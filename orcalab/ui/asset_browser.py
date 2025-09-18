@@ -24,11 +24,10 @@ class AssetBrowser(QtWidgets.QListView):
 
     add_item = QtCore.Signal(str, BaseActor)
 
-    def __init__(self, hwnd_target=None):
+    def __init__(self):
         super().__init__()
 
         self._model = AssetListModel()
-        self.hwnd_target = hwnd_target
         self.dragging = False
         self.selected_item_name = None
         self._drag_start_pos = None

@@ -26,6 +26,9 @@ from orcalab.math import Transform
 
 class MainWindow(QtWidgets.QWidget):
 
+    enable_control = QtCore.Signal()
+    disanble_control = QtCore.Signal()
+
     def __init__(self):
         super().__init__()
 
@@ -48,8 +51,6 @@ class MainWindow(QtWidgets.QWidget):
         self._query_pending_operation_running = False
         await self._start_query_pending_operation_loop()
 
-        respone = await self.remote_scene.get_window_id()
-        self.hwnd = respone.window_id
         self.start_transform = None
         self.end_transform = None
 
@@ -66,7 +67,7 @@ class MainWindow(QtWidgets.QWidget):
 
         self.actor_editor = ActorEditor()
 
-        self.asset_browser = AssetBrowser(hwnd_target=self.hwnd)
+        self.asset_browser = AssetBrowser()
         assets = await self.remote_scene.get_actor_assets()
         self.asset_browser.set_assets(assets)
 
@@ -212,6 +213,7 @@ class MainWindow(QtWidgets.QWidget):
         ]
         self.sim_process = subprocess.Popen(cmd)
         self.sim_process_running = True
+        self.disanble_control.emit()
         asyncio.create_task(self._sim_process_check_loop())
 
         # await asyncio.sleep(2)
@@ -225,6 +227,7 @@ class MainWindow(QtWidgets.QWidget):
             await self.remote_scene.set_sync_from_mujoco_to_scene(False)
             self.sim_process_running = False
             self.sim_process.terminate()
+            self.enable_control.emit()
             await self.remote_scene.restore_body_transform()
 
     async def _sim_process_check_loop(self):
@@ -364,6 +367,20 @@ class MainWindow(QtWidgets.QWidget):
 
         await self.remote_scene.set_actor_transform(actor_path, transform, True)
 
+    def record_start_transform(self):
+        actor = self.actor_editor.actor
+        if actor is None:
+            return
+        self.start_transform = actor.transform
+        
+    def record_stop_transform(self):
+        actor = self.actor_editor.actor
+        if actor is None:
+            return
+        self.end_transform = actor.transform
+        actor_path = self.local_scene.get_actor_path(actor)
+        self.transform_change.emit(actor_path, True)
+
     def set_transform_from_scene(
         self, actor_path: Path, transform: Transform, local: bool
     ):
@@ -481,6 +498,8 @@ class MainWindow1(MainWindow):
         connect(self.actor_outline.request_rename, self.open_rename_dialog)
 
         connect(self.actor_editor.transform_changed, self.on_transform_edit)
+        connect(self.actor_editor.start_drag, self.record_start_transform)
+        connect(self.actor_editor.stop_drag, self.record_stop_transform)
 
         connect(self.asset_browser.add_item, self.add_item_to_scene)
 
@@ -489,6 +508,9 @@ class MainWindow1(MainWindow):
 
         connect(self.add_item_by_drag, self.add_item_drag)
         connect(self.transform_change, self.transform_change_command)
+
+        connect(self.enable_control, self.enable_widgets)
+        connect(self.disanble_control, self.disable_widgets)
 
         # Window actions.
 
@@ -758,6 +780,25 @@ class MainWindow1(MainWindow):
         command.new_transform = self.end_transform
         command.local = local
         self.add_command(command)
+        print(command)
+
+    def enable_widgets(self):
+        self.actor_outline.setEnabled(True)
+        self.actor_outline.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
+        self.actor_editor.setEnabled(True)
+        self.actor_editor.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
+        self.asset_browser.setEnabled(True)
+        self.asset_browser.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
+        self.menu_edit.setEnabled(True)
+
+    def disable_widgets(self):
+        self.actor_outline.setEnabled(False)
+        self.actor_outline.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        self.actor_editor.setEnabled(False)
+        self.actor_editor.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        self.asset_browser.setEnabled(False)
+        self.asset_browser.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        self.menu_edit.setEnabled(False)
 
 
 if __name__ == "__main__":

@@ -63,6 +63,8 @@ class TransformEdit(QtWidgets.QWidget):
         self.labels.append(label_widget)
 
         widget.value_changed.connect(self._on_value_changed)
+        widget.start_drag.connect(self._on_start_drag)
+        widget.stop_drag.connect(self._on_stop_drag)
 
         return widget
 

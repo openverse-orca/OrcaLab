@@ -7,6 +7,8 @@ from orcalab.ui.transform_edit import TransformEdit
 
 class ActorEditor(QtWidgets.QWidget):
     transform_changed = QtCore.Signal()
+    start_drag = QtCore.Signal()
+    stop_drag = QtCore.Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -96,10 +98,10 @@ class ActorEditor(QtWidgets.QWidget):
         self.transform_changed.emit()
 
     def _on_start_drag(self):
-        pass
+        self.start_drag.emit()
 
     def _on_stop_drag(self):
-        pass
+        self.stop_drag.emit()
 
     @property
     def transform(self):
