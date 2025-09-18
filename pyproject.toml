@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orcalab"         
+version = "25.9.0"                 
+description = "OrcaLab"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "OrcaGym",
+    "numpy>=2.0.0",
+    "scipy",
+    "scipy-stubs", # for type hints
+    "grpcio==1.66.1",
+    "grpcio-tools==1.66.1",
+    "pyside6",
+]
+
+# 可选依赖，可用于开发调试、测试、格式化代码等用途
+[project.optional-dependencies]
+dev = [
+    "pytest",         # 单元测试工具
+    "pytest-cov",     # 测试覆盖率工具
+    "flake8",         # 代码风格检查工具
+    "black",          # 代码格式化工具
+    "mypy",           # 静态类型检查工具
+]
+
+[tool.setuptools.packages.find]
+# 如果项目源码在 src/ 目录下，请取消下面的注释，并确保目录结构正确
+# where = ["src"]
+
+# 如果源码就在项目根目录下，此项可以忽略，setuptools 会自动发现
