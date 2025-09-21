@@ -221,6 +221,14 @@ message LoadPackageResponse {
     string error_message = 2;
 }
 
+message ChangeSimStateRequest {
+    bool sim_process_running = 1;
+}
+message ChangeSimStateResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
 service GrpcService {
     rpc Aloha(AlohaRequest) returns (AlohaResponse);
     
@@ -253,4 +261,5 @@ service GrpcService {
 
     rpc GetCacheFolder(GetCacheFolderRequest) returns (GetCacheFolderResponse);
     rpc LoadPackage(LoadPackageRequest) returns (LoadPackageResponse);
+    rpc ChangeSimState(ChangeSimStateRequest) returns (ChangeSimStateResponse);
 }

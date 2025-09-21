@@ -129,8 +129,9 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
                 return
 
             operations = await self.remote_scene.query_pending_operation_loop()
-            for op in operations:
-                await self._process_pending_operation(op)
+            if not self.sim_process_running:
+                for op in operations:
+                    await self._process_pending_operation(op)
 
         # frequency = 30  # Hz
         # await asyncio.sleep(1 / frequency)
@@ -233,11 +234,16 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             "-m",
             "orcalab.sim_process",
             "--sim_addr",
-            self.sim_grpc_addr,
+            self.remote_scene.sim_grpc_addr,
         ]
         self.sim_process = subprocess.Popen(cmd)
         self.sim_process_running = True
         self.disanble_control.emit()
+        if self.local_scene.selection:
+            self.actor_editor.actor = None
+            self.local_scene.selection = []
+            await self.remote_scene.set_selection([])
+        await self.remote_scene.change_sim_state(self.sim_process_running)
         asyncio.create_task(self._sim_process_check_loop())
 
         # await asyncio.sleep(2)
@@ -252,6 +258,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             self.sim_process_running = False
             self.sim_process.terminate()
             self.enable_control.emit()
+            await self.remote_scene.change_sim_state(self.sim_process_running)
             await self.remote_scene.restore_body_transform()
 
     async def _sim_process_check_loop(self):
