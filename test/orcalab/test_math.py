@@ -22,11 +22,11 @@ class TestTransform(unittest.TestCase):
 
     def test_position_setter_type(self):
         with self.assertRaises(TypeError):
-            Transform(position=np.array([1, 2, 3]))
+            Transform(position=[1, 2, 3])
 
     def test_rotation_setter_type(self):
         with self.assertRaises(TypeError):
-            Transform(rotation=np.array([1, 0, 0, 0]))
+            Transform(rotation=[1, 0, 0, 0])
 
     def test_rotation_setter_shape(self):
         with self.assertRaises(TypeError):
@@ -72,17 +72,17 @@ class TestTransform(unittest.TestCase):
     def test_transform_point_type_error(self):
         t = Transform()
         with self.assertRaises(TypeError):
-            t.transform_point(np.array([1, 2, 3]))
+            t.transform_point([1, 2, 3])
 
     def test_transform_vector_type_error(self):
         t = Transform()
         with self.assertRaises(TypeError):
-            t.transform_vector(np.array([1, 2, 3]))
+            t.transform_vector([1, 2, 3])
 
     def test_transform_direction_type_error(self):
         t = Transform()
         with self.assertRaises(TypeError):
-            t.transform_direction(np.array([1, 2, 3]))
+            t.transform_direction([1, 2, 3])
 
     def test_multiply_identity(self):
         t = Transform(position=np.array([1, 2, 3]), rotation=np.array([1, 0, 0, 0]), scale=2.0)

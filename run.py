@@ -1,10 +1,28 @@
+import asyncio
+import sys
+
+from flask import app
 from orcalab.config_service import ConfigService
 from orcalab.project_util import check_project_folder
 from orcalab.ui.main_window import MainWindow1
 
 import os
-import PySide6.QtAsyncio as QtAsyncio
+
+# import PySide6.QtAsyncio as QtAsyncio
 from PySide6 import QtWidgets
+
+from qasync import QEventLoop
+
+
+async def main(q_app):
+
+    app_close_event = asyncio.Event()
+    q_app.aboutToQuit.connect(app_close_event.set)
+    main_window = MainWindow1()
+    await main_window.init()
+
+    await app_close_event.wait()
+
 
 if __name__ == "__main__":
     check_project_folder()
@@ -12,15 +30,13 @@ if __name__ == "__main__":
     config_service = ConfigService()
     config_service.init_config(os.path.dirname(__file__))
 
-    q_app = QtWidgets.QApplication([])
+    q_app = QtWidgets.QApplication(sys.argv)
 
-    main_window = MainWindow1()
+    event_loop = QEventLoop(q_app)
+    asyncio.set_event_loop(event_loop)
 
-    # 在这之后，Qt的event_loop变成asyncio的event_loop。
-    # 这是目前统一Qt和asyncio最好的方法。
-    # 所以不要保存loop，统一使用asyncio.xxx()。
-    # https://doc.qt.io/qtforpython-6/PySide6/QtAsyncio/index.html
-    QtAsyncio.run(main_window.init())
+    event_loop.run_until_complete(main(q_app))
+    event_loop.close()
 
     # magic!
     # AttributeError: 'NoneType' object has no attribute 'POLLER'

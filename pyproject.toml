@@ -18,6 +18,7 @@ dependencies = [
     "pyside6",
     "aiohttp",
     "aiofiles",
+    "qasync",
 ]
 
 # 可选依赖，可用于开发调试、测试、格式化代码等用途
