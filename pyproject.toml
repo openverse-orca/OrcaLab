@@ -3,8 +3,8 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "orcalab"         
-version = "25.9.0"                 
+name = "orcalab"
+version = "25.9.0"
 description = "OrcaLab"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -12,20 +12,22 @@ dependencies = [
     "OrcaGym",
     "numpy>=2.0.0",
     "scipy",
-    "scipy-stubs", # for type hints
+    "scipy-stubs",          # for type hints
     "grpcio==1.66.1",
     "grpcio-tools==1.66.1",
     "pyside6",
+    "aiohttp",
+    "aiofiles",
 ]
 
 # 可选依赖，可用于开发调试、测试、格式化代码等用途
 [project.optional-dependencies]
 dev = [
-    "pytest",         # 单元测试工具
-    "pytest-cov",     # 测试覆盖率工具
-    "flake8",         # 代码风格检查工具
-    "black",          # 代码格式化工具
-    "mypy",           # 静态类型检查工具
+    "pytest",     # 单元测试工具
+    "pytest-cov", # 测试覆盖率工具
+    "flake8",     # 代码风格检查工具
+    "black",      # 代码格式化工具
+    "mypy",       # 静态类型检查工具
 ]
 
 [tool.setuptools.packages.find]

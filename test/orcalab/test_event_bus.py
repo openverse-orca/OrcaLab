@@ -13,14 +13,16 @@ class Foo:
 
 FooBus = create_event_bus(Foo)
 
+foo = FooBus()
+
 
 class Handler(Foo):
     def __init__(self):
         super().__init__()
-        FooBus().connect(self)
+        FooBus.connect(self)
 
     def destroy(self):
-        FooBus().disconnect(self)
+        FooBus.disconnect(self)
 
     def a(self, l):
         l.append("a")

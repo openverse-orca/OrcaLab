@@ -2,7 +2,7 @@ import asyncio
 from copy import deepcopy
 import random
 
-from typing import Dict, Tuple
+from typing import Dict, Tuple, override
 import numpy as np
 from scipy.spatial.transform import Rotation
 import subprocess
@@ -22,9 +22,17 @@ from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.asset_browser import AssetBrowser
 from orcalab.ui.tool_bar import ToolBar
 from orcalab.math import Transform
+from orcalab.config_service import ConfigService
+from orcalab.url_service import UrlServiceServer
+from orcalab.asset_service import AssetService
+from orcalab.asset_service_bus import (
+    AssetServiceNotification,
+    AssetServiceNotificationBus,
+)
+from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 
 
-class MainWindow(QtWidgets.QWidget):
+class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification):
 
     enable_control = QtCore.Signal()
     disanble_control = QtCore.Signal()
@@ -32,20 +40,31 @@ class MainWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
 
+    def connect_buses(self):
+        ApplicationRequestBus.connect(self)
+        AssetServiceNotificationBus.connect(self)
+
+    def disconnect_buses(self):
+        AssetServiceNotificationBus.disconnect(self)
+        ApplicationRequestBus.disconnect(self)
+
     async def init(self):
+
+        self.asset_service = AssetService()
+
+        self.url_server = UrlServiceServer()
+        await self.url_server.start()
+
         self.local_scene = LocalScene()
 
-        self.edit_grpc_addr = "localhost:50151"
-        self.sim_grpc_addr = "localhost:50051"
-        self.remote_scene = RemoteScene(self.edit_grpc_addr, self.sim_grpc_addr)
-
-        self._sim_process_check_lock = asyncio.Lock()
-        self.sim_process_running = False
+        self.remote_scene = RemoteScene(ConfigService())
 
         await self.remote_scene.init_grpc()
         await self.remote_scene.set_sync_from_mujoco_to_scene(False)
         await self.remote_scene.set_selection([])
         await self.remote_scene.clear_scene()
+
+        self.cache_folder = await self.remote_scene.get_cache_folder()
 
         self._query_pending_operation_lock = asyncio.Lock()
         self._query_pending_operation_running = False
@@ -53,6 +72,11 @@ class MainWindow(QtWidgets.QWidget):
 
         self.start_transform = None
         self.end_transform = None
+
+        self._sim_process_check_lock = asyncio.Lock()
+        self.sim_process_running = False
+
+        self.connect_buses()
 
     async def _init_ui(self):
         self.tool_bar = ToolBar()
@@ -372,7 +396,7 @@ class MainWindow(QtWidgets.QWidget):
         if actor is None:
             return
         self.start_transform = actor.transform
-        
+
     def record_stop_transform(self):
         actor = self.actor_editor.actor
         if actor is None:
@@ -393,6 +417,14 @@ class MainWindow(QtWidgets.QWidget):
 
         if self.actor_editor.actor == actor:
             self.actor_editor.update_ui()
+
+    @override
+    def get_cache_folder(self, output: list[str]) -> None:
+        output.append(self.cache_folder)
+
+    @override
+    def on_asset_downloaded(self, file):
+        asyncio.create_task(self.remote_scene.load_package(file))
 
 
 # 不要存Actor对象，只存Path。
@@ -799,21 +831,3 @@ class MainWindow1(MainWindow):
         self.asset_browser.setEnabled(False)
         self.asset_browser.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
         self.menu_edit.setEnabled(False)
-
-
-if __name__ == "__main__":
-
-    q_app = QtWidgets.QApplication([])
-
-    main_window = MainWindow1()
-
-    # 在这之后，Qt的event_loop变成asyncio的event_loop。
-    # 这是目前统一Qt和asyncio最好的方法。
-    # 所以不要保存loop，统一使用asyncio.xxx()。
-    # https://doc.qt.io/qtforpython-6/PySide6/QtAsyncio/index.html
-    QtAsyncio.run(main_window.init())
-
-    # magic!
-    # AttributeError: 'NoneType' object has no attribute 'POLLER'
-    # https://github.com/google-gemini/deprecated-generative-ai-python/issues/207#issuecomment-2601058191
-    exit(0)

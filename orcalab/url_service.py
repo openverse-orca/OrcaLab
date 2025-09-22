@@ -1,59 +1,82 @@
 import grpc
-import orcalab.protos.asset_service_pb2_grpc as asset_service_pb2_grpc
-import orcalab.protos.asset_service_pb2 as asset_service_pb2
+from orcalab.asset_service_bus import AssetServiceRequestBus
+import orcalab.protos.url_service_pb2_grpc as url_service_pb2_grpc
+import orcalab.protos.url_service_pb2 as url_service_pb2
 
 import argparse
 import asyncio
 import sys
+import urllib.parse
 
 
 address = "localhost:50651"
 scheme_name = "orca"
 
 
-class AssetDownloadServer(asset_service_pb2_grpc.GrpcServiceServicer):
+class UrlServiceServer(url_service_pb2_grpc.GrpcServiceServicer):
     def __init__(self):
         self.server = grpc.aio.server()
-        asset_service_pb2_grpc.add_GrpcServiceServicer_to_server(self, self.server)
+        url_service_pb2_grpc.add_GrpcServiceServicer_to_server(self, self.server)
         self.server.add_insecure_port(address)
 
     async def start(self):
+        register_protocol()
+
         await self.server.start()
 
     async def stop(self):
         await self.server.stop(0)
 
-    def DownloadAsset(self, request, context):
-        response = asset_service_pb2.DownloadAssetResponse()
-        print(f"Received DownloadAsset request: {request.url}")
+    async def ProcessUrl(self, request, context):
+        response = url_service_pb2.ProcessUrlResponse()
+        raw_url = request.url
+        print(f"Received ProcessUrl request: {raw_url}")
+
+        prefix = "orca://download-asset?url="
+        if raw_url.startswith(prefix):
+            url = raw_url[len(prefix) :]
+            print(f"Extracted URL: {url}")
+            await AssetServiceRequestBus().download_asset_to_cache(url)
+
+        response.status_code = url_service_pb2.StatusCode.Success
         return response
 
 
-class AssetDownloadClient:
+class UrlServiceClient:
     def __init__(self):
         self.channel = grpc.aio.insecure_channel(address)
-        self.stub = asset_service_pb2_grpc.GrpcServiceStub(self.channel)
+        self.stub = url_service_pb2_grpc.GrpcServiceStub(self.channel)
 
     def _check_response(self, response):
-        if response.status_code != asset_service_pb2.StatusCode.Success:
+        if response.status_code != url_service_pb2.StatusCode.Success:
             raise Exception(f"Request failed. {response.error_message}")
 
-    async def download_asset(self, url):
-        request = asset_service_pb2.DownloadAssetRequest(url=url)
-        response = await self.stub.DownloadAsset(request)
+    async def process_url(self, url):
+        request = url_service_pb2.ProcessUrlRequest(url=url)
+        response = await self.stub.ProcessUrl(request)
         return response
 
 
 async def serve():
-    server = AssetDownloadServer()
+    server = UrlServiceServer()
     await server.start()
     await server.server.wait_for_termination()
 
 
 async def send_url(url):
-    client = AssetDownloadClient()
-    response = await client.download_asset(url)
-    print(f"DownloadAsset response: {response.status_code}")
+    client = UrlServiceClient()
+
+    url = urllib.parse.unquote_plus(url)
+
+    with open("D:\\log.txt", "a") as f:
+        f.write(f"Sending URL to server: {url}\n")
+
+        import sys
+
+        f.write(f"args: {sys.argv}\n")
+
+    response = await client.process_url(url)
+    print(f"ProcessUrl response: {response.status_code}")
 
 
 def is_protocol_registered():

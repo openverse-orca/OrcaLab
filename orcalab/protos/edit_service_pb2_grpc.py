@@ -134,6 +134,16 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.GetGeneratePosRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetGeneratePosResponse.FromString,
                 _registered_method=True)
+        self.GetCacheFolder = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetCacheFolder',
+                request_serializer=edit__service__pb2.GetCacheFolderRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetCacheFolderResponse.FromString,
+                _registered_method=True)
+        self.LoadPackage = channel.unary_unary(
+                '/SceneEdit.GrpcService/LoadPackage',
+                request_serializer=edit__service__pb2.LoadPackageRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.LoadPackageResponse.FromString,
+                _registered_method=True)
 
 
 class GrpcServiceServicer(object):
@@ -259,6 +269,18 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetCacheFolder(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def LoadPackage(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GrpcServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -361,6 +383,16 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.GetGeneratePos,
                     request_deserializer=edit__service__pb2.GetGeneratePosRequest.FromString,
                     response_serializer=edit__service__pb2.GetGeneratePosResponse.SerializeToString,
+            ),
+            'GetCacheFolder': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCacheFolder,
+                    request_deserializer=edit__service__pb2.GetCacheFolderRequest.FromString,
+                    response_serializer=edit__service__pb2.GetCacheFolderResponse.SerializeToString,
+            ),
+            'LoadPackage': grpc.unary_unary_rpc_method_handler(
+                    servicer.LoadPackage,
+                    request_deserializer=edit__service__pb2.LoadPackageRequest.FromString,
+                    response_serializer=edit__service__pb2.LoadPackageResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -903,6 +935,60 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/GetGeneratePos',
             edit__service__pb2.GetGeneratePosRequest.SerializeToString,
             edit__service__pb2.GetGeneratePosResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCacheFolder(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetCacheFolder',
+            edit__service__pb2.GetCacheFolderRequest.SerializeToString,
+            edit__service__pb2.GetCacheFolderResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def LoadPackage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/LoadPackage',
+            edit__service__pb2.LoadPackageRequest.SerializeToString,
+            edit__service__pb2.LoadPackageResponse.FromString,
             options,
             channel_credentials,
             insecure,

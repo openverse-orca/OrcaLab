@@ -203,6 +203,24 @@ message GetGeneratePosResponse {
     Transform transform = 3;
 }
 
+
+message GetCacheFolderRequest {
+}
+message GetCacheFolderResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    string cache_folder = 3;
+}
+
+
+message LoadPackageRequest {
+    string file_path = 1;
+}
+message LoadPackageResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
 service GrpcService {
     rpc Aloha(AlohaRequest) returns (AlohaResponse);
     
@@ -232,4 +250,7 @@ service GrpcService {
 
     rpc GetWindowId(GetWindowIdRequest) returns (GetWindowIdResponse);
     rpc GetGeneratePos(GetGeneratePosRequest) returns (GetGeneratePosResponse);
+
+    rpc GetCacheFolder(GetCacheFolderRequest) returns (GetCacheFolderResponse);
+    rpc LoadPackage(LoadPackageRequest) returns (LoadPackageResponse);
 }

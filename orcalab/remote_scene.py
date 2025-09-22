@@ -1,5 +1,4 @@
-import grpc
-import numpy as np
+from orcalab.config_service import ConfigService
 from orcalab.math import Transform
 import orcalab.protos.edit_service_pb2_grpc as edit_service_pb2_grpc
 import orcalab.protos.edit_service_pb2 as edit_service_pb2
@@ -9,9 +8,13 @@ import orca_gym.protos.mjc_message_pb2 as mjc_message_pb2
 from orcalab.path import Path
 from orcalab.actor import BaseActor, GroupActor, AssetActor
 
+import os
+import grpc
+import numpy as np
 from typing import List
 import subprocess
 import time
+import pathlib
 
 Success = edit_service_pb2.StatusCode.Success
 Error = edit_service_pb2.StatusCode.Error
@@ -19,13 +22,15 @@ Error = edit_service_pb2.StatusCode.Error
 
 # 由于Qt是异步的，所以这里只提供异步接口。
 class RemoteScene:
-    def __init__(self, edit_grpc_addr: str, sim_grpc_addr: str):
+    def __init__(self, config_service: ConfigService):
         super().__init__()
 
-        self.edit_grpc_addr = edit_grpc_addr
-        self.sim_grpc_addr = sim_grpc_addr
+        self.config_service = config_service
 
-    async def init_grpc(self, /, launch: str = ""):
+        self.edit_grpc_addr = f"localhost:{self.config_service.edit_port()}"
+        self.sim_grpc_addr = f"localhost:{self.config_service.sim_port()}"
+
+    async def init_grpc(self):
         options = [
             ("grpc.max_receive_message_length", 1024 * 1024 * 1024),
             ("grpc.max_send_message_length", 1024 * 1024 * 1024),
@@ -43,48 +48,62 @@ class RemoteScene:
 
         self.timeout = 3
 
-        if isinstance(launch, str) and launch != "":
-            print(f"launching server: {self.edit_grpc_addr}")
-
-            cmds = [
-                launch,
-                "--datalink_host ",
-                "54.223.63.47",
-                "--datalink_port",
-                "7000",
-            ]
-
-            server_process = subprocess.Popen(cmds)
-            if server_process is None:
-                raise Exception("Failed to launch server process.")
-
-            # We can 'block' here.
-            max_wait_time = 10
-            while True:
-                if await self.aloha():
-                    break
-                time.sleep(1)
-                print("waiting for server to be ready...")
-                if server_process.poll() is not None:
-                    raise Exception("Server process exited unexpectedly.")
-                max_wait_time -= 1
-                if max_wait_time <= 0:
-                    server_process.terminate()
-                    raise Exception("Timeout waiting for server to be ready.")
-
-            self.server_process = server_process
-
+        if not self.config_service.attach():
+            await self._launch()
         else:
-            print(f"connecting to existing server: {self.edit_grpc_addr}")
-            if not await self.aloha():
-                raise Exception("Failed to connect to server.")
-            self.server_process = None
+            await self._attach()
 
         print("connected to server.")
 
-    async def destroy_grpc(self):
-        await self._stop_query_pending_operation_loop()
+    async def _launch(self):
+        print(f"launching server: {self.edit_grpc_addr}")
 
+        executable = pathlib.Path(self.config_service.executable())
+        if not executable.exists():
+            raise Exception(f"Executable not found: {executable}")
+
+        executable_folder = executable.parent
+
+        cmds = [
+            str(executable),
+            "--project-path ",
+            self.config_service.orca_project_folder(),
+            "--datalink_host ",
+            "54.223.63.47",
+            "--datalink_port",
+            "7000",
+        ]
+
+        print(" ".join(cmds))
+
+        # Viewport 会生成一些文件，所以需要指定工作目录。
+        server_process = subprocess.Popen(cmds, cwd=str(executable_folder))
+        if server_process is None:
+            raise Exception("Failed to launch server process.")
+
+        # We can 'block' here.
+        max_wait_time = 10
+        while True:
+            if await self.aloha():
+                break
+            time.sleep(1)
+            print("waiting for server to be ready...")
+            if server_process.poll() is not None:
+                raise Exception("Server process exited unexpectedly.")
+            max_wait_time -= 1
+            if max_wait_time <= 0:
+                server_process.terminate()
+                raise Exception("Timeout waiting for server to be ready.")
+
+        self.server_process = server_process
+
+    async def _attach(self):
+        print(f"connecting to existing server: {self.edit_grpc_addr}")
+        if not await self.aloha():
+            raise Exception("Failed to connect to server.")
+        self.server_process = None
+
+    async def destroy_grpc(self):
         if self.edit_channel:
             await self.edit_channel.close()
         self.edit_stub = None
@@ -292,3 +311,15 @@ class RemoteScene:
         response = await self.edit_stub.GetGeneratePos(request)
         self._check_response(response)
         return response
+
+    async def get_cache_folder(self) -> str:
+        request = edit_service_pb2.GetCacheFolderRequest()
+        response = await self.edit_stub.GetCacheFolder(request)
+        self._check_response(response)
+        return response.cache_folder
+
+    async def load_package(self, package_path: str) -> bool:
+        request = edit_service_pb2.LoadPackageRequest(file_path=package_path)
+        response = await self.edit_stub.LoadPackage(request)
+        self._check_response(response)
+        return response.success

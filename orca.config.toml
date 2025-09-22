@@ -1,0 +1,20 @@
+
+# 这个文件是所有人共享的配置，复制一份，命名为 orca.config.user.toml
+# 个人相关的配置写在orca.config.user.toml中, 个人配置不会提交到Git中。
+# 运行时这两个配置会合并。
+
+[orcalab]
+
+# 场景编辑服务的端口。
+edit_port = 50151
+
+# 仿真服务的端口。
+sim_port = 50051
+
+# [个人配置] Viewport可执行文件的绝对路径。目前还没有通过pip分发，先手填。
+executable = ""
+
+# [个人配置] Launch or attach。
+# Launch: 由Python启动Viewport。
+# Attach: 连接到以经启动的Viewport。
+attach = false

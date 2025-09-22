@@ -209,3 +209,7 @@ __marimo__/
 # vscode
 .VSCodeCounter/
 .vscode/
+
+
+# personal config file
+orca.config.user.toml

@@ -22,7 +22,7 @@ protoc.main((
 ))
 
 
-proto_file = os.path.join(current_dir, "./asset_service.proto")
+proto_file = os.path.join(current_dir, "./url_service.proto")
 protoc.main((
     '',
     f'-I{os.path.dirname(proto_file)}',
