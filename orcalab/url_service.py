@@ -7,7 +7,7 @@ import argparse
 import asyncio
 import sys
 import urllib.parse
-
+import os
 
 address = "localhost:50651"
 scheme_name = "orca"
@@ -66,20 +66,14 @@ async def serve():
 async def send_url(url):
     client = UrlServiceClient()
 
+    # Decode the URL
     url = urllib.parse.unquote_plus(url)
-
-    with open("D:\\log.txt", "a") as f:
-        f.write(f"Sending URL to server: {url}\n")
-
-        import sys
-
-        f.write(f"args: {sys.argv}\n")
 
     response = await client.process_url(url)
     print(f"ProcessUrl response: {response.status_code}")
 
 
-def is_protocol_registered():
+def is_protocol_registered_win32():
     import winreg
 
     try:
@@ -91,7 +85,7 @@ def is_protocol_registered():
         return False
 
 
-def register_protocol():
+def register_protocol_win32():
     import winreg
 
     executable = sys.executable
@@ -127,7 +121,7 @@ def register_protocol():
         print(f"Error registering URI scheme: {e}")
 
 
-def unregister_protocol():
+def unregister_protocol_win32():
     import winreg
 
     try:
@@ -139,6 +133,77 @@ def unregister_protocol():
         print(f"URI scheme '{scheme_name}' unregistered successfully.")
     except Exception as e:
         print(f"Error unregistering URI scheme: {e}")
+
+
+def _desktop_entry_file_path():
+    home = os.path.expanduser("~")
+    return os.path.join(
+        home, f".local/share/applications/{scheme_name}-url-handler.desktop"
+    )
+
+
+def is_registered_protocol_linux():
+    if os.path.exists(_desktop_entry_file_path()):
+        return True
+    return False
+
+
+def register_protocol_linux():
+
+    executable = sys.executable
+
+    # We do not need a console window for handling the protocol
+    if executable.endswith("python"):
+        executable = executable.replace("python", "pythonw")
+
+    this_file = __file__
+
+    # https://specifications.freedesktop.org/desktop-entry-spec/latest/
+
+    text = f"""
+[Desktop Entry]
+Name=Orca URL Handler
+Exec={executable} {this_file} --url %u  
+Type=Application
+NoDisplay=true
+MimeType=x-scheme-handler/{scheme_name};
+        """
+
+    with open(_desktop_entry_file_path(), "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def unregister_protocol_linux():
+    file = _desktop_entry_file_path()
+
+    if not os.path.exists(file):
+        return
+
+    try:
+        os.remove(file)
+    except Exception as e:
+        print(f"Error unregistering URI scheme: {e}")
+
+
+def register_protocol():
+    if sys.platform == "win32":
+        register_protocol_win32()
+    else:
+        register_protocol_linux()
+
+
+def unregister_protocol():
+    if sys.platform == "win32":
+        unregister_protocol_win32()
+    else:
+        unregister_protocol_linux()
+
+
+def is_protocol_registered():
+    if sys.platform == "win32":
+        return is_protocol_registered_win32()
+    else:
+        return is_registered_protocol_linux()
 
 
 if __name__ == "__main__":
@@ -171,10 +236,12 @@ if __name__ == "__main__":
             print(f"1")
         else:
             print(f"0")
-    else:
+    elif args.url:
         url = args.url
         if len(url) == 0:
             exit(-1)
 
         print(f"Sending URL to server: {url}")
         asyncio.run(send_url(url))
+    else:
+        parser.print_help()
