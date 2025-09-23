@@ -26,7 +26,7 @@ class UrlServiceServer(url_service_pb2_grpc.GrpcServiceServicer):
         raw_url = request.url
         print(f"Received ProcessUrl request: {raw_url}")
 
-        prefix = "orca://download-asset?url="
+        prefix = "orca://download-asset/?url="
         if raw_url.startswith(prefix):
             url = raw_url[len(prefix) :]
             print(f"Extracted URL: {url}")

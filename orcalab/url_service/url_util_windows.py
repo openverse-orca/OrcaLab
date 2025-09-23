@@ -1,3 +1,4 @@
+import pathlib
 import sys
 
 
@@ -25,7 +26,7 @@ def register_protocol():
     if executable.endswith("python.exe"):
         executable = executable.replace("python.exe", "pythonw.exe")
 
-    this_file = __file__
+    script_file = pathlib.Path(__file__).parent / "url_handler.py"
 
     try:
         # Create the main key for the custom scheme
@@ -43,7 +44,7 @@ def register_protocol():
             "",
             0,
             winreg.REG_SZ,
-            f'"{executable}" "{this_file}" --url "%1"',
+            f'"{executable}" "{script_file}" --url "%1"',
         )
         winreg.CloseKey(command_key)
 

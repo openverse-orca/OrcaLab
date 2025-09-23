@@ -1,9 +1,16 @@
 import argparse
 import urllib
 import asyncio
-
+import pathlib
 
 from orcalab.url_service.url_service import UrlServiceClient, UrlServiceServer
+
+
+def _log_file_path():
+    home = pathlib.Path.home()
+    log_dir = home / "Orca" / "OrcaLab" / "Logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / "url_service.log"
 
 
 async def serve():
@@ -17,6 +24,9 @@ async def send_url(url):
 
     # Decode the URL
     # url = urllib.parse.unquote_plus(url)
+
+    # with open(_log_file_path(), "a") as f:
+    #     f.write(f"Sending URL: {url}\n")
 
     try:
         response = await client.process_url(url)
