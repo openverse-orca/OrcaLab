@@ -66,3 +66,6 @@ class ConfigService:
 
     def orca_project_folder(self) -> str:
         return self.config["orca_project_folder"]
+
+    def level(self) -> str:
+        return self.config["orcalab"]["level"]

@@ -72,6 +72,8 @@ class RemoteScene:
             "54.223.63.47",
             "--datalink_port",
             "7000",
+            "--LoadLevel",
+            self.config_service.level(),
         ]
 
         print(" ".join(cmds))

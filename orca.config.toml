@@ -18,3 +18,6 @@ executable = ""
 # Launch: 由Python启动Viewport。
 # Attach: 连接到以经启动的Viewport。
 attach = false
+
+# [个人配置] 启动关卡
+level = "Default_level"
