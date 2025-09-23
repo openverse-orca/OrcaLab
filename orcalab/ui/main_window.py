@@ -23,7 +23,7 @@ from orcalab.ui.asset_browser import AssetBrowser
 from orcalab.ui.tool_bar import ToolBar
 from orcalab.math import Transform
 from orcalab.config_service import ConfigService
-from orcalab.url_service import UrlServiceServer
+from orcalab.url_service.url_service import UrlServiceServer
 from orcalab.asset_service import AssetService
 from orcalab.asset_service_bus import (
     AssetServiceNotification,

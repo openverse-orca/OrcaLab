@@ -1,9 +1,9 @@
 import asyncio
 import sys
 
-from flask import app
 from orcalab.config_service import ConfigService
 from orcalab.project_util import check_project_folder
+from orcalab.url_service.url_util import register_protocol
 from orcalab.ui.main_window import MainWindow1
 
 import os
@@ -26,6 +26,8 @@ async def main(q_app):
 
 if __name__ == "__main__":
     check_project_folder()
+
+    register_protocol()
 
     config_service = ConfigService()
     config_service.init_config(os.path.dirname(__file__))
