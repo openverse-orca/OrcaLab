@@ -15,6 +15,7 @@ from typing import List
 import subprocess
 import time
 import pathlib
+import psutil
 
 Success = edit_service_pb2.StatusCode.Success
 Error = edit_service_pb2.StatusCode.Error
@@ -28,7 +29,110 @@ class RemoteScene:
         self.config_service = config_service
 
         self.edit_grpc_addr = f"localhost:{self.config_service.edit_port()}"
+        self.server_process = None  # Initialize server_process to None
+        self.server_process_pid = None  # Track the actual process PID
+        self.executable_path = self.config_service.executable()
         self.sim_grpc_addr = f"localhost:{self.config_service.sim_port()}"
+    
+    def _find_orca_processes(self):
+        """Find all OrcaStudio.GameLauncher processes"""
+        processes = []
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'exe']):
+                try:
+                    # Check by executable name
+                    if proc.info['name'] and 'OrcaStudio.GameLauncher' in proc.info['name']:
+                        processes.append(proc)
+                    # Check by executable path
+                    elif proc.info['exe'] and self.executable_path in proc.info['exe']:
+                        processes.append(proc)
+                    # Check by command line
+                    elif proc.info['cmdline'] and any(self.executable_path in str(cmd) for cmd in proc.info['cmdline']):
+                        processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    pass
+        except Exception as e:
+            print(f"Error finding OrcaStudio processes: {e}")
+        return processes
+    
+    def _cleanup_orca_processes(self, timeout=10):
+        """Clean up all OrcaStudio.GameLauncher processes using the same executable path"""
+        print("Starting OrcaStudio.GameLauncher process cleanup...")
+        
+        # Find all processes using the same executable path
+        processes_to_cleanup = []
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'exe']):
+                try:
+                    # Check by executable path
+                    if proc.info['exe'] and self.executable_path in proc.info['exe']:
+                        processes_to_cleanup.append(proc)
+                    # Check by executable name
+                    elif proc.info['name'] and 'OrcaStudio.GameLauncher' in proc.info['name']:
+                        processes_to_cleanup.append(proc)
+                    # Check by command line
+                    elif proc.info['cmdline'] and any(self.executable_path in str(cmd) for cmd in proc.info['cmdline']):
+                        processes_to_cleanup.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    pass
+        except Exception as e:
+            print(f"Error finding OrcaStudio processes: {e}")
+        
+        if not processes_to_cleanup:
+            print("No OrcaStudio.GameLauncher processes found to clean up")
+            return
+        
+        print(f"Found {len(processes_to_cleanup)} OrcaStudio.GameLauncher processes to clean up:")
+        for proc in processes_to_cleanup:
+            print(f"  - PID {proc.pid}: {proc.info['name']}")
+        
+        # First, try graceful termination for all processes
+        print("Sending TERM signals to all processes...")
+        for proc in processes_to_cleanup:
+            try:
+                if proc.is_running():
+                    print(f"  Sending TERM to PID {proc.pid}")
+                    proc.terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                print(f"  Could not terminate PID {proc.pid}: {e}")
+        
+        # Wait for graceful termination
+        print(f"Waiting {timeout} seconds for graceful termination...")
+        time.sleep(timeout)
+        
+        # Check for remaining processes and force kill if necessary
+        remaining_processes = []
+        for proc in processes_to_cleanup:
+            try:
+                if proc.is_running():
+                    remaining_processes.append(proc)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        
+        if remaining_processes:
+            print(f"Force killing {len(remaining_processes)} remaining processes...")
+            for proc in remaining_processes:
+                try:
+                    print(f"  Force killing PID {proc.pid}")
+                    proc.kill()
+                    proc.wait(timeout=5)
+                    print(f"  Successfully killed PID {proc.pid}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired) as e:
+                    print(f"  Could not kill PID {proc.pid}: {e}")
+        else:
+            print("All OrcaStudio.GameLauncher processes terminated gracefully")
+        
+        # Clear the tracked PID
+        self.server_process_pid = None
+    
+    def __del__(self):
+        """Destructor to ensure server process is cleaned up"""
+        try:
+            print("Cleaning up server process in destructor...")
+            # Use the new cleanup mechanism
+            self._cleanup_orca_processes(timeout=5)
+        except Exception as e:
+            print(f"Error in destructor cleaning up server process: {e}")
 
     async def init_grpc(self):
         options = [
@@ -74,6 +178,7 @@ class RemoteScene:
             "7000",
             "--LoadLevel",
             self.config_service.level(),
+            self.config_service.lock_fps(),
         ]
 
         print(" ".join(cmds))
@@ -82,6 +187,10 @@ class RemoteScene:
         server_process = subprocess.Popen(cmds, cwd=str(executable_folder))
         if server_process is None:
             raise Exception("Failed to launch server process.")
+
+        # Record the process PID for tracking
+        self.server_process_pid = server_process.pid
+        print(f"Launched OrcaStudio.GameLauncher with PID: {self.server_process_pid}")
 
         # We can 'block' here.
         max_wait_time = 10
@@ -104,6 +213,7 @@ class RemoteScene:
         if not await self.aloha():
             raise Exception("Failed to connect to server.")
         self.server_process = None
+        self.server_process_pid = None  # No process to track in attach mode
 
     async def destroy_grpc(self):
         if self.edit_channel:
@@ -115,6 +225,16 @@ class RemoteScene:
             await self.sim_channel.close()
         self.sim_stub = None
         self.sim_channel = None
+        
+        # Clean up OrcaStudio.GameLauncher processes using the new mechanism
+        self._cleanup_orca_processes(timeout=10)
+        
+        # Also clean up the subprocess object if it exists
+        if hasattr(self, 'server_process') and self.server_process is not None:
+            try:
+                self.server_process = None
+            except Exception as e:
+                print(f"Error cleaning up server process object: {e}")
 
     def _create_transform_message(self, transform: Transform):
         msg = edit_service_pb2.Transform(

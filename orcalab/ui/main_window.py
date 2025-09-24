@@ -399,7 +399,13 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         async with self._sim_process_check_lock:
             await self.remote_scene.set_sync_from_mujoco_to_scene(False)
             self.sim_process_running = False
-            self.sim_process.terminate()
+            if hasattr(self, 'sim_process') and self.sim_process is not None:
+                self.sim_process.terminate()
+                try:
+                    self.sim_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self.sim_process.kill()
+                    self.sim_process.wait()
             self.enable_control.emit()
             await self.remote_scene.change_sim_state(self.sim_process_running)
             await self.remote_scene.restore_body_transform()
@@ -986,3 +992,40 @@ class MainWindow1(MainWindow):
         self.copilot.setEnabled(False)
         self.copilot.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
         self.menu_edit.setEnabled(False)
+    
+    async def cleanup(self):
+        """Clean up resources when the application is closing"""
+        try:
+            print("Cleaning up main window resources...")
+            
+            # Stop simulation if running
+            if self.sim_process_running:
+                await self.stop_sim()
+            
+            # Stop query pending operation loop
+            await self._stop_query_pending_operation_loop()
+            
+            # Disconnect buses
+            self.disconnect_buses()
+            
+            # Clean up remote scene (this will terminate server process)
+            if hasattr(self, 'remote_scene'):
+                print("MainWindow: Calling remote_scene.destroy_grpc()...")
+                await self.remote_scene.destroy_grpc()
+                print("MainWindow: remote_scene.destroy_grpc() completed")
+            
+            # Stop URL server
+            if hasattr(self, 'url_server'):
+                await self.url_server.stop()
+            
+            print("Main window cleanup completed")
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+    
+    def closeEvent(self, event):
+        """Handle window close event"""
+        print("Window close event triggered")
+        # Schedule cleanup to run in the event loop
+        asyncio.create_task(self.cleanup())
+        # Accept the close event
+        event.accept()

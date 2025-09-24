@@ -249,3 +249,41 @@ class CopilotService:
             timeout: The new timeout in seconds
         """
         self.timeout = timeout
+    
+    def get_scene_assets_for_orcalab(self, scene_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Extract asset information from scene data for OrcaLab add_item API.
+        
+        Args:
+            scene_data: The scene data from the server
+            
+        Returns:
+            List[Dict[str, Any]]: List of asset information for OrcaLab
+        """
+        assets = []
+        
+        # Extract assets from scene data
+        if scene_data.get('assets'):
+            for asset in scene_data['assets']:
+                # Use UUID as spawnable name, but ensure it's properly formatted
+                uuid = asset.get('uuid', 'unknown')
+                spawnable_name = uuid if uuid != 'unknown' else asset.get('name', 'asset')
+
+                # 将 uuid 转为 asset_$uuid_usda 这样的格式，且 '-' 替换为 '_'
+                spawnable_name = f"asset_{uuid.replace('-', '_')}_usda"
+                
+                # Debug output to show what spawnable names are being used
+                print(f"Asset: {asset.get('name', 'asset')} -> Spawnable: {spawnable_name} (UUID: {uuid})")
+                
+                asset_info = {
+                    'spawnable_name': spawnable_name,
+                    'name': asset.get('name', 'asset'),
+                    'position': asset.get('position', {}),
+                    'rotation': asset.get('rotation', {}),
+                    'scale': asset.get('scale', {}),
+                    'uuid': uuid  # Keep UUID for reference
+                }
+                assets.append(asset_info)
+        
+        return assets
+    

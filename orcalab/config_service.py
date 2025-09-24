@@ -69,6 +69,14 @@ class ConfigService:
 
     def level(self) -> str:
         return self.config["orcalab"]["level"]
+
+    def lock_fps(self) -> str:
+        if self.config["orcalab"]["lock_fps"] == 30:
+            return "--lockFps30"
+        elif self.config["orcalab"]["lock_fps"] == 60:
+            return "--lockFps60"
+        else:
+            return ""
     
     def copilot_server_url(self) -> str:
         return self.config.get("copilot", {}).get("server_url", "http://103.237.28.246:9023")

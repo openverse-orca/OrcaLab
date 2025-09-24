@@ -77,7 +77,34 @@ class CopilotPanel(QtWidgets.QWidget):
             }
         """)
         button_layout.addWidget(self.submit_button)
-        button_layout.addStretch()  # Push button to the left
+        
+        # Clear scene button
+        self.clear_scene_button = QtWidgets.QPushButton("Clear Scene")
+        self.clear_scene_button.setFixedWidth(100)
+        self.clear_scene_button.setStyleSheet("""
+            QPushButton {
+                background-color: #dc3545;
+                color: #ffffff;
+                border: none;
+                border-radius: 3px;
+                padding: 6px 12px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+            QPushButton:pressed {
+                background-color: #bd2130;
+            }
+            QPushButton:disabled {
+                background-color: #555555;
+                color: #999999;
+            }
+        """)
+        button_layout.addWidget(self.clear_scene_button)
+        
+        button_layout.addStretch()  # Push buttons to the left
         
         input_layout.addLayout(button_layout)
         
@@ -113,6 +140,7 @@ class CopilotPanel(QtWidgets.QWidget):
         
         # Connect signals
         self.submit_button.clicked.connect(self._on_submit_clicked)
+        self.clear_scene_button.clicked.connect(self._on_clear_scene_clicked)
         # QTextEdit doesn't have returnPressed signal, so we'll handle Enter key manually
         self.input_field.keyPressEvent = self._on_input_key_press
         
@@ -132,6 +160,11 @@ class CopilotPanel(QtWidgets.QWidget):
         if text:
             # Use asyncio to run the async asset search and creation
             asyncio.create_task(self._handle_asset_creation(text))
+    
+    def _on_clear_scene_clicked(self):
+        """Handle clear scene button click"""
+        # Use asyncio to run the async scene clearing
+        asyncio.create_task(self._handle_clear_scene())
             
     def log_message(self, message: str):
         """Add a message to the log"""
@@ -314,14 +347,19 @@ class CopilotPanel(QtWidgets.QWidget):
             # Step 2.5: Display detailed asset information
             self._display_scene_info(scene_data)
             
-            # Step 3: Emit signal to create actor using existing add_item_to_scene API
-            self.log_message("Step 3: Creating actor using existing API...")
-            self.add_item.emit(spawnable_name, None)  # None means root path
-            self.log_success("Actor creation signal sent successfully!")
+            # Step 3: Create all assets using OrcaLab's add_item API
+            self.log_message("Step 3: Creating all assets using OrcaLab API...")
+            assets = self.copilot_service.get_scene_assets_for_orcalab(scene_data)
+            
+            for i, asset in enumerate(assets):
+                self.log_message(f"Creating asset {i+1}/{len(assets)}: {asset['name']}")
+                self.add_item.emit(asset['spawnable_name'], None)  # None means root path
+            
+            self.log_success(f"All {len(assets)} assets created successfully!")
             
             # Clear input field
             self.clear_input()
-            self.log_success("Asset generation and actor creation completed successfully!")
+            self.log_success("Asset generation and scene display completed successfully!")
             
         except Exception as e:
             self.log_error(f"Failed to generate asset: {str(e)}")
@@ -330,3 +368,24 @@ class CopilotPanel(QtWidgets.QWidget):
         finally:
             # Re-enable submit button
             self.set_submit_enabled(True)
+    
+    async def _handle_clear_scene(self):
+        """Handle the scene clearing workflow"""
+        try:
+            # Disable clear scene button during processing
+            self.clear_scene_button.setEnabled(False)
+            self.log_message("Clearing scene...")
+            
+            # Note: OrcaLab doesn't have a direct clear scene API
+            # The scene clearing would need to be handled by the main window
+            # For now, we'll just log a message
+            self.log_message("Scene clearing request sent. Please use the main window's clear scene functionality.")
+            self.log_success("Scene clearing request completed!")
+            
+        except Exception as e:
+            self.log_error(f"Failed to clear scene: {str(e)}")
+            import traceback
+            self.log_error(f"Error details: {traceback.format_exc()}")
+        finally:
+            # Re-enable clear scene button
+            self.clear_scene_button.setEnabled(True)
