@@ -21,3 +21,10 @@ attach = false
 
 # [个人配置] 启动关卡
 level = "Default_level"
+
+# Copilot 服务器配置
+[copilot]
+# 服务器地址
+server_url = "http://103.237.28.246:9023"
+# 请求超时时间（秒）
+timeout = 180

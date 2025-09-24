@@ -122,6 +122,12 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         self.asset_browser_widget.set_assets(assets)
 
         self.copilot_widget = CopilotPanel(self.remote_scene)
+        # Configure copilot with server settings from config
+        config_service = ConfigService()
+        self.copilot_widget.set_server_config(
+            config_service.copilot_server_url(),
+            config_service.copilot_timeout()
+        )
         self.copilot = self._create_styled_panel("Copilot", self.copilot_widget)
 
         self.menu_bar = QtWidgets.QMenuBar()

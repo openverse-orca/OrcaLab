@@ -69,3 +69,9 @@ class ConfigService:
 
     def level(self) -> str:
         return self.config["orcalab"]["level"]
+    
+    def copilot_server_url(self) -> str:
+        return self.config.get("copilot", {}).get("server_url", "http://103.237.28.246:9023")
+    
+    def copilot_timeout(self) -> int:
+        return self.config.get("copilot", {}).get("timeout", 180)
