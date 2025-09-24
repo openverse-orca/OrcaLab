@@ -80,37 +80,169 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
 
     async def _init_ui(self):
         self.tool_bar = ToolBar()
+        # 为工具栏添加样式
+        self.tool_bar.setStyleSheet("""
+            QWidget {
+                background-color: #3c3c3c;
+                border-bottom: 1px solid #404040;
+            }
+            QToolButton {
+                background-color: #4a4a4a;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                padding: 4px;
+                margin: 2px;
+            }
+            QToolButton:hover {
+                background-color: #5a5a5a;
+                border-color: #666666;
+            }
+            QToolButton:pressed {
+                background-color: #2a2a2a;
+            }
+        """)
         connect(self.tool_bar.action_start.triggered, self.run_sim)
         connect(self.tool_bar.action_stop.triggered, self.stop_sim)
 
         self.actor_outline_model = ActorOutlineModel(self.local_scene)
         self.actor_outline_model.set_root_group(self.local_scene.root_actor)
 
-        self.actor_outline = ActorOutline()
-        self.actor_outline.set_actor_model(self.actor_outline_model)
+        # 创建带样式的面板
+        self.actor_outline_widget = ActorOutline()
+        self.actor_outline = self._create_styled_panel("Scene Hierarchy", self.actor_outline_widget)
+        self.actor_outline_widget.set_actor_model(self.actor_outline_model)
 
-        self.actor_editor = ActorEditor()
+        self.actor_editor_widget = ActorEditor()
+        self.actor_editor = self._create_styled_panel("Properties", self.actor_editor_widget)
 
-        self.asset_browser = AssetBrowser()
+        self.asset_browser_widget = AssetBrowser()
+        self.asset_browser = self._create_styled_panel("Assets", self.asset_browser_widget)
         assets = await self.remote_scene.get_actor_assets()
-        self.asset_browser.set_assets(assets)
+        self.asset_browser_widget.set_assets(assets)
 
         self.menu_bar = QtWidgets.QMenuBar()
+        # 为菜单栏添加样式
+        self.menu_bar.setStyleSheet("""
+            QMenuBar {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border-bottom: 1px solid #404040;
+                padding: 2px;
+            }
+            QMenuBar::item {
+                background-color: transparent;
+                padding: 4px 8px;
+                border-radius: 3px;
+            }
+            QMenuBar::item:selected {
+                background-color: #4a4a4a;
+            }
+            QMenuBar::item:pressed {
+                background-color: #2a2a2a;
+            }
+            QMenu {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #404040;
+                border-radius: 3px;
+            }
+            QMenu::item {
+                padding: 6px 20px;
+            }
+            QMenu::item:selected {
+                background-color: #4a4a4a;
+            }
+        """)
 
         self.menu_file = self.menu_bar.addMenu("File")
         self.menu_edit = self.menu_bar.addMenu("Edit")
 
         layout1 = QtWidgets.QHBoxLayout()
+        layout1.setSpacing(8)  # 增加面板间距
         layout1.addWidget(self.actor_outline, 1)
         layout1.addWidget(self.actor_editor, 1)
         layout1.addWidget(self.asset_browser, 1)
 
         layout2 = QtWidgets.QVBoxLayout()
+        layout2.setContentsMargins(8, 8, 8, 8)  # 设置外边距
         layout2.addWidget(self.menu_bar)
         layout2.addWidget(self.tool_bar)
         layout2.addLayout(layout1)
 
         self.setLayout(layout2)
+        
+        # 为主窗体设置背景色
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #1e1e1e;
+                color: #ffffff;
+            }
+        """)
+
+    def _create_styled_panel(self, title: str, content_widget: QtWidgets.QWidget) -> QtWidgets.QWidget:
+        """创建带标题和样式的面板"""
+        # 创建主容器
+        panel = QtWidgets.QWidget()
+        panel.setObjectName(f"panel_{title.lower().replace(' ', '_')}")
+        
+        # 设置面板样式
+        panel.setStyleSheet(f"""
+            QWidget#{panel.objectName()} {{
+                background-color: #2b2b2b;
+                border: 1px solid #404040;
+                border-radius: 4px;
+            }}
+        """)
+        
+        # 创建垂直布局
+        layout = QtWidgets.QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # 创建标题栏
+        title_bar = QtWidgets.QLabel(title)
+        title_bar.setObjectName("title_bar")
+        title_bar.setStyleSheet("""
+            QLabel#title_bar {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                padding: 6px 12px;
+                border-bottom: 1px solid #404040;
+                font-weight: bold;
+                font-size: 12px;
+            }
+        """)
+        title_bar.setFixedHeight(28)
+        
+        # 设置内容区域样式
+        content_widget.setStyleSheet("""
+            QTreeView, QListView, QWidget {
+                background-color: #2b2b2b;
+                color: #ffffff;
+                border: none;
+                selection-background-color: #404040;
+                alternate-background-color: #333333;
+            }
+            QTreeView::item:selected, QListView::item:selected {
+                background-color: #404040;
+                color: #ffffff;
+            }
+            QTreeView::item:hover, QListView::item:hover {
+                background-color: #353535;
+            }
+            QHeaderView::section {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #404040;
+                padding: 4px;
+            }
+        """)
+        
+        # 添加到布局
+        layout.addWidget(title_bar)
+        layout.addWidget(content_widget)
+        
+        return panel
 
     async def _start_query_pending_operation_loop(self):
         async with self._query_pending_operation_lock:
@@ -240,7 +372,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         self.sim_process_running = True
         self.disanble_control.emit()
         if self.local_scene.selection:
-            self.actor_editor.actor = None
+            self.actor_editor_widget.actor = None
             self.local_scene.selection = []
             await self.remote_scene.set_selection([])
         await self.remote_scene.change_sim_state(self.sim_process_running)
@@ -280,7 +412,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         actors, actor_paths = self.local_scene.get_actor_and_path_list(actors)
 
         if source != "outline":
-            self.actor_outline.set_actor_selection(actors)
+            self.actor_outline_widget.set_actor_selection(actors)
 
         if source != "remote":
             await self.remote_scene.set_selection(actor_paths)
@@ -289,9 +421,9 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
 
         # sync editor
         if len(actors) == 0:
-            self.actor_editor.actor = None
+            self.actor_editor_widget.actor = None
         else:
-            self.actor_editor.actor = actors[0]
+            self.actor_editor_widget.actor = actors[0]
 
     def make_unique_name(self, base_name: str, parent: BaseActor | Path) -> str:
         parent, _ = self.local_scene.get_actor_and_path(parent)
@@ -382,11 +514,11 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         await self.remote_scene.reparent_actor(actor_path, new_parent_path)
 
     async def on_transform_edit(self):
-        actor = self.actor_editor.actor
+        actor = self.actor_editor_widget.actor
         if actor is None:
             return
 
-        transform = self.actor_editor.transform
+        transform = self.actor_editor_widget.transform
         if transform is None:
             return
 
@@ -399,13 +531,13 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         await self.remote_scene.set_actor_transform(actor_path, transform, True)
 
     def record_start_transform(self):
-        actor = self.actor_editor.actor
+        actor = self.actor_editor_widget.actor
         if actor is None:
             return
         self.start_transform = actor.transform
 
     def record_stop_transform(self):
-        actor = self.actor_editor.actor
+        actor = self.actor_editor_widget.actor
         if actor is None:
             return
         self.end_transform = actor.transform
@@ -422,8 +554,8 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         else:
             actor.world_transform = transform
 
-        if self.actor_editor.actor == actor:
-            self.actor_editor.update_ui()
+        if self.actor_editor_widget.actor == actor:
+            self.actor_editor_widget.update_ui()
 
     @override
     def get_cache_folder(self, output: list[str]) -> None:
@@ -529,18 +661,18 @@ class MainWindow1(MainWindow):
         connect(self.actor_outline_model.add_item, self.add_item_to_scene)
 
         connect(
-            self.actor_outline.actor_selection_changed,
+            self.actor_outline_widget.actor_selection_changed,
             self.set_selection_from_outline,
         )
-        connect(self.actor_outline.request_add_group, self.add_group_actor_from_outline)
-        connect(self.actor_outline.request_delete, self.delete_actor_from_outline)
-        connect(self.actor_outline.request_rename, self.open_rename_dialog)
+        connect(self.actor_outline_widget.request_add_group, self.add_group_actor_from_outline)
+        connect(self.actor_outline_widget.request_delete, self.delete_actor_from_outline)
+        connect(self.actor_outline_widget.request_rename, self.open_rename_dialog)
 
-        connect(self.actor_editor.transform_changed, self.on_transform_edit)
-        connect(self.actor_editor.start_drag, self.record_start_transform)
-        connect(self.actor_editor.stop_drag, self.record_stop_transform)
+        connect(self.actor_editor_widget.transform_changed, self.on_transform_edit)
+        connect(self.actor_editor_widget.start_drag, self.record_start_transform)
+        connect(self.actor_editor_widget.stop_drag, self.record_stop_transform)
 
-        connect(self.asset_browser.add_item, self.add_item_to_scene)
+        connect(self.asset_browser_widget.add_item, self.add_item_to_scene)
 
         connect(self.menu_file.aboutToShow, self.prepare_file_menu)
         connect(self.menu_edit.aboutToShow, self.prepare_edit_menu)
