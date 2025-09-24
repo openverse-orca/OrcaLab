@@ -121,7 +121,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         assets = await self.remote_scene.get_actor_assets()
         self.asset_browser_widget.set_assets(assets)
 
-        self.copilot_widget = CopilotPanel(self.remote_scene)
+        self.copilot_widget = CopilotPanel(self.remote_scene, self)
         # Configure copilot with server settings from config
         config_service = ConfigService()
         self.copilot_widget.set_server_config(
@@ -690,7 +690,9 @@ class MainWindow1(MainWindow):
         connect(self.actor_editor_widget.stop_drag, self.record_stop_transform)
 
         connect(self.asset_browser_widget.add_item, self.add_item_to_scene)
-        connect(self.copilot_widget.add_item, self.add_item_to_scene)
+
+        connect(self.copilot_widget.add_item_with_transform, self.add_item_to_scene_with_transform)
+        connect(self.copilot_widget.request_add_group, self.on_copilot_add_group)
 
         connect(self.menu_file.aboutToShow, self.prepare_file_menu)
         connect(self.menu_edit.aboutToShow, self.prepare_edit_menu)
@@ -943,6 +945,57 @@ class MainWindow1(MainWindow):
         command.actor = deepcopy(actor)
         command.path = parent_path / name
         self.add_command(command)
+
+    async def add_item_to_scene_with_transform(self, item_name, item_spawnable_name, parent_path=None, transform=None):
+        if parent_path is None:
+            parent_path = Path.root_path()
+
+        name = self.make_unique_name(item_name, parent_path)
+        actor = AssetActor(name=name, spawnable_name=item_spawnable_name)
+        actor.transform = transform
+        await self.add_actor(actor, parent_path)
+        command = CreateActorCommand()
+        command.actor = deepcopy(actor)
+        command.path = parent_path / name
+        self.add_command(command)
+
+    async def on_copilot_add_group(self, group_path: Path):
+        group_actor = GroupActor(name=group_path.name())
+        await self.add_actor(group_actor, group_path.parent())
+
+        command = CreateGroupCommand()
+        command.path = group_path
+        self.add_command(command)
+
+    async def on_copilot_transform_changed(self, actor_path_str, transform):
+        """
+        Handle transform changes from copilot.
+        
+        Args:
+            actor_path_str: String path to the actor
+            transform: Pre-calculated Transform object from CopilotPanel
+        """
+        try:
+            # Convert string path to Path object
+            actor_path = Path(actor_path_str)
+            
+            # Check if actor exists in local scene
+            if actor_path not in self.local_scene:
+                print(f"Warning: Actor {actor_path} not found in local scene")
+                return
+            
+            # Get the actor
+            actor = self.local_scene[actor_path]
+            
+            # Set the transform (already calculated in CopilotPanel)
+            actor.transform = transform
+            
+            # Sync with remote scene
+            await self.remote_scene.set_actor_transform(actor_path, transform, True)
+            
+        except Exception as e:
+            print(f"Error setting copilot transform: {e}")
+
 
     async def add_item_drag(self, item_name, transform):
         name = self.make_unique_name(item_name, Path.root_path())

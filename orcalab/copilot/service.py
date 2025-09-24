@@ -253,12 +253,13 @@ class CopilotService:
     def get_scene_assets_for_orcalab(self, scene_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Extract asset information from scene data for OrcaLab add_item API.
+        Includes transform data (position, rotation, scale) from server.
         
         Args:
             scene_data: The scene data from the server
             
         Returns:
-            List[Dict[str, Any]]: List of asset information for OrcaLab
+            List[Dict[str, Any]]: List of asset information for OrcaLab with transform data
         """
         assets = []
         
@@ -274,6 +275,10 @@ class CopilotService:
                 
                 # Debug output to show what spawnable names are being used
                 print(f"Asset: {asset.get('name', 'asset')} -> Spawnable: {spawnable_name} (UUID: {uuid})")
+                print(f"  USD Position (cm): {asset.get('position', {})}")
+                print(f"  USD Rotation (degrees): {asset.get('rotation', {})}")
+                print(f"  Scale: {asset.get('scale', {})}")
+                print(f"  Note: Will be converted from USD to OrcaLab coordinate system")
                 
                 asset_info = {
                     'spawnable_name': spawnable_name,

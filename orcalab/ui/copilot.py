@@ -1,20 +1,27 @@
 import asyncio
 from typing import List
+from copy import deepcopy
+import uuid
+import numpy as np
+from scipy.spatial.transform import Rotation
 from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import Qt
-from orcalab.actor import BaseActor, AssetActor
+from orcalab.actor import BaseActor, AssetActor, GroupActor
 from orcalab.path import Path
 from orcalab.copilot import CopilotService
-
+from orcalab.math import Transform
+import orca_gym.utils.rotations as rotations
 
 class CopilotPanel(QtWidgets.QWidget):
     """Copilot panel for asset search and actor creation"""
     
-    add_item = QtCore.Signal(str, BaseActor)  # Signal emitted when submit button is clicked, compatible with asset_browser
+    add_item_with_transform = QtCore.Signal(str, str, Path, Transform)  # Signal emitted when submit button is clicked, compatible with asset_browser
+    request_add_group = QtCore.Signal(object)  # Signal to request creating a group (parent_actor: BaseActor | Path)
     
-    def __init__(self, remote_scene=None):
+    def __init__(self, remote_scene=None, main_window=None):
         super().__init__()
         self.remote_scene = remote_scene
+        self.main_window = main_window
         self.copilot_service = CopilotService()
         self._setup_ui()
         
@@ -215,6 +222,10 @@ class CopilotPanel(QtWidgets.QWidget):
         """Set the remote scene instance for asset operations"""
         self.remote_scene = remote_scene
     
+    def set_main_window(self, main_window):
+        """Set the main window instance for asset operations"""
+        self.main_window = main_window
+    
     def set_server_config(self, server_url: str, timeout: int = 180):
         """
         Configure the server settings for the copilot service.
@@ -347,13 +358,18 @@ class CopilotPanel(QtWidgets.QWidget):
             # Step 2.5: Display detailed asset information
             self._display_scene_info(scene_data)
             
-            # Step 3: Create all assets using OrcaLab's add_item API
-            self.log_message("Step 3: Creating all assets using OrcaLab API...")
+            # Step 3: Create all assets using OrcaLab's add_item API with transform support
+            self.log_message("Step 3: Creating all assets using OrcaLab API with transform support...")
             assets = self.copilot_service.get_scene_assets_for_orcalab(scene_data)
             
-            for i, asset in enumerate(assets):
-                self.log_message(f"Creating asset {i+1}/{len(assets)}: {asset['name']}")
-                self.add_item.emit(asset['spawnable_name'], None)  # None means root path
+            # Create all assets using three-step process
+            scene_center = scene_data.get('scene_center', [])
+            center_point = {
+                'x': scene_center[0],
+                'y': scene_center[1],
+                'z': scene_center[2]
+            }
+            await self.create_actor_on_scene(assets, center_point)
             
             self.log_success(f"All {len(assets)} assets created successfully!")
             
@@ -389,3 +405,149 @@ class CopilotPanel(QtWidgets.QWidget):
         finally:
             # Re-enable clear scene button
             self.clear_scene_button.setEnabled(True)
+    
+    async def create_actor_on_scene(self, assets_data, center_point):
+        """
+        Create assets using three-step process through signals.
+        
+        Args:
+            assets_data: List of asset dictionaries containing spawnable_name, name, position, rotation, scale
+        """
+        if not assets_data:
+            return
+            
+        # Step 1: Create a group to contain all assets using signal
+        group_uuid = str(uuid.uuid4())
+        group_uuid = group_uuid.replace('-', '_')
+        group_name = f"CopilotGroup_{group_uuid}"
+        self.log_message(f"Step 1: Creating group '{group_name}'...")
+        
+        # Emit signal to request group creation (pass root path as parent)
+        root_path = Path.root_path()
+        group_path = root_path / group_name
+        self.request_add_group.emit(group_path)
+        
+        # Wait a bit for the group to be created (in a real implementation, you might want a callback)
+        await asyncio.sleep(0.1)
+        
+        self.log_success(f"Group '{group_name}' created successfully!")
+        
+        # Step 2: Add all assets to the group using existing add_item signal
+        self.log_message(f"Step 2: Adding {len(assets_data)} assets to group...")
+        for i, asset_data in enumerate(assets_data):
+            self.log_message(f"  Adding asset {i+1}/{len(assets_data)}: {asset_data['name']}")
+
+            transform = self._create_transform_from_server_data(asset_data, center_point)
+            self.add_item_with_transform.emit(asset_data['name'], asset_data['spawnable_name'], group_path, transform)
+
+            # Wait a bit for the asset to be created
+            await asyncio.sleep(0.05)
+        
+        self.log_success(f"All {len(assets_data)} assets added to group!")  
+    
+        print(f"Created copilot group '{group_name}' with {len(assets_data)} assets")
+        print("Note: All transforms converted from USD to OrcaLab coordinate system")
+
+    def _create_transform_from_server_data(self, asset_data, center_point):
+        """
+        Create a Transform object from server asset data.
+        Server provides world coordinates in centimeters and rotation in degrees.
+        We need to convert from USD coordinate system to OrcaLab coordinate system.
+        
+        USD coordinate system: Right-handed, Y-up, -Z-forward, X-right
+        OrcaLab coordinate system: Right-handed, Z-up, X-forward, Y-left
+        
+        Args:
+            asset_data: Dictionary containing position, rotation, scale data
+                       - position: in centimeters (USD coordinate system)
+                       - rotation: in degrees (Euler angles, USD coordinate system)
+                       - scale: unitless scaling factors
+            
+        Returns:
+            Transform object with the asset's transform data in OrcaLab coordinate system
+        """
+        # Extract position data (convert from centimeters to meters)
+        position_offset = np.array([
+            center_point.get('x', 0.0) / 100.0,
+            -center_point.get('z', 0.0) / 100.0,
+            0.0,
+        ])
+
+        position_data = asset_data.get('position', {})
+        if isinstance(position_data, dict):
+            # Convert from centimeters to meters first
+            position_usd = {
+                'x': position_data.get('x', 0.0) / 100.0,  # cm to m
+                'y': position_data.get('y', 0.0) / 100.0,  # cm to m
+                'z': position_data.get('z', 0.0) / 100.0   # cm to m
+            }
+        else:
+            position_usd = {'x': 0.0, 'y': 0.0, 'z': 0.0}
+        
+        # Convert USD coordinates to OrcaLab coordinates
+        # USD (X, Y, Z) -> OrcaLab (X, -Z, Y)
+        position_orcalab = np.array([
+            position_usd['x'],      # X stays the same
+            -position_usd['z'],     # USD -Z becomes OrcaLab Y
+            position_usd['y'] - 0.005       # USD Y becomes OrcaLab Z ，有一些资产带有底板，下移5mm避免 Z-Fighting
+        ], dtype=np.float64)
+        position_orcalab = position_orcalab - position_offset
+        
+        # Debug output for coordinate conversion
+        if asset_data.get('name') and 'debug' in asset_data.get('name', '').lower():
+            print(f"  Coordinate conversion for {asset_data['name']}:")
+            print(f"    USD position (m): {position_usd}")
+            print(f"    OrcaLab position (m): {position_orcalab}")
+        
+        # Extract rotation data (Euler angles in degrees)
+        rotation_data = asset_data.get('rotation', {})
+        if isinstance(rotation_data, dict):
+            rotation_usd = {
+                'x': rotation_data.get('x', 0.0),  # degrees
+                'y': rotation_data.get('y', 0.0),  # degrees
+                'z': rotation_data.get('z', 0.0)   # degrees
+            }
+        else:
+            rotation_usd = {'x': 0.0, 'y': 0.0, 'z': 0.0}
+        
+        # Convert USD rotation to OrcaLab rotation
+        # This accounts for the coordinate system change
+        rotation_orcalab = {
+            'x': rotation_usd['x'],      # X rotation stays the same
+            'y': -rotation_usd['z'],     # USD Z rotation becomes OrcaLab -Y rotation
+            'z': rotation_usd['y'] + 180 # USD Y rotation becomes OrcaLab Z rotation + 180
+        }
+        
+        # Convert Euler angles to quaternion
+        rotation_euler = np.array([
+            np.radians(rotation_orcalab.get('x', 0.0)),
+            np.radians(rotation_orcalab.get('y', 0.0)),
+            np.radians(rotation_orcalab.get('z', 0.0))
+        ])
+        rotation_quat = rotations.euler2quat(rotation_euler)
+        
+        # Extract scale data (unitless scaling factors)
+        scale_data = asset_data.get('scale', {})
+        if isinstance(scale_data, dict):
+            # Use uniform scale (average of x, y, z components)
+            scale_x = scale_data.get('x', 1.0)
+            scale_y = scale_data.get('y', 1.0)
+            scale_z = scale_data.get('z', 1.0)
+            scale = (scale_x + scale_y + scale_z) / 3.0
+        else:
+            scale = 1.0
+        
+        return Transform(position=position_orcalab, rotation=rotation_quat, scale=scale)
+
+    def _create_transform_from_copilot_data(self, transform_data):
+        """
+        Create a Transform object from copilot transform data.
+        This is the same logic as _create_transform_from_server_data but with a different name for clarity.
+        
+        Args:
+            transform_data: Dictionary containing position, rotation, scale data
+            
+        Returns:
+            Transform object with the transform data in OrcaLab coordinate system
+        """
+        return self._create_transform_from_server_data(transform_data)
