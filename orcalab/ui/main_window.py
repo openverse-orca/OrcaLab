@@ -20,6 +20,7 @@ from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.rename_dialog import RenameDialog
 from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.asset_browser import AssetBrowser
+from orcalab.ui.copilot import CopilotPanel
 from orcalab.ui.tool_bar import ToolBar
 from orcalab.math import Transform
 from orcalab.config_service import ConfigService
@@ -120,6 +121,9 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         assets = await self.remote_scene.get_actor_assets()
         self.asset_browser_widget.set_assets(assets)
 
+        self.copilot_widget = CopilotPanel(self.remote_scene)
+        self.copilot = self._create_styled_panel("Copilot", self.copilot_widget)
+
         self.menu_bar = QtWidgets.QMenuBar()
         # 为菜单栏添加样式
         self.menu_bar.setStyleSheet("""
@@ -162,6 +166,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         layout1.addWidget(self.actor_outline, 1)
         layout1.addWidget(self.actor_editor, 1)
         layout1.addWidget(self.asset_browser, 1)
+        layout1.addWidget(self.copilot, 1)
 
         layout2 = QtWidgets.QVBoxLayout()
         layout2.setContentsMargins(8, 8, 8, 8)  # 设置外边距
@@ -673,6 +678,7 @@ class MainWindow1(MainWindow):
         connect(self.actor_editor_widget.stop_drag, self.record_stop_transform)
 
         connect(self.asset_browser_widget.add_item, self.add_item_to_scene)
+        connect(self.copilot_widget.add_item, self.add_item_to_scene)
 
         connect(self.menu_file.aboutToShow, self.prepare_file_menu)
         connect(self.menu_edit.aboutToShow, self.prepare_edit_menu)
@@ -960,6 +966,8 @@ class MainWindow1(MainWindow):
         self.actor_editor.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
         self.asset_browser.setEnabled(True)
         self.asset_browser.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
+        self.copilot.setEnabled(True)
+        self.copilot.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
         self.menu_edit.setEnabled(True)
 
     def disable_widgets(self):
@@ -969,4 +977,6 @@ class MainWindow1(MainWindow):
         self.actor_editor.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
         self.asset_browser.setEnabled(False)
         self.asset_browser.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        self.copilot.setEnabled(False)
+        self.copilot.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
         self.menu_edit.setEnabled(False)
