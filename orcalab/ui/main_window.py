@@ -6,6 +6,9 @@ from typing import Dict, Tuple, override
 import numpy as np
 from scipy.spatial.transform import Rotation
 import subprocess
+import json
+import ast
+import os
 
 from PySide6 import QtCore, QtWidgets, QtGui
 import PySide6.QtAsyncio as QtAsyncio
@@ -664,12 +667,14 @@ class MainWindow1(MainWindow):
 
     add_item_by_drag = QtCore.Signal(str, Transform)
     transform_change = QtCore.Signal(Path, bool)
+    load_scene_sig = QtCore.Signal(str)
 
     def __init__(self):
         super().__init__()
 
         self.command_history = []
         self.command_history_index = -1
+        self.cwd = os.getcwd()
 
     async def init(self):
         await super().init()
@@ -701,6 +706,7 @@ class MainWindow1(MainWindow):
 
         connect(self.add_item_by_drag, self.add_item_drag)
         connect(self.transform_change, self.transform_change_command)
+        connect(self.load_scene_sig, self.load_scene)
 
         connect(self.enable_control, self.enable_widgets)
         connect(self.disanble_control, self.disable_widgets)
@@ -727,6 +733,132 @@ class MainWindow1(MainWindow):
 
         action_exit = self.menu_file.addAction("Exit")
         connect(action_exit.triggered, self.close)
+
+        action_sava = self.menu_file.addAction("Save")
+        connect(action_sava.triggered, self.save_scene)
+
+        action_open = self.menu_file.addAction("Open")
+        connect(action_open.triggered, self.open_scene)
+
+    def save_scene(self, filename: str = None):
+        filename, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,  
+            "Save Scene",  
+            self.cwd, 
+            "JSON Files (*.json);;All Files (*)"
+        )
+
+        if filename == "":
+            return
+        if not filename.lower().endswith(".json"):
+            filename += ".json"
+        root = self.local_scene.root_actor
+        scene_dict = self.actor_to_dict(root)
+
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(scene_dict, f, indent=4, ensure_ascii=False)
+            print(f"Scene saved to {filename}")
+        except Exception as e:
+            print(f"Failed to save scene: {e}")
+
+    def actor_to_dict(self, actor: AssetActor | GroupActor):
+        def to_list(v):
+            lst = v.tolist() if hasattr(v, "tolist") else v
+            return lst
+        def compact_array(arr):
+            return "[" + ",".join(str(x) for x in arr) + "]"
+
+        data = {
+            "name": actor.name,
+            "path": self.local_scene.get_actor_path(actor)._p,
+            "transform": {
+                "position": compact_array(to_list(actor.transform.position)),
+                "rotation": compact_array(to_list(actor.transform.rotation)),
+                "scale": actor.transform.scale,
+            },
+            "world_transform": {
+                "world_position": compact_array(to_list(actor.world_transform.position)),
+                "world_rotation": compact_array(to_list(actor.world_transform.rotation)),
+                "world_scale": actor.world_transform.scale,
+            },
+        }
+
+        if actor.name == "root":
+            new_fields = {"version": "1.0"}
+            data = {**new_fields, **data}
+
+        if isinstance(actor, AssetActor):
+            data["type"] = "AssetActor"
+            data["spawnable_name"] = actor._spawnable_name
+            
+        if isinstance(actor, GroupActor):
+            data["type"] = "GroupActor"
+            data["children"] = [self.actor_to_dict(child) for child in actor.children]
+
+        return data
+
+    def open_scene(self, filename: str = None):
+        filename, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Open Scene",
+            self.cwd,
+            "Scene Files (*.json);;All Files (*)"
+        )
+        if not filename:
+            return
+        else:
+            self.load_scene_sig.emit(filename)
+
+    async def load_scene(self, filename):
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"Failed to save scene: {e}")
+
+        await self.clear_scene(self.local_scene.root_actor)
+        await self.create_actor_from_scene(data)
+
+    async def clear_scene(self, actor):
+        if isinstance(actor, GroupActor):
+            for child_actor in actor.children:
+                await self.clear_scene(child_actor)
+        if actor != self.local_scene.root_actor:
+            await self.delete_actor(actor)
+    
+    async def create_actor_from_scene(self, actor_data, parent: GroupActor = None):
+        name = actor_data["name"]
+        actor_type = actor_data.get("type", "BaseActor")
+        if actor_type == "AssetActor":
+            spawnable_name = actor_data.get("spawnable_name", "")
+            actor = AssetActor(name=name, spawnable_name=spawnable_name)
+        else:
+            actor = GroupActor(name=name)
+
+        transform_data = actor_data.get("transform", {})
+        position = np.array(ast.literal_eval(transform_data["position"]), dtype=float).reshape(3)
+        rotation = np.array(ast.literal_eval(transform_data["rotation"]), dtype=float)
+        scale = transform_data.get("scale", 1.0)
+        transform = Transform(position, rotation, scale)
+        actor.transform = transform
+
+        world_transform_data = actor_data.get("world_transform", {})
+        world_position = np.array(ast.literal_eval(world_transform_data["world_position"]), dtype=float).reshape(3)
+        world_rotation = np.array(ast.literal_eval(world_transform_data["world_rotation"]), dtype=float)
+        world_scale = world_transform_data.get("scale", 1.0)
+        world_transform = Transform(world_position, world_rotation, world_scale)
+        actor.world_transform = world_transform
+        
+        if name == "root":
+            actor = self.local_scene.root_actor
+        else:
+            await self.add_actor(actor=actor, parent_actor=parent)
+
+        if isinstance(actor, GroupActor):
+            for child_data in actor_data.get("children", []):
+                await self.create_actor_from_scene(child_data, actor)
+
 
     def prepare_edit_menu(self):
         self.menu_edit.clear()
