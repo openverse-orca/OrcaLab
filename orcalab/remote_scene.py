@@ -169,8 +169,11 @@ class RemoteScene:
         # We can 'block' here.
         max_wait_time = 60  # 资产太多的时候，重启电脑加载会比较久
         while True:
-            if await self.aloha():
-                break
+            try:
+                if await self.aloha():
+                    break
+            except Exception as e:
+                pass
             time.sleep(1)
             print("waiting for server to be ready...")
             if server_process.poll() is not None:

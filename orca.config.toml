@@ -19,6 +19,13 @@ executable = ""
 # Attach: 连接到以经启动的Viewport。
 attach = false
 
+# [个人配置] 用到的pak包的绝对路径。目前先手填。至少要有一个engine的pak和level的pak。
+# 启动时脚本会把它们放到正确的位置。
+paks = [
+    # "/xxx/engine_linux.pak",
+    # "/xxx/test_level_linux.pak",
+]
+
 # [个人配置] 启动关卡
 level = "Default_level"
 

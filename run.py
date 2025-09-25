@@ -4,7 +4,7 @@ import signal
 import atexit
 
 from orcalab.config_service import ConfigService
-from orcalab.project_util import check_project_folder
+from orcalab.project_util import check_project_folder, copy_packages
 from orcalab.url_service.url_util import register_protocol
 from orcalab.ui.main_window import MainWindow1
 
@@ -17,6 +17,7 @@ from qasync import QEventLoop
 
 # Global variable to store main window instance for cleanup
 _main_window = None
+
 
 def signal_handler(signum, frame):
     """Handle system signals to ensure cleanup"""
@@ -31,12 +32,14 @@ def signal_handler(signum, frame):
             print(f"Error during signal cleanup: {e}")
     sys.exit(0)
 
+
 def register_signal_handlers():
     """Register signal handlers for graceful shutdown"""
-    signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
+    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
     signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
-    if hasattr(signal, 'SIGHUP'):
+    if hasattr(signal, "SIGHUP"):
         signal.signal(signal.SIGHUP, signal_handler)  # Hangup signal
+
 
 async def main(q_app):
     global _main_window
@@ -48,7 +51,7 @@ async def main(q_app):
     await main_window.init()
 
     await app_close_event.wait()
-    
+
     # Clean up resources before exiting
     print("Application is closing, cleaning up resources...")
     await main_window.cleanup()
@@ -58,12 +61,15 @@ if __name__ == "__main__":
     check_project_folder()
 
     register_protocol()
-    
+
     # Register signal handlers for graceful shutdown
     register_signal_handlers()
 
     config_service = ConfigService()
     config_service.init_config(os.path.dirname(__file__))
+
+    if config_service.paks():
+        copy_packages(config_service.paks())
 
     q_app = QtWidgets.QApplication(sys.argv)
 

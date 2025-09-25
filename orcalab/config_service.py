@@ -35,7 +35,7 @@ class ConfigService:
 
     def init_config(self, root_folder: str):
         self.config = {}
-        self.config["orca_project_folder"] = get_project_dir()
+        self.config["orca_project_folder"] = str(get_project_dir())
 
         self.root_folder = root_folder
         self.config_path = os.path.join(self.root_folder, "orca.config.toml")
@@ -63,6 +63,9 @@ class ConfigService:
 
     def attach(self) -> bool:
         return self.config["orcalab"]["attach"]
+    
+    def paks(self) -> list:
+        return self.config["orcalab"].get("paks", [])
 
     def orca_project_folder(self) -> str:
         return self.config["orca_project_folder"]
