@@ -292,3 +292,80 @@ class CopilotService:
         
         return assets
     
+    def create_corner_lights_for_orcalab(self, scene_data: Dict[str, Any], light_height: float = 3.0) -> List[Dict[str, Any]]:
+        """
+        Create corner light assets for OrcaLab based on scene bounding box.
+        
+        Args:
+            scene_data: The scene data from the server containing bounding box info
+            light_height: Height of lights above the scene in meters
+            
+        Returns:
+            List[Dict[str, Any]]: List of light asset information for OrcaLab
+        """
+        lights = []
+        
+        # Get bounding box information
+        if not scene_data.get('bounding_box'):
+            print("Warning: No bounding box info available, cannot add corner lights")
+            return lights
+            
+        bbox = scene_data['bounding_box']
+        min_point = tuple(bbox['min'])
+        max_point = tuple(bbox['max'])
+        center_point = tuple(bbox['center'])
+        
+        # Convert bbox from cm to meters
+        half_width = (max_point[0] - min_point[0]) / 200.0  # /200 to convert cm to m and /2 for half
+        half_length = (max_point[2] - min_point[2]) / 200.0  # /200 to convert cm to m and /2 for half
+        
+        # Calculate corner positions (3/4 distance from center to corner)
+        # The four corners are: (+width, +length), (+width, -length), (-width, +length), (-width, -length)
+        corner_positions = [
+            # Corner 1: +width, +length (northeast)
+            (half_width * 3/4, half_length * 3/4),
+            # Corner 2: +width, -length (southeast) 
+            (half_width * 3/4, -half_length * 3/4),
+            # Corner 3: -width, +length (northwest)
+            (-half_width * 3/4, half_length * 3/4),
+            # Corner 4: -width, -length (southwest)
+            (-half_width * 3/4, -half_length * 3/4)
+        ]
+        
+        corner_names = ["northeast_light", "southeast_light", "northwest_light", "southwest_light"]
+        
+        for i, (corner_x, corner_y) in enumerate(corner_positions):
+            light_name = corner_names[i]
+            
+            # Create light position (positioned above the corner)
+            # Convert from OrcaGym coordinates to OrcaLab coordinates
+            # OrcaGym: (X, Y, Z) where Z is up
+            # OrcaLab: (X, Y, Z) where Z is up (same coordinate system)
+            light_position = {
+                'x': corner_x,
+                'y': corner_y, 
+                'z': light_height
+            }
+            
+            # Light rotation: point downward (180 degrees around X-axis)
+            light_rotation = {
+                'x': 180.0,  # 180 degrees around X-axis to point downward
+                'y': 0.0,
+                'z': 0.0
+            }
+            
+            light_info = {
+                'spawnable_name': 'spotlight',
+                'name': light_name,
+                'position': light_position,
+                'rotation': light_rotation,
+                'scale': {'x': 1.0, 'y': 1.0, 'z': 1.0},
+                'uuid': f'light_{i+1}'  # Simple UUID for lights
+            }
+            lights.append(light_info)
+            
+            print(f"Created {light_name} at position ({corner_x:.2f}, {corner_y:.2f}, {light_height:.2f})m")
+        
+        print(f"Created {len(lights)} corner lights successfully.")
+        return lights
+    

@@ -85,32 +85,6 @@ class CopilotPanel(QtWidgets.QWidget):
         """)
         button_layout.addWidget(self.submit_button)
         
-        # Clear scene button
-        self.clear_scene_button = QtWidgets.QPushButton("Clear Scene")
-        self.clear_scene_button.setFixedWidth(100)
-        self.clear_scene_button.setStyleSheet("""
-            QPushButton {
-                background-color: #dc3545;
-                color: #ffffff;
-                border: none;
-                border-radius: 3px;
-                padding: 6px 12px;
-                font-weight: bold;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #c82333;
-            }
-            QPushButton:pressed {
-                background-color: #bd2130;
-            }
-            QPushButton:disabled {
-                background-color: #555555;
-                color: #999999;
-            }
-        """)
-        button_layout.addWidget(self.clear_scene_button)
-        
         button_layout.addStretch()  # Push buttons to the left
         
         input_layout.addLayout(button_layout)
@@ -147,7 +121,6 @@ class CopilotPanel(QtWidgets.QWidget):
         
         # Connect signals
         self.submit_button.clicked.connect(self._on_submit_clicked)
-        self.clear_scene_button.clicked.connect(self._on_clear_scene_clicked)
         # QTextEdit doesn't have returnPressed signal, so we'll handle Enter key manually
         self.input_field.keyPressEvent = self._on_input_key_press
         
@@ -168,10 +141,6 @@ class CopilotPanel(QtWidgets.QWidget):
             # Use asyncio to run the async asset search and creation
             asyncio.create_task(self._handle_asset_creation(text))
     
-    def _on_clear_scene_clicked(self):
-        """Handle clear scene button click"""
-        # Use asyncio to run the async scene clearing
-        asyncio.create_task(self._handle_clear_scene())
             
     def log_message(self, message: str):
         """Add a message to the log"""
@@ -358,20 +327,40 @@ class CopilotPanel(QtWidgets.QWidget):
             # Step 2.5: Display detailed asset information
             self._display_scene_info(scene_data)
             
-            # Step 3: Create all assets using OrcaLab's add_item API with transform support
-            self.log_message("Step 3: Creating all assets using OrcaLab API with transform support...")
+            # Step 3: Create a unified group for the entire scene
+            self.log_message("Step 3: Creating unified group for the scene...")
+            import secrets
+            group_suffix = secrets.token_hex(4)  # Generate 8 hex characters (4 bytes)
+            group_name = f"CopilotScene_{group_suffix}"
+            group_path = await self.create_group_for_scene(group_name)
+            
+            # Step 4: Add all scene assets to the group
+            self.log_message("Step 4: Adding scene assets to the group...")
             assets = self.copilot_service.get_scene_assets_for_orcalab(scene_data)
             
-            # Create all assets using three-step process
             scene_center = scene_data.get('scene_center', [])
             center_point = {
                 'x': scene_center[0],
                 'y': scene_center[1],
                 'z': scene_center[2]
             }
-            await self.create_actor_on_scene(assets, center_point)
             
-            self.log_success(f"All {len(assets)} assets created successfully!")
+            await self.add_assets_to_group(assets, group_path, center_point)
+            self.log_success(f"All {len(assets)} scene assets added successfully!")
+            
+            # Step 5: Add corner lights to the same group
+            self.log_message("Step 5: Adding corner lights to the group...")
+            lights = self.copilot_service.create_corner_lights_for_orcalab(scene_data, light_height=3.0)
+            
+            if lights:
+                await self.add_assets_to_group(lights, group_path, center_point)
+                self.log_success(f"All {len(lights)} corner lights added successfully!")
+            else:
+                self.log_message("No corner lights added (no bounding box info available)")
+            
+            # Summary
+            total_assets = len(assets) + len(lights) if lights else len(assets)
+            self.log_success(f"Scene group '{group_name}' created with {total_assets} total assets ({len(assets)} scene assets + {len(lights) if lights else 0} lights)")
             
             # Clear input field
             self.clear_input()
@@ -385,27 +374,55 @@ class CopilotPanel(QtWidgets.QWidget):
             # Re-enable submit button
             self.set_submit_enabled(True)
     
-    async def _handle_clear_scene(self):
-        """Handle the scene clearing workflow"""
-        try:
-            # Disable clear scene button during processing
-            self.clear_scene_button.setEnabled(False)
-            self.log_message("Clearing scene...")
-            
-            # Note: OrcaLab doesn't have a direct clear scene API
-            # The scene clearing would need to be handled by the main window
-            # For now, we'll just log a message
-            self.log_message("Scene clearing request sent. Please use the main window's clear scene functionality.")
-            self.log_success("Scene clearing request completed!")
-            
-        except Exception as e:
-            self.log_error(f"Failed to clear scene: {str(e)}")
-            import traceback
-            self.log_error(f"Error details: {traceback.format_exc()}")
-        finally:
-            # Re-enable clear scene button
-            self.clear_scene_button.setEnabled(True)
     
+    async def create_group_for_scene(self, group_name: str) -> Path:
+        """
+        Create a group for the scene and return its path.
+        
+        Args:
+            group_name: Name of the group to create
+            
+        Returns:
+            Path: Path to the created group
+        """
+        self.log_message(f"Creating group '{group_name}'...")
+        
+        # Emit signal to request group creation (pass root path as parent)
+        root_path = Path.root_path()
+        group_path = root_path / group_name
+        self.request_add_group.emit(group_path)
+        
+        # Wait a bit for the group to be created
+        await asyncio.sleep(0.1)
+        
+        self.log_success(f"Group '{group_name}' created successfully!")
+        return group_path
+    
+    async def add_assets_to_group(self, assets_data, group_path, center_point):
+        """
+        Add assets to an existing group.
+        
+        Args:
+            assets_data: List of asset dictionaries containing spawnable_name, name, position, rotation, scale
+            group_path: Path to the group to add assets to
+            center_point: Center point for coordinate conversion
+        """
+        if not assets_data:
+            return
+            
+        self.log_message(f"Adding {len(assets_data)} assets to group...")
+        
+        for i, asset_data in enumerate(assets_data):
+            self.log_message(f"  Adding asset {i+1}/{len(assets_data)}: {asset_data['name']}")
+
+            transform = self._create_transform_from_server_data(asset_data, center_point)
+            self.add_item_with_transform.emit(asset_data['name'], asset_data['spawnable_name'], group_path, transform)
+
+            # Wait a bit for the asset to be created
+            await asyncio.sleep(0.05)
+        
+        self.log_success(f"All {len(assets_data)} assets added to group!")
+
     async def create_actor_on_scene(self, assets_data, center_point):
         """
         Create assets using three-step process through signals.

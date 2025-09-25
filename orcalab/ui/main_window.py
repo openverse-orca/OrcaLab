@@ -969,36 +969,6 @@ class MainWindow1(MainWindow):
         command.path = group_path
         self.add_command(command)
 
-    async def on_copilot_transform_changed(self, actor_path_str, transform):
-        """
-        Handle transform changes from copilot.
-        
-        Args:
-            actor_path_str: String path to the actor
-            transform: Pre-calculated Transform object from CopilotPanel
-        """
-        try:
-            # Convert string path to Path object
-            actor_path = Path(actor_path_str)
-            
-            # Check if actor exists in local scene
-            if actor_path not in self.local_scene:
-                print(f"Warning: Actor {actor_path} not found in local scene")
-                return
-            
-            # Get the actor
-            actor = self.local_scene[actor_path]
-            
-            # Set the transform (already calculated in CopilotPanel)
-            actor.transform = transform
-            
-            # Sync with remote scene
-            await self.remote_scene.set_actor_transform(actor_path, transform, True)
-            
-        except Exception as e:
-            print(f"Error setting copilot transform: {e}")
-
-
     async def add_item_drag(self, item_name, transform):
         name = self.make_unique_name(item_name, Path.root_path())
         actor = AssetActor(name=name, spawnable_name=item_name)
@@ -1080,7 +1050,30 @@ class MainWindow1(MainWindow):
     def closeEvent(self, event):
         """Handle window close event"""
         print("Window close event triggered")
-        # Schedule cleanup to run in the event loop
-        asyncio.create_task(self.cleanup())
-        # Accept the close event
-        event.accept()
+        
+        # Check if we're already in cleanup process to avoid infinite loop
+        if hasattr(self, '_cleanup_in_progress') and self._cleanup_in_progress:
+            print("Cleanup already in progress, accepting close event")
+            event.accept()
+            return
+            
+        # Mark cleanup as in progress
+        self._cleanup_in_progress = True
+        
+        # Ignore the close event initially
+        event.ignore()
+        
+        # Schedule cleanup to run in the event loop and wait for it
+        async def cleanup_and_close():
+            try:
+                await self.cleanup()
+                print("Cleanup completed, closing window")
+                # Use QApplication.quit() instead of self.close() to avoid triggering closeEvent again
+                QtWidgets.QApplication.quit()
+            except Exception as e:
+                print(f"Error during cleanup: {e}")
+                # Close anyway if cleanup fails
+                QtWidgets.QApplication.quit()
+        
+        # Create and run the cleanup task
+        asyncio.create_task(cleanup_and_close())

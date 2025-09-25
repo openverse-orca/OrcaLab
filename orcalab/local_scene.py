@@ -141,7 +141,9 @@ class LocalScene:
 
         actor, actor_path = self.get_actor_and_path(actor)
 
-        actor.parent = None
+        # Properly remove from parent's children list
+        if actor.parent is not None:
+            actor.parent.remove_child(actor)
 
         self._remove_path(actor_path)
 

@@ -124,8 +124,7 @@ class GroupActor(BaseActor):
         if child in self._children:
             self._children.remove(child)
             child._parent = None
-        else:
-            raise ValueError(f"{child.name} is not a child of {self.name}")
+        # Don't raise error if child is not in the list - this can happen during cleanup
 
 
 class AssetActor(BaseActor):
