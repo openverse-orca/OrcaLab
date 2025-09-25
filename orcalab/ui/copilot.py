@@ -348,9 +348,19 @@ class CopilotPanel(QtWidgets.QWidget):
             await self.add_assets_to_group(assets, group_path, center_point)
             self.log_success(f"All {len(assets)} scene assets added successfully!")
             
-            # Step 5: Add corner lights to the same group
-            self.log_message("Step 5: Adding corner lights to the group...")
-            lights = self.copilot_service.create_corner_lights_for_orcalab(scene_data, light_height=3.0)
+            # Step 5: Add walls to the same group
+            self.log_message("Step 5: Adding walls to the group...")
+            walls = self.copilot_service.create_walls_for_orcalab(scene_data)
+            
+            if walls:
+                await self.add_assets_to_group(walls, group_path, center_point)
+                self.log_success(f"All {len(walls)} walls added successfully!")
+            else:
+                self.log_message("No walls added (no bounding box info available)")
+            
+            # Step 6: Add corner lights to the same group
+            self.log_message("Step 6: Adding corner lights to the group...")
+            lights = self.copilot_service.create_corner_lights_for_orcalab(scene_data, light_height=300.0)
             
             if lights:
                 await self.add_assets_to_group(lights, group_path, center_point)
@@ -359,8 +369,8 @@ class CopilotPanel(QtWidgets.QWidget):
                 self.log_message("No corner lights added (no bounding box info available)")
             
             # Summary
-            total_assets = len(assets) + len(lights) if lights else len(assets)
-            self.log_success(f"Scene group '{group_name}' created with {total_assets} total assets ({len(assets)} scene assets + {len(lights) if lights else 0} lights)")
+            total_assets = len(assets) + len(walls) + len(lights) if walls and lights else len(assets) + len(walls) if walls else len(assets) + len(lights) if lights else len(assets)
+            self.log_success(f"Scene group '{group_name}' created with {total_assets} total assets ({len(assets)} scene assets + {len(walls) if walls else 0} walls + {len(lights) if lights else 0} lights)")
             
             # Clear input field
             self.clear_input()

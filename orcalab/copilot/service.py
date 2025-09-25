@@ -292,16 +292,16 @@ class CopilotService:
         
         return assets
     
-    def create_corner_lights_for_orcalab(self, scene_data: Dict[str, Any], light_height: float = 3.0) -> List[Dict[str, Any]]:
+    def create_corner_lights_for_orcalab(self, scene_data: Dict[str, Any], light_height: float = 300.0) -> List[Dict[str, Any]]:
         """
         Create corner light assets for OrcaLab based on scene bounding box.
         
         Args:
             scene_data: The scene data from the server containing bounding box info
-            light_height: Height of lights above the scene in meters
+            light_height: Height of lights above the scene in centimeters (USD coordinate system)
             
         Returns:
-            List[Dict[str, Any]]: List of light asset information for OrcaLab
+            List[Dict[str, Any]]: List of light asset information in USD coordinate system
         """
         lights = []
         
@@ -315,12 +315,12 @@ class CopilotService:
         max_point = tuple(bbox['max'])
         center_point = tuple(bbox['center'])
         
-        # Convert bbox from cm to meters
-        half_width = (max_point[0] - min_point[0]) / 200.0  # /200 to convert cm to m and /2 for half
-        half_length = (max_point[2] - min_point[2]) / 200.0  # /200 to convert cm to m and /2 for half
+        # Calculate half dimensions in USD coordinate system (centimeters)
+        half_width = (max_point[0] - min_point[0]) / 2.0  # Half width in cm
+        half_length = (max_point[2] - min_point[2]) / 2.0  # Half length in cm (USD Z-axis)
         
-        # Calculate corner positions (3/4 distance from center to corner)
-        # The four corners are: (+width, +length), (+width, -length), (-width, +length), (-width, -length)
+        # Calculate corner positions (3/4 distance from center to corner) in USD coordinates
+        # USD coordinate system: Y-up, so we use (X, Y, Z) where Y is height
         corner_positions = [
             # Corner 1: +width, +length (northeast)
             (half_width * 3/4, half_length * 3/4),
@@ -334,17 +334,15 @@ class CopilotService:
         
         corner_names = ["northeast_light", "southeast_light", "northwest_light", "southwest_light"]
         
-        for i, (corner_x, corner_y) in enumerate(corner_positions):
+        for i, (corner_x, corner_z) in enumerate(corner_positions):
             light_name = corner_names[i]
             
-            # Create light position (positioned above the corner)
-            # Convert from OrcaGym coordinates to OrcaLab coordinates
-            # OrcaGym: (X, Y, Z) where Z is up
-            # OrcaLab: (X, Y, Z) where Z is up (same coordinate system)
+            # Create light position in USD coordinate system (centimeters)
+            # USD: (X, Y, Z) where Y is up
             light_position = {
-                'x': corner_x,
-                'y': corner_y, 
-                'z': light_height
+                'x': center_point[0] + corner_x,  # X position relative to center
+                'y': light_height,                # Y is height in USD coordinate system
+                'z': center_point[2] + corner_z   # Z position relative to center
             }
             
             # Light rotation: point downward (180 degrees around X-axis)
@@ -364,8 +362,95 @@ class CopilotService:
             }
             lights.append(light_info)
             
-            print(f"Created {light_name} at position ({corner_x:.2f}, {corner_y:.2f}, {light_height:.2f})m")
+            print(f"Created {light_name} at USD position ({light_position['x']:.1f}, {light_position['y']:.1f}, {light_position['z']:.1f})cm")
         
-        print(f"Created {len(lights)} corner lights successfully.")
+        print(f"Created {len(lights)} corner lights successfully in USD coordinate system.")
         return lights
+    
+    def create_walls_for_orcalab(self, scene_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Create wall assets for OrcaLab based on scene bounding box.
+        
+        Args:
+            scene_data: The scene data from the server containing bounding box info
+            wall_height: Height of walls in centimeters (USD coordinate system)
+            
+        Returns:
+            List[Dict[str, Any]]: List of wall asset information in USD coordinate system
+        """
+        walls = []
+        
+        # Get bounding box information
+        if not scene_data.get('bounding_box'):
+            print("Warning: No bounding box info available, cannot add walls")
+            return walls
+            
+        bbox = scene_data['bounding_box']
+        min_point = tuple(bbox['min'])
+        max_point = tuple(bbox['max'])
+        center_point = tuple(bbox['center'])
+        
+        # Calculate half dimensions in USD coordinate system (centimeters)
+        half_width = (max_point[0] - min_point[0]) / 2.0  # Half width in cm
+        half_length = (max_point[2] - min_point[2]) / 2.0  # Half length in cm (USD Z-axis)
+        
+        # Wall positions: North, South, East, West
+        # Each wall faces toward the center
+        # USD coordinate system: Y-up, so we use (X, Y, Z) where Y is height
+        wall_positions = [
+            # North wall (facing south toward center)
+            {
+                'x': center_point[0],
+                'y': -200,
+                'z': center_point[2] + half_length
+            },
+            # South wall (facing north toward center)  
+            {
+                'x': center_point[0],
+                'y': -200,
+                'z': center_point[2] - half_length
+            },
+            # East wall (facing west toward center)
+            {
+                'x': center_point[0] + half_width,
+                'y': -200,
+                'z': center_point[2]
+            },
+            # West wall (facing east toward center)
+            {
+                'x': center_point[0] - half_width,
+                'y': -200,
+                'z': center_point[2]
+            }
+        ]
+        
+        # Wall rotations: Each wall needs to face the center
+        wall_rotations = [
+            # North wall: rotate 180 degrees around Y to face south
+            {'x': -90.0, 'y': 0.0, 'z': 0.0},
+            # South wall: no rotation needed (already faces north)
+            {'x': 90.0, 'y': 0.0, 'z': 0.0},
+            # East wall: rotate -90 degrees around Y to face west
+            {'x': 0.0, 'y': 0, 'z': 90.0},
+            # West wall: rotate 90 degrees around Y to face east
+            {'x': 0.0, 'y': 0, 'z': -90.0}
+        ]
+        
+        wall_names = ["north_wall", "south_wall", "east_wall", "west_wall"]
+        
+        for i, (position, rotation, name) in enumerate(zip(wall_positions, wall_rotations, wall_names)):
+            wall_info = {
+                'spawnable_name': 'wall_10x10',
+                'name': name,
+                'position': position,
+                'rotation': rotation,
+                'scale': {'x': 1.0, 'y': 1.0, 'z': 1.0},
+                'uuid': f'wall_{i+1}'  # Simple UUID for walls
+            }
+            walls.append(wall_info)
+            
+            print(f"Created {name} at USD position ({position['x']:.1f}, {position['y']:.1f}, {position['z']:.1f})cm")
+        
+        print(f"Created {len(walls)} walls successfully in USD coordinate system.")
+        return walls
     
