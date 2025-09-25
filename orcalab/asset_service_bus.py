@@ -15,7 +15,7 @@ AssetServiceRequestBus = create_event_bus(AssetServiceRequest)
 
 class AssetServiceNotification:
 
-    def on_asset_downloaded(self, file: str) -> None:
+    async def on_asset_downloaded(self, file: str) -> None:
         pass
 
 

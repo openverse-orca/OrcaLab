@@ -1,4 +1,5 @@
-from orcalab.asset_service_bus import AssetServiceRequest, AssetServiceRequestBus
+from datetime import datetime
+from orcalab.asset_service_bus import AssetServiceRequest, AssetServiceRequestBus, AssetServiceNotificationBus
 from orcalab.application_bus import ApplicationRequestBus
 
 import aiohttp
@@ -38,4 +39,12 @@ class AssetService(AssetServiceRequest):
 
         cache_folder: str = cache_folder[0]
 
-        await self.download_asset_to_file(url, cache_folder + "/" + "test1.txt")
+        # name file with time and date.
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"asset_{timestamp}.pak"
+
+        file_path = cache_folder + "/" + filename
+
+        await self.download_asset_to_file(url, file_path)
+
+        await AssetServiceNotificationBus().on_asset_downloaded(file_path)

@@ -579,8 +579,10 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         output.append(self.cache_folder)
 
     @override
-    def on_asset_downloaded(self, file):
-        asyncio.create_task(self.remote_scene.load_package(file))
+    async def on_asset_downloaded(self, file):
+       await self.remote_scene.load_package(file)
+       assets = await self.remote_scene.get_actor_assets()
+       self.asset_browser_widget.set_assets(assets)
 
 
 # 不要存Actor对象，只存Path。

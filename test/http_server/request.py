@@ -1,7 +1,10 @@
 import os
-import urllib.parse
+import sys
 
+url = "http://localhost:8000/box_pc.pak"
+safe_string = "orca://download-asset/?url=" + url
 
-url = "?url=http://localhost:8000/hello.txt"
-safe_string = "orca://download-asset" + urllib.parse.quote_plus(url, safe="/")
-os.system(f"start {safe_string}")
+if sys.platform == "win32":
+    os.system(f"start {safe_string}")
+else:
+    os.system(f"xdg-open {safe_string}")

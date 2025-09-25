@@ -382,7 +382,7 @@ class RemoteScene:
         response = await self.edit_stub.SetSelection(request)
         self._check_response(response)
 
-    async def get_actor_assets(self):
+    async def get_actor_assets(self) -> List[str]:
         request = edit_service_pb2.GetActorAssetsRequest()
         response = await self.edit_stub.GetActorAssets(request)
         self._check_response(response)
@@ -440,11 +440,10 @@ class RemoteScene:
         self._check_response(response)
         return response.cache_folder
 
-    async def load_package(self, package_path: str) -> bool:
+    async def load_package(self, package_path: str) -> None:
         request = edit_service_pb2.LoadPackageRequest(file_path=package_path)
         response = await self.edit_stub.LoadPackage(request)
         self._check_response(response)
-        return response.success
     
     async def change_sim_state(self, sim_process_running: bool) -> bool:
             request = edit_service_pb2.ChangeSimStateRequest(sim_process_running=sim_process_running)
