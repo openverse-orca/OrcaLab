@@ -9,6 +9,7 @@ import subprocess
 import json
 import ast
 import os
+import time
 
 from PySide6 import QtCore, QtWidgets, QtGui
 import PySide6.QtAsyncio as QtAsyncio
@@ -107,7 +108,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
                 background-color: #2a2a2a;
             }
         """)
-        connect(self.tool_bar.action_start.triggered, self.show_launch_dialog)
+        connect(self.tool_bar.action_start.triggered, lambda: asyncio.create_task(self.show_launch_dialog()))
         connect(self.tool_bar.action_stop.triggered, self.stop_sim)
 
         self.actor_outline_model = ActorOutlineModel(self.local_scene)
@@ -383,32 +384,30 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             [transform, name] = await self.remote_scene.get_pending_add_item()
             self.add_item_by_drag.emit(name, transform)
 
-    def show_launch_dialog(self):
-        """显示启动对话框"""
+    async def show_launch_dialog(self):
+        """显示启动对话框（异步版本）"""
         if self.sim_process_running:
             return
         
         dialog = LaunchDialog(self)
         
-        # 连接信号，使用包装函数处理异步调用
-        dialog.program_selected.connect(self._handle_program_selected)
-        dialog.no_external_program.connect(self._handle_no_external_program)
+        # 连接信号直接到异步处理方法
+        dialog.program_selected.connect(self._handle_program_selected_signal)
+        dialog.no_external_program.connect(self._handle_no_external_program_signal)
         
         # 显示对话框
         dialog.exec()
     
-    def _handle_program_selected(self, program_name: str):
-        """处理程序选择的包装函数"""
-        # 直接调用同步版本
-        self._on_external_program_selected_sync(program_name)
+    def _handle_program_selected_signal(self, program_name: str):
+        """处理程序选择信号的包装函数"""
+        asyncio.create_task(self._on_external_program_selected_async(program_name))
     
-    def _handle_no_external_program(self):
-        """处理无外部程序选择的包装函数"""
-        # 直接调用同步版本
-        self._on_no_external_program_sync()
+    def _handle_no_external_program_signal(self):
+        """处理无外部程序信号的包装函数"""
+        asyncio.create_task(self._on_no_external_program_async())
     
-    def _on_external_program_selected_sync(self, program_name: str):
-        """外部程序选择处理（同步版本）"""
+    async def _on_external_program_selected_async(self, program_name: str):
+        """外部程序选择处理（异步版本）"""
         config_service = ConfigService()
         program_config = config_service.get_external_program_config(program_name)
         
@@ -416,17 +415,16 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             print(f"未找到程序配置: {program_name}")
             return
 
-        asyncio.create_task(self._before_sim_startup())
+        await self._before_sim_startup()
+        await asyncio.sleep(1)
         
-        # 启动外部程序
+        # 启动外部程序 - 改为在主线程直接启动
         command = program_config.get('command', 'python')
         args = []
         for arg in program_config.get('args', []):
-            # 替换占位符
-            arg = arg.replace('{sim_addr}', "localhost:50051")  # 使用默认地址
             args.append(arg)
         
-        success = self.terminal_widget.start_process(command, args)
+        success = await self._start_external_process_in_main_thread_async(command, args)
         
         if success:
             self.sim_process_running = True
@@ -434,7 +432,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             self._update_button_states()
             
             # 添加缺失的同步操作（从 run_sim 函数中复制）
-            asyncio.create_task(self._complete_sim_startup())
+            await self._complete_sim_startup()
             
             print(f"外部程序 {program_name} 启动成功")
         else:
@@ -445,8 +443,6 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         await self.remote_scene.publish_scene()
         await self.remote_scene.save_body_transform()
 
-    async def _complete_sim_startup(self):
-        """完成模拟启动的异步操作（从 run_sim 函数中复制的缺失部分）"""
         # 清除选择状态
         if self.local_scene.selection:
             self.actor_editor_widget.actor = None
@@ -455,21 +451,103 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         
         # 改变模拟状态
         await self.remote_scene.change_sim_state(self.sim_process_running)
+
+    async def _start_external_process_in_main_thread_async(self, command: str, args: list):
+        """在主线程中启动外部进程，并将输出重定向到terminal_widget（异步版本）"""
+        try:
+            # 构建完整的命令
+            cmd = [command] + args
+            
+            # 启动进程，将输出重定向到terminal_widget
+            self.sim_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1,
+                env=os.environ.copy()
+            )
+            
+            # 在terminal_widget中显示启动信息
+            self.terminal_widget._append_output(f"启动进程: {' '.join(cmd)}\n")
+            self.terminal_widget._append_output(f"工作目录: {os.getcwd()}\n")
+            self.terminal_widget._append_output("-" * 50 + "\n")
+            
+            # 启动输出读取线程
+            self._start_output_redirect_thread()
+            
+            return True
+            
+        except Exception as e:
+            self.terminal_widget._append_output(f"启动进程失败: {str(e)}\n")
+            return False
+    
+    def _start_output_redirect_thread(self):
+        """启动输出重定向线程"""
+        import threading
         
+        def read_output():
+            """在后台线程中读取进程输出并重定向到terminal_widget"""
+            try:
+                while self.sim_process and self.sim_process.poll() is None:
+                    line = self.sim_process.stdout.readline()
+                    if line:
+                        # 使用信号槽机制确保在主线程中更新UI
+                        QtCore.QMetaObject.invokeMethod(
+                            self.terminal_widget, "_append_output_safe",
+                            QtCore.Qt.ConnectionType.QueuedConnection,
+                            QtCore.Q_ARG(str, line)
+                        )
+                    else:
+                        break
+                
+                # 读取剩余输出
+                if self.sim_process:
+                    remaining_output = self.sim_process.stdout.read()
+                    if remaining_output:
+                        QtCore.QMetaObject.invokeMethod(
+                            self.terminal_widget, "_append_output_safe",
+                            QtCore.Qt.ConnectionType.QueuedConnection,
+                            QtCore.Q_ARG(str, remaining_output)
+                        )
+                    
+                    # 检查进程退出码
+                    return_code = self.sim_process.poll()
+                    if return_code is not None:
+                        QtCore.QMetaObject.invokeMethod(
+                            self.terminal_widget, "_append_output_safe",
+                            QtCore.Qt.ConnectionType.QueuedConnection,
+                            QtCore.Q_ARG(str, f"\n进程退出，返回码: {return_code}\n")
+                        )
+                        
+            except Exception as e:
+                QtCore.QMetaObject.invokeMethod(
+                    self.terminal_widget, "_append_output_safe",
+                    QtCore.Qt.ConnectionType.QueuedConnection,
+                    QtCore.Q_ARG(str, f"读取输出时出错: {str(e)}\n")
+                )
+        
+        # 启动输出读取线程
+        self.output_thread = threading.Thread(target=read_output, daemon=True)
+        self.output_thread.start()
+
+    async def _complete_sim_startup(self):
+        """完成模拟启动的异步操作（从 run_sim 函数中复制的缺失部分）"""        
         # 启动检查循环
         asyncio.create_task(self._sim_process_check_loop())
         
         # 设置同步状态
         await self.remote_scene.set_sync_from_mujoco_to_scene(True)
     
-    def _on_no_external_program_sync(self):
-        """无外部程序处理（同步版本）"""
+    async def _on_no_external_program_async(self):
+        """无外部程序处理（异步版本）"""
 
-        asyncio.create_task(self._before_sim_startup())
+        await self._before_sim_startup()
+        await asyncio.sleep(1)
 
         # 启动一个虚拟的等待进程，保持终端活跃状态
         # 使用 sleep 命令创建一个长期运行的进程，这样 _sim_process_check_loop 就不会立即退出
-        success = self.terminal_widget.start_process("sleep", ["infinity"])
+        success = await self._start_external_process_in_main_thread_async("sleep", ["infinity"])
         
         if success:
             # 设置运行状态
@@ -478,7 +556,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             self._update_button_states()
             
             # 添加缺失的同步操作（从 run_sim 函数中复制）
-            asyncio.create_task(self._complete_sim_startup())
+            await self._complete_sim_startup()
             
             # 在终端显示提示信息
             self.terminal_widget._append_output("已切换到运行模式，等待外部程序连接...\n")
@@ -527,17 +605,21 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             self.sim_process_running = False
             self._update_button_states()
             
-            # 停止终端中的进程
-            self.terminal_widget.stop_process()
-            
-            # 停止原有的sim_process（兼容性）
+            # 停止主线程启动的sim_process
             if hasattr(self, 'sim_process') and self.sim_process is not None:
+                self.terminal_widget._append_output("\n" + "-" * 50 + "\n")
+                self.terminal_widget._append_output("正在停止进程...\n")
+                
                 self.sim_process.terminate()
                 try:
                     self.sim_process.wait(timeout=5)
+                    self.terminal_widget._append_output("进程已正常终止\n")
                 except subprocess.TimeoutExpired:
                     self.sim_process.kill()
                     self.sim_process.wait()
+                    self.terminal_widget._append_output("进程已强制终止\n")
+                
+                self.sim_process = None
             
             self.enable_control.emit()
             await self.remote_scene.change_sim_state(self.sim_process_running)
@@ -548,24 +630,17 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             if not self.sim_process_running:
                 return
 
-            # 检查终端中的进程
-            if not self.terminal_widget.is_process_running():
-                print("External process exited")
-                self.sim_process_running = False
-                self._update_button_states()
-                await self.remote_scene.set_sync_from_mujoco_to_scene(False)
-                await self.remote_scene.change_sim_state(self.sim_process_running)
-                self.enable_control.emit()
-                return
-
-            # 检查原有的sim_process（兼容性）
+            # 检查主线程启动的sim_process
             if hasattr(self, 'sim_process') and self.sim_process is not None:
                 code = self.sim_process.poll()
                 if code is not None:
-                    print(f"Simulation process exit with {code}")
+                    print(f"External process exited with code {code}")
                     self.sim_process_running = False
                     self._update_button_states()
-                    # TODO notify ui.
+                    await self.remote_scene.set_sync_from_mujoco_to_scene(False)
+                    await self.remote_scene.change_sim_state(self.sim_process_running)
+                    self.enable_control.emit()
+                    return
 
         frequency = 0.5  # Hz
         await asyncio.sleep(1 / frequency)
