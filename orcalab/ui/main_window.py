@@ -204,6 +204,9 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
                 color: #ffffff;
             }
         """)
+        
+        # 初始化按钮状态
+        self._update_button_states()
 
     def _create_styled_panel(self, title: str, content_widget: QtWidgets.QWidget) -> QtWidgets.QWidget:
         """创建带标题和样式的面板"""
@@ -426,6 +429,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         if success:
             self.sim_process_running = True
             self.disanble_control.emit()
+            self._update_button_states()
             print(f"外部程序 {program_name} 启动成功")
         else:
             print(f"外部程序 {program_name} 启动失败")
@@ -435,6 +439,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         # 设置运行状态但不启动外部程序
         self.sim_process_running = True
         self.disanble_control.emit()
+        self._update_button_states()
         
         # 在终端显示提示信息
         self.terminal_widget._append_output("已切换到运行模式，等待外部程序连接...\n")
@@ -469,6 +474,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         if success:
             self.sim_process_running = True
             self.disanble_control.emit()
+            self._update_button_states()
             
             # 清理选择
             if self.local_scene.selection:
@@ -492,6 +498,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         # 设置运行状态但不启动仿真程序
         self.sim_process_running = True
         self.disanble_control.emit()
+        self._update_button_states()
         
         # 清理选择
         if self.local_scene.selection:
@@ -528,6 +535,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         self.sim_process = subprocess.Popen(cmd)
         self.sim_process_running = True
         self.disanble_control.emit()
+        self._update_button_states()
         if self.local_scene.selection:
             self.actor_editor_widget.actor = None
             self.local_scene.selection = []
@@ -545,6 +553,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         async with self._sim_process_check_lock:
             await self.remote_scene.set_sync_from_mujoco_to_scene(False)
             self.sim_process_running = False
+            self._update_button_states()
             
             # 停止终端中的进程
             self.terminal_widget.stop_process()
@@ -571,6 +580,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             if not self.terminal_widget.is_process_running():
                 print("External process exited")
                 self.sim_process_running = False
+                self._update_button_states()
                 await self.remote_scene.set_sync_from_mujoco_to_scene(False)
                 await self.remote_scene.change_sim_state(self.sim_process_running)
                 self.enable_control.emit()
@@ -582,6 +592,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
                 if code is not None:
                     print(f"Simulation process exit with {code}")
                     self.sim_process_running = False
+                    self._update_button_states()
                     # TODO notify ui.
 
         frequency = 0.5  # Hz
@@ -1300,6 +1311,7 @@ class MainWindow1(MainWindow):
         self.terminal.setEnabled(True)
         self.terminal.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
         self.menu_edit.setEnabled(True)
+        self._update_button_states()
 
     def disable_widgets(self):
         self.actor_outline.setEnabled(False)
@@ -1310,9 +1322,22 @@ class MainWindow1(MainWindow):
         self.asset_browser.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
         self.copilot.setEnabled(False)
         self.copilot.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-        self.terminal.setEnabled(False)
-        self.terminal.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        # Terminal widget should remain interactive during simulation
+        # self.terminal.setEnabled(False)
+        # self.terminal.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
         self.menu_edit.setEnabled(False)
+        self._update_button_states()
+    
+    def _update_button_states(self):
+        """更新run和stop按钮的状态"""
+        if self.sim_process_running:
+            # 运行状态：禁用run按钮，启用stop按钮
+            self.tool_bar.action_start.setEnabled(False)
+            self.tool_bar.action_stop.setEnabled(True)
+        else:
+            # 停止状态：启用run按钮，禁用stop按钮
+            self.tool_bar.action_start.setEnabled(True)
+            self.tool_bar.action_stop.setEnabled(False)
     
     async def cleanup(self):
         """Clean up resources when the application is closing"""
