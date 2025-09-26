@@ -20,10 +20,14 @@ OrcaLab is a front-end of OrcaGym. It provides a user-interface for scene assemb
 	```
 2. Clone this repository and install OrcaLab in editable mode:
 	```bash
+	# required by pyside
+	sudo apt install libxcb-cursor0
+
 	git clone https://github.com/openverse-orca/OrcaLab.git
 	cd OrcaLab
 	pip install -e .
 	```
+
 
 ## Usage
 
