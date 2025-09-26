@@ -467,19 +467,27 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
 
         asyncio.create_task(self._before_sim_startup())
 
-        # 设置运行状态但不启动外部程序
-        self.sim_process_running = True
-        self.disanble_control.emit()
-        self._update_button_states()
+        # 启动一个虚拟的等待进程，保持终端活跃状态
+        # 使用 sleep 命令创建一个长期运行的进程，这样 _sim_process_check_loop 就不会立即退出
+        success = self.terminal_widget.start_process("sleep", ["infinity"])
         
-        # 添加缺失的同步操作（从 run_sim 函数中复制）
-        asyncio.create_task(self._complete_sim_startup())
-        
-        # 在终端显示提示信息
-        self.terminal_widget._append_output("已切换到运行模式，等待外部程序连接...\n")
-        self.terminal_widget._append_output("模拟地址: localhost:50051\n")
-        self.terminal_widget._append_output("请手动启动外部程序并连接到上述地址\n")
-        print("无外部程序模式已启动")
+        if success:
+            # 设置运行状态
+            self.sim_process_running = True
+            self.disanble_control.emit()
+            self._update_button_states()
+            
+            # 添加缺失的同步操作（从 run_sim 函数中复制）
+            asyncio.create_task(self._complete_sim_startup())
+            
+            # 在终端显示提示信息
+            self.terminal_widget._append_output("已切换到运行模式，等待外部程序连接...\n")
+            self.terminal_widget._append_output("模拟地址: localhost:50051\n")
+            self.terminal_widget._append_output("请手动启动外部程序并连接到上述地址\n")
+            self.terminal_widget._append_output("注意：当前运行的是虚拟等待进程，可以手动停止\n")
+            print("无外部程序模式已启动")
+        else:
+            print("无外部程序模式启动失败")
 
     async def run_sim(self):
         """保留原有的run_sim方法以兼容性"""
