@@ -415,6 +415,8 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         if not program_config:
             print(f"未找到程序配置: {program_name}")
             return
+
+        asyncio.create_task(self._before_sim_startup())
         
         # 启动外部程序
         command = program_config.get('command', 'python')
@@ -430,92 +432,54 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             self.sim_process_running = True
             self.disanble_control.emit()
             self._update_button_states()
+            
+            # 添加缺失的同步操作（从 run_sim 函数中复制）
+            asyncio.create_task(self._complete_sim_startup())
+            
             print(f"外部程序 {program_name} 启动成功")
         else:
             print(f"外部程序 {program_name} 启动失败")
     
+    async def _before_sim_startup(self):
+        """完成模拟启动的异步操作（从 run_sim 函数中复制的缺失部分）"""
+        await self.remote_scene.publish_scene()
+        await self.remote_scene.save_body_transform()
+
+    async def _complete_sim_startup(self):
+        """完成模拟启动的异步操作（从 run_sim 函数中复制的缺失部分）"""
+        # 清除选择状态
+        if self.local_scene.selection:
+            self.actor_editor_widget.actor = None
+            self.local_scene.selection = []
+            await self.remote_scene.set_selection([])
+        
+        # 改变模拟状态
+        await self.remote_scene.change_sim_state(self.sim_process_running)
+        
+        # 启动检查循环
+        asyncio.create_task(self._sim_process_check_loop())
+        
+        # 设置同步状态
+        await self.remote_scene.set_sync_from_mujoco_to_scene(True)
+    
     def _on_no_external_program_sync(self):
         """无外部程序处理（同步版本）"""
+
+        asyncio.create_task(self._before_sim_startup())
+
         # 设置运行状态但不启动外部程序
         self.sim_process_running = True
         self.disanble_control.emit()
         self._update_button_states()
+        
+        # 添加缺失的同步操作（从 run_sim 函数中复制）
+        asyncio.create_task(self._complete_sim_startup())
         
         # 在终端显示提示信息
         self.terminal_widget._append_output("已切换到运行模式，等待外部程序连接...\n")
         self.terminal_widget._append_output("模拟地址: localhost:50051\n")
         self.terminal_widget._append_output("请手动启动外部程序并连接到上述地址\n")
         print("无外部程序模式已启动")
-    
-    async def _on_external_program_selected(self, program_name: str):
-        """仿真程序选择处理"""
-        config_service = ConfigService()
-        program_config = config_service.get_external_program_config(program_name)
-        
-        if not program_config:
-            print(f"未找到程序配置: {program_name}")
-            return
-        
-        # 准备场景
-        await self.remote_scene.publish_scene()
-        await self.remote_scene.save_body_transform()
-        
-        # 构建命令参数，替换占位符
-        args = []
-        for arg in program_config.get('args', []):
-            # 替换占位符
-            arg = arg.replace('{sim_addr}', self.remote_scene.sim_grpc_addr)
-            args.append(arg)
-        
-        # 启动仿真程序
-        command = program_config.get('command', 'python')
-        success = self.terminal_widget.start_process(command, args)
-        
-        if success:
-            self.sim_process_running = True
-            self.disanble_control.emit()
-            self._update_button_states()
-            
-            # 清理选择
-            if self.local_scene.selection:
-                self.actor_editor_widget.actor = None
-                self.local_scene.selection = []
-                await self.remote_scene.set_selection([])
-            
-            # 更新模拟状态
-            await self.remote_scene.change_sim_state(self.sim_process_running)
-            asyncio.create_task(self._sim_process_check_loop())
-            
-            # 启用场景同步
-            await self.remote_scene.set_sync_from_mujoco_to_scene(True)
-    
-    async def _on_no_external_program(self):
-        """无仿真程序处理"""
-        # 准备场景
-        await self.remote_scene.publish_scene()
-        await self.remote_scene.save_body_transform()
-        
-        # 设置运行状态但不启动仿真程序
-        self.sim_process_running = True
-        self.disanble_control.emit()
-        self._update_button_states()
-        
-        # 清理选择
-        if self.local_scene.selection:
-            self.actor_editor_widget.actor = None
-            self.local_scene.selection = []
-            await self.remote_scene.set_selection([])
-        
-        # 更新模拟状态
-        await self.remote_scene.change_sim_state(self.sim_process_running)
-        
-        # 启用场景同步
-        await self.remote_scene.set_sync_from_mujoco_to_scene(True)
-        
-        # 在终端显示提示信息
-        self.terminal_widget._append_output("已切换到运行模式，等待仿真程序连接...\n")
-        self.terminal_widget._append_output(f"模拟地址: {self.remote_scene.sim_grpc_addr}\n")
-        self.terminal_widget._append_output("请手动启动仿真程序并连接到上述地址\n")
 
     async def run_sim(self):
         """保留原有的run_sim方法以兼容性"""
