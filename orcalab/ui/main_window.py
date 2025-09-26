@@ -25,6 +25,8 @@ from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.asset_browser import AssetBrowser
 from orcalab.ui.copilot import CopilotPanel
 from orcalab.ui.tool_bar import ToolBar
+from orcalab.ui.launch_dialog import LaunchDialog
+from orcalab.ui.terminal_widget import TerminalWidget
 from orcalab.math import Transform
 from orcalab.config_service import ConfigService
 from orcalab.url_service.url_service import UrlServiceServer
@@ -105,7 +107,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
                 background-color: #2a2a2a;
             }
         """)
-        connect(self.tool_bar.action_start.triggered, self.run_sim)
+        connect(self.tool_bar.action_start.triggered, self.show_launch_dialog)
         connect(self.tool_bar.action_stop.triggered, self.stop_sim)
 
         self.actor_outline_model = ActorOutlineModel(self.local_scene)
@@ -132,6 +134,10 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             config_service.copilot_timeout()
         )
         self.copilot = self._create_styled_panel("Copilot", self.copilot_widget)
+
+        # 添加终端组件
+        self.terminal_widget = TerminalWidget()
+        self.terminal = self._create_styled_panel("Terminal", self.terminal_widget)
 
         self.menu_bar = QtWidgets.QMenuBar()
         # 为菜单栏添加样式
@@ -177,11 +183,17 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         layout1.addWidget(self.asset_browser, 1)
         layout1.addWidget(self.copilot, 1)
 
+        # 第二行布局：终端组件
+        layout1_2 = QtWidgets.QHBoxLayout()
+        layout1_2.setSpacing(8)
+        layout1_2.addWidget(self.terminal, 1)
+
         layout2 = QtWidgets.QVBoxLayout()
         layout2.setContentsMargins(8, 8, 8, 8)  # 设置外边距
         layout2.addWidget(self.menu_bar)
         layout2.addWidget(self.tool_bar)
         layout2.addLayout(layout1)
+        layout2.addLayout(layout1_2)
 
         self.setLayout(layout2)
         
@@ -368,7 +380,138 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             [transform, name] = await self.remote_scene.get_pending_add_item()
             self.add_item_by_drag.emit(name, transform)
 
+    def show_launch_dialog(self):
+        """显示启动对话框"""
+        if self.sim_process_running:
+            return
+        
+        dialog = LaunchDialog(self)
+        
+        # 连接信号，使用包装函数处理异步调用
+        dialog.program_selected.connect(self._handle_program_selected)
+        dialog.no_external_program.connect(self._handle_no_external_program)
+        
+        # 显示对话框
+        dialog.exec()
+    
+    def _handle_program_selected(self, program_name: str):
+        """处理程序选择的包装函数"""
+        # 直接调用同步版本
+        self._on_external_program_selected_sync(program_name)
+    
+    def _handle_no_external_program(self):
+        """处理无外部程序选择的包装函数"""
+        # 直接调用同步版本
+        self._on_no_external_program_sync()
+    
+    def _on_external_program_selected_sync(self, program_name: str):
+        """外部程序选择处理（同步版本）"""
+        config_service = ConfigService()
+        program_config = config_service.get_external_program_config(program_name)
+        
+        if not program_config:
+            print(f"未找到程序配置: {program_name}")
+            return
+        
+        # 启动外部程序
+        command = program_config.get('command', 'python')
+        args = []
+        for arg in program_config.get('args', []):
+            # 替换占位符
+            arg = arg.replace('{sim_addr}', "localhost:50051")  # 使用默认地址
+            args.append(arg)
+        
+        success = self.terminal_widget.start_process(command, args)
+        
+        if success:
+            self.sim_process_running = True
+            self.disanble_control.emit()
+            print(f"外部程序 {program_name} 启动成功")
+        else:
+            print(f"外部程序 {program_name} 启动失败")
+    
+    def _on_no_external_program_sync(self):
+        """无外部程序处理（同步版本）"""
+        # 设置运行状态但不启动外部程序
+        self.sim_process_running = True
+        self.disanble_control.emit()
+        
+        # 在终端显示提示信息
+        self.terminal_widget._append_output("已切换到运行模式，等待外部程序连接...\n")
+        self.terminal_widget._append_output("模拟地址: localhost:50051\n")
+        self.terminal_widget._append_output("请手动启动外部程序并连接到上述地址\n")
+        print("无外部程序模式已启动")
+    
+    async def _on_external_program_selected(self, program_name: str):
+        """仿真程序选择处理"""
+        config_service = ConfigService()
+        program_config = config_service.get_external_program_config(program_name)
+        
+        if not program_config:
+            print(f"未找到程序配置: {program_name}")
+            return
+        
+        # 准备场景
+        await self.remote_scene.publish_scene()
+        await self.remote_scene.save_body_transform()
+        
+        # 构建命令参数，替换占位符
+        args = []
+        for arg in program_config.get('args', []):
+            # 替换占位符
+            arg = arg.replace('{sim_addr}', self.remote_scene.sim_grpc_addr)
+            args.append(arg)
+        
+        # 启动仿真程序
+        command = program_config.get('command', 'python')
+        success = self.terminal_widget.start_process(command, args)
+        
+        if success:
+            self.sim_process_running = True
+            self.disanble_control.emit()
+            
+            # 清理选择
+            if self.local_scene.selection:
+                self.actor_editor_widget.actor = None
+                self.local_scene.selection = []
+                await self.remote_scene.set_selection([])
+            
+            # 更新模拟状态
+            await self.remote_scene.change_sim_state(self.sim_process_running)
+            asyncio.create_task(self._sim_process_check_loop())
+            
+            # 启用场景同步
+            await self.remote_scene.set_sync_from_mujoco_to_scene(True)
+    
+    async def _on_no_external_program(self):
+        """无仿真程序处理"""
+        # 准备场景
+        await self.remote_scene.publish_scene()
+        await self.remote_scene.save_body_transform()
+        
+        # 设置运行状态但不启动仿真程序
+        self.sim_process_running = True
+        self.disanble_control.emit()
+        
+        # 清理选择
+        if self.local_scene.selection:
+            self.actor_editor_widget.actor = None
+            self.local_scene.selection = []
+            await self.remote_scene.set_selection([])
+        
+        # 更新模拟状态
+        await self.remote_scene.change_sim_state(self.sim_process_running)
+        
+        # 启用场景同步
+        await self.remote_scene.set_sync_from_mujoco_to_scene(True)
+        
+        # 在终端显示提示信息
+        self.terminal_widget._append_output("已切换到运行模式，等待仿真程序连接...\n")
+        self.terminal_widget._append_output(f"模拟地址: {self.remote_scene.sim_grpc_addr}\n")
+        self.terminal_widget._append_output("请手动启动仿真程序并连接到上述地址\n")
+
     async def run_sim(self):
+        """保留原有的run_sim方法以兼容性"""
         if self.sim_process_running:
             return
 
@@ -402,6 +545,11 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         async with self._sim_process_check_lock:
             await self.remote_scene.set_sync_from_mujoco_to_scene(False)
             self.sim_process_running = False
+            
+            # 停止终端中的进程
+            self.terminal_widget.stop_process()
+            
+            # 停止原有的sim_process（兼容性）
             if hasattr(self, 'sim_process') and self.sim_process is not None:
                 self.sim_process.terminate()
                 try:
@@ -409,6 +557,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
                 except subprocess.TimeoutExpired:
                     self.sim_process.kill()
                     self.sim_process.wait()
+            
             self.enable_control.emit()
             await self.remote_scene.change_sim_state(self.sim_process_running)
             await self.remote_scene.restore_body_transform()
@@ -418,11 +567,22 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             if not self.sim_process_running:
                 return
 
-            code = self.sim_process.poll()
-            if code is not None:
-                print("Simulation process exit with {code}")
+            # 检查终端中的进程
+            if not self.terminal_widget.is_process_running():
+                print("External process exited")
                 self.sim_process_running = False
-                # TODO notify ui.
+                await self.remote_scene.set_sync_from_mujoco_to_scene(False)
+                await self.remote_scene.change_sim_state(self.sim_process_running)
+                self.enable_control.emit()
+                return
+
+            # 检查原有的sim_process（兼容性）
+            if hasattr(self, 'sim_process') and self.sim_process is not None:
+                code = self.sim_process.poll()
+                if code is not None:
+                    print(f"Simulation process exit with {code}")
+                    self.sim_process_running = False
+                    # TODO notify ui.
 
         frequency = 0.5  # Hz
         await asyncio.sleep(1 / frequency)
@@ -1137,6 +1297,8 @@ class MainWindow1(MainWindow):
         self.asset_browser.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
         self.copilot.setEnabled(True)
         self.copilot.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
+        self.terminal.setEnabled(True)
+        self.terminal.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
         self.menu_edit.setEnabled(True)
 
     def disable_widgets(self):
@@ -1148,6 +1310,8 @@ class MainWindow1(MainWindow):
         self.asset_browser.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
         self.copilot.setEnabled(False)
         self.copilot.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        self.terminal.setEnabled(False)
+        self.terminal.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
         self.menu_edit.setEnabled(False)
     
     async def cleanup(self):

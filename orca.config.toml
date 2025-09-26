@@ -38,3 +38,16 @@ lock_fps = 60
 server_url = "http://103.237.28.246:9023"
 # 请求超时时间（秒）
 timeout = 180
+
+# 仿真程序配置
+[external_programs]
+# 默认程序配置
+default = "sim_process"
+
+# 仿真程序列表
+[[external_programs.programs]]
+name = "sim_process"
+display_name = "MuJoCo Simulation"
+command = "python"
+args = ["-m", "orcalab.sim_process", "--sim_addr", "{sim_addr}"]
+description = "启动MuJoCo物理仿真"

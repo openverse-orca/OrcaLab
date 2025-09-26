@@ -86,3 +86,19 @@ class ConfigService:
     
     def copilot_timeout(self) -> int:
         return self.config.get("copilot", {}).get("timeout", 180)
+    
+    def external_programs(self) -> list:
+        """获取仿真程序配置列表"""
+        return self.config.get("external_programs", {}).get("programs", [])
+    
+    def default_external_program(self) -> str:
+        """获取默认仿真程序名称"""
+        return self.config.get("external_programs", {}).get("default", "sim_process")
+    
+    def get_external_program_config(self, program_name: str) -> dict:
+        """根据程序名称获取程序配置"""
+        programs = self.external_programs()
+        for program in programs:
+            if program.get("name") == program_name:
+                return program
+        return {}
