@@ -4,6 +4,7 @@ import random
 
 from typing import Dict, Tuple, override
 import numpy as np
+from qasync import asyncWrap
 from scipy.spatial.transform import Rotation
 import subprocess
 import json
@@ -396,7 +397,10 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         dialog.no_external_program.connect(self._handle_no_external_program_signal)
         
         # 显示对话框
-        dialog.exec()
+
+        def bloc_task():
+            return dialog.exec()
+        await asyncWrap(bloc_task)
     
     def _handle_program_selected_signal(self, program_name: str):
         """处理程序选择信号的包装函数"""
@@ -450,7 +454,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             await self.remote_scene.set_selection([])
         
         # 改变模拟状态
-        await self.remote_scene.change_sim_state(self.sim_process_running)
+        await self.remote_scene.change_sim_state(True)
 
     async def _start_external_process_in_main_thread_async(self, command: str, args: list):
         """在主线程中启动外部进程，并将输出重定向到terminal_widget（异步版本）"""

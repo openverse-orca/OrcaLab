@@ -38,6 +38,17 @@ python run.py
 ```
 
 
+## Notice
+
+- Blocking function (like QDialog.exec()) should wrap in `qasync.asyncWrap`.
+
+``` python
+def bloc_task():
+	return dialog.exec()
+
+await asyncWrap(bloc_task)
+```
+
 ## License
 
 This project is licensed under the terms of the [LICENSE](LICENSE) file.
