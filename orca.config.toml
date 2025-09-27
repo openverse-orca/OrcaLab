@@ -63,5 +63,5 @@ description = "启动轮式底盘物理仿真示例"
 name = "run_character"
 display_name = "Character Example"
 command = "python"
-args = ["-m", "examples.character.run_character",]
+args = ["-m", "examples.character.run_character", "--orcagym_addr", "localhost:50051", "--agent_name", "remy_1", "--env_name", "Character"]
 description = "启动角色动画物理仿真示例"
