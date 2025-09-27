@@ -893,6 +893,7 @@ class MainWindow1(MainWindow):
     add_item_by_drag = QtCore.Signal(str, Transform)
     transform_change = QtCore.Signal(Path, bool)
     load_scene_sig = QtCore.Signal(str)
+    rename_sig = QtCore.Signal(BaseActor, str)
 
     def __init__(self):
         super().__init__()
@@ -932,6 +933,7 @@ class MainWindow1(MainWindow):
         connect(self.add_item_by_drag, self.add_item_drag)
         connect(self.transform_change, self.transform_change_command)
         connect(self.load_scene_sig, self.load_scene)
+        connect(self.rename_sig, self.rename_undoable)
 
         connect(self.enable_control, self.enable_widgets)
         connect(self.disanble_control, self.disable_widgets)
@@ -1270,7 +1272,7 @@ class MainWindow1(MainWindow):
         await self.reparent_actor(actor, new_parent, row)
         self.add_command(command)
 
-    async def open_rename_dialog(self, actor: BaseActor):
+    def open_rename_dialog(self, actor: BaseActor):
         actor_path = self.local_scene.get_actor_path(actor)
         if actor_path is None:
             raise Exception("Invalid actor.")
@@ -1278,7 +1280,7 @@ class MainWindow1(MainWindow):
         dialog = RenameDialog(actor_path, self.local_scene.can_rename_actor, self)
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             new_name = dialog.new_name
-            await self.rename_undoable(actor, new_name)
+            self.rename_sig.emit(actor, new_name)
 
     async def rename_undoable(self, actor: BaseActor | Path, new_name: str):
         _, actor_path = self.local_scene.get_actor_and_path(actor)
