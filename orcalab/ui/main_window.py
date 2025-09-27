@@ -4,14 +4,14 @@ import random
 
 from typing import Dict, Tuple, override
 import numpy as np
-from qasync import asyncWrap
+
 from scipy.spatial.transform import Rotation
 import subprocess
 import json
 import ast
 import os
 import time
-
+import platform
 from PySide6 import QtCore, QtWidgets, QtGui
 import PySide6.QtAsyncio as QtAsyncio
 
@@ -38,7 +38,6 @@ from orcalab.asset_service_bus import (
     AssetServiceNotificationBus,
 )
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
-
 
 class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification):
 
@@ -109,7 +108,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
                 background-color: #2a2a2a;
             }
         """)
-        connect(self.tool_bar.action_start.triggered, lambda: asyncio.create_task(self.show_launch_dialog()))
+        connect(self.tool_bar.action_start.triggered, self.show_launch_dialog)
         connect(self.tool_bar.action_stop.triggered, self.stop_sim)
 
         self.actor_outline_model = ActorOutlineModel(self.local_scene)
@@ -385,8 +384,8 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             [transform, name] = await self.remote_scene.get_pending_add_item()
             self.add_item_by_drag.emit(name, transform)
 
-    async def show_launch_dialog(self):
-        """显示启动对话框（异步版本）"""
+    def show_launch_dialog(self):
+        """显示启动对话框（同步版本）"""
         if self.sim_process_running:
             return
         
@@ -396,11 +395,15 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         dialog.program_selected.connect(self._handle_program_selected_signal)
         dialog.no_external_program.connect(self._handle_no_external_program_signal)
         
-        # 显示对话框
-
-        def bloc_task():
+        # 如果是windows平台
+        if platform.system() == "Windows":
+            from qasync import asyncWrap
+            def show_dialog():
+                return dialog.exec()
+            asyncWrap(show_dialog)
+        else:
+            # 直接在主线程中执行对话框
             return dialog.exec()
-        await asyncWrap(bloc_task)
     
     def _handle_program_selected_signal(self, program_name: str):
         """处理程序选择信号的包装函数"""

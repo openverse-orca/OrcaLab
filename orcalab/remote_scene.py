@@ -423,8 +423,8 @@ class RemoteScene:
         self._check_response(response)
     
     async def change_sim_state(self, sim_process_running: bool) -> bool:
-            print(f"change_sim_state {sim_process_running}")
-            request = edit_service_pb2.ChangeSimStateRequest(sim_process_running=sim_process_running)
-            response = await self.edit_stub.ChangeSimState(request)
-            self._check_response(response)
-            return response
+        print(f"change_sim_state {sim_process_running}")
+        request = edit_service_pb2.ChangeSimStateRequest(sim_process_running=sim_process_running)                                                                                        
+        response = await self.edit_stub.ChangeSimState(request)
+        self._check_response(response)
+        return response
