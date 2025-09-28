@@ -40,13 +40,26 @@ python run.py
 
 ## Notice
 
-- Blocking function (like QDialog.exec()) should wrap in `qasync.asyncWrap`.
+- Blocking function (like QDialog.exec()) should not be called in async function directly. It will stop the async loop in a strange way. There are two ways to work around:
+	- wrap in `qasync.asyncWrap`
+	- invoke by a qt signal.
 
 ``` python
+# wrap in `qasync.asyncWrap`
+
+async def foo():
+	def bloc_task():
+		return dialog.exec()
+
+	await asyncWrap(bloc_task)	
+
+# invoke by a qt signal
+
 def bloc_task():
 	return dialog.exec()
 
-await asyncWrap(bloc_task)
+some_signal.connect(bloc_task)
+
 ```
 
 ## License

@@ -395,15 +395,9 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         dialog.program_selected.connect(self._handle_program_selected_signal)
         dialog.no_external_program.connect(self._handle_no_external_program_signal)
         
-        # 如果是windows平台
-        if platform.system() == "Windows":
-            from qasync import asyncWrap
-            def show_dialog():
-                return dialog.exec()
-            asyncWrap(show_dialog)
-        else:
-            # 直接在主线程中执行对话框
-            return dialog.exec()
+
+        # 直接在主线程中执行对话框
+        return dialog.exec()
     
     def _handle_program_selected_signal(self, program_name: str):
         """处理程序选择信号的包装函数"""
