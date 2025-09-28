@@ -1,9 +1,22 @@
-from typing import Tuple
+import asyncio
+from typing import Tuple, override
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from orcalab.actor import BaseActor
+from orcalab.actor import BaseActor, GroupActor
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
+from orcalab.pyside_util import connect
+from orcalab.scene_edit_bus import (
+    SceneEditRequestBus,
+    SceneEditNotification,
+    SceneEditNotificationBus,
+    get_actor_and_path,
+    make_unique_name,
+    can_rename_actor,
+)
+
+from orcalab.ui.actor_outline_model import ActorOutlineModel
+from orcalab.ui.rename_dialog import RenameDialog
 
 
 class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
@@ -30,11 +43,7 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
 
 # QTreeView的默认行为是按下鼠标左键时选中，我们希望在鼠标左键抬起的时候选中。
 # 这样可以避免在拖拽时选中。
-class ActorOutline(QtWidgets.QTreeView):
-    actor_selection_changed = QtCore.Signal(list)
-    request_add_group = QtCore.Signal(BaseActor)
-    request_delete = QtCore.Signal(BaseActor)
-    request_rename = QtCore.Signal(BaseActor)
+class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
     def __init__(self):
         super().__init__()
@@ -59,9 +68,24 @@ class ActorOutline(QtWidgets.QTreeView):
 
         self.reparent_mime = "application/x-orca-actor-reparent"
 
-    def set_actor_model(self, model):
+    def connect_bus(self):
+        SceneEditNotificationBus.connect(self)
+
+    def disconnect_bus(self):
+        SceneEditNotificationBus.disconnect(self)
+
+    def set_actor_model(self, model: ActorOutlineModel):
         self.setModel(model)
         self.selectionModel().selectionChanged.connect(self._on_selection_changed)
+        connect(model.request_reparent, self._on_request_reparent)
+
+    async def _on_request_reparent(
+        self, actor_path: Path, new_parent_path: Path, index: int
+    ):
+        print(f"reparent {actor_path} to {new_parent_path} at {index}")
+        await SceneEditRequestBus().reparent_actor(
+            actor_path, new_parent_path, index, undo=True, source="actor_outline"
+        )
 
     @QtCore.Slot()
     def _on_selection_changed(self):
@@ -78,9 +102,26 @@ class ActorOutline(QtWidgets.QTreeView):
                 raise Exception("Invalid actor.")
             actors.append(actor)
 
-        self.actor_selection_changed.emit(actors)
+        asyncio.create_task(
+            SceneEditRequestBus().set_selection(
+                actors, undo=True, source="actor_outline"
+            )
+        )
 
         self._change_from_inside = False
+
+    @override
+    async def on_selection_changed(self, old_selection, new_selection, source=""):
+        if source == "actor_outline":
+            return
+
+        actors = []
+
+        for actor_path in new_selection:
+            actor, actor_path = get_actor_and_path(actor_path)
+            actors.append(actor)
+
+        self.set_actor_selection(actors)
 
     def set_actor_selection(self, actors: list[BaseActor]):
         if self._change_from_inside:
@@ -104,21 +145,6 @@ class ActorOutline(QtWidgets.QTreeView):
 
         self._change_from_outside = False
 
-    def get_actor_selection(self) -> list[BaseActor]:
-        model: ActorOutlineModel = self.model()
-        selection_model = self.selectionModel()
-        indexes = selection_model.selectedIndexes()
-
-        actors = []
-        for index in indexes:
-            actor = model.get_actor(index)
-            if actor is None:
-                raise Exception("Invalid actor.")
-
-            actors.append(actor)
-
-        return actors
-
     @QtCore.Slot()
     def show_context_menu(self, position):
         self._current_index = self.indexAt(position)
@@ -127,43 +153,67 @@ class ActorOutline(QtWidgets.QTreeView):
         local_scene: LocalScene = actor_outline_model.local_scene
 
         is_root = False
-        self._current_actor = actor_outline_model.get_actor(self._current_index)
-        if self._current_actor is None:
-            self._current_actor = local_scene.root_actor
+        current_actor = actor_outline_model.get_actor(self._current_index)
+        if current_actor is None:
+            current_actor = local_scene.root_actor
             is_root = True
+
+        self._current_actor = current_actor
+        self._current_actor_path = local_scene.get_actor_path(self._current_actor)
 
         menu = QtWidgets.QMenu()
 
         action_add_group = QtGui.QAction("Add Group")
-        action_add_group.triggered.connect(self._add_group)
+        connect(action_add_group.triggered, self._add_group)
         menu.addAction(action_add_group)
 
         if self._current_index.isValid():
             menu.addSeparator()
 
             action_delete = QtGui.QAction("Delete")
-            action_delete.triggered.connect(self._delete_actor)
+            connect(action_delete.triggered, self._delete_actor)
             action_delete.setEnabled(not is_root)
             menu.addAction(action_delete)
 
             action_rename = QtGui.QAction("Rename")
-            action_rename.triggered.connect(self._rename_actor)
+            connect(action_rename.triggered, self._open_rename_dialog)
             action_rename.setEnabled(not is_root)
             menu.addAction(action_rename)
 
         menu.exec_(self.mapToGlobal(position))
 
-    @QtCore.Slot()
-    def _add_group(self):
-        self.request_add_group.emit(self._current_actor)
+    async def _add_group(self):
+        parent_actor = self._current_actor
+        parent_actor_path = self._current_actor_path
+        if not isinstance(parent_actor, GroupActor):
+            parent_actor = parent_actor.parent
+            parent_actor_path = parent_actor_path.parent()
 
-    @QtCore.Slot()
-    def _delete_actor(self):
-        self.request_delete.emit(self._current_actor)
+        assert isinstance(parent_actor, GroupActor)
 
-    @QtCore.Slot()
-    def _rename_actor(self):
-        self.request_rename.emit(self._current_actor)
+        new_group_name = make_unique_name("group", parent_actor)
+        actor = GroupActor(name=new_group_name)
+
+        await SceneEditRequestBus().add_actor(
+            actor, parent_actor, undo=True, source="actor_outline"
+        )
+
+    async def _delete_actor(self):
+        await SceneEditRequestBus().delete_actor(
+            self._current_actor, undo=True, source="actor_outline"
+        )
+
+    def _open_rename_dialog(self):
+        dialog = RenameDialog(self._current_actor_path, can_rename_actor, self)
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            asyncio.create_task(
+                SceneEditRequestBus().rename_actor(
+                    self._current_actor,
+                    dialog.new_name,
+                    undo=True,
+                    source="actor_outline",
+                )
+            )
 
     def _get_actor_at_pos(self, pos) -> Tuple[BaseActor, Path]:
         index = self.indexAt(pos)
@@ -196,7 +246,12 @@ class ActorOutline(QtWidgets.QTreeView):
 
             if actor_path == Path.root_path():
                 self.set_actor_selection([])
-                self.actor_selection_changed.emit([])
+
+                asyncio.create_task(
+                    SceneEditRequestBus().set_selection(
+                        [], undo=True, source="actor_outline"
+                    )
+                )
 
             else:
                 rect = self._brach_areas.get(index)
@@ -205,7 +260,11 @@ class ActorOutline(QtWidgets.QTreeView):
                     self.setExpanded(index, not self.isExpanded(index))
                 else:
                     self.set_actor_selection([actor])
-                    self.actor_selection_changed.emit([actor])
+                    asyncio.create_task(
+                        SceneEditRequestBus().set_selection(
+                            [actor], undo=True, source="actor_outline"
+                        )
+                    )
 
     def mouseMoveEvent(self, event):
         if self._left_mouse_pressed:

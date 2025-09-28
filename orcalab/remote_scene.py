@@ -1,3 +1,4 @@
+import asyncio
 from orcalab.config_service import ConfigService
 from orcalab.math import Transform
 import orcalab.protos.edit_service_pb2_grpc as edit_service_pb2_grpc
@@ -8,10 +9,17 @@ import orca_gym.protos.mjc_message_pb2 as mjc_message_pb2
 from orcalab.path import Path
 from orcalab.actor import BaseActor, GroupActor, AssetActor
 
+from orcalab.scene_edit_bus import (
+    SceneEditNotificationBus,
+    SceneEditNotification,
+    SceneEditRequestBus,
+    make_unique_name,
+)
+
 import os
 import grpc
 import numpy as np
-from typing import List
+from typing import List, Tuple, override
 import subprocess
 import time
 import pathlib
@@ -22,7 +30,7 @@ Error = edit_service_pb2.StatusCode.Error
 
 
 # 由于Qt是异步的，所以这里只提供异步接口。
-class RemoteScene:
+class RemoteScene(SceneEditNotification):
     def __init__(self, config_service: ConfigService):
         super().__init__()
 
@@ -33,37 +41,55 @@ class RemoteScene:
         self.server_process_pid = None  # Track the actual process PID
         self.executable_path = self.config_service.executable()
         self.sim_grpc_addr = f"localhost:{self.config_service.sim_port()}"
-    
+
+        self.actor_in_editing: Path | None = None
+        self.current_transform: Transform | None = None
+
+    def connect_bus(self):
+        SceneEditNotificationBus.connect(self)
+
+    def disconnect_bus(self):
+        SceneEditNotificationBus.disconnect(self)
+
     def _find_orca_processes(self):
         """Find all OrcaStudio.GameLauncher processes"""
         processes = []
         try:
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'exe']):
+            for proc in psutil.process_iter(["pid", "name", "cmdline", "exe"]):
                 try:
                     # Check by executable name
-                    if proc.info['name'] and 'OrcaStudio.GameLauncher' in proc.info['name']:
+                    if (
+                        proc.info["name"]
+                        and "OrcaStudio.GameLauncher" in proc.info["name"]
+                    ):
                         processes.append(proc)
                     # Check by executable path
-                    elif proc.info['exe'] and self.executable_path in proc.info['exe']:
+                    elif proc.info["exe"] and self.executable_path in proc.info["exe"]:
                         processes.append(proc)
                     # Check by command line
-                    elif proc.info['cmdline'] and any(self.executable_path in str(cmd) for cmd in proc.info['cmdline']):
+                    elif proc.info["cmdline"] and any(
+                        self.executable_path in str(cmd) for cmd in proc.info["cmdline"]
+                    ):
                         processes.append(proc)
-                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                except (
+                    psutil.NoSuchProcess,
+                    psutil.AccessDenied,
+                    psutil.ZombieProcess,
+                ):
                     pass
         except Exception as e:
             print(f"Error finding OrcaStudio processes: {e}")
         return processes
-    
+
     def _cleanup_orca_processes(self, timeout=1):
         """Clean up only the OrcaStudio.GameLauncher process launched by this instance"""
         print("Starting OrcaStudio.GameLauncher process cleanup...")
-        
+
         # Only clean up the process we launched (if any)
         if self.server_process_pid is None:
             print("No tracked OrcaStudio.GameLauncher process to clean up")
             return
-        
+
         try:
             # Find the specific process by PID
             proc = psutil.Process(self.server_process_pid)
@@ -71,17 +97,19 @@ class RemoteScene:
                 print(f"Process PID {self.server_process_pid} is no longer running")
                 self.server_process_pid = None
                 return
-            
-            print(f"Found OrcaStudio.GameLauncher process to clean up: PID {self.server_process_pid}")
-            
+
+            print(
+                f"Found OrcaStudio.GameLauncher process to clean up: PID {self.server_process_pid}"
+            )
+
             # Try graceful termination
             print(f"Sending TERM signal to PID {self.server_process_pid}")
             proc.terminate()
-            
+
             # Wait for graceful termination
             print(f"Waiting {timeout} seconds for graceful termination...")
             time.sleep(timeout)
-            
+
             # Check if process is still running
             if proc.is_running():
                 print(f"Force killing PID {self.server_process_pid}")
@@ -90,7 +118,7 @@ class RemoteScene:
                 print(f"Successfully killed PID {self.server_process_pid}")
             else:
                 print(f"Process PID {self.server_process_pid} terminated gracefully")
-                
+
         except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
             print(f"Could not clean up process PID {self.server_process_pid}: {e}")
         except Exception as e:
@@ -98,7 +126,7 @@ class RemoteScene:
         finally:
             # Clear the tracked PID
             self.server_process_pid = None
-    
+
     def __del__(self):
         """Destructor to ensure server process is cleaned up"""
         try:
@@ -132,6 +160,9 @@ class RemoteScene:
             await self._attach()
 
         print("connected to server.")
+
+        # Start the pending operation loop.
+        await self._query_pending_operation_loop()
 
     async def _launch(self):
         print(f"launching server: {self.edit_grpc_addr}")
@@ -202,16 +233,234 @@ class RemoteScene:
             await self.sim_channel.close()
         self.sim_stub = None
         self.sim_channel = None
-        
+
         # Clean up OrcaStudio.GameLauncher processes using the new mechanism
         self._cleanup_orca_processes(timeout=1)
-        
+
         # Also clean up the subprocess object if it exists
-        if hasattr(self, 'server_process') and self.server_process is not None:
+        if hasattr(self, "server_process") and self.server_process is not None:
             try:
                 self.server_process = None
             except Exception as e:
                 print(f"Error cleaning up server process object: {e}")
+
+    async def _query_pending_operation_loop(self):
+        operations = await self.query_pending_operation_loop()
+        # TODO: stop the loop when sim_process_running is True
+        # if not self.sim_process_running:
+        for op in operations:
+            await self._process_pending_operation(op)
+
+        # frequency = 30  # Hz
+        # await asyncio.sleep(1 / frequency)
+        asyncio.create_task(self._query_pending_operation_loop())
+
+    async def _process_pending_operation(self, op: str):
+        print(op)
+        sltc = "start_local_transform_change:"
+        if op.startswith(sltc):
+            actor_path = Path(op[len(sltc) :])
+
+            if self.actor_in_editing is not None:
+                raise Exception(
+                    f"Another actor is being edited: {self.actor_in_editing}"
+                )
+
+            self.actor_in_editing = actor_path
+
+        eltc = "end_local_transform_change:"
+        if op.startswith(eltc):
+            actor_path = Path(op[len(eltc) :])
+
+            if self.actor_in_editing != actor_path:
+                raise Exception(
+                    f"Actor in editing mismatch: {self.actor_in_editing} vs {actor_path}"
+                )
+
+            # Trigger an undoable transform change.
+            await SceneEditRequestBus().set_transform(
+                actor_path,
+                self.current_transform,
+                local=True,
+                undo=True,
+                source="remote_scene",
+            )
+
+            # Transform on viewport will be updated by on_transform_changed.
+
+            self.actor_in_editing = None
+            self.current_transform = None
+
+        swtc = "start_world_transform_change:"
+        if op.startswith(swtc):
+            actor_path = Path(op[len(swtc) :])
+
+            if self.actor_in_editing is not None:
+                raise Exception(
+                    f"Another actor is being edited: {self.actor_in_editing}"
+                )
+
+            self.actor_in_editing = actor_path
+
+        ewtc = "end_world_transform_change:"
+        if op.startswith(ewtc):
+            actor_path = Path(op[len(ewtc) :])
+
+            if self.actor_in_editing != actor_path:
+                raise Exception(
+                    f"Actor in editing mismatch: {self.actor_in_editing} vs {actor_path}"
+                )
+
+            # Trigger an undoable transform change.
+            await SceneEditRequestBus().set_transform(
+                actor_path,
+                self.current_transform,
+                local=False,
+                undo=True,
+                source="remote_scene",
+            )
+
+            self.actor_in_editing = None
+            self.current_transform = None
+
+        local_transform_change = "local_transform_change:"
+        if op.startswith(local_transform_change):
+            actor_path = Path(op[len(local_transform_change) :])
+
+            # Currently only support drag from viewport. So actor_in_editing must be set.
+            if self.actor_in_editing is None:
+                raise Exception(
+                    f"No actor is being edited, but got local transform change for {actor_path}"
+                )
+
+            if actor_path != self.actor_in_editing:
+                raise Exception(
+                    f"Actor in editing mismatch: {self.actor_in_editing} vs {actor_path}"
+                )
+
+            self.current_transform = await self.get_pending_actor_transform(
+                actor_path, local=True
+            )
+
+            await SceneEditRequestBus().set_transform(
+                actor_path,
+                self.current_transform,
+                local=True,
+                undo=False,
+                source="remote_scene",
+            )
+
+            # Transform on viewport will be updated by on_transform_changed.
+
+        world_transform_change = "world_transform_change:"
+        if op.startswith(world_transform_change):
+            actor_path = Path(op[len(world_transform_change) :])
+
+            if self.actor_in_editing is None:
+                raise Exception(
+                    f"No actor is being edited, but got world transform change for {actor_path}"
+                )
+            if actor_path != self.actor_in_editing:
+                raise Exception(
+                    f"Actor in editing mismatch: {self.actor_in_editing} vs {actor_path}"
+                )
+            self.current_transform = await self.get_pending_actor_transform(
+                actor_path, local=False
+            )
+            await SceneEditRequestBus().set_transform(
+                actor_path,
+                self.current_transform,
+                local=False,
+                undo=False,
+                source="remote_scene",
+            )
+            # Transform on viewport will be updated by on_transform_changed.
+
+        selection_change = "selection_change"
+        if op.startswith(selection_change):
+            actor_paths = await self.get_pending_selection_change()
+
+            paths = []
+            for p in actor_paths:
+                paths.append(Path(p))
+
+            await SceneEditRequestBus().set_selection(paths, source="remote_scene")
+
+        # TODO: refactor using e-bus
+        add_item = "add_item"
+        if op.startswith(add_item):
+            [transform, name] = await self.get_pending_add_item()
+
+            actor_name = make_unique_name(name, Path("/"))
+
+            actor = AssetActor(name=actor_name, spawnable_name=name)
+            actor.transform = transform
+            await SceneEditRequestBus().add_actor(
+                actor, Path("/"), source="remote_scene"
+            )
+
+    @override
+    async def on_transform_changed(
+        self,
+        actor_path: Path,
+        transform: Transform,
+        local: bool,
+        source: str,
+    ):
+        # We still need to set the transform to viewport, even if source is "remote_scene".
+        # This is by design.
+        await self.set_actor_transform(actor_path, transform, local)
+
+    @override
+    async def on_selection_changed(self, old_selection, new_selection, source=""):
+        if source == "remote_scene":
+            return
+
+        asyncio.create_task(self.set_selection(new_selection))
+
+    @override
+    async def on_actor_added(
+        self,
+        actor: BaseActor,
+        parent_actor_path: Path,
+        source: str,
+    ):
+        await self.add_actor(actor, parent_actor_path)
+
+    @override
+    async def on_actor_deleted(
+        self,
+        actor_path: Path,
+        source: str,
+    ):
+        await self.delete_actor(actor_path)
+
+    @override
+    async def on_actor_renamed(
+        self,
+        actor_path: Path,
+        new_name: str,
+        source: str,
+    ):
+        await self.rename_actor(actor_path, new_name)
+
+    @override
+    async def on_actor_reparented(
+        self,
+        actor_path: Path,
+        new_parent_path: Path,
+        row: int,
+        source: str,
+    ):
+        await self.reparent_actor(actor_path, new_parent_path)
+
+    ############################################################
+    #
+    #
+    # Grpc methods
+    #
+    #
+    ############################################################
 
     def _create_transform_message(self, transform: Transform):
         msg = edit_service_pb2.Transform(
@@ -342,11 +591,13 @@ class RemoteScene:
         self._check_response(response)
         return response.actor_paths
 
-    async def get_pending_add_item(self) -> Transform:
+    async def get_pending_add_item(self) -> Tuple[Transform, str]:
         request = edit_service_pb2.GetPendingAddItemRequest()
         response = await self.edit_stub.GetPendingAddItem(request)
         self._check_response(response)
-        return [response.transform, response.actor_name]
+
+        transform = self._get_transform_from_message(response.transform)
+        return (transform, response.actor_name)
 
     async def set_selection(self, actor_paths: list[Path]):
         paths = []
@@ -421,10 +672,12 @@ class RemoteScene:
         request = edit_service_pb2.LoadPackageRequest(file_path=package_path)
         response = await self.edit_stub.LoadPackage(request)
         self._check_response(response)
-    
+
     async def change_sim_state(self, sim_process_running: bool) -> bool:
         print(f"change_sim_state {sim_process_running}")
-        request = edit_service_pb2.ChangeSimStateRequest(sim_process_running=sim_process_running)                                                                                        
+        request = edit_service_pb2.ChangeSimStateRequest(
+            sim_process_running=sim_process_running
+        )
         response = await self.edit_stub.ChangeSimState(request)
         self._check_response(response)
         return response

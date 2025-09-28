@@ -228,6 +228,8 @@ class TerminalWidget(QtWidgets.QWidget):
         try:
             while True:
                 try:
+                    if self.output_queue.empty():
+                        break
                     line = self.output_queue.get_nowait()
                     self._append_output(line)
                 except queue.Empty:

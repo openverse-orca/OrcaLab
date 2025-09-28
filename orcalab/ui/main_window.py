@@ -2,7 +2,7 @@ import asyncio
 from copy import deepcopy
 import random
 
-from typing import Dict, Tuple, override
+from typing import Dict, List, Tuple, override
 import numpy as np
 
 from scipy.spatial.transform import Rotation
@@ -13,7 +13,6 @@ import os
 import time
 import platform
 from PySide6 import QtCore, QtWidgets, QtGui
-import PySide6.QtAsyncio as QtAsyncio
 
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.local_scene import LocalScene
@@ -22,7 +21,6 @@ from orcalab.pyside_util import connect
 from orcalab.remote_scene import RemoteScene
 from orcalab.ui.actor_editor import ActorEditor
 from orcalab.ui.actor_outline import ActorOutline
-from orcalab.ui.rename_dialog import RenameDialog
 from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.asset_browser import AssetBrowser
 from orcalab.ui.copilot import CopilotPanel
@@ -31,6 +29,10 @@ from orcalab.ui.launch_dialog import LaunchDialog
 from orcalab.ui.terminal_widget import TerminalWidget
 from orcalab.math import Transform
 from orcalab.config_service import ConfigService
+from orcalab.undo_service.undo_service import SelectionCommand, UndoService
+from orcalab.scene_edit_service import SceneEditService
+from orcalab.scene_edit_bus import SceneEditRequestBus, make_unique_name
+from orcalab.undo_service.undo_service_bus import can_redo, can_undo
 from orcalab.url_service.url_service import UrlServiceServer
 from orcalab.asset_service import AssetService
 from orcalab.asset_service_bus import (
@@ -62,7 +64,10 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         self.url_server = UrlServiceServer()
         await self.url_server.start()
 
+        self.undo_service = UndoService()
         self.local_scene = LocalScene()
+
+        self.scene_edit_service = SceneEditService(self.local_scene)
 
         self.remote_scene = RemoteScene(ConfigService())
 
@@ -73,15 +78,14 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
 
         self.cache_folder = await self.remote_scene.get_cache_folder()
 
-        self._query_pending_operation_lock = asyncio.Lock()
-        self._query_pending_operation_running = False
-        await self._start_query_pending_operation_loop()
 
-        self.start_transform = None
-        self.end_transform = None
 
         self._sim_process_check_lock = asyncio.Lock()
         self.sim_process_running = False
+
+        self.undo_service.connect_bus()
+        self.scene_edit_service.connect_bus()
+        self.remote_scene.connect_bus()
 
         self.connect_buses()
 
@@ -209,6 +213,11 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         # 初始化按钮状态
         self._update_button_states()
 
+
+        self.actor_outline_widget.connect_bus()
+        self.actor_outline_model.connect_bus()
+        self.actor_editor_widget.connect_bus()
+
     def _create_styled_panel(self, title: str, content_widget: QtWidgets.QWidget) -> QtWidgets.QWidget:
         """创建带标题和样式的面板"""
         # 创建主容器
@@ -274,115 +283,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         
         return panel
 
-    async def _start_query_pending_operation_loop(self):
-        async with self._query_pending_operation_lock:
-            if self._query_pending_operation_running:
-                return
-            asyncio.create_task(self._query_pending_operation_loop())
-            self._query_pending_operation_running = True
 
-    async def _stop_query_pending_operation_loop(self):
-        async with self._query_pending_operation_lock:
-            self._query_pending_operation_running = False
-
-    async def _query_pending_operation_loop(self):
-        async with self._query_pending_operation_lock:
-            if not self._query_pending_operation_running:
-                return
-
-            operations = await self.remote_scene.query_pending_operation_loop()
-            if not self.sim_process_running:
-                for op in operations:
-                    await self._process_pending_operation(op)
-
-        # frequency = 30  # Hz
-        # await asyncio.sleep(1 / frequency)
-        asyncio.create_task(self._query_pending_operation_loop())
-
-    async def _process_pending_operation(self, op: str):
-        sltc = "start_local_transform_change:"
-        if op.startswith(sltc):
-            actor_path = Path(op[len(sltc) :])
-
-            if actor_path not in self.local_scene:
-                raise Exception(f"actor not exist")
-
-            actor = self.local_scene[actor_path]
-            self.start_transform = actor.transform
-
-        eltc = "end_local_transform_change:"
-        if op.startswith(eltc):
-            actor_path = Path(op[len(eltc) :])
-
-            if actor_path not in self.local_scene:
-                raise Exception(f"actor not exist")
-
-            actor = self.local_scene[actor_path]
-            self.end_transform = actor.transform
-            self.transform_change.emit(actor_path, True)
-
-        swtc = "start_world_transform_change:"
-        if op.startswith(swtc):
-            actor_path = Path(op[len(swtc) :])
-
-            if actor_path not in self.local_scene:
-                raise Exception(f"actor not exist")
-
-            actor = self.local_scene[actor_path]
-            self.start_transform = actor.world_transform
-
-        ewtc = "end_world_transform_change:"
-        if op.startswith(ewtc):
-            actor_path = Path(op[len(ewtc) :])
-
-            if actor_path not in self.local_scene:
-                raise Exception(f"actor not exist")
-
-            actor = self.local_scene[actor_path]
-            self.end_transform = actor.world_transform
-            self.transform_change.emit(actor_path, False)
-
-        local_transform_change = "local_transform_change:"
-        if op.startswith(local_transform_change):
-            actor_path = Path(op[len(local_transform_change) :])
-
-            if actor_path not in self.local_scene:
-                raise Exception(f"actor not exist")
-
-            transform = await self.remote_scene.get_pending_actor_transform(
-                actor_path, True
-            )
-            self.set_transform_from_scene(actor_path, transform, True)
-            await self.remote_scene.set_actor_transform(actor_path, transform, True)
-
-        world_transform_change = "world_transform_change:"
-        if op.startswith(world_transform_change):
-            actor_path = Path(op[len(world_transform_change) :])
-
-            if not actor_path in self.local_scene:
-                raise Exception(f"actor not exist")
-
-            transform = await self.remote_scene.get_pending_actor_transform(
-                actor_path, False
-            )
-
-            self.set_transform_from_scene(actor_path, transform, False)
-            await self.remote_scene.set_actor_transform(actor_path, transform, False)
-
-        selection_change = "selection_change"
-        if op.startswith(selection_change):
-            actor_paths = await self.remote_scene.get_pending_selection_change()
-
-            paths = []
-            for p in actor_paths:
-                paths.append(Path(p))
-
-            await self.set_selection_from_remote_scene(paths)
-
-        add_item = "add_item"
-        if op.startswith(add_item):
-            [transform, name] = await self.remote_scene.get_pending_add_item()
-            self.add_item_by_drag.emit(name, transform)
 
     def show_launch_dialog(self):
         """显示启动对话框（同步版本）"""
@@ -647,155 +548,6 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         await asyncio.sleep(1 / frequency)
         asyncio.create_task(self._sim_process_check_loop())
 
-    async def set_selection(self, actors: list[BaseActor | Path], source: str = ""):
-        actors, actor_paths = self.local_scene.get_actor_and_path_list(actors)
-
-        if source != "outline":
-            self.actor_outline_widget.set_actor_selection(actors)
-
-        if source != "remote":
-            await self.remote_scene.set_selection(actor_paths)
-
-        self.local_scene.selection = actor_paths
-
-        # sync editor
-        if len(actors) == 0:
-            self.actor_editor_widget.actor = None
-        else:
-            self.actor_editor_widget.actor = actors[0]
-
-    def make_unique_name(self, base_name: str, parent: BaseActor | Path) -> str:
-        parent, _ = self.local_scene.get_actor_and_path(parent)
-        assert isinstance(parent, GroupActor)
-
-        existing_names = {child.name for child in parent.children}
-
-        counter = 1
-        new_name = f"{base_name}_{counter}"
-        while new_name in existing_names:
-            counter += 1
-            new_name = f"{base_name}_{counter}"
-
-        return new_name
-
-    async def add_actor(self, actor: BaseActor, parent_actor: GroupActor | Path):
-        ok, err = self.local_scene.can_add_actor(actor, parent_actor)
-        if not ok:
-            raise Exception(err)
-
-        parent_actor, parent_actor_path = self.local_scene.get_actor_and_path(
-            parent_actor
-        )
-
-        model = self.actor_outline_model
-        parent_index = model.get_index_from_actor(parent_actor)
-        child_count = len(parent_actor.children)
-
-        model.beginInsertRows(parent_index, child_count, child_count)
-
-        self.local_scene.add_actor(actor, parent_actor_path)
-
-        model.endInsertRows()
-
-        await self.remote_scene.add_actor(actor, parent_actor_path)
-
-    async def delete_actor(self, actor) -> Tuple[BaseActor, GroupActor | None]:
-        ok, err = self.local_scene.can_delete_actor(actor)
-        if not ok:
-            return
-
-        actor, actor_path = self.local_scene.get_actor_and_path(actor)
-
-        model = self.actor_outline_model
-        index = model.get_index_from_actor(actor)
-        parent_index = index.parent()
-
-        model.beginRemoveRows(parent_index, index.row(), index.row())
-
-        self.local_scene.delete_actor(actor)
-
-        model.endRemoveRows()
-
-        await self.remote_scene.delete_actor(actor_path)
-
-    async def rename_actor(self, actor: BaseActor, new_name: str):
-        ok, err = self.local_scene.can_rename_actor(actor, new_name)
-        if not ok:
-            raise Exception(err)
-
-        actor, actor_path = self.local_scene.get_actor_and_path(actor)
-
-        model = self.actor_outline_model
-        index = model.get_index_from_actor(actor)
-
-        self.local_scene.rename_actor(actor, new_name)
-
-        model.dataChanged.emit(index, index)
-
-        await self.remote_scene.rename_actor(actor_path, new_name)
-
-    async def reparent_actor(
-        self, actor: BaseActor | Path, new_parent: BaseActor | Path, row: int
-    ):
-        ok, err = self.local_scene.can_reparent_actor(actor, new_parent)
-        if not ok:
-            raise Exception(err)
-
-        actor, actor_path = self.local_scene.get_actor_and_path(actor)
-        new_parent, new_parent_path = self.local_scene.get_actor_and_path(new_parent)
-
-        model = self.actor_outline_model
-
-        model.beginResetModel()
-        self.local_scene.reparent_actor(actor, new_parent, row)
-        model.endResetModel()
-
-        await self.remote_scene.reparent_actor(actor_path, new_parent_path)
-
-    async def on_transform_edit(self):
-        actor = self.actor_editor_widget.actor
-        if actor is None:
-            return
-
-        transform = self.actor_editor_widget.transform
-        if transform is None:
-            return
-
-        actor.transform = transform
-
-        actor_path = self.local_scene.get_actor_path(actor)
-        if actor_path is None:
-            raise Exception("Invalid actor.")
-
-        await self.remote_scene.set_actor_transform(actor_path, transform, True)
-
-    def record_start_transform(self):
-        actor = self.actor_editor_widget.actor
-        if actor is None:
-            return
-        self.start_transform = actor.transform
-
-    def record_stop_transform(self):
-        actor = self.actor_editor_widget.actor
-        if actor is None:
-            return
-        self.end_transform = actor.transform
-        actor_path = self.local_scene.get_actor_path(actor)
-        self.transform_change.emit(actor_path, True)
-
-    def set_transform_from_scene(
-        self, actor_path: Path, transform: Transform, local: bool
-    ):
-        actor = self.local_scene[actor_path]
-
-        if local == True:
-            actor.transform = transform
-        else:
-            actor.world_transform = transform
-
-        if self.actor_editor_widget.actor == actor:
-            self.actor_editor_widget.update_ui()
-
     @override
     def get_cache_folder(self, output: list[str]) -> None:
         output.append(self.cache_folder)
@@ -807,93 +559,16 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
        self.asset_browser_widget.set_assets(assets)
 
 
-# 不要存Actor对象，只存Path。
-# Actor可能被删除和创建，前后的Actor是不相等的。
-# DeleteActorCommand中存的Actor不会再次放到LocalScene中，
-# 而是作为模板使用。
-
-
-class SelectionCommand:
-    def __init__(self):
-        self.old_selection = []
-        self.new_selection = []
-
-    def __repr__(self):
-        return f"SelectionCommand(old_selection={self.old_selection}, new_selection={self.new_selection})"
-
-
-class CreateGroupCommand:
-    def __init__(self):
-        self.path: Path = None
-
-    def __repr__(self):
-        return f"CreateGroupCommand(path={self.path})"
-
-
-class CreateActorCommand:
-    def __init__(self):
-        self.actor = None
-        self.path: Path = None
-        self.row = -1
-
-    def __repr__(self):
-        return f"CreteActorCommand(path={self.path})"
-
-
-class DeleteActorCommand:
-    def __init__(self):
-        self.actor: BaseActor = None
-        self.path: Path = None
-        self.row = -1
-
-    def __repr__(self):
-        return f"DeleteActorCommand(path={self.path})"
-
-
-class RenameActorCommand:
-    def __init__(self):
-        self.old_path: Path = None
-        self.new_path: Path = None
-
-    def __repr__(self):
-        return f"RenameActorCommand(old_path={self.old_path}, new_path={self.new_path})"
-
-
-class ReparentActorCommand:
-    def __init__(self):
-        self.old_path = None
-        self.old_row = -1
-        self.new_path = None
-        self.new_row = -1
-
-    def __repr__(self):
-        return f"ReparentActorCommand(old_path={self.old_path}, old_row={self.old_row}, new_path={self.new_path}, new_row={self.new_row})"
-
-
-class TransformCommand:
-    def __init__(self):
-        self.actor_path = None
-        self.old_transform = None
-        self.new_transform = None
-        self.local = None
-
-    def __repr__(self):
-        return f"TransformCommand(actor_path={self.actor_path})"
-
-
 # Add undo/redo functionality
 class MainWindow1(MainWindow):
 
     add_item_by_drag = QtCore.Signal(str, Transform)
-    transform_change = QtCore.Signal(Path, bool)
+    # transform_change = QtCore.Signal(Path, bool)
     load_scene_sig = QtCore.Signal(str)
-    rename_sig = QtCore.Signal(BaseActor, str)
+    # rename_sig = QtCore.Signal(BaseActor, str)
 
     def __init__(self):
         super().__init__()
-
-        self.command_history = []
-        self.command_history_index = -1
         self.cwd = os.getcwd()
 
     async def init(self):
@@ -901,20 +576,7 @@ class MainWindow1(MainWindow):
 
         await super()._init_ui()
 
-        connect(self.actor_outline_model.request_reparent, self.reparent_from_outline)
         connect(self.actor_outline_model.add_item, self.add_item_to_scene)
-
-        connect(
-            self.actor_outline_widget.actor_selection_changed,
-            self.set_selection_from_outline,
-        )
-        connect(self.actor_outline_widget.request_add_group, self.add_group_actor_from_outline)
-        connect(self.actor_outline_widget.request_delete, self.delete_actor_from_outline)
-        connect(self.actor_outline_widget.request_rename, self.open_rename_dialog)
-
-        connect(self.actor_editor_widget.transform_changed, self.on_transform_edit)
-        connect(self.actor_editor_widget.start_drag, self.record_start_transform)
-        connect(self.actor_editor_widget.stop_drag, self.record_stop_transform)
 
         connect(self.asset_browser_widget.add_item, self.add_item_to_scene)
 
@@ -925,9 +587,7 @@ class MainWindow1(MainWindow):
         connect(self.menu_edit.aboutToShow, self.prepare_edit_menu)
 
         connect(self.add_item_by_drag, self.add_item_drag)
-        connect(self.transform_change, self.transform_change_command)
         connect(self.load_scene_sig, self.load_scene)
-        connect(self.rename_sig, self.rename_undoable)
 
         connect(self.enable_control, self.enable_widgets)
         connect(self.disanble_control, self.disable_widgets)
@@ -1085,245 +745,46 @@ class MainWindow1(MainWindow):
         self.menu_edit.clear()
 
         action_undo = self.menu_edit.addAction("Undo")
+        action_undo.setEnabled(can_undo())
         connect(action_undo.triggered, self.undo)
-
-        if self.command_history_index >= 0:
-            action_undo.setEnabled(True)
-        else:
-            action_undo.setEnabled(False)
-
+        
         action_redo = self.menu_edit.addAction("Redo")
+        action_redo.setEnabled(can_redo())
         connect(action_redo.triggered, self.redo)
 
-        if self.command_history_index + 1 < len(self.command_history):
-            action_redo.setEnabled(True)
-        else:
-            action_redo.setEnabled(False)
-
-    def add_command(self, command):
-        # Remove commands after the current index
-        self.command_history = self.command_history[: self.command_history_index + 1]
-        self.command_history.append(command)
-
-        self.command_history_index = self.command_history_index + 1
-
-        print(f"Added command: {command}")
-
     async def undo(self):
-        if self.command_history_index < 0:
-            return
-
-        command = self.command_history[self.command_history_index]
-        self.command_history_index -= 1
-
-        match command:
-            case SelectionCommand():
-                await self.set_selection(command.old_selection)
-            case CreateGroupCommand():
-                await self.delete_actor(command.path)
-            case CreateActorCommand():
-                await self.delete_actor(command.path)
-            case DeleteActorCommand():
-                actor = command.actor
-                parent_path = command.path.parent()
-                await self.undo_delete_recursive(actor, parent_path)
-            case RenameActorCommand():
-                actor, _ = self.local_scene.get_actor_and_path(command.new_path)
-                await self.rename_actor(actor, command.old_path.name())
-            case ReparentActorCommand():
-                actor, _ = self.local_scene.get_actor_and_path(command.new_path)
-                old_parent_path = command.old_path.parent()
-                await self.reparent_actor(actor, old_parent_path, command.old_row)
-            case TransformCommand():
-                self.set_transform_from_scene(
-                    command.actor_path, command.old_transform, command.local
-                )
-                await self.remote_scene.set_actor_transform(
-                    command.actor_path, command.old_transform, command.local
-                )
-            case _:
-                raise Exception("Unknown command type.")
+        if can_undo():
+            await self.undo_service.undo()
 
     async def redo(self):
-        if self.command_history_index + 1 >= len(self.command_history):
-            return
-
-        command = self.command_history[self.command_history_index + 1]
-        self.command_history_index += 1
-
-        match command:
-            case SelectionCommand():
-                await self.set_selection(command.new_selection)
-            case CreateGroupCommand():
-                parent = command.path.parent()
-                name = command.path.name()
-                actor = GroupActor(name=name)
-                await self.add_actor(actor, parent)
-            case CreateActorCommand():
-                parent = command.path.parent()
-                actor = deepcopy(command.actor)
-                await self.add_actor(actor, parent)
-            case DeleteActorCommand():
-                await self.delete_actor(command.path)
-            case RenameActorCommand():
-                actor, _ = self.local_scene.get_actor_and_path(command.old_path)
-                await self.rename_actor(actor, command.new_path.name())
-            case ReparentActorCommand():
-                actor, _ = self.local_scene.get_actor_and_path(command.old_path)
-                new_parent_path = command.new_path.parent()
-                await self.reparent_actor(actor, new_parent_path, command.new_row)
-            case TransformCommand():
-                self.set_transform_from_scene(
-                    command.actor_path, command.new_transform, command.local
-                )
-                await self.remote_scene.set_actor_transform(
-                    command.actor_path, command.new_transform, command.local
-                )
-            case _:
-                raise Exception("Unknown command type.")
-
-    async def undo_delete_recursive(self, actor: BaseActor, parent_path: Path):
-        if isinstance(actor, GroupActor):
-            new_actor = GroupActor(name=actor.name)
-            new_actor.transform = actor.transform
-
-            await self.add_actor(new_actor, parent_path)
-
-            this_path = parent_path / actor.name
-            for child in actor.children:
-                await self.undo_delete_recursive(child, this_path)
-        else:
-            new_actor = deepcopy(actor)
-            await self.add_actor(new_actor, parent_path)
-
-    async def add_group_actor_from_outline(self, parent_actor: BaseActor | Path):
-        parent_actor, parent_actor_path = self.local_scene.get_actor_and_path(
-            parent_actor
-        )
-
-        if not isinstance(parent_actor, GroupActor):
-            parent_actor = parent_actor.parent
-            parent_actor_path = parent_actor_path.parent()
-
-        assert isinstance(parent_actor, GroupActor)
-
-        new_group_name = self.make_unique_name("group", parent_actor)
-        actor = GroupActor(name=new_group_name)
-        await self.add_actor(actor, parent_actor)
-
-        command = CreateGroupCommand()
-        command.path = parent_actor_path / new_group_name
-        self.add_command(command)
-
-    async def delete_actor_from_outline(self, actor: BaseActor | Path):
-        actor, actor_path = self.local_scene.get_actor_and_path(actor)
-
-        parent_actor = actor.parent
-        index = parent_actor.children.index(actor)
-        assert index != -1
-
-        command = DeleteActorCommand()
-        command.actor = actor
-        command.path = actor_path
-        command.row = index
-
-        await self.delete_actor(actor)
-
-        self.add_command(command)
-
-    async def set_selection_from_outline(self, actors):
-        _, actor_paths = self.local_scene.get_actor_and_path_list(actors)
-        if self.local_scene.selection != actor_paths:
-            command = SelectionCommand()
-            command.new_selection = actor_paths
-            command.old_selection = self.local_scene.selection
-            self.add_command(command)
-            await self.set_selection(actor_paths, "outline")
-
-    async def set_selection_from_remote_scene(self, actor_paths: list[Path]):
-        if self.local_scene.selection != actor_paths:
-            command = SelectionCommand()
-            command.new_selection = actor_paths
-            command.old_selection = self.local_scene.selection
-            self.add_command(command)
-            await self.set_selection(actor_paths, "remote")
-
-    async def reparent_from_outline(
-        self, actor: BaseActor | Path, new_parent: BaseActor | Path, row: int
-    ):
-        actor, actor_path = self.local_scene.get_actor_and_path(actor)
-        new_parent, new_parent_path = self.local_scene.get_actor_and_path(new_parent)
-        old_parent = actor.parent
-        old_index = old_parent.children.index(actor)
-        assert old_index != -1
-
-        command = ReparentActorCommand()
-        command.old_path = actor_path
-        command.old_row = old_index
-        command.new_path = new_parent_path / actor.name
-        command.new_row = row
-
-        await self.reparent_actor(actor, new_parent, row)
-        self.add_command(command)
-
-    def open_rename_dialog(self, actor: BaseActor):
-        actor_path = self.local_scene.get_actor_path(actor)
-        if actor_path is None:
-            raise Exception("Invalid actor.")
-
-        dialog = RenameDialog(actor_path, self.local_scene.can_rename_actor, self)
-        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-            new_name = dialog.new_name
-            self.rename_sig.emit(actor, new_name)
-
-    async def rename_undoable(self, actor: BaseActor | Path, new_name: str):
-        _, actor_path = self.local_scene.get_actor_and_path(actor)
-        command = RenameActorCommand()
-        command.old_path = actor_path
-        command.new_path = actor_path.parent() / new_name
-
-        await self.rename_actor(actor, new_name)
-
-        self.add_command(command)
+        if can_redo():
+            await self.undo_service.redo()
 
     async def add_item_to_scene(self, item_name, parent_actor=None):
         if parent_actor is None:
             parent_path = Path.root_path()
         else:
             parent_path = self.local_scene.get_actor_path(parent_actor)
-        name = self.make_unique_name(item_name, parent_path)
+        name = make_unique_name(item_name, parent_path)
         actor = AssetActor(name=name, spawnable_name=item_name)
 
-        await self.add_actor(actor, parent_path)
-
-        command = CreateActorCommand()
-        command.actor = deepcopy(actor)
-        command.path = parent_path / name
-        self.add_command(command)
+        await SceneEditRequestBus().add_actor(actor, parent_path)
 
     async def add_item_to_scene_with_transform(self, item_name, item_spawnable_name, parent_path=None, transform=None):
         if parent_path is None:
             parent_path = Path.root_path()
 
-        name = self.make_unique_name(item_name, parent_path)
+        name = make_unique_name(item_name, parent_path)
         actor = AssetActor(name=name, spawnable_name=item_spawnable_name)
         actor.transform = transform
-        await self.add_actor(actor, parent_path)
-        command = CreateActorCommand()
-        command.actor = deepcopy(actor)
-        command.path = parent_path / name
-        self.add_command(command)
+        await SceneEditRequestBus().add_actor(actor, parent_path)
 
     async def on_copilot_add_group(self, group_path: Path):
         group_actor = GroupActor(name=group_path.name())
-        await self.add_actor(group_actor, group_path.parent())
-
-        command = CreateGroupCommand()
-        command.path = group_path
-        self.add_command(command)
+        await SceneEditRequestBus().add_actor(group_actor, group_path.parent())
 
     async def add_item_drag(self, item_name, transform):
-        name = self.make_unique_name(item_name, Path.root_path())
+        name = make_unique_name(item_name, Path.root_path())
         actor = AssetActor(name=name, spawnable_name=item_name)
 
         pos = np.array([transform.pos[0], transform.pos[1], transform.pos[2]])
@@ -1333,21 +794,7 @@ class MainWindow1(MainWindow):
         scale = transform.scale
         actor.transform = Transform(pos, quat, scale)
 
-        await self.add_actor(actor, Path.root_path())
-
-        command = CreateActorCommand()
-        command.actor = deepcopy(actor)
-        command.path = Path.root_path() / name
-        self.add_command(command)
-
-    async def transform_change_command(self, actor_path, local):
-        command = TransformCommand()
-        command.actor_path = actor_path
-        command.old_transform = self.start_transform
-        command.new_transform = self.end_transform
-        command.local = local
-        self.add_command(command)
-        print(command)
+        await SceneEditRequestBus().add_actor(actor, Path.root_path())
 
     def enable_widgets(self):
         self.actor_outline.setEnabled(True)
@@ -1397,9 +844,6 @@ class MainWindow1(MainWindow):
             # Stop simulation if running
             if self.sim_process_running:
                 await self.stop_sim()
-            
-            # Stop query pending operation loop
-            await self._stop_query_pending_operation_loop()
             
             # Disconnect buses
             self.disconnect_buses()

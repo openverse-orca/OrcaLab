@@ -5,6 +5,7 @@ from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt, QMimeData, Signa
 from orcalab.actor import BaseActor, GroupActor
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
+from orcalab.scene_edit_bus import SceneEditNotification, SceneEditNotificationBus
 
 
 class ReparentData:
@@ -18,7 +19,7 @@ class ReparentData:
         self.parent_path: Path = None
 
 
-class ActorOutlineModel(QAbstractItemModel):
+class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
     # actor path, new parent path, index to insert at (-1 means append to the end)
     request_reparent = Signal(Path, Path, int)
     add_item = Signal(str, BaseActor)
@@ -29,6 +30,12 @@ class ActorOutlineModel(QAbstractItemModel):
         self.m_root_group: GroupActor | None = None
         self.reparent_mime = "application/x-orca-actor-reparent"
         self.local_scene = local_scene
+
+    def connect_bus(self):
+        SceneEditNotificationBus.connect(self)
+
+    def disconnect_bus(self):
+        SceneEditNotificationBus.disconnect(self)
 
     def get_actor(self, index: QModelIndex) -> BaseActor:
         if not index.isValid():
@@ -72,15 +79,17 @@ class ActorOutlineModel(QAbstractItemModel):
             return QModelIndex()
 
         if not parent.isValid():
-            child = self.m_root_group.children[row]
-            if child is not None:
-                return self.createIndex(row, column, child)
+            if row < len(self.m_root_group.children):
+                child = self.m_root_group.children[row]
+                if child is not None:
+                    return self.createIndex(row, column, child)
         else:
             if parent.column() == 0:
                 parent_actor = self.get_actor(parent)
                 if isinstance(parent_actor, GroupActor):
-                    child = parent_actor.children[row]
-                    return self.createIndex(row, column, child)
+                    if row < len(parent_actor.children):
+                        child = parent_actor.children[row]
+                        return self.createIndex(row, column, child)
 
         return QModelIndex()
 
@@ -259,6 +268,91 @@ class ActorOutlineModel(QAbstractItemModel):
         reparent_data.parent_path = parent_actor_path
 
         return True
+
+    @override
+    async def before_actor_added(
+        self,
+        actor: BaseActor,
+        parent_actor_path: Path,
+        source: str,
+    ):
+        parent_actor, _ = self.local_scene.get_actor_and_path(parent_actor_path)
+        parent_index = self.get_index_from_actor(parent_actor)
+        child_count = len(parent_actor.children)
+
+        self.beginInsertRows(parent_index, child_count, child_count)
+
+    @override
+    async def on_actor_added(
+        self,
+        actor: BaseActor,
+        parent_actor_path: Path,
+        source: str,
+    ):
+        self.endInsertRows()
+
+    @override
+    async def before_actor_deleted(
+        self,
+        actor_path: Path,
+        source: str,
+    ):
+        actor, _ = self.local_scene.get_actor_and_path(actor_path)
+        index = self.get_index_from_actor(actor)
+        parent_index = index.parent()
+
+        self.beginRemoveRows(parent_index, index.row(), index.row())
+
+    @override
+    async def on_actor_deleted(
+        self,
+        actor_path: Path,
+        source: str,
+    ):
+        self.endRemoveRows()
+
+    @override
+    async def before_actor_renamed(
+        self,
+        actor_path: Path,
+        new_name: str,
+        source: str,
+    ):
+        pass
+
+    @override
+    async def on_actor_renamed(
+        self,
+        actor_path: Path,
+        new_name: str,
+        source: str,
+    ):
+        new_path = actor_path.parent() / new_name
+        actor, _ = self.local_scene.get_actor_and_path(new_path)
+        index = self.get_index_from_actor(actor)
+        self.dataChanged.emit(index, index)
+
+    @override
+    async def before_actor_reparented(
+        self,
+        actor_path: Path,
+        new_parent_path: Path,
+        row: int,
+        source: str,
+    ):
+        print("before reparent")
+        self.beginResetModel()
+
+    @override
+    async def on_actor_reparented(
+        self,
+        actor_path: Path,
+        new_parent_path: Path,
+        row: int,
+        source: str,
+    ):
+        print("after reparent")
+        self.endResetModel()
 
 
 if __name__ == "__main__":
