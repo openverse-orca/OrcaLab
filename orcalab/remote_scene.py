@@ -158,7 +158,7 @@ class RemoteScene(SceneEditNotification):
             await self._launch()
         else:
             await self._attach()
-
+        await self.change_sim_state(False)
         print("connected to server.")
 
         # Start the pending operation loop.

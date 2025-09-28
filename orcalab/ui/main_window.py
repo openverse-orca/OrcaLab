@@ -341,10 +341,6 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             print(f"外部程序 {program_name} 启动失败")
     
     async def _before_sim_startup(self):
-        """完成模拟启动的异步操作（从 run_sim 函数中复制的缺失部分）"""
-        await self.remote_scene.publish_scene()
-        await self.remote_scene.save_body_transform()
-
         # 清除选择状态
         if self.local_scene.selection:
             self.actor_editor_widget.actor = None
@@ -353,6 +349,10 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         
         # 改变模拟状态
         await self.remote_scene.change_sim_state(True)
+
+        """完成模拟启动的异步操作（从 run_sim 函数中复制的缺失部分）"""
+        await self.remote_scene.publish_scene()
+        await self.remote_scene.save_body_transform()
 
     async def _start_external_process_in_main_thread_async(self, command: str, args: list):
         """在主线程中启动外部进程，并将输出重定向到terminal_widget（异步版本）"""
@@ -474,6 +474,15 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         if self.sim_process_running:
             return
 
+        self.sim_process_running = True
+        self.disanble_control.emit()
+        self._update_button_states()
+        if self.local_scene.selection:
+            self.actor_editor_widget.actor = None
+            self.local_scene.selection = []
+            await self.remote_scene.set_selection([])
+        await self.remote_scene.change_sim_state(self.sim_process_running)
+
         await self.remote_scene.publish_scene()
         await self.remote_scene.save_body_transform()
 
@@ -485,14 +494,6 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             self.remote_scene.sim_grpc_addr,
         ]
         self.sim_process = subprocess.Popen(cmd)
-        self.sim_process_running = True
-        self.disanble_control.emit()
-        self._update_button_states()
-        if self.local_scene.selection:
-            self.actor_editor_widget.actor = None
-            self.local_scene.selection = []
-            await self.remote_scene.set_selection([])
-        await self.remote_scene.change_sim_state(self.sim_process_running)
         asyncio.create_task(self._sim_process_check_loop())
 
         # await asyncio.sleep(2)
