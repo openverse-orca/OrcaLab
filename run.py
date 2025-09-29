@@ -68,7 +68,7 @@ if __name__ == "__main__":
     config_service = ConfigService()
     config_service.init_config(os.path.dirname(__file__))
 
-    if config_service.paks():
+    if config_service.init_paks() and config_service.paks():
         copy_packages(config_service.paks())
 
     q_app = QtWidgets.QApplication(sys.argv)

@@ -131,138 +131,33 @@ def files_are_identical_fast(source: pathlib.Path, target: pathlib.Path) -> Opti
 
 def copy_packages(packages: List[str]):
     """
-    复制包文件到缓存目录，具有以下功能：
-    1. 删除目标目录中不在文件列表里的文件
-    2. 使用分层比较策略：快速元数据比较 -> MD5比较
-    3. 缓存MD5值以提高性能
+    复制包文件到缓存目录，简化版本：
+    1. 删除目标目录下的所有文件
+    2. 复制指定的源pak文件到目标目录
     """
     cache_folder = get_cache_folder()
     cache_folder.mkdir(parents=True, exist_ok=True)
     
-    # 加载MD5缓存
-    md5_cache = load_md5_cache()
-    cache_updated = False
-    
-    # 获取目标包文件名列表
-    target_package_names = set()
-    valid_packages = []
-    
-    # 首先验证所有源文件并收集目标文件名
-    for package in packages:
-        package_path = pathlib.Path(package)
-        if package_path.exists() and package_path.is_file():
-            target_package_names.add(package_path.name)
-            valid_packages.append(package_path)
-        else:
-            print(f"Warning: Package {package} does not exist or is not a file.")
-    
-    # 删除目标目录中不在文件列表里的文件
+    # 删除目标目录下的所有文件
     if cache_folder.exists():
         for existing_file in cache_folder.iterdir():
-            if existing_file.is_file() and existing_file.name not in target_package_names:
+            if existing_file.is_file():
                 try:
                     existing_file.unlink()
-                    print(f"Deleted outdated file: {existing_file.name}")
-                    # 从缓存中删除对应的条目
-                    if str(existing_file) in md5_cache:
-                        del md5_cache[str(existing_file)]
-                        cache_updated = True
+                    print(f"Deleted file: {existing_file.name}")
                 except Exception as e:
                     print(f"Error deleting file {existing_file.name}: {e}")
     
-    # 复制或更新包文件
-    for package_path in valid_packages:
-        target_file = cache_folder / package_path.name
-        
-        # 如果目标文件不存在，直接复制
-        if not target_file.exists():
+    # 复制指定的包文件
+    for package in packages:
+        package_path = pathlib.Path(package)
+        if package_path.exists() and package_path.is_file():
+            target_file = cache_folder / package_path.name
             try:
                 shutil.copy2(package_path, target_file)  # 使用copy2保持元数据
                 print(f"Copied {package_path.name} to {cache_folder}")
-                
-                # 更新缓存
-                md5_value = calculate_file_md5(package_path)
-                if md5_value:
-                    md5_cache[str(target_file)] = {
-                        'md5': md5_value,
-                        **get_file_metadata(target_file)
-                    }
-                    cache_updated = True
             except Exception as e:
                 print(f"Error copying {package_path.name}: {e}")
-            continue
-        
-        # 使用分层比较策略
-        fast_comparison = files_are_identical_fast(package_path, target_file)
-        
-        if fast_comparison is True:
-            # 快速比较确定文件相同
-            print(f"Skipped {package_path.name} (identical by metadata)")
-            continue
-        elif fast_comparison is False:
-            # 快速比较确定文件不同，需要拷贝
-            try:
-                shutil.copy2(package_path, target_file)
-                print(f"Updated {package_path.name} (different by metadata)")
-                
-                # 更新缓存
-                md5_value = calculate_file_md5(package_path)
-                if md5_value:
-                    md5_cache[str(target_file)] = {
-                        'md5': md5_value,
-                        **get_file_metadata(target_file)
-                    }
-                    cache_updated = True
-            except Exception as e:
-                print(f"Error updating {package_path.name}: {e}")
-            continue
-        
-        # 快速比较无法确定，需要MD5比较
-        # 首先尝试从缓存获取MD5值
-        source_md5 = get_cached_md5(package_path, md5_cache)
-        if not source_md5:
-            source_md5 = calculate_file_md5(package_path)
-            if source_md5:
-                # 更新源文件缓存
-                md5_cache[str(package_path)] = {
-                    'md5': source_md5,
-                    **get_file_metadata(package_path)
-                }
-                cache_updated = True
-        
-        target_md5 = get_cached_md5(target_file, md5_cache)
-        if not target_md5:
-            target_md5 = calculate_file_md5(target_file)
-            if target_md5:
-                # 更新目标文件缓存
-                md5_cache[str(target_file)] = {
-                    'md5': target_md5,
-                    **get_file_metadata(target_file)
-                }
-                cache_updated = True
-        
-        if not source_md5 or not target_md5:
-            print(f"Warning: Could not calculate MD5 for {package_path.name}, skipping comparison")
-            continue
-        
-        # 如果MD5值不同，则复制文件
-        if source_md5 != target_md5:
-            try:
-                shutil.copy2(package_path, target_file)
-                print(f"Updated {package_path.name} (MD5 changed: {target_md5[:8]}... -> {source_md5[:8]}...)")
-                
-                # 更新缓存
-                md5_cache[str(target_file)] = {
-                    'md5': source_md5,
-                    **get_file_metadata(target_file)
-                }
-                cache_updated = True
-            except Exception as e:
-                print(f"Error updating {package_path.name}: {e}")
         else:
-            print(f"Skipped {package_path.name} (MD5 identical: {source_md5[:8]}...)")
-    
-    # 保存更新的缓存
-    if cache_updated:
-        save_md5_cache(md5_cache)
+            print(f"Warning: Package {package} does not exist or is not a file.")
     

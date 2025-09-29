@@ -66,6 +66,9 @@ class ConfigService:
     
     def paks(self) -> list:
         return self.config["orcalab"].get("paks", [])
+    
+    def init_paks(self) -> bool:
+        return self.config["orcalab"].get("init_paks", True)
 
     def orca_project_folder(self) -> str:
         return self.config["orca_project_folder"]
