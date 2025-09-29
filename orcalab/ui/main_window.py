@@ -707,7 +707,7 @@ class MainWindow1(MainWindow):
             for child_actor in actor.children:
                 await self.clear_scene(child_actor)
         if actor != self.local_scene.root_actor:
-            await self.delete_actor(actor)
+            await SceneEditRequestBus().delete_actor(actor)
     
     async def create_actor_from_scene(self, actor_data, parent: GroupActor = None):
         name = actor_data["name"]
@@ -735,7 +735,7 @@ class MainWindow1(MainWindow):
         if name == "root":
             actor = self.local_scene.root_actor
         else:
-            await self.add_actor(actor=actor, parent_actor=parent)
+            await SceneEditRequestBus().add_actor(actor=actor, parent_actor=parent)
 
         if isinstance(actor, GroupActor):
             for child_data in actor_data.get("children", []):
@@ -766,9 +766,9 @@ class MainWindow1(MainWindow):
             parent_path = Path.root_path()
         else:
             parent_path = self.local_scene.get_actor_path(parent_actor)
+
         name = make_unique_name(item_name, parent_path)
         actor = AssetActor(name=name, spawnable_name=item_name)
-
         await SceneEditRequestBus().add_actor(actor, parent_path)
 
     async def add_item_to_scene_with_transform(self, item_name, item_spawnable_name, parent_path=None, transform=None):
