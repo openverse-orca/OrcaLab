@@ -313,16 +313,16 @@ class CopilotPanel(QtWidgets.QWidget):
             
             # Step 2: Generate asset from prompt
             self.log_message("Step 2: Generating asset from prompt...")
-            spawnable_name, scene_data = await self.copilot_service.generate_asset_from_prompt(
+            asset_path, scene_data = await self.copilot_service.generate_asset_from_prompt(
                 prompt, 
                 progress_callback=self._update_progress_message
             )
             
-            if not spawnable_name:
+            if not asset_path:
                 self.log_error("Failed to generate asset from prompt")
                 return
             
-            self.log_success(f"Generated asset: '{spawnable_name}'")
+            self.log_success(f"Generated asset: '{asset_path}'")
             
             # Step 2.5: Display detailed asset information
             self._display_scene_info(scene_data)
@@ -413,7 +413,7 @@ class CopilotPanel(QtWidgets.QWidget):
         Add assets to an existing group.
         
         Args:
-            assets_data: List of asset dictionaries containing spawnable_name, name, position, rotation, scale
+            assets_data: List of asset dictionaries containing asset_path, name, position, rotation, scale
             group_path: Path to the group to add assets to
             center_point: Center point for coordinate conversion
         """
@@ -426,7 +426,7 @@ class CopilotPanel(QtWidgets.QWidget):
             self.log_message(f"  Adding asset {i+1}/{len(assets_data)}: {asset_data['name']}")
 
             transform = self._create_transform_from_server_data(asset_data, center_point)
-            self.add_item_with_transform.emit(asset_data['name'], asset_data['spawnable_name'], group_path, transform)
+            self.add_item_with_transform.emit(asset_data['name'], asset_data['asset_path'], group_path, transform)
 
             # Wait a bit for the asset to be created
             await asyncio.sleep(0.05)
@@ -438,7 +438,7 @@ class CopilotPanel(QtWidgets.QWidget):
         Create assets using three-step process through signals.
         
         Args:
-            assets_data: List of asset dictionaries containing spawnable_name, name, position, rotation, scale
+            assets_data: List of asset dictionaries containing asset_path, name, position, rotation, scale
         """
         if not assets_data:
             return
@@ -465,7 +465,7 @@ class CopilotPanel(QtWidgets.QWidget):
             self.log_message(f"  Adding asset {i+1}/{len(assets_data)}: {asset_data['name']}")
 
             transform = self._create_transform_from_server_data(asset_data, center_point)
-            self.add_item_with_transform.emit(asset_data['name'], asset_data['spawnable_name'], group_path, transform)
+            self.add_item_with_transform.emit(asset_data['name'], asset_data['asset_path'], group_path, transform)
 
             # Wait a bit for the asset to be created
             await asyncio.sleep(0.05)

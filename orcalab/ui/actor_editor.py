@@ -109,7 +109,7 @@ class ActorEditor(QtWidgets.QWidget, SceneEditNotification):
         self._layout.addWidget(line)
 
         if isinstance(self._actor, AssetActor):
-            label = QtWidgets.QLabel(f"Asset Name {self._actor.spawnable_name}")
+            label = QtWidgets.QLabel(f"Asset Name {self._actor.asset_path}")
             self._layout.addWidget(label)
 
         self._layout.addStretch(1)

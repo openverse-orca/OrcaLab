@@ -672,7 +672,7 @@ class MainWindow1(MainWindow):
 
         if isinstance(actor, AssetActor):
             data["type"] = "AssetActor"
-            data["spawnable_name"] = actor._spawnable_name
+            data["asset_path"] = actor._asset_path
             
         if isinstance(actor, GroupActor):
             data["type"] = "GroupActor"
@@ -713,8 +713,8 @@ class MainWindow1(MainWindow):
         name = actor_data["name"]
         actor_type = actor_data.get("type", "BaseActor")
         if actor_type == "AssetActor":
-            spawnable_name = actor_data.get("spawnable_name", "")
-            actor = AssetActor(name=name, spawnable_name=spawnable_name)
+            asset_path = actor_data.get("asset_path", "")
+            actor = AssetActor(name=name, asset_path=asset_path)
         else:
             actor = GroupActor(name=name)
 
@@ -768,15 +768,15 @@ class MainWindow1(MainWindow):
             parent_path = self.local_scene.get_actor_path(parent_actor)
 
         name = make_unique_name(item_name, parent_path)
-        actor = AssetActor(name=name, spawnable_name=item_name)
+        actor = AssetActor(name=name, asset_path=item_name)
         await SceneEditRequestBus().add_actor(actor, parent_path)
 
-    async def add_item_to_scene_with_transform(self, item_name, item_spawnable_name, parent_path=None, transform=None):
+    async def add_item_to_scene_with_transform(self, item_name, item_asset_path, parent_path=None, transform=None):
         if parent_path is None:
             parent_path = Path.root_path()
 
         name = make_unique_name(item_name, parent_path)
-        actor = AssetActor(name=name, spawnable_name=item_spawnable_name)
+        actor = AssetActor(name=name, asset_path=item_asset_path)
         actor.transform = transform
         await SceneEditRequestBus().add_actor(actor, parent_path)
 
@@ -786,7 +786,7 @@ class MainWindow1(MainWindow):
 
     async def add_item_drag(self, item_name, transform):
         name = make_unique_name(item_name, Path.root_path())
-        actor = AssetActor(name=name, spawnable_name=item_name)
+        actor = AssetActor(name=name, asset_path=item_name)
 
         pos = np.array([transform.pos[0], transform.pos[1], transform.pos[2]])
         quat = np.array(

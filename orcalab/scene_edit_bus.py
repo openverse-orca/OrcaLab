@@ -204,6 +204,8 @@ def make_unique_name(base_name: str, parent: BaseActor | Path) -> str:
     existing_names = {child.name for child in parent.children}
 
     counter = 1
+    # base_name 可能是一个路径，因此以最后一个 / 之后作为名字
+    base_name = base_name.split("/")[-1]
     new_name = f"{base_name}_{counter}"
     while new_name in existing_names:
         counter += 1

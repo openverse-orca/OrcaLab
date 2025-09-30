@@ -393,7 +393,7 @@ class RemoteScene(SceneEditNotification):
 
             actor_name = make_unique_name(name, Path("/"))
 
-            actor = AssetActor(name=actor_name, spawnable_name=name)
+            actor = AssetActor(name=actor_name, asset_path=name)
             actor.transform = transform
             await SceneEditRequestBus().add_actor(
                 actor, Path("/"), source="remote_scene"
@@ -528,7 +528,7 @@ class RemoteScene(SceneEditNotification):
         elif isinstance(actor, AssetActor):
             request = edit_service_pb2.AddActorRequest(
                 actor_name=actor.name,
-                spawnable_name=actor.spawnable_name,
+                spawnable_name=actor.asset_path,
                 parent_actor_path=parent_path.string(),
                 transform=transform_msg,
                 space=edit_service_pb2.Space.Local,

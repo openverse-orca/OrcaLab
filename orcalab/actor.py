@@ -128,19 +128,19 @@ class GroupActor(BaseActor):
 
 
 class AssetActor(BaseActor):
-    def __init__(self, name: str, spawnable_name: str, parent: GroupActor = None):
+    def __init__(self, name: str, asset_path: str, parent: GroupActor = None):
         super().__init__(name, parent)
-        self._spawnable_name = spawnable_name
+        self._asset_path = asset_path
 
     def __repr__(self):
         return f"AssetActor(name={self.name})"
 
     @property
-    def spawnable_name(self):
-        return self._spawnable_name
+    def asset_path(self):
+        return self._asset_path
 
-    @spawnable_name.setter
-    def spawnable_name(self, value):
+    @asset_path.setter
+    def asset_path(self, value):
         if not isinstance(value, str) or len(value) == 0:
-            raise ValueError("spawnable_name name must be non-empty string")
-        self._spawnable_name = value
+            raise ValueError("asset_path name must be non-empty string")
+        self._asset_path = value

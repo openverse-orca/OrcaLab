@@ -61,12 +61,12 @@ class CopilotService:
             }
             
             # Step 3: Extract the first asset's spawnable name
-            spawnable_name = None
+            asset_path = None
             if scene_data.get('assets') and len(scene_data['assets']) > 0:
                 first_asset = scene_data['assets'][0]
-                spawnable_name = first_asset.get('name', '')
+                asset_path = first_asset.get('name', '')
             
-            return spawnable_name, scene_data
+            return asset_path, scene_data
             
         except Exception as e:
             raise Exception(f"Failed to generate asset from prompt: {str(e)}")
@@ -268,20 +268,20 @@ class CopilotService:
             for asset in scene_data['assets']:
                 # Use UUID as spawnable name, but ensure it's properly formatted
                 uuid = asset.get('uuid', 'unknown')
-                spawnable_name = uuid if uuid != 'unknown' else asset.get('name', 'asset')
+                asset_path = uuid if uuid != 'unknown' else asset.get('name', 'asset')
 
                 # 将 uuid 转为 asset_$uuid_usda 这样的格式，且 '-' 替换为 '_'
-                spawnable_name = f"asset_{uuid.replace('-', '_')}_usda"
+                asset_path = f"asset_{uuid.replace('-', '_')}_usda"
                 
                 # Debug output to show what spawnable names are being used
-                print(f"Asset: {asset.get('name', 'asset')} -> Spawnable: {spawnable_name} (UUID: {uuid})")
+                print(f"Asset: {asset.get('name', 'asset')} -> Spawnable: {asset_path} (UUID: {uuid})")
                 print(f"  USD Position (cm): {asset.get('position', {})}")
                 print(f"  USD Rotation (degrees): {asset.get('rotation', {})}")
                 print(f"  Scale: {asset.get('scale', {})}")
                 print(f"  Note: Will be converted from USD to OrcaLab coordinate system")
                 
                 asset_info = {
-                    'spawnable_name': spawnable_name,
+                    'asset_path': asset_path,
                     'name': asset.get('name', 'asset'),
                     'position': asset.get('position', {}),
                     'rotation': asset.get('rotation', {}),
@@ -353,7 +353,7 @@ class CopilotService:
             }
             
             light_info = {
-                'spawnable_name': 'spotlight',
+                'asset_path': 'spotlight',
                 'name': light_name,
                 'position': light_position,
                 'rotation': light_rotation,
@@ -440,7 +440,7 @@ class CopilotService:
         
         for i, (position, rotation, name) in enumerate(zip(wall_positions, wall_rotations, wall_names)):
             wall_info = {
-                'spawnable_name': 'wall_10x10',
+                'asset_path': 'wall_10x10',
                 'name': name,
                 'position': position,
                 'rotation': rotation,
