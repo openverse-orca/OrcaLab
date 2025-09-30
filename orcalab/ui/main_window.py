@@ -658,12 +658,7 @@ class MainWindow1(MainWindow):
                 "position": compact_array(to_list(actor.transform.position)),
                 "rotation": compact_array(to_list(actor.transform.rotation)),
                 "scale": actor.transform.scale,
-            },
-            "world_transform": {
-                "world_position": compact_array(to_list(actor.world_transform.position)),
-                "world_rotation": compact_array(to_list(actor.world_transform.rotation)),
-                "world_scale": actor.world_transform.scale,
-            },
+            }
         }
 
         if actor.name == "root":
@@ -724,13 +719,6 @@ class MainWindow1(MainWindow):
         scale = transform_data.get("scale", 1.0)
         transform = Transform(position, rotation, scale)
         actor.transform = transform
-
-        world_transform_data = actor_data.get("world_transform", {})
-        world_position = np.array(ast.literal_eval(world_transform_data["world_position"]), dtype=float).reshape(3)
-        world_rotation = np.array(ast.literal_eval(world_transform_data["world_rotation"]), dtype=float)
-        world_scale = world_transform_data.get("scale", 1.0)
-        world_transform = Transform(world_position, world_rotation, world_scale)
-        actor.world_transform = world_transform
         
         if name == "root":
             actor = self.local_scene.root_actor

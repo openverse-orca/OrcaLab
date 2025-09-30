@@ -278,13 +278,14 @@ class RemoteScene(SceneEditNotification):
                 )
 
             # Trigger an undoable transform change.
-            await SceneEditRequestBus().set_transform(
-                actor_path,
-                self.current_transform,
-                local=True,
-                undo=True,
-                source="remote_scene",
-            )
+            if isinstance(self.current_transform, Transform):
+                await SceneEditRequestBus().set_transform(
+                    actor_path,
+                    self.current_transform,
+                    local=True,
+                    undo=True,
+                    source="remote_scene",
+                )
 
             # Transform on viewport will be updated by on_transform_changed.
 
@@ -312,13 +313,14 @@ class RemoteScene(SceneEditNotification):
                 )
 
             # Trigger an undoable transform change.
-            await SceneEditRequestBus().set_transform(
-                actor_path,
-                self.current_transform,
-                local=False,
-                undo=True,
-                source="remote_scene",
-            )
+            if isinstance(self.current_transform, Transform):
+                await SceneEditRequestBus().set_transform(
+                    actor_path,
+                    self.current_transform,
+                    local=False,
+                    undo=True,
+                    source="remote_scene",
+                )
 
             self.actor_in_editing = None
             self.current_transform = None
