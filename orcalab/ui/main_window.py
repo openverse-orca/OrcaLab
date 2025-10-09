@@ -2,6 +2,7 @@ import asyncio
 from copy import deepcopy
 import random
 
+import sys
 from typing import Dict, List, Tuple, override
 import numpy as np
 
@@ -449,7 +450,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
 
         # 启动一个虚拟的等待进程，保持终端活跃状态
         # 使用 sleep 命令创建一个长期运行的进程，这样 _sim_process_check_loop 就不会立即退出
-        success = await self._start_external_process_in_main_thread_async("sleep", ["infinity"])
+        success = await self._start_external_process_in_main_thread_async(sys.executable, ["-c", "import time; time.sleep(99999999)"])
         
         if success:
             # 设置运行状态
@@ -504,6 +505,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             return
 
         async with self._sim_process_check_lock:
+            await self.remote_scene.publish_scene()
             await self.remote_scene.set_sync_from_mujoco_to_scene(False)
             self.sim_process_running = False
             self._update_button_states()
