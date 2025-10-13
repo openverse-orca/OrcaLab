@@ -256,7 +256,7 @@ class RemoteScene(SceneEditNotification):
         asyncio.create_task(self._query_pending_operation_loop())
 
     async def _process_pending_operation(self, op: str):
-        print(op)
+        # print(op)
         sltc = "start_local_transform_change:"
         if op.startswith(sltc):
             actor_path = Path(op[len(sltc) :])
@@ -265,7 +265,7 @@ class RemoteScene(SceneEditNotification):
                 raise Exception(
                     f"Another actor is being edited: {self.actor_in_editing}"
                 )
-
+            SceneEditRequestBus().record_old_transform(actor_path)
             self.actor_in_editing = actor_path
 
         eltc = "end_local_transform_change:"
@@ -300,7 +300,7 @@ class RemoteScene(SceneEditNotification):
                 raise Exception(
                     f"Another actor is being edited: {self.actor_in_editing}"
                 )
-
+            SceneEditRequestBus().record_old_transform(actor_path)
             self.actor_in_editing = actor_path
 
         ewtc = "end_world_transform_change:"

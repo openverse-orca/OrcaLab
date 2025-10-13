@@ -26,6 +26,7 @@ class SceneEditService(SceneEditRequest):
 
     def __init__(self, local_scene: LocalScene):
         self.local_scene = local_scene
+        self.old_transform = None
 
     def connect_bus(self):
         SceneEditRequestBus.connect(self)
@@ -62,7 +63,6 @@ class SceneEditService(SceneEditRequest):
     @override
     async def set_transform(self, actor, transform, local, undo=True, source=""):
         actor, actor_path = self.local_scene.get_actor_and_path(actor)
-
         if local:
             old_transform = actor.transform
             actor.transform = transform
@@ -77,10 +77,15 @@ class SceneEditService(SceneEditRequest):
         if undo:
             command = TransformCommand()
             command.actor_path = actor_path
-            command.old_transform = old_transform
+            command.old_transform = self.old_transform
             command.new_transform = transform
             command.local = local
             UndoRequestBus().add_command(command)
+
+    @override
+    def record_old_transform(self, actor):
+        actor, actor_path = self.local_scene.get_actor_and_path(actor)
+        self.old_transform = actor.transform
 
     @override
     def get_actor_and_path(self, out, actor):

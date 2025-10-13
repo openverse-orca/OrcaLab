@@ -42,6 +42,11 @@ class SceneEditRequest:
         """
         pass
 
+    def record_old_transform(
+        self, actor: BaseActor | Path
+    ):
+        pass
+
     def get_actor_and_path(
         self, out: List[Tuple[BaseActor, Path]], actor: BaseActor | Path
     ):
