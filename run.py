@@ -6,7 +6,7 @@ import atexit
 from orcalab.config_service import ConfigService
 from orcalab.project_util import check_project_folder, copy_packages
 from orcalab.url_service.url_util import register_protocol
-from orcalab.ui.main_window import MainWindow1
+from orcalab.ui.main_window import MainWindow
 
 import os
 
@@ -46,7 +46,7 @@ async def main(q_app):
 
     app_close_event = asyncio.Event()
     q_app.aboutToQuit.connect(app_close_event.set)
-    main_window = MainWindow1()
+    main_window = MainWindow()
     _main_window = main_window  # Store reference for signal handlers
     await main_window.init()
 

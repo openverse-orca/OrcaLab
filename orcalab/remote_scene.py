@@ -154,10 +154,13 @@ class RemoteScene(SceneEditNotification):
 
         self.timeout = 3
 
-        if not self.config_service.attach():
-            await self._launch()
-        else:
-            await self._attach()
+        # if not self.config_service.attach():
+        #     await self._launch()
+        # else:
+        #     await self._attach()
+
+        await self._attach()
+        
         await self.change_sim_state(False)
         print("connected to server.")
 
