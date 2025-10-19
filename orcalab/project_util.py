@@ -131,22 +131,11 @@ def files_are_identical_fast(source: pathlib.Path, target: pathlib.Path) -> Opti
 
 def copy_packages(packages: List[str]):
     """
-    复制包文件到缓存目录，简化版本：
-    1. 删除目标目录下的所有文件
-    2. 复制指定的源pak文件到目标目录
+    复制包文件到缓存目录
+    将指定的pak文件复制到目标目录（不会删除已存在的其他pak文件）
     """
     cache_folder = get_cache_folder()
     cache_folder.mkdir(parents=True, exist_ok=True)
-    
-    # 删除目标目录下的所有文件
-    if cache_folder.exists():
-        for existing_file in cache_folder.iterdir():
-            if existing_file.is_file():
-                try:
-                    existing_file.unlink()
-                    print(f"Deleted file: {existing_file.name}")
-                except Exception as e:
-                    print(f"Error deleting file {existing_file.name}: {e}")
     
     # 复制指定的包文件
     for package in packages:

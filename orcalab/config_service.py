@@ -105,3 +105,23 @@ class ConfigService:
             if program.get("name") == program_name:
                 return program
         return {}
+    
+    def datalink_base_url(self) -> str:
+        """获取 DataLink 后端 API 地址"""
+        return self.config.get("datalink", {}).get("base_url", "http://localhost:8080/api")
+    
+    def datalink_username(self) -> str:
+        """获取 DataLink 用户名"""
+        return self.config.get("datalink", {}).get("username", "")
+    
+    def datalink_token(self) -> str:
+        """获取 DataLink 访问令牌"""
+        return self.config.get("datalink", {}).get("token", "")
+    
+    def datalink_enable_sync(self) -> bool:
+        """是否启用 DataLink 资产同步"""
+        return self.config.get("datalink", {}).get("enable_sync", True)
+    
+    def datalink_timeout(self) -> int:
+        """获取 DataLink 请求超时时间"""
+        return self.config.get("datalink", {}).get("timeout", 60)

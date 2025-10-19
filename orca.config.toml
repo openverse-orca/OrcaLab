@@ -43,6 +43,22 @@ server_url = "http://103.237.28.246:9023"
 # 请求超时时间（秒）
 timeout = 180
 
+# DataLink 资产同步配置
+[datalink]
+# 后端API地址（根据实际环境修改）
+# 本地开发环境使用 HTTP
+# base_url = "http://localhost:8080/api"
+# 生产环境使用 HTTPS
+base_url = "https://datalink.orca3d.cn:8080/api"
+# [个人配置] 用户名（需要在个人配置中设置）
+username = ""
+# [个人配置] 访问令牌（需要在个人配置中设置）
+token = ""
+# 是否启用资产同步
+enable_sync = true
+# 请求超时时间（秒）
+timeout = 60
+
 # 仿真程序配置
 [external_programs]
 # 默认程序配置

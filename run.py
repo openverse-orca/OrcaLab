@@ -5,6 +5,7 @@ import atexit
 
 from orcalab.config_service import ConfigService
 from orcalab.project_util import check_project_folder, copy_packages
+from orcalab.asset_sync_ui import run_asset_sync_ui
 from orcalab.url_service.url_util import register_protocol
 from orcalab.ui.main_window import MainWindow1
 
@@ -68,10 +69,16 @@ if __name__ == "__main__":
     config_service = ConfigService()
     config_service.init_config(os.path.dirname(__file__))
 
+    # 复制配置的pak包
+    print("正在准备资产包...")
     if config_service.init_paks() and config_service.paks():
         copy_packages(config_service.paks())
-
+    
+    # 创建 Qt 应用（需要在创建窗口之前）
     q_app = QtWidgets.QApplication(sys.argv)
+    
+    # 同步订阅的资产包（带UI）
+    run_asset_sync_ui(config_service)
 
     event_loop = QEventLoop(q_app)
     asyncio.set_event_loop(event_loop)
