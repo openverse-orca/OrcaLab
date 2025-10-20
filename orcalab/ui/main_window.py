@@ -42,13 +42,18 @@ from orcalab.asset_service_bus import (
 )
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 
+from orcalab_pyside import Viewport
+
 class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification):
 
+    add_item_by_drag = QtCore.Signal(str, Transform)
+    load_scene_sig = QtCore.Signal(str)
     enable_control = QtCore.Signal()
     disanble_control = QtCore.Signal()
 
     def __init__(self):
         super().__init__()
+        self.cwd = os.getcwd()
 
     def connect_buses(self):
         ApplicationRequestBus.connect(self)
@@ -59,6 +64,9 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         ApplicationRequestBus.disconnect(self)
 
     async def init(self):
+
+        self._init_viewport()
+        self._start_viewport_main_loop()
 
         self.asset_service = AssetService()
 
@@ -89,6 +97,41 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         self.remote_scene.connect_bus()
 
         self.connect_buses()
+
+        await self._init_ui()
+
+        connect(self.actor_outline_model.add_item, self.add_item_to_scene)
+
+        connect(self.asset_browser_widget.add_item, self.add_item_to_scene)
+
+        connect(self.copilot_widget.add_item_with_transform, self.add_item_to_scene_with_transform)
+        connect(self.copilot_widget.request_add_group, self.on_copilot_add_group)
+
+        connect(self.menu_file.aboutToShow, self.prepare_file_menu)
+        connect(self.menu_edit.aboutToShow, self.prepare_edit_menu)
+
+        connect(self.add_item_by_drag, self.add_item_drag)
+        connect(self.load_scene_sig, self.load_scene)
+
+        connect(self.enable_control, self.enable_widgets)
+        connect(self.disanble_control, self.disable_widgets)
+
+        # Window actions.
+
+        action_undo = QtGui.QAction("Undo")
+        action_undo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
+        action_undo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
+        connect(action_undo.triggered, self.undo)
+
+        action_redo = QtGui.QAction("Redo")
+        action_redo.setShortcut(QtGui.QKeySequence("Ctrl+Shift+Z"))
+        action_redo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
+        connect(action_redo.triggered, self.redo)
+
+        self.addActions([action_undo, action_redo])
+
+        self.resize(800, 400)
+        self.show()
 
     async def _init_ui(self):
         self.tool_bar = ToolBar()
@@ -198,8 +241,9 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         layout2.setContentsMargins(8, 8, 8, 8)  # 设置外边距
         layout2.addWidget(self.menu_bar)
         layout2.addWidget(self.tool_bar)
-        layout2.addLayout(layout1)
-        layout2.addLayout(layout1_2)
+        layout2.addWidget(self._viewport_widget, 1)
+        # layout2.addLayout(layout1)
+        # layout2.addLayout(layout1_2)
 
         self.setLayout(layout2)
         
@@ -284,7 +328,27 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         
         return panel
 
+    def _init_viewport(self):
+        self._viewport_widget = Viewport()
 
+        self.command_line = [
+            "pseudo.exe",
+            "--project-path=D:/dev/orca/Project/OrcaGame2409_1",
+            "--datalink_host=54.223.63.47",
+            "--datalink_port=7000",
+        ]
+
+        if not self._viewport_widget.init_viewport(self.command_line, connect_builder_hub=True):
+            raise RuntimeError("Failed to initialize viewport")
+
+    def _start_viewport_main_loop(self):
+        self._viewport_running = True
+        asyncio.create_task(self._viewport_main_loop())
+
+    async def _viewport_main_loop(self):
+        self._viewport_widget.main_loop_tick()
+        if self._viewport_running:
+            asyncio.create_task(self._viewport_main_loop())
 
     def show_launch_dialog(self):
         """显示启动对话框（同步版本）"""
@@ -561,56 +625,6 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
        assets = await self.remote_scene.get_actor_assets()
        self.asset_browser_widget.set_assets(assets)
 
-
-# Add undo/redo functionality
-class MainWindow1(MainWindow):
-
-    add_item_by_drag = QtCore.Signal(str, Transform)
-    # transform_change = QtCore.Signal(Path, bool)
-    load_scene_sig = QtCore.Signal(str)
-    # rename_sig = QtCore.Signal(BaseActor, str)
-
-    def __init__(self):
-        super().__init__()
-        self.cwd = os.getcwd()
-
-    async def init(self):
-        await super().init()
-
-        await super()._init_ui()
-
-        connect(self.actor_outline_model.add_item, self.add_item_to_scene)
-
-        connect(self.asset_browser_widget.add_item, self.add_item_to_scene)
-
-        connect(self.copilot_widget.add_item_with_transform, self.add_item_to_scene_with_transform)
-        connect(self.copilot_widget.request_add_group, self.on_copilot_add_group)
-
-        connect(self.menu_file.aboutToShow, self.prepare_file_menu)
-        connect(self.menu_edit.aboutToShow, self.prepare_edit_menu)
-
-        connect(self.add_item_by_drag, self.add_item_drag)
-        connect(self.load_scene_sig, self.load_scene)
-
-        connect(self.enable_control, self.enable_widgets)
-        connect(self.disanble_control, self.disable_widgets)
-
-        # Window actions.
-
-        action_undo = QtGui.QAction("Undo")
-        action_undo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
-        action_undo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(action_undo.triggered, self.undo)
-
-        action_redo = QtGui.QAction("Redo")
-        action_redo.setShortcut(QtGui.QKeySequence("Ctrl+Shift+Z"))
-        action_redo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(action_redo.triggered, self.redo)
-
-        self.addActions([action_undo, action_redo])
-
-        self.resize(800, 400)
-        self.show()
 
     def prepare_file_menu(self):
         self.menu_file.clear()

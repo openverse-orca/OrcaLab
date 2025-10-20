@@ -216,3 +216,7 @@ __marimo__/
 orca.config.user.toml
 
 MUJOCO_LOG.TXT
+
+/imgui.ini
+/out.xml
+/tmp/

@@ -20,6 +20,7 @@ dependencies = [
     "aiofiles",
     "qasync",
     "psutil",
+    "orcalab-pyside",
 ]
 
 # 可选依赖，可用于开发调试、测试、格式化代码等用途
