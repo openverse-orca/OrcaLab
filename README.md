@@ -62,6 +62,13 @@ some_signal.connect(bloc_task)
 
 ```
 
+## 常见问题
+
+### Linux上出现 version `GLIBCXX_3.4.30' not found
+    conda update -c conda-forge libstdcxx-ng
+
+
+
 ## License
 
 This project is licensed under the terms of the [LICENSE](LICENSE) file.

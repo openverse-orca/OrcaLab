@@ -333,7 +333,8 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
 
         self.command_line = [
             "pseudo.exe",
-            "--project-path=D:/dev/orca/Project/OrcaGame2409_1",
+            # "--project-path=D:/dev/orca/Project/OrcaGame2409_1",
+            "--project-path=/home/djfos/Desktop/dev/orca/Project/OrcaGame2409_1",
             "--datalink_host=54.223.63.47",
             "--datalink_port=7000",
         ]
