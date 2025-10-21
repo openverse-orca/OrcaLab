@@ -15,7 +15,7 @@ dependencies = [
     "scipy-stubs",          # for type hints
     "grpcio==1.66.1",
     "grpcio-tools==1.66.1",
-    "pyside6",
+    "pyside6==6.9.2",
     "aiohttp",
     "aiofiles",
     "qasync",
