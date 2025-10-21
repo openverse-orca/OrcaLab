@@ -50,10 +50,7 @@ timeout = 180
 # base_url = "http://localhost:8080/api"
 # 生产环境使用 HTTPS
 base_url = "https://datalink.orca3d.cn:8080/api"
-# [个人配置] 用户名（需要在个人配置中设置）
-username = ""
-# [个人配置] 访问令牌（需要在个人配置中设置）
-token = ""
+
 # 是否启用资产同步
 enable_sync = true
 # 请求超时时间（秒）

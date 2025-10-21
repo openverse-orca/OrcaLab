@@ -111,7 +111,12 @@ class AssetSyncService:
         }
     
     def query_subscribed_packages(self) -> Optional[List[Dict]]:
-        """查询用户订阅的资产包列表"""
+        """
+        查询用户订阅的资产包列表
+        
+        Returns:
+            资产包列表，如果返回 'TOKEN_EXPIRED' 字符串表示 token 过期
+        """
         self.callbacks.on_query_start()
         self.log("查询订阅列表...")
         
@@ -120,8 +125,8 @@ class AssetSyncService:
             response = requests.get(url, headers=self.get_headers(), timeout=self.timeout)
             
             if response.status_code == 401:
-                self.log("❌ 认证失败")
-                return None
+                self.log("❌ 认证失败（Token 可能已过期）")
+                return 'TOKEN_EXPIRED'  # 特殊标记
             
             if response.status_code != 200:
                 self.log(f"❌ 查询失败: HTTP {response.status_code}")
@@ -272,23 +277,27 @@ class AssetSyncService:
         同步资产包（主流程）
         
         Returns:
-            同步是否成功
+            同步是否成功，如果返回 'TOKEN_EXPIRED' 表示 token 过期
         """
         self.callbacks.on_start()
         
         # 1. 查询订阅列表
         packages = self.query_subscribed_packages()
         
+        if packages == 'TOKEN_EXPIRED':
+            self.log("⚠️  Token 已过期，保留现有资产包，以离线模式启动")
+            self.callbacks.on_complete(False, "Token 已过期")
+            return 'TOKEN_EXPIRED'
+        
         if packages is None:
+            self.log("⚠️  查询订阅列表失败，保留现有资产包，以离线模式启动")
             self.callbacks.on_complete(False, "查询订阅列表失败")
             return False
         
         if not packages:
-            self.log("没有订阅的资产包")
-            # 仍然执行清理
-            _, to_delete = self.check_local_packages([])
-            self.clean_unsubscribed_packages(to_delete)
-            self.callbacks.on_complete(True)
+            self.log("没有订阅的资产包，保留现有资产包")
+            # 不执行清理操作，保留现有资产包以离线模式使用
+            self.callbacks.on_complete(True, "没有订阅的资产包")
             return True
         
         # 2. 检查本地文件

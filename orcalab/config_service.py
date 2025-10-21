@@ -111,11 +111,27 @@ class ConfigService:
         return self.config.get("datalink", {}).get("base_url", "http://localhost:8080/api")
     
     def datalink_username(self) -> str:
-        """获取 DataLink 用户名"""
+        """获取 DataLink 用户名（优先从本地存储读取）"""
+        from orcalab.token_storage import TokenStorage
+        
+        # 优先从本地存储读取
+        token_data = TokenStorage.load_token()
+        if token_data and token_data.get('username'):
+            return token_data['username']
+        
+        # 否则从配置文件读取（兼容旧配置）
         return self.config.get("datalink", {}).get("username", "")
     
     def datalink_token(self) -> str:
-        """获取 DataLink 访问令牌"""
+        """获取 DataLink 访问令牌（优先从本地存储读取）"""
+        from orcalab.token_storage import TokenStorage
+        
+        # 优先从本地存储读取
+        token_data = TokenStorage.load_token()
+        if token_data and token_data.get('access_token'):
+            return token_data['access_token']
+        
+        # 否则从配置文件读取（兼容旧配置）
         return self.config.get("datalink", {}).get("token", "")
     
     def datalink_enable_sync(self) -> bool:

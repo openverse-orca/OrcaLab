@@ -10,6 +10,9 @@ from PySide6 import QtWidgets
 
 from orcalab.asset_sync_service import sync_assets, AssetSyncCallbacks
 from orcalab.ui.sync_progress_window import SyncProgressWindow
+from orcalab.auth_service import AuthService
+from orcalab.token_storage import TokenStorage
+from orcalab.ui.auth_window import show_auth_dialog
 
 
 class SyncCallbacksImpl(AssetSyncCallbacks):
@@ -47,6 +50,76 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
         self.window.complete_sync(success, message)
 
 
+def ask_offline_or_exit(title: str, message: str) -> bool:
+    """
+    询问用户是否以离线模式继续启动或退出程序
+    
+    Args:
+        title: 对话框标题
+        message: 提示消息
+    
+    Returns:
+        True - 用户选择离线启动
+        False - 用户选择退出（会直接调用 sys.exit）
+    """
+    from PySide6 import QtWidgets
+    msg_box = QtWidgets.QMessageBox()
+    msg_box.setWindowTitle(title)
+    msg_box.setText(message)
+    msg_box.setInformativeText("是否以离线模式继续启动？\n\n点击「是」使用现有资产包继续启动\n点击「否」退出程序")
+    msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No)
+    msg_box.setDefaultButton(QtWidgets.QMessageBox.StandardButton.Yes)
+    
+    reply = msg_box.exec()
+    if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+        print("✓ 以离线模式继续启动（使用现有资产包）")
+        return True
+    else:
+        print("用户选择退出程序")
+        import sys
+        sys.exit(0)
+
+
+def authenticate_user(config_service, window=None) -> bool:
+    """
+    用户认证流程
+    
+    Args:
+        config_service: 配置服务实例
+        window: AuthWindow 实例（可选）
+    
+    Returns:
+        认证是否成功
+    """
+    base_url = config_service.datalink_base_url()
+    
+    # 创建认证服务
+    auth_service = AuthService(base_url)
+    
+    def auth_func():
+        """认证函数，带进度回调"""
+        return auth_service.authenticate(window=window)
+    
+    # 如果没有传入 window，则显示认证对话框
+    if window is None:
+        credentials = show_auth_dialog(auth_func)
+    else:
+        credentials = auth_func()
+    
+    if credentials:
+        # 保存 token 到本地
+        TokenStorage.save_token(
+            username=credentials['username'],
+            access_token=credentials['access_token'],
+            refresh_token=credentials.get('refresh_token')
+        )
+        print(f"✓ 认证成功: {credentials['username']}")
+        return True
+    else:
+        print("✗ 认证失败或已取消")
+        return False
+
+
 def run_asset_sync_ui(config_service) -> bool:
     """
     运行资产同步（带UI）
@@ -62,10 +135,42 @@ def run_asset_sync_ui(config_service) -> bool:
         print("跳过资产同步（已禁用）")
         return True
     
-    # 检查认证信息
-    if not config_service.datalink_username() or not config_service.datalink_token():
-        print("跳过资产同步（未配置认证信息）")
-        return True
+    # 检查认证信息（优先从本地存储读取）
+    username = config_service.datalink_username()
+    token = config_service.datalink_token()
+    
+    # 如果没有认证信息，显示登录窗口
+    if not username or not token:
+        print("需要进行 DataLink 认证...")
+        if not authenticate_user(config_service):
+            # 认证失败，询问用户是否离线启动
+            ask_offline_or_exit("认证失败", "DataLink 认证失败或已取消。")
+            return True  # 用户选择离线启动
+        
+        # 认证成功，重新获取 username 和 token
+        username = config_service.datalink_username()
+        token = config_service.datalink_token()
+    
+    # 在同步前验证 token 是否有效
+    print("验证访问令牌...")
+    base_url = config_service.datalink_base_url()
+    auth_service = AuthService(base_url)
+    
+    if not auth_service.verify_token(username, token):
+        print("⚠️  Token 已过期或无效，需要重新认证")
+        TokenStorage.clear_token()
+        
+        # 直接打开认证窗口，不询问用户
+        print("正在打开认证窗口...")
+        if not authenticate_user(config_service):
+            # 认证失败，询问用户是否离线启动
+            ask_offline_or_exit("重新认证失败", "DataLink 重新认证失败。")
+            return True  # 用户选择离线启动
+        
+        print("✓ 重新认证成功")
+        # 更新 username 和 token
+        username = config_service.datalink_username()
+        token = config_service.datalink_token()
     
     # 创建同步进度窗口
     sync_window = SyncProgressWindow()
@@ -75,10 +180,15 @@ def run_asset_sync_ui(config_service) -> bool:
     
     # 在后台线程执行同步
     sync_result = [True]  # 使用列表来存储结果，因为需要在闭包中修改
+    token_expired = [False]
     
     def run_sync():
         result = sync_assets(config_service, callbacks=callbacks, verbose=False)
-        sync_result[0] = result
+        if result == 'TOKEN_EXPIRED':
+            token_expired[0] = True
+            sync_result[0] = False
+        else:
+            sync_result[0] = result
     
     sync_thread = threading.Thread(target=run_sync, daemon=True)
     sync_thread.start()
@@ -89,8 +199,14 @@ def run_asset_sync_ui(config_service) -> bool:
     # 等待同步完成
     sync_thread.join()
     
-    if not sync_result[0]:
-        print("⚠️  资产同步失败，但程序将继续启动")
+    # 如果同步过程中检测到 token 过期（理论上不应该发生，因为已经提前验证过）
+    if token_expired[0]:
+        print("⚠️  同步过程中 Token 意外过期，现有资产包已保留")
+        print("✓ 以离线模式继续启动（使用现有资产包）")
+    elif not sync_result[0]:
+        print("⚠️  资产同步失败，但程序将继续启动（使用现有资产包）")
+    else:
+        print("✓ 资产同步完成")
     
-    return sync_result[0]
+    return True  # 总是返回 True，允许程序继续启动
 
