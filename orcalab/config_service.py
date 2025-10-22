@@ -59,11 +59,31 @@ class ConfigService:
         return self.config["orcalab"]["sim_port"]
 
     def executable(self) -> str:
-        return self.config["orcalab"]["executable"]
+        # return self.config["orcalab"]["executable"]
+        return "pseudo.exe"
 
     def attach(self) -> bool:
-        return self.config["orcalab"]["attach"]
+        # return self.config["orcalab"]["attach"]
+        return True
+
+    def is_development(self) -> bool:
+        value = self.config["orcalab"]["dev"]["development"]
+        return bool(value)
     
+    def connect_builder_hub(self) -> bool:
+        if not self.is_development():
+            return False
+        
+        value = self.config["orcalab"]["dev"]["connect_builder_hub"]
+        return bool(value)
+    
+    def dev_project_path(self) -> str:
+        if not self.is_development():
+            return ""
+        
+        value = self.config["orcalab"]["dev"]["project_path"]
+        return str(value)
+
     def paks(self) -> list:
         return self.config["orcalab"].get("paks", [])
     
