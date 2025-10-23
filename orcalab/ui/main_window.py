@@ -28,6 +28,7 @@ from orcalab.ui.copilot import CopilotPanel
 from orcalab.ui.tool_bar import ToolBar
 from orcalab.ui.launch_dialog import LaunchDialog
 from orcalab.ui.terminal_widget import TerminalWidget
+from orcalab.ui.viewport import Viewport
 from orcalab.math import Transform
 from orcalab.config_service import ConfigService
 from orcalab.undo_service.undo_service import SelectionCommand, UndoService
@@ -42,7 +43,7 @@ from orcalab.asset_service_bus import (
 )
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 
-from orcalab_pyside import Viewport
+
 
 class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification):
 
@@ -64,9 +65,9 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         ApplicationRequestBus.disconnect(self)
 
     async def init(self):
-
-        self._init_viewport()
-        self._start_viewport_main_loop()
+        self._viewport_widget = Viewport()
+        self._viewport_widget.init_viewport()
+        self._viewport_widget.start_viewport_main_loop()
 
         self.asset_service = AssetService()
 
@@ -130,7 +131,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
 
         self.addActions([action_undo, action_redo])
 
-        self.resize(800, 400)
+        self.resize(1200, 800)
         self.show()
 
     async def _init_ui(self):
@@ -225,13 +226,17 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         self.menu_file = self.menu_bar.addMenu("File")
         self.menu_edit = self.menu_bar.addMenu("Edit")
 
+        layout1_1 = QtWidgets.QVBoxLayout()
+        layout1_1.addWidget(self.actor_editor, 1)
+        layout1_1.addWidget(self.asset_browser, 1)
+        layout1_1.addWidget(self.copilot, 1)
+
         layout1 = QtWidgets.QHBoxLayout()
         layout1.setSpacing(8)  # 增加面板间距
-        layout1.addWidget(self.actor_outline, 1)
-        layout1.addWidget(self.actor_editor, 1)
-        layout1.addWidget(self.asset_browser, 1)
-        layout1.addWidget(self.copilot, 1)
-
+        layout1.addWidget(self.actor_outline, 0)
+        layout1.addWidget(self._viewport_widget, 1)
+        layout1.addLayout(layout1_1, 0)
+        
         # 第二行布局：终端组件
         layout1_2 = QtWidgets.QHBoxLayout()
         layout1_2.setSpacing(8)
@@ -241,9 +246,8 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         layout2.setContentsMargins(8, 8, 8, 8)  # 设置外边距
         layout2.addWidget(self.menu_bar)
         layout2.addWidget(self.tool_bar)
-        layout2.addWidget(self._viewport_widget, 1)
-        # layout2.addLayout(layout1)
-        # layout2.addLayout(layout1_2)
+        layout2.addLayout(layout1)
+        layout2.addLayout(layout1_2)
 
         self.setLayout(layout2)
         
@@ -328,28 +332,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         
         return panel
 
-    def _init_viewport(self):
-        self._viewport_widget = Viewport()
 
-        self.command_line = [
-            "pseudo.exe",
-            # "--project-path=D:/dev/orca/Project/OrcaGame2409_1",
-            "--project-path=/home/djfos/Desktop/dev/orca/Project/OrcaGame2409_1",
-            "--datalink_host=54.223.63.47",
-            "--datalink_port=7000",
-        ]
-
-        if not self._viewport_widget.init_viewport(self.command_line, connect_builder_hub=True):
-            raise RuntimeError("Failed to initialize viewport")
-
-    def _start_viewport_main_loop(self):
-        self._viewport_running = True
-        asyncio.create_task(self._viewport_main_loop())
-
-    async def _viewport_main_loop(self):
-        self._viewport_widget.main_loop_tick()
-        if self._viewport_running:
-            asyncio.create_task(self._viewport_main_loop())
 
     def show_launch_dialog(self):
         """显示启动对话框（同步版本）"""

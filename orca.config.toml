@@ -11,21 +11,6 @@ edit_port = 50151
 # 仿真服务的端口。
 sim_port = 50051
 
-# [个人配置] Viewport可执行文件的绝对路径。目前还没有通过pip分发，先手填。
-executable = ""
-
-# [个人配置] Launch or attach。
-# Launch: 由Python启动Viewport。
-# Attach: 连接到以经启动的Viewport。
-attach = false
-
-# [个人配置] 用到的pak包的绝对路径。目前先手填。至少要有一个engine的pak和level的pak。
-# 启动时脚本会把它们放到正确的位置。
-paks = [
-    # "/xxx/engine_linux.pak",
-    # "/xxx/test_level_linux.pak",
-]
-
 # [个人配置] 启动时是否初始化pak包。如果为true，会删除目标目录下的所有文件，并以指定的源pak为准。
 # 如果为false，启动时什么也不做。默认值为true。
 init_paks = true
@@ -35,6 +20,25 @@ level = "Default_level"
 
 # [个人配置] 锁帧
 lock_fps = 60
+
+# [个人配置] 用到的pak包的绝对路径。目前先手填。至少要有一个engine的pak和level的pak。
+# 启动时脚本会把它们放到正确的位置。
+paks = [
+    # "/xxx/engine_linux.pak",
+    # "/xxx/test_level_linux.pak",
+]
+
+[orcalab.dev]
+
+# 是否在开发环境。[orcalab.dev]中的配置只在开发环境中起作用。
+development = false
+
+# 是否连接Builder。
+connect_builder_hub = false
+
+# 测试项目目录
+project_path = ""
+
 
 # Copilot 服务器配置
 [copilot]
