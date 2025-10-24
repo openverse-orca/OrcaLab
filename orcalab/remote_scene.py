@@ -686,3 +686,20 @@ class RemoteScene(SceneEditNotification):
         response = await self.edit_stub.ChangeSimState(request)
         self._check_response(response)
         return response
+
+    async def get_camera_png(self, camera_name: str, png_path: str, png_name: str):
+        request = edit_service_pb2.GetCameraPNGRequest(
+            camera_name=camera_name,
+            png_path=png_path,
+            png_name=png_name,
+        )
+        response = await self.edit_stub.GetCameraPNG(request)
+        if response.status_code != Success:
+            retry = 2
+            while retry > 0:
+                response = await self.edit_stub.GetCameraPNG(request)
+                if response.status_code == Success:
+                    break
+                retry -= 1
+                await asyncio.sleep(0.01)
+        return response

@@ -75,6 +75,8 @@ class AssetBrowser(QtWidgets.QWidget):
 
     add_item = QtCore.Signal(str, BaseActor)
 
+    create_panorama_gif = QtCore.Signal(str)
+
     def __init__(self):
         super().__init__()
         self._setup_ui()
@@ -158,6 +160,29 @@ class AssetBrowser(QtWidgets.QWidget):
         """)
         layout.addWidget(self.list_view)
 
+        self.create_panorama_gif_button = QtWidgets.QPushButton("创建周视图")
+        self.create_panorama_gif_button.setStyleSheet("""
+            QPushButton {
+                background-color: #007acc;
+                color: #ffffff;
+                border: none;
+                border-radius: 3px;
+                padding: 6px 12px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #005a9e;
+            }
+            QPushButton:pressed {
+                background-color: #004578;
+            }
+            QPushButton:disabled {
+                background-color: #555555;
+                color: #999999;
+            }
+        """)
+        layout.addWidget(self.create_panorama_gif_button)
         # 状态标签
         self.status_label = QtWidgets.QLabel("0 assets")
         self.status_label.setStyleSheet("""
@@ -186,6 +211,7 @@ class AssetBrowser(QtWidgets.QWidget):
         self.include_search_box.textChanged.connect(self._on_include_filter_changed)
         self.exclude_search_box.textChanged.connect(self._on_exclude_filter_changed)
         self.list_view.customContextMenuRequested.connect(self.show_context_menu)
+        self.create_panorama_gif_button.clicked.connect(self._on_create_panorama_gif_clicked)
         self._model.rowsInserted.connect(self._update_status)
         self._model.rowsRemoved.connect(self._update_status)
         self._model.modelReset.connect(self._update_status)
@@ -226,6 +252,14 @@ class AssetBrowser(QtWidgets.QWidget):
         add_action.triggered.connect(lambda: self.on_add_item(selected_item_name))
         context_menu.addAction(add_action)
         context_menu.exec(self.list_view.mapToGlobal(pos))
+
+
+    def _on_create_panorama_gif_clicked(self):
+        """创建周视图"""
+        if len(self.list_view.selectedIndexes()) == 0:
+            return
+        selected_item_name = self.list_view.selectedIndexes()[0].data(QtCore.Qt.DisplayRole)
+        self.create_panorama_gif.emit(selected_item_name)
 
     def on_add_item(self, item_name):
         """添加项目到场景"""

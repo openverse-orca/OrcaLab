@@ -229,6 +229,17 @@ message ChangeSimStateResponse {
     string error_message = 2;
 }
 
+message GetCameraPNGRequest {
+    string camera_name = 1;
+    string png_path = 2;
+    string png_name = 3;
+}
+
+message GetCameraPNGResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
 service GrpcService {
     rpc Aloha(AlohaRequest) returns (AlohaResponse);
     
@@ -262,4 +273,6 @@ service GrpcService {
     rpc GetCacheFolder(GetCacheFolderRequest) returns (GetCacheFolderResponse);
     rpc LoadPackage(LoadPackageRequest) returns (LoadPackageResponse);
     rpc ChangeSimState(ChangeSimStateRequest) returns (ChangeSimStateResponse);
+
+    rpc GetCameraPNG(GetCameraPNGRequest) returns (GetCameraPNGResponse);
 }

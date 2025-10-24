@@ -14,6 +14,7 @@ import os
 import time
 import platform
 from PySide6 import QtCore, QtWidgets, QtGui
+from PIL import Image
 
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.local_scene import LocalScene
@@ -104,6 +105,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         connect(self.actor_outline_model.add_item, self.add_item_to_scene)
 
         connect(self.asset_browser_widget.add_item, self.add_item_to_scene)
+        connect(self.asset_browser_widget.create_panorama_gif, self.create_panorama_gif)
 
         connect(self.copilot_widget.add_item_with_transform, self.add_item_to_scene_with_transform)
         connect(self.copilot_widget.request_add_group, self.on_copilot_add_group)
@@ -236,7 +238,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         layout1.addWidget(self.actor_outline, 0)
         layout1.addWidget(self._viewport_widget, 1)
         layout1.addLayout(layout1_1, 0)
-        
+
         # 第二行布局：终端组件
         layout1_2 = QtWidgets.QHBoxLayout()
         layout1_2.setSpacing(8)
@@ -764,6 +766,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         name = make_unique_name(item_name, parent_path)
         actor = AssetActor(name=name, asset_path=item_name)
         await SceneEditRequestBus().add_actor(actor, parent_path)
+        return actor
 
     async def add_item_to_scene_with_transform(self, item_name, item_asset_path, parent_path=None, transform=None):
         if parent_path is None:
@@ -773,6 +776,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         actor = AssetActor(name=name, asset_path=item_asset_path)
         actor.transform = transform
         await SceneEditRequestBus().add_actor(actor, parent_path)
+        return actor
 
     async def on_copilot_add_group(self, group_path: Path):
         group_actor = GroupActor(name=group_path.name())
@@ -790,6 +794,69 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         actor.transform = Transform(pos, quat, scale)
 
         await SceneEditRequestBus().add_actor(actor, Path.root_path())
+
+    async def create_panorama_gif(self, actor_name: str):
+        self.terminal_widget._append_output(f"Creating panorama gif for {actor_name}\n")
+        actor = await self.add_item_to_scene(actor_name)
+        quat = Rotation.from_euler("xyz", [-15, 0, 0], degrees=True).as_quat()[[3, 0, 1, 2]]
+        actor_1 = await self.add_item_to_scene_with_transform("mujococamera1080", "prefabs/mujococamera1080", parent_path=Path.root_path(), transform=Transform(position=np.array([0, -2.5, 2]), rotation=quat, scale=1.0))
+        actor_2 = await self.add_item_to_scene_with_transform("mujococamera256", "prefabs/mujococamera256", parent_path=Path.root_path(), transform=Transform(position=np.array([0, -2.5, 2]), rotation=quat, scale=1.0))
+
+        tmp_path = os.path.join(os.path.expanduser("~"), ".orcalab", "tmp")
+        await self.remote_scene.get_camera_png("mujococamera1080", tmp_path, f"{actor.name}_1080.png")
+
+        # 生成所有旋转角度的PNG图像
+        png_files = []
+        for rotation_z in range(0, 360, 24):
+            quat = Rotation.from_euler("xyz", [0, 0, rotation_z], degrees=True).as_quat()[[3, 0, 1, 2]]
+            await self.scene_edit_service.set_transform(actor, Transform(position=np.array([0, 0, 0]), rotation=quat, scale=1.0), local=True, undo=False, source="create_panorama_gif")
+            png_filename = f"{actor.name}_256_{rotation_z}.png"
+            await self.remote_scene.get_camera_png("mujococamera256", tmp_path, png_filename)
+            png_files.append(os.path.join(tmp_path, png_filename))
+
+        await asyncio.sleep(0.01)
+        # 生成GIF动图
+        gif_path = os.path.join(tmp_path, f"{actor.name}_panorama.gif")
+
+        images = []
+        for png_file in png_files:
+            retry = 1
+            while retry < 3:
+                if os.path.exists(png_file):
+                    try:
+                        img = Image.open(png_file)
+                        images.append(img)
+                        break
+                    except Exception as e:
+                        self.terminal_widget._append_output(f"Error opening {png_file}: {e}\n")
+                        self.terminal_widget._append_output(f"Retrying... {retry} times\n")
+                        retry += 1
+                        await asyncio.sleep(0.01)
+
+        if images:
+            duration = 200  # 毫秒
+            images[0].save(
+                gif_path,
+                save_all=True,
+                append_images=images[1:],
+                duration=duration,
+                loop=0
+            )
+
+            for png_file in png_files:
+                if os.path.exists(png_file):
+                    try:
+                        os.remove(png_file)
+                    except OSError as e:
+                        self.terminal_widget._append_output(f"Error deleting {png_file}: {e}\n")
+            self.terminal_widget._append_output(f"GIF saved to: {gif_path}\n")
+        else:
+            self.terminal_widget._append_output("No images found to create GIF\n")
+
+        await self.scene_edit_service.delete_actor(actor_2, undo=False, source="create_panorama_gif")
+        await self.scene_edit_service.delete_actor(actor_1, undo=False, source="create_panorama_gif")
+        await self.scene_edit_service.delete_actor(actor, undo=False, source="create_panorama_gif")
+
 
     def enable_widgets(self):
         self.actor_outline.setEnabled(True)

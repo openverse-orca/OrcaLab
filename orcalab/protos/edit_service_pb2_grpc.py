@@ -149,6 +149,11 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.ChangeSimStateRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.ChangeSimStateResponse.FromString,
                 _registered_method=True)
+        self.GetCameraPNG = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetCameraPNG',
+                request_serializer=edit__service__pb2.GetCameraPNGRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetCameraPNGResponse.FromString,
+                _registered_method=True)
 
 
 class GrpcServiceServicer(object):
@@ -292,6 +297,12 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetCameraPNG(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GrpcServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -409,6 +420,11 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.ChangeSimState,
                     request_deserializer=edit__service__pb2.ChangeSimStateRequest.FromString,
                     response_serializer=edit__service__pb2.ChangeSimStateResponse.SerializeToString,
+            ),
+            'GetCameraPNG': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCameraPNG,
+                    request_deserializer=edit__service__pb2.GetCameraPNGRequest.FromString,
+                    response_serializer=edit__service__pb2.GetCameraPNGResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1032,6 +1048,33 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/ChangeSimState',
             edit__service__pb2.ChangeSimStateRequest.SerializeToString,
             edit__service__pb2.ChangeSimStateResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCameraPNG(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetCameraPNG',
+            edit__service__pb2.GetCameraPNGRequest.SerializeToString,
+            edit__service__pb2.GetCameraPNGResponse.FromString,
             options,
             channel_credentials,
             insecure,
