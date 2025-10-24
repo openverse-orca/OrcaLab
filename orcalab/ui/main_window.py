@@ -116,7 +116,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
 
         connect(self.enable_control, self.enable_widgets)
         connect(self.disanble_control, self.disable_widgets)
-
+        connect(self._viewport_widget.assetDropped, self.get_transform_and_add_item)
         # Window actions.
 
         action_undo = QtGui.QAction("Undo")
@@ -400,6 +400,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         await self.remote_scene.change_sim_state(True)
 
         """完成模拟启动的异步操作（从 run_sim 函数中复制的缺失部分）"""
+        await self.remote_scene.save_body_transform()
         await self.remote_scene.publish_scene()
         await self.remote_scene.save_body_transform()
 
@@ -532,6 +533,7 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             await self.remote_scene.set_selection([])
         await self.remote_scene.change_sim_state(self.sim_process_running)
 
+        await self.remote_scene.save_body_transform()
         await self.remote_scene.publish_scene()
         await self.remote_scene.save_body_transform()
 
@@ -748,6 +750,10 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
     async def redo(self):
         if can_redo():
             await self.undo_service.redo()
+
+    async def get_transform_and_add_item(self, asset_name, x, y):
+        t = await self.remote_scene.get_generate_pos(x, y)
+        await self.add_item_to_scene_with_transform(asset_name, asset_name, transform=t)
 
     async def add_item_to_scene(self, item_name, parent_actor=None):
         if parent_actor is None:

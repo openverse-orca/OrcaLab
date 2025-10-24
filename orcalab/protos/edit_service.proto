@@ -194,8 +194,8 @@ message GetWindowIdResponse {
 }
 
 message GetGeneratePosRequest {
-    int32 posX = 1;
-    int32 posY = 2;
+    float posX = 1;
+    float posY = 2;
 }
 message GetGeneratePosResponse {
     StatusCode status_code = 1;

@@ -665,7 +665,7 @@ class RemoteScene(SceneEditNotification):
         )
         response = await self.edit_stub.GetGeneratePos(request)
         self._check_response(response)
-        return response
+        return self._get_transform_from_message(response.transform)
 
     async def get_cache_folder(self) -> str:
         request = edit_service_pb2.GetCacheFolderRequest()

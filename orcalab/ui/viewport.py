@@ -8,8 +8,12 @@ from orcalab_pyside import Viewport as _Viewport
 
 
 class Viewport(QtWidgets.QWidget):
+    assetDropped = QtCore.Signal(str, float, float)
+
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        self.setAcceptDrops(True)
 
         self._viewport = _Viewport()
 
@@ -62,3 +66,25 @@ class Viewport(QtWidgets.QWidget):
         self._viewport.main_loop_tick()
         if self._viewport_running:
             asyncio.create_task(self._viewport_main_loop())
+
+    def dragEnterEvent(self, event: QtGui.QDragEnterEvent):
+        if event.mimeData().hasFormat("application/x-orca-asset"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QtGui.QDropEvent):
+        mime = event.mimeData()
+        if mime.hasFormat("application/x-orca-asset"):
+            asset_name = mime.data("application/x-orca-asset").data().decode("utf-8")
+            local_pos = event.pos()  # QPoint
+            x, y = local_pos.x(), local_pos.y()
+            viewport_width = self.width()
+            viewport_height = self.height()
+            normX = x / viewport_width
+            normY = y / viewport_height
+
+            self.assetDropped.emit(asset_name, normX, normY)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
