@@ -51,6 +51,8 @@ async def main(q_app):
     _main_window = main_window  # Store reference for signal handlers
     await main_window.init()
 
+    main_window.restore_default_layout()
+
     await app_close_event.wait()
 
     # Clean up resources before exiting

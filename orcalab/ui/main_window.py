@@ -30,6 +30,8 @@ from orcalab.ui.tool_bar import ToolBar
 from orcalab.ui.launch_dialog import LaunchDialog
 from orcalab.ui.terminal_widget import TerminalWidget
 from orcalab.ui.viewport import Viewport
+from orcalab.ui.panel_manager import PanelManager
+from orcalab.ui.panel import Panel
 from orcalab.math import Transform
 from orcalab.config_service import ConfigService
 from orcalab.undo_service.undo_service import SelectionCommand, UndoService
@@ -46,7 +48,7 @@ from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 
 
 
-class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification):
+class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
 
     add_item_by_drag = QtCore.Signal(str, Transform)
     load_scene_sig = QtCore.Signal(str)
@@ -58,12 +60,14 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         self.cwd = os.getcwd()
 
     def connect_buses(self):
+        super().connect_buses()
         ApplicationRequestBus.connect(self)
         AssetServiceNotificationBus.connect(self)
 
     def disconnect_buses(self):
         AssetServiceNotificationBus.disconnect(self)
         ApplicationRequestBus.disconnect(self)
+        super().disconnect_buses()
 
     async def init(self):
         self._viewport_widget = Viewport()
@@ -138,6 +142,11 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
 
     async def _init_ui(self):
         self.tool_bar = ToolBar()
+        layout = QtWidgets.QVBoxLayout(self._tool_bar_area)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.tool_bar)
+
         # 为工具栏添加样式
         self.tool_bar.setStyleSheet("""
             QWidget {
@@ -162,19 +171,23 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         connect(self.tool_bar.action_start.triggered, self.show_launch_dialog)
         connect(self.tool_bar.action_stop.triggered, self.stop_sim)
 
+        layout = QtWidgets.QVBoxLayout(self._main_content_area)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self._viewport_widget)
+
         self.actor_outline_model = ActorOutlineModel(self.local_scene)
         self.actor_outline_model.set_root_group(self.local_scene.root_actor)
 
-        # 创建带样式的面板
         self.actor_outline_widget = ActorOutline()
-        self.actor_outline = self._create_styled_panel("Scene Hierarchy", self.actor_outline_widget)
         self.actor_outline_widget.set_actor_model(self.actor_outline_model)
+        self.add_panel(Panel("Scene Hierarchy", self.actor_outline_widget), "left")
 
         self.actor_editor_widget = ActorEditor()
-        self.actor_editor = self._create_styled_panel("Properties", self.actor_editor_widget)
+        self.add_panel(Panel ("Properties", self.actor_editor_widget), "right")
 
         self.asset_browser_widget = AssetBrowser()
-        self.asset_browser = self._create_styled_panel("Assets", self.asset_browser_widget)
+        self.add_panel(Panel("Assets", self.asset_browser_widget), "right")
         assets = await self.remote_scene.get_actor_assets()
         self.asset_browser_widget.set_assets(assets)
 
@@ -185,13 +198,18 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
             config_service.copilot_server_url(),
             config_service.copilot_timeout()
         )
-        self.copilot = self._create_styled_panel("Copilot", self.copilot_widget)
+        self.add_panel(Panel("Copilot", self.copilot_widget), "right")
 
         # 添加终端组件
         self.terminal_widget = TerminalWidget()
-        self.terminal = self._create_styled_panel("Terminal", self.terminal_widget)
+        self.add_panel(Panel("Terminal", self.terminal_widget), "bottom")
 
         self.menu_bar = QtWidgets.QMenuBar()
+        layout = QtWidgets.QVBoxLayout(self._menu_bar_area)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.menu_bar)
+        
         # 为菜单栏添加样式
         self.menu_bar.setStyleSheet("""
             QMenuBar {
@@ -228,35 +246,10 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         self.menu_file = self.menu_bar.addMenu("File")
         self.menu_edit = self.menu_bar.addMenu("Edit")
 
-        layout1_1 = QtWidgets.QVBoxLayout()
-        layout1_1.addWidget(self.actor_editor, 1)
-        layout1_1.addWidget(self.asset_browser, 1)
-        layout1_1.addWidget(self.copilot, 1)
-
-        layout1 = QtWidgets.QHBoxLayout()
-        layout1.setSpacing(8)  # 增加面板间距
-        layout1.addWidget(self.actor_outline, 0)
-        layout1.addWidget(self._viewport_widget, 1)
-        layout1.addLayout(layout1_1, 0)
-
-        # 第二行布局：终端组件
-        layout1_2 = QtWidgets.QHBoxLayout()
-        layout1_2.setSpacing(8)
-        layout1_2.addWidget(self.terminal, 1)
-
-        layout2 = QtWidgets.QVBoxLayout()
-        layout2.setContentsMargins(8, 8, 8, 8)  # 设置外边距
-        layout2.addWidget(self.menu_bar)
-        layout2.addWidget(self.tool_bar)
-        layout2.addLayout(layout1)
-        layout2.addLayout(layout1_2)
-
-        self.setLayout(layout2)
-        
         # 为主窗体设置背景色
         self.setStyleSheet("""
             QWidget {
-                background-color: #1e1e1e;
+                background-color: #181818;
                 color: #ffffff;
             }
         """)
@@ -269,70 +262,6 @@ class MainWindow(QtWidgets.QWidget, ApplicationRequest, AssetServiceNotification
         self.actor_outline_model.connect_bus()
         self.actor_editor_widget.connect_bus()
 
-    def _create_styled_panel(self, title: str, content_widget: QtWidgets.QWidget) -> QtWidgets.QWidget:
-        """创建带标题和样式的面板"""
-        # 创建主容器
-        panel = QtWidgets.QWidget()
-        panel.setObjectName(f"panel_{title.lower().replace(' ', '_')}")
-        
-        # 设置面板样式
-        panel.setStyleSheet(f"""
-            QWidget#{panel.objectName()} {{
-                background-color: #2b2b2b;
-                border: 1px solid #404040;
-                border-radius: 4px;
-            }}
-        """)
-        
-        # 创建垂直布局
-        layout = QtWidgets.QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        
-        # 创建标题栏
-        title_bar = QtWidgets.QLabel(title)
-        title_bar.setObjectName("title_bar")
-        title_bar.setStyleSheet("""
-            QLabel#title_bar {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                padding: 6px 12px;
-                border-bottom: 1px solid #404040;
-                font-weight: bold;
-                font-size: 12px;
-            }
-        """)
-        title_bar.setFixedHeight(28)
-        
-        # 设置内容区域样式
-        content_widget.setStyleSheet("""
-            QTreeView, QListView, QWidget {
-                background-color: #2b2b2b;
-                color: #ffffff;
-                border: none;
-                selection-background-color: #404040;
-                alternate-background-color: #333333;
-            }
-            QTreeView::item:selected, QListView::item:selected {
-                background-color: #404040;
-                color: #ffffff;
-            }
-            QTreeView::item:hover, QListView::item:hover {
-                background-color: #353535;
-            }
-            QHeaderView::section {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                border: 1px solid #404040;
-                padding: 4px;
-            }
-        """)
-        
-        # 添加到布局
-        layout.addWidget(title_bar)
-        layout.addWidget(content_widget)
-        
-        return panel
 
 
 
