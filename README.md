@@ -12,6 +12,73 @@ OrcaLab is a front-end of OrcaGym. It provides a user-interface for scene assemb
 - [OrcaGym](https://github.com/your-org/OrcaGym) (required dependency)
 - Other dependencies listed in `pyproject.toml`
 
+## Development Requirements
+
+For building and releasing packages, the following pip packages are required:
+
+### Core Build Tools
+```bash
+pip install build twine wheel setuptools
+```
+
+### Development Tools (Optional)
+```bash
+pip install pytest pytest-cov flake8 black mypy
+```
+
+### Make Commands and Required Packages
+
+The project includes a `Makefile` with various commands. Here are the required packages for each command:
+
+| Make Command | Required pip packages | Description |
+|-------------|----------------------|-------------|
+| `make build` | `build`, `setuptools`, `wheel` | Build distribution packages |
+| `make check` | `twine` | Check package quality |
+| `make test-install` | `build`, `setuptools`, `wheel` | Test local installation |
+| `make test-install-testpypi` | `build`, `setuptools`, `wheel` | Test TestPyPI installation |
+| `make test-install-pypi` | `build`, `setuptools`, `wheel` | Test PyPI installation |
+| `make release-test` | `build`, `twine`, `setuptools`, `wheel` | Release to TestPyPI |
+| `make release-prod` | `build`, `twine`, `setuptools`, `wheel` | Release to PyPI |
+| `make bump-version` | None (uses sed) | Bump version number |
+| `make setup-pypirc` | None | Setup PyPI configuration file |
+| `make check-pypirc` | None | Check PyPI configuration |
+| `make clean` | None | Clean build artifacts |
+| `make test` | `pytest`, `pytest-cov` | Run tests |
+| `make format` | `black` | Format code |
+| `make lint` | `flake8`, `mypy` | Lint code |
+
+### Quick Setup for Development
+```bash
+# Install development dependencies
+pip install build twine wheel setuptools pytest pytest-cov flake8 black mypy
+
+# Or install from the project's optional dependencies
+pip install -e ".[dev]"
+```
+
+## Release Process
+
+### Quick Release
+```bash
+# Setup PyPI configuration (first time only)
+make setup-pypirc
+
+# Release to TestPyPI
+./scripts/release/release.sh test
+
+# Release to PyPI
+./scripts/release/release.sh prod
+```
+
+### Step-by-step Release
+```bash
+# Clean, build, check, and upload
+./scripts/release/clean.sh
+./scripts/release/build.sh
+./scripts/release/check.sh
+./scripts/release/upload_test.sh  # or upload_prod.sh
+```
+
 ## Installation
 
 1. Install OrcaGym (required):
