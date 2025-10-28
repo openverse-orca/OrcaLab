@@ -24,7 +24,7 @@ from orcalab.remote_scene import RemoteScene
 from orcalab.ui.actor_editor import ActorEditor
 from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.actor_outline_model import ActorOutlineModel
-from orcalab.ui.asset_browser import AssetBrowser
+from orcalab.ui.asset_browser.asset_browser import AssetBrowser
 from orcalab.ui.copilot import CopilotPanel
 from orcalab.ui.tool_bar import ToolBar
 from orcalab.ui.launch_dialog import LaunchDialog
@@ -556,7 +556,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
 
         print("创建资产浏览器...")
         self.asset_browser_widget = AssetBrowser()
-        self.add_panel(Panel("Assets", self.asset_browser_widget), "right")
+        self.add_panel(Panel("Assets", self.asset_browser_widget), "bottom")
         
         # 异步加载资产，不阻塞UI初始化
         print("启动异步资产加载...")
