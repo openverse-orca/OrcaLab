@@ -56,8 +56,8 @@ class ThumbnailView(QtWidgets.QWidget):
         self.bg_hover_color = theme.get_color("bg-hover")
         self.text_color = theme.get_color("text")
 
-        self.hover_item: _ThumbnailViewItem | None = None
-        self.selected_item: _ThumbnailViewItem | None = None
+        self._hover_item: _ThumbnailViewItem | None = None
+        self._selected_item: _ThumbnailViewItem | None = None
 
         self._left_mouse_pressed_pos: QtCore.QPoint | None = None
         self._left_click_item: _ThumbnailViewItem | None = None
@@ -81,6 +81,12 @@ class ThumbnailView(QtWidgets.QWidget):
     def item_at(self, pos: QtCore.QPoint) -> int:
         item = self._item_at(pos)
         return item.index if item else -1
+
+    def selected_index(self) -> int:
+        return self._selected_item.index if self._selected_item else -1
+
+    def hovered_index(self) -> int:
+        return self._hover_item.index if self._hover_item else -1
 
     def paintEvent(self, event: QtGui.QPaintEvent):
         painter = QtGui.QPainter(self)
@@ -120,8 +126,8 @@ class ThumbnailView(QtWidgets.QWidget):
             assert self._dragging == False
 
             # update selection
-            if self.selected_item != self._left_click_item:
-                self.selected_item = self._left_click_item
+            if self._selected_item != self._left_click_item:
+                self._selected_item = self._left_click_item
                 self.selection_changed.emit()
                 self.update()
 
@@ -134,8 +140,8 @@ class ThumbnailView(QtWidgets.QWidget):
     def mouseMoveEvent(self, event: QtGui.QMouseEvent):
         pos = event.position().toPoint()
         item = self._item_at(pos)
-        if self.hover_item != item:
-            self.hover_item = item
+        if self._hover_item != item:
+            self._hover_item = item
             self.update()
 
         if not self._dragging and self._left_mouse_pressed_pos:
@@ -246,14 +252,14 @@ class ThumbnailView(QtWidgets.QWidget):
         content_rect = item.content_rect
 
         bg_color = self.bg_color
-        if self.selected_item == item:
+        if self._selected_item == item:
             bg_color = self.bg_hover_color
-        elif self.hover_item == item:
+        elif self._hover_item == item:
             bg_color = self.bg_hover_color
 
         painter.fillRect(content_rect, bg_color)
 
-        if self.selected_item == item:
+        if self._selected_item == item:
             painter.drawRect(item.cell_rect)
 
         content_center = content_rect.center()

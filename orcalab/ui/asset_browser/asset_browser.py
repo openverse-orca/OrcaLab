@@ -171,6 +171,14 @@ class AssetBrowser(QtWidgets.QWidget):
         self._model.exclude_filter = text
         self._model.apply_filters()
 
+    def _on_selection_changed(self):
+        index = self._view.selected_index()
+        if index == -1:
+            self._info_view.set_asset_info(None)
+        else:
+            info = self._model.info_at(index)
+            self._info_view.set_asset_info(info)
+
     # def _update_status(self):
     #     total_count = self._model.get_total_count()
     #     filtered_count = self._model.get_filtered_count()

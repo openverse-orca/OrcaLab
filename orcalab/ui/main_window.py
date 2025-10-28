@@ -69,52 +69,62 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         ApplicationRequestBus.disconnect(self)
         super().disconnect_buses()
 
+    # def start_viewport_main_loop(self):
+    #     self._viewport_widget.start_viewport_main_loop()
+
     async def init(self):
-        # 启动前检查GPU环境
-        await self._pre_init_gpu_check()
-        
-        # 分阶段初始化viewport，添加错误恢复机制
-        await self._init_viewport_with_retry()
-
-        # 等待viewport完全启动并检查就绪状态
-        print("等待viewport启动...")
-        await asyncio.sleep(5)
-        
-        # 等待viewport就绪状态
-        viewport_ready = await self._wait_for_viewport_ready()
-        if not viewport_ready:
-            print("警告: Viewport可能未完全就绪，但继续初始化...")
-        
-        # 检查GPU状态
-        await self._check_gpu_status()
-        
-        # 确保GPU资源稳定后再继续
-        await self._stabilize_gpu_resources()
-        print("Viewport启动完成，继续初始化...")
-
-        self.asset_service = AssetService()
-
-        self.url_server = UrlServiceServer()
-        await self.url_server.start()
-
-        self.undo_service = UndoService()
         self.local_scene = LocalScene()
-
-        self.scene_edit_service = SceneEditService(self.local_scene)
-
         self.remote_scene = RemoteScene(ConfigService())
-
-        await self.remote_scene.init_grpc()
-        await self.remote_scene.set_sync_from_mujoco_to_scene(False)
-        await self.remote_scene.set_selection([])
-        await self.remote_scene.clear_scene()
-
-        self.cache_folder = await self.remote_scene.get_cache_folder()
-
-
 
         self._sim_process_check_lock = asyncio.Lock()
         self.sim_process_running = False
+
+        self.asset_service = AssetService()
+        
+        self.url_server = UrlServiceServer()
+        
+        self.undo_service = UndoService()
+    
+        self.scene_edit_service = SceneEditService(self.local_scene)
+
+        self._viewport_widget = Viewport()
+        self._viewport_widget.init_viewport()
+
+        print("开始初始化UI...")
+        await self._init_ui()
+        print("UI初始化完成")
+
+        self.resize(1200, 800)
+        self.show()
+
+        self._viewport_widget.start_viewport_main_loop()
+        
+        # # 启动前检查GPU环境
+        # await self._pre_init_gpu_check()
+        
+        # # 分阶段初始化viewport，添加错误恢复机制
+        # await self._init_viewport_with_retry()
+
+        # 等待viewport完全启动并检查就绪状态
+        # print("等待viewport启动...")
+        # await asyncio.sleep(5)
+        
+        # # 等待viewport就绪状态
+        # viewport_ready = await self._wait_for_viewport_ready()
+        # if not viewport_ready:
+        #     print("警告: Viewport可能未完全就绪，但继续初始化...")
+        
+        # 检查GPU状态
+        # await self._check_gpu_status()
+        
+        # 确保GPU资源稳定后再继续
+        # await self._stabilize_gpu_resources()
+        # print("Viewport启动完成，继续初始化...")
+
+        print("连接总线...")
+        self.actor_outline_widget.connect_bus()
+        self.actor_outline_model.connect_bus()
+        self.actor_editor_widget.connect_bus()
 
         self.undo_service.connect_bus()
         self.scene_edit_service.connect_bus()
@@ -122,14 +132,24 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
 
         self.connect_buses()
 
-        print("开始初始化UI...")
-        await self._init_ui()
-        print("UI初始化完成")
+        await self.remote_scene.init_grpc()
+        await self.remote_scene.set_sync_from_mujoco_to_scene(False)
+        await self.remote_scene.set_selection([])
+        await self.remote_scene.clear_scene()
+
+        self.cache_folder = await self.remote_scene.get_cache_folder()
+        await self.url_server.start()
         
-        # 启动GPU健康监控
-        print("启动GPU健康监控...")
-        await self._monitor_gpu_health()
-        print("GPU健康监控启动完成")
+        # 异步加载资产，不阻塞UI初始化
+        print("启动异步资产加载...")
+        asyncio.create_task(self._load_assets_async())
+
+        # print("UI初始化完成")
+        
+        # # 启动GPU健康监控
+        # print("启动GPU健康监控...")
+        # await self._monitor_gpu_health()
+        # print("GPU健康监控启动完成")
 
     async def _init_viewport_with_retry(self, max_retries=3):
         """带重试机制的viewport初始化"""
@@ -501,8 +521,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
 
         self.addActions([action_undo, action_redo])
 
-        self.resize(1200, 800)
-        self.show()
+   
 
     async def _init_ui(self):
         print("创建工具栏...")
@@ -558,10 +577,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         self.asset_browser_widget = AssetBrowser()
         self.add_panel(Panel("Assets", self.asset_browser_widget), "bottom")
         
-        # 异步加载资产，不阻塞UI初始化
-        print("启动异步资产加载...")
-        asyncio.create_task(self._load_assets_async())
-
         print("创建Copilot组件...")
         self.copilot_widget = CopilotPanel(self.remote_scene, self)
         # Configure copilot with server settings from config
@@ -630,15 +645,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         # 初始化按钮状态
         print("初始化按钮状态...")
         self._update_button_states()
-
-        print("连接总线...")
-        self.actor_outline_widget.connect_bus()
-        self.actor_outline_model.connect_bus()
-        self.actor_editor_widget.connect_bus()
-        print("UI初始化完成")
-
-
-
 
     def show_launch_dialog(self):
         """显示启动对话框（同步版本）"""
