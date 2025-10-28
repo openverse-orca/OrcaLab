@@ -92,9 +92,11 @@ def authenticate_user(config_service, window=None) -> bool:
         认证是否成功
     """
     base_url = config_service.datalink_base_url()
+    auth_server_url = config_service.datalink_auth_server_url()
+    timeout = config_service.datalink_timeout()
     
     # 创建认证服务
-    auth_service = AuthService(base_url)
+    auth_service = AuthService(base_url, auth_server_url=auth_server_url, timeout=timeout)
     
     def auth_func():
         """认证函数，带进度回调"""
@@ -154,7 +156,9 @@ def run_asset_sync_ui(config_service) -> bool:
     # 在同步前验证 token 是否有效
     print("验证访问令牌...")
     base_url = config_service.datalink_base_url()
-    auth_service = AuthService(base_url)
+    auth_server_url = config_service.datalink_auth_server_url()
+    timeout = config_service.datalink_timeout()
+    auth_service = AuthService(base_url, auth_server_url=auth_server_url, timeout=timeout)
     
     if not auth_service.verify_token(username, token):
         print("⚠️  Token 已过期或无效，需要重新认证")

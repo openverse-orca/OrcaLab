@@ -14,28 +14,32 @@ from urllib.parse import urlencode
 class AuthService:
     """DataLink 认证服务"""
     
-    def __init__(self, base_url: str, auth_frontend_url: str = None, timeout: int = 60):
+    def __init__(self, base_url: str, auth_server_url: str = None, auth_frontend_url: str = None, timeout: int = 60):
         """
         初始化认证服务
         
         Args:
             base_url: DataLink API 基础地址（例如：http://localhost:8080/api）
-            auth_frontend_url: 认证前端页面地址
+            auth_server_url: 认证服务器地址（例如：https://datalink.orca3d.cn:8081）
+            auth_frontend_url: 认证前端页面地址（可选，会自动构造）
             timeout: 请求超时时间（秒）
         """
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
         
-        # 认证服务器是统一的，不区分频道
-        # 始终使用生产环境的认证服务器地址
-        self.auth_url = "https://datalink.orca3d.cn:8081/auth/v1"
+        # 认证服务器配置
+        if auth_server_url:
+            # 使用指定的认证服务器地址
+            self.auth_url = f"{auth_server_url.rstrip('/')}/auth/v1"
+            self.auth_frontend_url = f"{auth_server_url.rstrip('/')}/auth/v1/frontend"
+        else:
+            # 默认使用生产环境的认证服务器
+            self.auth_url = "https://datalink.orca3d.cn:8081/auth/v1"
+            self.auth_frontend_url = "https://datalink.orca3d.cn:8081/auth/v1/frontend"
         
-        # 认证前端页面地址
+        # 如果指定了自定义认证前端地址，则使用它
         if auth_frontend_url:
             self.auth_frontend_url = auth_frontend_url
-        else:
-            # 认证前端页面和认证服务在同一个服务器
-            self.auth_frontend_url = "https://datalink.orca3d.cn:8081/auth/v1/frontend"
     
     def get_nonce(self) -> Optional[str]:
         """
@@ -44,20 +48,48 @@ class AuthService:
         Returns:
             nonce 字符串，失败返回 None
         """
-        try:
-            url = f"{self.auth_url}/nonce/"
-            response = requests.get(url, timeout=self.timeout)
-            
-            if response.status_code == 200:
-                data = response.json()
-                return data.get('nonce')
-            
-            print(f"获取 nonce 失败: HTTP {response.status_code}")
-            return None
-            
-        except Exception as e:
-            print(f"获取 nonce 失败: {e}")
-            return None
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                url = f"{self.auth_url}/nonce/"
+                print(f"尝试获取 nonce (第 {attempt + 1} 次): {url}")
+                response = requests.get(url, timeout=self.timeout)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    nonce = data.get('nonce')
+                    if nonce:
+                        print(f"✓ 成功获取 nonce: {nonce[:8]}...")
+                        return nonce
+                    else:
+                        print("✗ 响应中未找到 nonce")
+                else:
+                    print(f"✗ 获取 nonce 失败: HTTP {response.status_code}")
+                    if response.text:
+                        print(f"响应内容: {response.text[:200]}...")
+                
+                if attempt < max_retries - 1:
+                    print(f"等待 2 秒后重试...")
+                    time.sleep(2)
+                    
+            except requests.exceptions.ConnectionError as e:
+                print(f"✗ 连接错误 (第 {attempt + 1} 次): {e}")
+                if attempt < max_retries - 1:
+                    print(f"等待 2 秒后重试...")
+                    time.sleep(2)
+            except requests.exceptions.Timeout as e:
+                print(f"✗ 请求超时 (第 {attempt + 1} 次): {e}")
+                if attempt < max_retries - 1:
+                    print(f"等待 2 秒后重试...")
+                    time.sleep(2)
+            except Exception as e:
+                print(f"✗ 获取 nonce 失败 (第 {attempt + 1} 次): {e}")
+                if attempt < max_retries - 1:
+                    print(f"等待 2 秒后重试...")
+                    time.sleep(2)
+        
+        print(f"✗ 获取 nonce 失败，已尝试 {max_retries} 次")
+        return None
     
     def verify_nonce(self, nonce: str, max_retries: int = 60, retry_interval: float = 2.0) -> Optional[Dict[str, str]]:
         """
@@ -119,14 +151,9 @@ class AuthService:
         """
         try:
             # 构造认证URL
-            # server 参数应该指向 API 服务器
-            # 如果是本地开发，使用生产环境的 API 服务器
-            if 'localhost' in self.base_url or '127.0.0.1' in self.base_url:
-                # 本地开发时，使用生产环境的 API 服务器
-                server_url = "datalink.orca3d.cn:7000"
-            else:
-                # 生产环境时，使用配置的服务器
-                server_url = self.base_url.replace('/api', '').replace('https://', '').replace('http://', '')
+            # server 参数应该指向认证服务器期望的 API 服务器地址
+            # 根据观察，认证服务器期望的是 datalink.orca3d.cn:7000
+            server_url = "datalink.orca3d.cn:7000"
             
             params = {
                 'server': server_url,

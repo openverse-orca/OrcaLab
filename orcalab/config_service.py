@@ -87,14 +87,14 @@ class ConfigService:
     def paks(self) -> list:
         return self.config["orcalab"].get("paks", [])
     
-    def init_paks(self) -> bool:
-        return self.config["orcalab"].get("init_paks", True)
-
+    def level(self) -> str:
+        return self.config["orcalab"].get("level", "Default_level")
+    
     def orca_project_folder(self) -> str:
         return self.config["orca_project_folder"]
-
-    def level(self) -> str:
-        return self.config["orcalab"]["level"]
+    
+    def init_paks(self) -> bool:
+        return self.config["orcalab"].get("init_paks", True)
 
     def lock_fps(self) -> str:
         if self.config["orcalab"]["lock_fps"] == 30:
@@ -161,3 +161,7 @@ class ConfigService:
     def datalink_timeout(self) -> int:
         """获取 DataLink 请求超时时间"""
         return self.config.get("datalink", {}).get("timeout", 60)
+    
+    def datalink_auth_server_url(self) -> str:
+        """获取 DataLink 认证服务器地址"""
+        return self.config.get("datalink", {}).get("auth_server_url", "https://datalink.orca3d.cn:8081")
