@@ -14,8 +14,12 @@ class AssetInfoView(QtWidgets.QWidget):
         self._name_label = QtWidgets.QLabel()
         self._path_label = QtWidgets.QLabel()
 
+        self._name_label.setWordWrap(True)
+        self._path_label.setWordWrap(True)
+
         self._layout.addWidget(self._name_label)
         self._layout.addWidget(self._path_label)
+        self._layout.addStretch(1)
 
     def set_asset_info(self, asset_info: AssetInfo | None):
         if asset_info is not None:

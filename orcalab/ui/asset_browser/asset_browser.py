@@ -144,6 +144,8 @@ class AssetBrowser(QtWidgets.QWidget):
         root_layout.addLayout(left_layout)
         root_layout.addWidget(self._info_view)
 
+        self._view.selection_changed.connect(self._on_selection_changed)
+
     def _setup_connections(self):
         """设置信号连接"""
         self.include_search_box.textChanged.connect(self._on_include_filter_changed)

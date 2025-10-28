@@ -95,6 +95,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         print("UI初始化完成")
 
         self.resize(1200, 800)
+        self.restore_default_layout()
         self.show()
 
         self._viewport_widget.start_viewport_main_loop()
@@ -121,7 +122,26 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         # await self._stabilize_gpu_resources()
         # print("Viewport启动完成，继续初始化...")
 
-        print("连接总线...")
+        # print("连接总线...")
+
+        connect(self.actor_outline_model.add_item, self.add_item_to_scene)
+
+        connect(self.asset_browser_widget.add_item, self.add_item_to_scene)
+        connect(self.asset_browser_widget.create_panorama_gif, self.create_panorama_gif)
+
+        connect(self.copilot_widget.add_item_with_transform, self.add_item_to_scene_with_transform)
+        connect(self.copilot_widget.request_add_group, self.on_copilot_add_group)
+
+        connect(self.menu_file.aboutToShow, self.prepare_file_menu)
+        connect(self.menu_edit.aboutToShow, self.prepare_edit_menu)
+
+        connect(self.add_item_by_drag, self.add_item_drag)
+        connect(self.load_scene_sig, self.load_scene)
+
+        connect(self.enable_control, self.enable_widgets)
+        connect(self.disanble_control, self.disable_widgets)
+        connect(self._viewport_widget.assetDropped, self.get_transform_and_add_item)
+
         self.actor_outline_widget.connect_bus()
         self.actor_outline_model.connect_bus()
         self.actor_editor_widget.connect_bus()
@@ -132,6 +152,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
 
         self.connect_buses()
 
+
         await self.remote_scene.init_grpc()
         await self.remote_scene.set_sync_from_mujoco_to_scene(False)
         await self.remote_scene.set_selection([])
@@ -140,7 +161,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         self.cache_folder = await self.remote_scene.get_cache_folder()
         await self.url_server.start()
         
-        # 异步加载资产，不阻塞UI初始化
         print("启动异步资产加载...")
         asyncio.create_task(self._load_assets_async())
 
@@ -490,39 +510,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
             print(f"资产加载失败: {e}")
             self.asset_browser_widget.set_assets([])
 
-        connect(self.actor_outline_model.add_item, self.add_item_to_scene)
-
-        connect(self.asset_browser_widget.add_item, self.add_item_to_scene)
-        connect(self.asset_browser_widget.create_panorama_gif, self.create_panorama_gif)
-
-        connect(self.copilot_widget.add_item_with_transform, self.add_item_to_scene_with_transform)
-        connect(self.copilot_widget.request_add_group, self.on_copilot_add_group)
-
-        connect(self.menu_file.aboutToShow, self.prepare_file_menu)
-        connect(self.menu_edit.aboutToShow, self.prepare_edit_menu)
-
-        connect(self.add_item_by_drag, self.add_item_drag)
-        connect(self.load_scene_sig, self.load_scene)
-
-        connect(self.enable_control, self.enable_widgets)
-        connect(self.disanble_control, self.disable_widgets)
-        connect(self._viewport_widget.assetDropped, self.get_transform_and_add_item)
-        # Window actions.
-
-        action_undo = QtGui.QAction("Undo")
-        action_undo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
-        action_undo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(action_undo.triggered, self.undo)
-
-        action_redo = QtGui.QAction("Redo")
-        action_redo.setShortcut(QtGui.QKeySequence("Ctrl+Shift+Z"))
-        action_redo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(action_redo.triggered, self.redo)
-
-        self.addActions([action_undo, action_redo])
-
-   
-
     async def _init_ui(self):
         print("创建工具栏...")
         self.tool_bar = ToolBar()
@@ -645,6 +632,21 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         # 初始化按钮状态
         print("初始化按钮状态...")
         self._update_button_states()
+
+
+        # Window actions.
+
+        action_undo = QtGui.QAction("Undo")
+        action_undo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
+        action_undo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
+        connect(action_undo.triggered, self.undo)
+
+        action_redo = QtGui.QAction("Redo")
+        action_redo.setShortcut(QtGui.QKeySequence("Ctrl+Shift+Z"))
+        action_redo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
+        connect(action_redo.triggered, self.redo)
+
+        self.addActions([action_undo, action_redo])
 
     def show_launch_dialog(self):
         """显示启动对话框（同步版本）"""
