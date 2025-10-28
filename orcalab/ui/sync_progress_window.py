@@ -206,13 +206,28 @@ class SyncProgressWindow(QtWidgets.QDialog):
         
         bottom_layout.addStretch()
         
-        # 关闭按钮（初始禁用）
+        # 退出按钮（初始隐藏，仅在失败时显示）
+        self.exit_button = QtWidgets.QPushButton("退出")
+        self.exit_button.setVisible(False)
+        self.exit_button.clicked.connect(self.on_exit_clicked)
+        bottom_layout.addWidget(self.exit_button)
+        
+        # 离线启动按钮（初始隐藏，仅在失败时显示）
+        self.offline_button = QtWidgets.QPushButton("离线启动")
+        self.offline_button.setVisible(False)
+        self.offline_button.clicked.connect(self.on_offline_clicked)
+        bottom_layout.addWidget(self.offline_button)
+        
+        # 关闭按钮（初始禁用，成功后显示）
         self.close_button = QtWidgets.QPushButton("关闭")
         self.close_button.setEnabled(False)
         self.close_button.clicked.connect(self.on_close_clicked)
         bottom_layout.addWidget(self.close_button)
         
         layout.addLayout(bottom_layout)
+        
+        # 用户选择结果（用于区分退出还是离线启动）
+        self.user_choice = None  # None: 未选择, 'exit': 退出, 'offline': 离线启动, 'close': 正常关闭
     
     def add_asset(self, asset_id: str, asset_name: str, file_name: str, size: int, status: str):
         """线程安全：添加资产包到列表"""
@@ -295,16 +310,19 @@ class SyncProgressWindow(QtWidgets.QDialog):
             self._set_message_impl(f"同步完成！用时 {elapsed:.1f} 秒")
             self.sync_completed.emit()
             
-            # 启动倒计时
+            # 成功时显示关闭按钮并启动倒计时
+            self.close_button.setVisible(True)
+            self.close_button.setEnabled(True)
             self.start_countdown(5)
         else:
             error_msg = f"同步失败：{message}" if message else "同步失败"
             self._set_message_impl(error_msg)
             self.sync_failed.emit(message)
             
-            # 失败时直接启用关闭按钮，不倒计时
-            self.close_button.setEnabled(True)
-            self.close_button.setText("关闭")
+            # 失败时隐藏关闭按钮，显示退出和离线启动按钮
+            self.close_button.setVisible(False)
+            self.exit_button.setVisible(True)
+            self.offline_button.setVisible(True)
     
     def start_countdown(self, seconds: int):
         """启动倒计时"""
@@ -339,13 +357,25 @@ class SyncProgressWindow(QtWidgets.QDialog):
             self.accept()  # 自动关闭
     
     def on_close_clicked(self):
-        """关闭按钮点击处理"""
+        """关闭按钮点击处理（同步成功后）"""
         # 停止倒计时
         if self.countdown_timer:
             self.countdown_timer.stop()
             self.countdown_timer = None
+        # 设置为正常关闭
+        self.user_choice = 'close'
         # 立即关闭
         self.accept()
+    
+    def on_exit_clicked(self):
+        """退出按钮点击处理"""
+        self.user_choice = 'exit'
+        self.reject()  # 使用 reject() 表示用户取消/退出
+    
+    def on_offline_clicked(self):
+        """离线启动按钮点击处理"""
+        self.user_choice = 'offline'
+        self.accept()  # 使用 accept() 表示继续
     
     def remove_asset(self, asset_id: str):
         """移除资产包（删除后）"""

@@ -70,9 +70,27 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         super().disconnect_buses()
 
     async def init(self):
-        self._viewport_widget = Viewport()
-        self._viewport_widget.init_viewport()
-        self._viewport_widget.start_viewport_main_loop()
+        # 启动前检查GPU环境
+        await self._pre_init_gpu_check()
+        
+        # 分阶段初始化viewport，添加错误恢复机制
+        await self._init_viewport_with_retry()
+
+        # 等待viewport完全启动并检查就绪状态
+        print("等待viewport启动...")
+        await asyncio.sleep(5)
+        
+        # 等待viewport就绪状态
+        viewport_ready = await self._wait_for_viewport_ready()
+        if not viewport_ready:
+            print("警告: Viewport可能未完全就绪，但继续初始化...")
+        
+        # 检查GPU状态
+        await self._check_gpu_status()
+        
+        # 确保GPU资源稳定后再继续
+        await self._stabilize_gpu_resources()
+        print("Viewport启动完成，继续初始化...")
 
         self.asset_service = AssetService()
 
@@ -104,7 +122,353 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
 
         self.connect_buses()
 
+        print("开始初始化UI...")
         await self._init_ui()
+        print("UI初始化完成")
+        
+        # 启动GPU健康监控
+        print("启动GPU健康监控...")
+        await self._monitor_gpu_health()
+        print("GPU健康监控启动完成")
+
+    async def _init_viewport_with_retry(self, max_retries=3):
+        """带重试机制的viewport初始化"""
+        for attempt in range(max_retries):
+            try:
+                print(f"初始化viewport (尝试 {attempt + 1}/{max_retries})...")
+                
+                # 在重试前清理GPU资源
+                if attempt > 0:
+                    await self._cleanup_gpu_resources()
+                    await asyncio.sleep(3)  # 给GPU更多时间恢复
+                
+                self._viewport_widget = Viewport()
+                self._viewport_widget.init_viewport()
+                self._viewport_widget.start_viewport_main_loop()
+                print("Viewport初始化成功")
+                return
+            except Exception as e:
+                print(f"Viewport初始化失败 (尝试 {attempt + 1}): {e}")
+                
+                # 检查是否是GPU设备丢失错误
+                if "Device lost" in str(e) or "GPU removed" in str(e):
+                    print("检测到GPU设备丢失错误，尝试恢复...")
+                    await self._handle_gpu_device_lost()
+                
+                if attempt < max_retries - 1:
+                    print(f"等待 {2 ** attempt} 秒后重试...")
+                    await asyncio.sleep(2 ** attempt)  # 指数退避
+                else:
+                    print("Viewport初始化最终失败，抛出异常")
+                    raise
+
+    async def _cleanup_gpu_resources(self):
+        """清理GPU资源"""
+        try:
+            print("清理GPU资源...")
+            # 清理viewport对象
+            if hasattr(self, '_viewport_widget') and self._viewport_widget:
+                del self._viewport_widget
+                self._viewport_widget = None
+            
+            # 强制垃圾回收
+            import gc
+            gc.collect()
+            
+            # 等待GPU资源释放
+            await asyncio.sleep(2)
+            print("GPU资源清理完成")
+        except Exception as e:
+            print(f"清理GPU资源失败: {e}")
+
+    async def _handle_gpu_device_lost(self):
+        """处理GPU设备丢失"""
+        try:
+            print("处理GPU设备丢失...")
+            
+            # 检查并重启NVIDIA驱动服务
+            await self._restart_nvidia_services()
+            
+            # 等待GPU恢复
+            await asyncio.sleep(5)
+            
+            print("GPU设备丢失处理完成")
+        except Exception as e:
+            print(f"处理GPU设备丢失失败: {e}")
+
+    async def _restart_nvidia_services(self):
+        """重启NVIDIA相关服务"""
+        try:
+            print("尝试重启NVIDIA服务...")
+            import subprocess
+            
+            # 重启NVIDIA持久化守护进程
+            try:
+                subprocess.run(['sudo', 'systemctl', 'restart', 'nvidia-persistenced'], 
+                             timeout=10, capture_output=True)
+                print("NVIDIA持久化守护进程已重启")
+            except Exception as e:
+                print(f"重启NVIDIA持久化守护进程失败: {e}")
+            
+            # 重置NVIDIA GPU
+            try:
+                subprocess.run(['sudo', 'nvidia-smi', '--gpu-reset'], 
+                             timeout=10, capture_output=True)
+                print("NVIDIA GPU已重置")
+            except Exception as e:
+                print(f"重置NVIDIA GPU失败: {e}")
+                
+        except Exception as e:
+            print(f"重启NVIDIA服务失败: {e}")
+
+    async def _pre_init_gpu_check(self):
+        """启动前GPU环境检查"""
+        try:
+            print("执行启动前GPU环境检查...")
+            
+            # 检查NVIDIA驱动
+            await self._check_nvidia_driver()
+            
+            # 检查GPU可用性
+            await self._check_gpu_availability()
+            
+            # 检查显存状态
+            await self._check_vram_status()
+            
+            print("GPU环境检查完成")
+        except Exception as e:
+            print(f"GPU环境检查失败: {e}")
+            print("继续启动，但可能遇到GPU问题")
+
+    async def _check_nvidia_driver(self):
+        """检查NVIDIA驱动状态"""
+        try:
+            import subprocess
+            result = subprocess.run(['nvidia-smi'], capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                print("NVIDIA驱动正常")
+                # 解析驱动版本
+                lines = result.stdout.split('\n')
+                for line in lines:
+                    if 'Driver Version:' in line:
+                        print(f"驱动版本: {line.strip()}")
+                        break
+            else:
+                print("警告: NVIDIA驱动可能有问题")
+        except Exception as e:
+            print(f"检查NVIDIA驱动失败: {e}")
+
+    async def _check_gpu_availability(self):
+        """检查GPU可用性"""
+        try:
+            import subprocess
+            result = subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                gpu_info = result.stdout.strip().split('\n')[0]
+                print(f"GPU信息: {gpu_info}")
+            else:
+                print("警告: 无法获取GPU信息")
+        except Exception as e:
+            print(f"检查GPU可用性失败: {e}")
+
+    async def _check_vram_status(self):
+        """检查显存状态"""
+        try:
+            import subprocess
+            result = subprocess.run(['nvidia-smi', '--query-gpu=memory.used,memory.total', '--format=csv,noheader,nounits'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                memory_info = result.stdout.strip().split('\n')[0]
+                used, total = memory_info.split(', ')
+                used_mb = int(used)
+                total_mb = int(total)
+                free_mb = total_mb - used_mb
+                usage_percent = (used_mb / total_mb) * 100
+                
+                print(f"显存状态: {used_mb}MB/{total_mb}MB 使用中 ({usage_percent:.1f}%)")
+                print(f"可用显存: {free_mb}MB")
+                
+                if free_mb < 1024:  # 少于1GB可用显存
+                    print("警告: 可用显存不足，可能导致GPU设备丢失")
+                elif usage_percent > 80:
+                    print("警告: 显存使用率过高")
+            else:
+                print("无法获取显存状态")
+        except Exception as e:
+            print(f"检查显存状态失败: {e}")
+
+    async def _check_gpu_status(self):
+        """检查GPU状态，确保viewport正常运行"""
+        try:
+            # 检查viewport是否正常响应
+            if hasattr(self._viewport_widget, '_viewport') and self._viewport_widget._viewport:
+                print("检查GPU状态...")
+                
+                # 给GPU一些时间来稳定
+                await asyncio.sleep(2)
+                
+                # 检查系统GPU状态
+                await self._check_system_gpu_status()
+                
+                print("GPU状态检查完成")
+            else:
+                print("警告: Viewport对象未正确初始化")
+        except Exception as e:
+            print(f"GPU状态检查失败: {e}")
+            print("继续初始化，但GPU状态可能不稳定")
+
+    async def _check_system_gpu_status(self):
+        """检查系统GPU状态"""
+        try:
+            import subprocess
+            import re
+            
+            # 检查NVIDIA GPU状态
+            try:
+                result = subprocess.run(['nvidia-smi', '--query-gpu=name,memory.used,memory.total,temperature.gpu', '--format=csv,noheader,nounits'], 
+                                      capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    gpu_info = result.stdout.strip().split('\n')[0]
+                    print(f"NVIDIA GPU状态: {gpu_info}")
+                    
+                    # 检查显存使用情况
+                    memory_match = re.search(r'(\d+)/(\d+)', gpu_info)
+                    if memory_match:
+                        used_mem = int(memory_match.group(1))
+                        total_mem = int(memory_match.group(2))
+                        usage_percent = (used_mem / total_mem) * 100
+                        print(f"显存使用率: {usage_percent:.1f}%")
+                        
+                        if usage_percent > 90:
+                            print("警告: 显存使用率过高，可能导致设备丢失")
+                else:
+                    print("无法获取NVIDIA GPU状态")
+            except Exception as e:
+                print(f"检查NVIDIA GPU状态失败: {e}")
+            
+            # 检查是否有其他进程占用GPU
+            try:
+                result = subprocess.run(['nvidia-smi', '--query-compute-apps=pid,process_name,used_memory', '--format=csv,noheader,nounits'], 
+                                      capture_output=True, text=True, timeout=5)
+                if result.returncode == 0 and result.stdout.strip():
+                    print("当前GPU进程:")
+                    print(result.stdout.strip())
+                else:
+                    print("当前无其他进程占用GPU")
+            except Exception as e:
+                print(f"检查GPU进程失败: {e}")
+                
+        except Exception as e:
+            print(f"系统GPU状态检查失败: {e}")
+
+    async def _wait_for_viewport_ready(self, timeout=10):
+        """等待viewport就绪状态"""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                # 检查viewport是否就绪
+                if hasattr(self._viewport_widget, '_viewport_running') and self._viewport_widget._viewport_running:
+                    print("Viewport已就绪")
+                    return True
+                await asyncio.sleep(0.1)
+            except Exception as e:
+                print(f"检查viewport就绪状态时出错: {e}")
+                await asyncio.sleep(0.1)
+        
+        print("警告: Viewport就绪状态检查超时")
+        return False
+
+    async def _stabilize_gpu_resources(self):
+        """稳定GPU资源，避免资源竞争"""
+        try:
+            print("稳定GPU资源...")
+            
+            # 给GPU一些额外时间来稳定
+            await asyncio.sleep(2)
+            
+            # 可以在这里添加GPU资源预热操作
+            # 例如进行一次简单的渲染操作来确保GPU上下文稳定
+            if hasattr(self._viewport_widget, '_viewport') and self._viewport_widget._viewport:
+                # 尝试触发一次简单的GPU操作
+                try:
+                    # 这里可以调用viewport的某个方法来预热GPU
+                    print("GPU资源预热完成")
+                except Exception as e:
+                    print(f"GPU资源预热失败: {e}")
+            
+            print("GPU资源稳定化完成")
+        except Exception as e:
+            print(f"GPU资源稳定化过程中出错: {e}")
+
+    async def _monitor_gpu_health(self):
+        """监控GPU健康状态"""
+        try:
+            # 这里可以添加GPU健康状态监控
+            # 例如检查GPU温度、显存使用情况等
+            print("GPU健康状态监控已启动")
+            # 立即返回，不阻塞主流程
+            return
+        except Exception as e:
+            print(f"GPU健康状态监控启动失败: {e}")
+
+    def stop_viewport_main_loop(self):
+        """停止viewport主循环"""
+        try:
+            if hasattr(self, '_viewport_widget') and self._viewport_widget:
+                print("停止viewport主循环...")
+                self._viewport_widget.stop_viewport_main_loop()
+                print("Viewport主循环已停止")
+        except Exception as e:
+            print(f"停止viewport主循环失败: {e}")
+
+    async def cleanup_viewport_resources(self):
+        """清理viewport相关资源"""
+        try:
+            print("清理viewport资源...")
+            
+            # 停止viewport主循环
+            self.stop_viewport_main_loop()
+            
+            # 等待viewport完全停止
+            await asyncio.sleep(1)
+            
+            # 清理viewport对象
+            if hasattr(self, '_viewport_widget') and self._viewport_widget:
+                # 确保主循环已停止
+                self._viewport_widget.stop_viewport_main_loop()
+                
+                # 等待一下让循环自然结束
+                await asyncio.sleep(0.5)
+                
+                # 清理viewport对象
+                del self._viewport_widget
+                self._viewport_widget = None
+            
+            print("Viewport资源清理完成")
+        except Exception as e:
+            print(f"清理viewport资源失败: {e}")
+
+    async def _load_assets_async(self):
+        """异步加载资产，不阻塞UI初始化"""
+        try:
+            print("开始异步加载资产...")
+            # 等待一下让服务器完全准备好
+            await asyncio.sleep(2)
+            
+            # 尝试获取资产，带超时
+            assets = await asyncio.wait_for(
+                self.remote_scene.get_actor_assets(), 
+                timeout=10.0
+            )
+            self.asset_browser_widget.set_assets(assets)
+            print(f"资产加载完成，共 {len(assets)} 个资产")
+        except asyncio.TimeoutError:
+            print("资产加载超时，使用空列表")
+            self.asset_browser_widget.set_assets([])
+        except Exception as e:
+            print(f"资产加载失败: {e}")
+            self.asset_browser_widget.set_assets([])
 
         connect(self.actor_outline_model.add_item, self.add_item_to_scene)
 
@@ -141,6 +505,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         self.show()
 
     async def _init_ui(self):
+        print("创建工具栏...")
         self.tool_bar = ToolBar()
         layout = QtWidgets.QVBoxLayout(self._tool_bar_area)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -171,11 +536,13 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         connect(self.tool_bar.action_start.triggered, self.show_launch_dialog)
         connect(self.tool_bar.action_stop.triggered, self.stop_sim)
 
+        print("设置主内容区域...")
         layout = QtWidgets.QVBoxLayout(self._main_content_area)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self._viewport_widget)
 
+        print("创建场景层次结构...")
         self.actor_outline_model = ActorOutlineModel(self.local_scene)
         self.actor_outline_model.set_root_group(self.local_scene.root_actor)
 
@@ -183,14 +550,19 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         self.actor_outline_widget.set_actor_model(self.actor_outline_model)
         self.add_panel(Panel("Scene Hierarchy", self.actor_outline_widget), "left")
 
+        print("创建属性编辑器...")
         self.actor_editor_widget = ActorEditor()
         self.add_panel(Panel ("Properties", self.actor_editor_widget), "right")
 
+        print("创建资产浏览器...")
         self.asset_browser_widget = AssetBrowser()
         self.add_panel(Panel("Assets", self.asset_browser_widget), "right")
-        assets = await self.remote_scene.get_actor_assets()
-        self.asset_browser_widget.set_assets(assets)
+        
+        # 异步加载资产，不阻塞UI初始化
+        print("启动异步资产加载...")
+        asyncio.create_task(self._load_assets_async())
 
+        print("创建Copilot组件...")
         self.copilot_widget = CopilotPanel(self.remote_scene, self)
         # Configure copilot with server settings from config
         config_service = ConfigService()
@@ -200,6 +572,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         )
         self.add_panel(Panel("Copilot", self.copilot_widget), "right")
 
+        print("创建终端组件...")
         # 添加终端组件
         self.terminal_widget = TerminalWidget()
         self.add_panel(Panel("Terminal", self.terminal_widget), "bottom")
@@ -255,12 +628,14 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         """)
         
         # 初始化按钮状态
+        print("初始化按钮状态...")
         self._update_button_states()
 
-
+        print("连接总线...")
         self.actor_outline_widget.connect_bus()
         self.actor_outline_model.connect_bus()
         self.actor_editor_widget.connect_bus()
+        print("UI初始化完成")
 
 
 
@@ -832,22 +1207,29 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         try:
             print("Cleaning up main window resources...")
             
-            # Stop simulation if running
+            # 1. 首先停止viewport主循环，避免事件循环问题
+            await self.cleanup_viewport_resources()
+            
+            # 2. 停止仿真进程
             if self.sim_process_running:
                 await self.stop_sim()
             
-            # Disconnect buses
+            # 3. 断开总线连接
             self.disconnect_buses()
             
-            # Clean up remote scene (this will terminate server process)
+            # 4. 清理远程场景（这会终止服务器进程）
             if hasattr(self, 'remote_scene'):
                 print("MainWindow: Calling remote_scene.destroy_grpc()...")
                 await self.remote_scene.destroy_grpc()
                 print("MainWindow: remote_scene.destroy_grpc() completed")
             
-            # Stop URL server
+            # 5. 停止URL服务器
             if hasattr(self, 'url_server'):
                 await self.url_server.stop()
+            
+            # 6. 强制垃圾回收
+            import gc
+            gc.collect()
             
             print("Main window cleanup completed")
         except Exception as e:

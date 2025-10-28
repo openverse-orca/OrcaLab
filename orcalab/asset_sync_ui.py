@@ -194,10 +194,19 @@ def run_asset_sync_ui(config_service) -> bool:
     sync_thread.start()
     
     # 显示同步窗口（模态）
-    sync_window.exec()
+    dialog_result = sync_window.exec()
     
     # 等待同步完成
     sync_thread.join()
+    
+    # 检查用户选择
+    if sync_window.user_choice == 'exit':
+        print("用户选择退出程序")
+        import sys
+        sys.exit(0)
+    elif sync_window.user_choice == 'offline':
+        print("✓ 用户选择离线启动（使用现有资产包）")
+        return True
     
     # 如果同步过程中检测到 token 过期（理论上不应该发生，因为已经提前验证过）
     if token_expired[0]:

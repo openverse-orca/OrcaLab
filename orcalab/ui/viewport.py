@@ -23,14 +23,17 @@ class Viewport(QtWidgets.QWidget):
         _layout.addWidget(self._viewport)
 
     def init_viewport(self):
+        config_service = ConfigService()
 
         self.command_line = [
             "pseudo.exe",
             "--datalink_host=54.223.63.47",
             "--datalink_port=7000",
+            # '--rhi-device-validation="enable"'
+            "--LoadLevel",
+            config_service.level(),
+            config_service.lock_fps(),
         ]
-
-        config_service = ConfigService()
 
         project_path = config_service.orca_project_folder()
         connect_builder_hub = False
@@ -62,10 +65,34 @@ class Viewport(QtWidgets.QWidget):
         self._viewport_running = True
         asyncio.create_task(self._viewport_main_loop())
 
+    def stop_viewport_main_loop(self):
+        """安全停止viewport主循环"""
+        self._viewport_running = False
+
     async def _viewport_main_loop(self):
-        self._viewport.main_loop_tick()
-        if self._viewport_running:
-            asyncio.create_task(self._viewport_main_loop())
+        try:
+            # 检查事件循环是否还在运行
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # 事件循环已停止，退出
+                return
+            
+            # 检查viewport是否还在运行
+            if not self._viewport_running:
+                return
+                
+            self._viewport.main_loop_tick()
+            
+            # 如果还在运行，继续下一帧
+            if self._viewport_running:
+                # 使用asyncio.sleep而不是立即创建新任务，避免递归过深
+                await asyncio.sleep(0.016)  # ~60 FPS
+                asyncio.create_task(self._viewport_main_loop())
+        except Exception as e:
+            print(f"Viewport主循环错误: {e}")
+            # 发生错误时停止循环
+            self._viewport_running = False
 
     def dragEnterEvent(self, event: QtGui.QDragEnterEvent):
         if event.mimeData().hasFormat("application/x-orca-asset"):
