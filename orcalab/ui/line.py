@@ -8,7 +8,7 @@ def make_horizontal_line(size: int = 1) -> QtWidgets.QFrame:
     line.setFrameShape(QtWidgets.QFrame.HLine)
     line.setFrameShadow(QtWidgets.QFrame.Plain)
     line.setFixedHeight(size)
-    color = ThemeService().get_color_hex("split-line")
+    color = ThemeService().get_color_hex("split_line")
     line.setStyleSheet(
         f"""
         QFrame {{
@@ -25,7 +25,7 @@ def make_vertical_line(size: int = 1) -> QtWidgets.QFrame:
     line.setFrameShape(QtWidgets.QFrame.VLine)
     line.setFrameShadow(QtWidgets.QFrame.Plain)
     line.setFixedWidth(size)
-    color = ThemeService().get_color_hex("split-line")
+    color = ThemeService().get_color_hex("split_line")
     line.setStyleSheet(
         f"""
         QFrame {{

@@ -53,7 +53,7 @@ class ThumbnailView(QtWidgets.QWidget):
 
         theme = ThemeService()
         self.bg_color = theme.get_color("bg")
-        self.bg_hover_color = theme.get_color("bg-hover")
+        self.bg_hover_color = theme.get_color("bg_hover")
         self.text_color = theme.get_color("text")
 
         self._hover_item: _ThumbnailViewItem | None = None

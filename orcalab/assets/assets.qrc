@@ -7,5 +7,12 @@
     <file alias="eye-close">icons/ic_fluent_eye_off_20_regular.svg</file>
     <file alias="lock-open">icons/ic_fluent_lock_open_20_regular.svg</file>
     <file alias="lock-close">icons/ic_fluent_lock_closed_20_regular.svg</file>
+
+    <file alias="box">icons/ic_fluent_box_20_regular.svg</file>
+    <file alias="chat_sparkle">icons/ic_fluent_chat_sparkle_20_regular.svg</file>
+    <file alias="circle_edit">icons/ic_fluent_circle_edit_20_regular.svg</file>
+    <file alias="window_console">icons/ic_fluent_window_console_20_regular.svg</file>
+    <file alias="text_bullet_list_tree">icons/ic_fluent_text_bullet_list_tree_20_regular.svg</file>
+
 </qresource>
 </RCC>

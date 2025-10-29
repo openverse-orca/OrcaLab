@@ -29,7 +29,7 @@ class PanelButton(Button):
         self.panel_area.toggle_panel(self.panel)
         super().mouseReleaseEvent(event)
 
-    def make_icon(self) -> QtGui.QIcon:
+    def make_icon(self):
         if self.panel.panel_icon is not None:
             self._icon = self.panel.panel_icon
             return
@@ -40,7 +40,7 @@ class PanelButton(Button):
         else:
             short_name = name
 
-        color = ThemeService().get_color_hex("panel-icon")
+        color = ThemeService().get_color("panel-icon")
         self._icon = make_text_icon(short_name, self.font(), color)
 
 

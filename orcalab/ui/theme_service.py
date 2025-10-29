@@ -23,18 +23,16 @@ class ThemeService:
         self._colors: Dict[str, QtGui.QColor] = {}
 
         self.set_color("bg", "#181818")
-        self.set_color("bg-hover", "#444444")
+        self.set_color("bg_hover", "#444444")
         self.set_color("text", "#FFFFFF")
-        self.set_color("split-line", "#2b2b2b")
+        self.set_color("split_line", "#2b2b2b")
         self.set_color("button_bg", "#181818")
         self.set_color("button_bg_hover", "#444444")
         self.set_color("button_bg_pressed", "#555555")
         self.set_color("button_text", "#FFFFFF")
         self.set_color("button_text_hover", "#FFFFFF")
         self.set_color("button_text_pressed", "#FFFFFF")
-        self.set_color("panel-icon", "#FFFFFF")
-
-        
+        self.set_color("panel_icon", "#C2C2C2")
 
     def set_color(self, name: str, color: str):
         self._colors[name] = QtGui.QColor(color)

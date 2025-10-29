@@ -26,6 +26,8 @@ from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.asset_browser.asset_browser import AssetBrowser
 from orcalab.ui.copilot import CopilotPanel
+from orcalab.ui.icon_util import make_icon
+from orcalab.ui.theme_service import ThemeService
 from orcalab.ui.tool_bar import ToolBar
 from orcalab.ui.launch_dialog import LaunchDialog
 from orcalab.ui.terminal_widget import TerminalWidget
@@ -554,16 +556,27 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
 
         self.actor_outline_widget = ActorOutline()
         self.actor_outline_widget.set_actor_model(self.actor_outline_model)
-        self.add_panel(Panel("Scene Hierarchy", self.actor_outline_widget), "left")
+
+        theme_service = ThemeService()
+
+        panel_icon_color = theme_service.get_color("panel_icon")
+
+        panel = Panel("Scene Hierarchy", self.actor_outline_widget)
+        panel.panel_icon = make_icon(":/icons/text_bullet_list_tree", panel_icon_color)
+        self.add_panel(panel, "left")
 
         print("创建属性编辑器...")
         self.actor_editor_widget = ActorEditor()
-        self.add_panel(Panel ("Properties", self.actor_editor_widget), "right")
+        panel = Panel("Properties", self.actor_editor_widget)
+        panel.panel_icon = make_icon(":/icons/circle_edit", panel_icon_color)
+        self.add_panel(panel, "right")
 
         print("创建资产浏览器...")
         self.asset_browser_widget = AssetBrowser()
-        self.add_panel(Panel("Assets", self.asset_browser_widget), "bottom")
-        
+        panel = Panel("Assets", self.asset_browser_widget)
+        panel.panel_icon = make_icon(":/icons/box", panel_icon_color)
+        self.add_panel(panel, "bottom")
+
         print("创建Copilot组件...")
         self.copilot_widget = CopilotPanel(self.remote_scene, self)
         # Configure copilot with server settings from config
@@ -572,12 +585,16 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
             config_service.copilot_server_url(),
             config_service.copilot_timeout()
         )
-        self.add_panel(Panel("Copilot", self.copilot_widget), "right")
+        panel = Panel("Copilot", self.copilot_widget)
+        panel.panel_icon = make_icon(":/icons/chat_sparkle", panel_icon_color)
+        self.add_panel(panel, "right")
 
         print("创建终端组件...")
         # 添加终端组件
         self.terminal_widget = TerminalWidget()
-        self.add_panel(Panel("Terminal", self.terminal_widget), "bottom")
+        panel = Panel("Terminal", self.terminal_widget)
+        panel.panel_icon = make_icon(":/icons/window_console", panel_icon_color)
+        self.add_panel(panel, "bottom")
 
         self.menu_bar = QtWidgets.QMenuBar()
         layout = QtWidgets.QVBoxLayout(self._menu_bar_area)

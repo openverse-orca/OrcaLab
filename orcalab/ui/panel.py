@@ -17,7 +17,7 @@ class Panel(QtWidgets.QWidget):
             raise ValueError("panel_name cannot be an empty string")
 
         self.panel_name = panel_name
-        self.panel_icon: QtGui.QIcon = None
+        self.panel_icon: QtGui.QIcon | None = None
         self.panel_order = 0
         self.panel_size = 0
 
