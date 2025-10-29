@@ -15,6 +15,7 @@ import os
 from PySide6 import QtWidgets
 
 from qasync import QEventLoop
+from orcalab.python_project_installer import ensure_python_project_installed
 
 # Global variable to store main window instance for cleanup
 _main_window = None
@@ -72,6 +73,13 @@ def main():
     current_dir = os.path.dirname(__file__)
     project_root = os.path.dirname(current_dir)  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root)
+
+    # Ensure the external Python project (orcalab-pyside) is present and installed
+    try:
+        ensure_python_project_installed(config_service)
+    except Exception as e:
+        print(f"安装 orcalab-pyside 失败: {e}")
+        # Continue startup but warn; some features may not work without it
 
     # 处理pak包
     print("正在准备资产包...")

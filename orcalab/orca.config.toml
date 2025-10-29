@@ -1,5 +1,5 @@
 # 这是模块的默认配置文件，包含所有默认配置项
-# 个人相关的配置可以写在 orca.config.user.toml 中，个人配置不会提交到Git中
+# 个人相关的配置可以写在 orca.config.user.toml 中（参考 orca.config.user.toml.example ），orca.config.user.toml文件不要提交到Git中
 # 运行时用户配置会覆盖默认配置
 [orcalab]
 
@@ -32,6 +32,14 @@ paks = [
 pak_urls = [
     "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/orcalab_linux.25.10.3.pak",
 ]
+
+# [个人配置] Python项目的根目录。这个用于配置 orcalab-pyside 包
+# 对于开发人员：通过在 orca.config.user.toml 中配置这个路径，可以跳过OSS下载，使用本地Python项目。
+python_project_path = ""
+
+# [系统配置] Python项目的下载地址。
+python_project_url = "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/python-project.25.10.3.tar.xz"
+
 
 [orcalab.dev]
 

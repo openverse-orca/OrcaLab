@@ -1,0 +1,15 @@
+# 个人相关的配置写在orca.config.user.toml中, 个人配置不会提交到Git中。
+# 运行时这两个配置会合并。
+[orcalab]
+
+
+# [个人配置] 启动关卡
+level = "my_test_level"
+
+# [个人配置] 用到的pak包的绝对路径。默认为空，程序会去OSS下载对应的文件。
+# 对于开发人员：可以在 user.toml 中覆盖这个配置，此时系统会跳过OSS下载，使用这个路径下的文件。启动时脚本会把它们放到正确的位置。
+paks = [
+    # "/home/username/path/to/my_test_package.pak",
+]
+
+python_project_path = "/home/username/path/to/my_python_project"

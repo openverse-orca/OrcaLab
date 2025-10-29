@@ -2,49 +2,28 @@
 
 这个目录包含了 OrcaLab 发布到 PyPI 的所有脚本。
 
-## 📁 脚本列表
-
-| 脚本 | 说明 | 用途 |
-|------|------|------|
-| `clean.sh` | 清理构建产物 | 清除 dist/, build/, *.egg-info 等 |
-| `build.sh` | 构建分发包 | 生成 wheel 和 tar.gz 包 |
-| `check.sh` | 检查包质量 | 使用 twine 验证包 |
-| `upload_test.sh` | 上传到 TestPyPI | 测试环境发布 |
-| `upload_prod.sh` | 上传到正式 PyPI | 生产环境发布 |
-| `release.sh` | 完整发布流程 | 整合所有步骤 |
-| `bump_version.sh` | 更新版本号 | 修改 pyproject.toml 中的版本 |
-| `test_install.sh` | 测试安装 | 验证包安装和导入 |
-| `setup_pypirc.sh` | 设置 PyPI 配置 | 配置 ~/.pypirc 文件 |
-| `check_pypirc.sh` | 检查 PyPI 配置 | 验证 ~/.pypirc 配置 |
-
 ## 环境要求
 
 - Python 3.12+
 - pip
-- 必需的 pip 包（见下方说明）
 
-### 必需的 pip 包
-
-#### 核心构建工具
+### 核心构建工具
 ```bash
 pip install build twine wheel setuptools
 ```
 
-#### 开发工具（可选）
+### 开发工具（可选）
 ```bash
 pip install pytest pytest-cov flake8 black mypy
 ```
 
-#### 一键安装所有开发依赖
+### 快速开发环境设置
 ```bash
-# 方法1：使用提供的脚本（推荐）
-make install-dev-deps
-
-# 方法2：手动安装
+# 安装开发依赖
 pip install build twine wheel setuptools pytest pytest-cov flake8 black mypy
 
-# 方法3：使用项目的可选依赖
-pip install -e ".[dev]"
+# 或使用项目的可选依赖
+pip install -e "[dev]"
 ```
 
 ### 各命令的包依赖

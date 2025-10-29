@@ -43,6 +43,7 @@ Repository = "https://github.com/openverse-orca/OrcaLab"
 
 [project.scripts]
 orcalab = "orcalab.main:main"
+orcalab-post-install = "orcalab.python_project_installer:cli"
 
 # 可选依赖，可用于开发调试、测试、格式化代码等用途
 [project.optional-dependencies]
