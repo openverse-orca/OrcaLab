@@ -6,6 +6,9 @@ import sys
 import shutil
 import hashlib
 import pickle
+import aiohttp
+import aiofiles
+import asyncio
 
 
 project_id = "{3DB8A56E-2458-4543-93A1-1A41756B97DA}"
@@ -149,4 +152,83 @@ def copy_packages(packages: List[str]):
                 print(f"Error copying {package_path.name}: {e}")
         else:
             print(f"Warning: Package {package} does not exist or is not a file.")
+
+
+async def download_pak_from_url(url: str, target_path: pathlib.Path) -> bool:
+    """
+    从URL下载pak文件到指定路径
+    
+    Args:
+        url: 下载URL
+        target_path: 目标文件路径
+        
+    Returns:
+        bool: 下载是否成功
+    """
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    print(f"Failed to download {url}. Status code: {response.status}")
+                    return False
+                
+                # 确保目标目录存在
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                # 下载文件
+                async with aiofiles.open(target_path, "wb") as f:
+                    async for chunk in response.content.iter_chunked(8192):
+                        await f.write(chunk)
+                
+                print(f"Downloaded {url} to {target_path}")
+                return True
+                
+    except Exception as e:
+        print(f"Error downloading {url}: {e}")
+        return False
+
+
+def download_pak_files_sync(pak_urls: List[str]) -> List[str]:
+    """
+    同步下载pak文件到缓存目录
+    
+    Args:
+        pak_urls: pak文件下载URL列表
+        
+    Returns:
+        List[str]: 下载成功的文件路径列表
+    """
+    cache_folder = get_cache_folder()
+    cache_folder.mkdir(parents=True, exist_ok=True)
+    
+    downloaded_files = []
+    
+    for url in pak_urls:
+        # 从URL中提取文件名
+        filename = url.split("/")[-1]
+        target_path = cache_folder / filename
+        
+        # 如果文件已存在，跳过下载
+        if target_path.exists():
+            print(f"File {filename} already exists, skipping download")
+            downloaded_files.append(str(target_path))
+            continue
+        
+        # 同步下载
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # 如果事件循环正在运行，创建新任务
+                task = asyncio.create_task(download_pak_from_url(url, target_path))
+                success = loop.run_until_complete(task)
+            else:
+                # 如果事件循环未运行，直接运行
+                success = loop.run_until_complete(download_pak_from_url(url, target_path))
+            
+            if success:
+                downloaded_files.append(str(target_path))
+        except Exception as e:
+            print(f"Error downloading {url}: {e}")
+    
+    return downloaded_files
     

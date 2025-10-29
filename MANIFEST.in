@@ -2,6 +2,8 @@
 include README.md
 include LICENSE
 include pyproject.toml
+include run.py
+include orca.config.user.toml
 
 # Include proto files
 recursive-include orcalab/protos *.proto

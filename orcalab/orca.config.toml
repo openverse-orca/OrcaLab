@@ -1,9 +1,9 @@
-
-# 这个文件是所有人共享的配置，复制一份，命名为 orca.config.user.toml
-# 个人相关的配置写在orca.config.user.toml中, 个人配置不会提交到Git中。
-# 运行时这两个配置会合并。
-
+# 这是模块的默认配置文件，包含所有默认配置项
+# 个人相关的配置可以写在 orca.config.user.toml 中，个人配置不会提交到Git中
+# 运行时用户配置会覆盖默认配置
 [orcalab]
+
+version = "25.10.3"
 
 # 场景编辑服务的端口。
 edit_port = 50151
@@ -15,17 +15,22 @@ sim_port = 50051
 # 如果为false，启动时什么也不做。默认值为true。
 init_paks = true
 
-# [个人配置] 启动关卡
-level = "Default_level"
+# [个人配置] 启动关卡，默认值为orcalabdefaultscene，版本配套的PAK会带这个关卡
+level = "orcalabdefaultscene"
 
 # [个人配置] 锁帧
 lock_fps = 60
 
-# [个人配置] 用到的pak包的绝对路径。目前先手填。至少要有一个engine的pak和level的pak。
-# 启动时脚本会把它们放到正确的位置。
+# [个人配置] 用到的pak包的绝对路径。默认为空，程序会去OSS下载对应的文件。
+# 对于开发人员：可以在 orca.config.user.toml 中覆盖这个配置，此时系统会跳过OSS下载，使用这个路径下的文件。启动时脚本会把它们放到正确的位置。
 paks = [
     # "/xxx/engine_linux.pak",
     # "/xxx/test_level_linux.pak",
+]
+
+# [系统配置] 当前版本配套的默认pak包的下载地址。
+pak_urls = [
+    "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/orcalab_linux.25.10.3.pak",
 ]
 
 [orcalab.dev]

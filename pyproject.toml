@@ -41,6 +41,9 @@ Documentation = "https://github.com/openverse-orca/OrcaLab"
 Repository = "https://github.com/openverse-orca/OrcaLab"
 "Bug Tracker" = "https://github.com/openverse-orca/OrcaLab/issues"
 
+[project.scripts]
+orcalab = "orcalab.main:main"
+
 # 可选依赖，可用于开发调试、测试、格式化代码等用途
 [project.optional-dependencies]
 dev = [
@@ -57,4 +60,4 @@ include = ["orcalab*"]
 exclude = ["test*", "examples*", "doc*", "scripts*"]
 
 [tool.setuptools.package-data]
-orcalab = ["*.proto", "*.qrc", "assets/*", "assets/icons/*"]
+orcalab = ["*.proto", "*.qrc", "*.toml", "assets/*", "assets/icons/*"]

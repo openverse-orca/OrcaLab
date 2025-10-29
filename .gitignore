@@ -214,7 +214,7 @@ __marimo__/
 
 
 # personal config file
-orca.config.user.toml
+orcalab/orca.config.user.toml
 
 MUJOCO_LOG.TXT
 

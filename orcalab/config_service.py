@@ -1,5 +1,8 @@
 import os
 import tomllib
+import sys
+from pathlib import Path
+import importlib.metadata
 
 from orcalab.project_util import get_project_dir
 
@@ -33,16 +36,84 @@ class ConfigService:
 
         return cls._instance
 
+    def _find_config_file(self, filename: str, root_folder: str) -> str:
+        """
+        查找配置文件，优先查找用户配置，然后查找模块默认配置
+        """
+        # 1. 首先在传入的根目录中查找用户配置文件
+        config_path = os.path.join(root_folder, filename)
+        if os.path.exists(config_path):
+            return config_path
+        
+        # 2. 在 orcalab 包目录中查找（模块默认配置）
+        package_dir = os.path.dirname(__file__)
+        config_path = os.path.join(package_dir, filename)
+        if os.path.exists(config_path):
+            return config_path
+        
+        # 3. 如果都找不到，返回默认路径（用于错误提示）
+        return os.path.join(root_folder, filename)
+
+    def _get_package_version(self) -> str:
+        """
+        获取当前安装的 orca-lab 包版本号
+        """
+        try:
+            return importlib.metadata.version("orca-lab")
+        except importlib.metadata.PackageNotFoundError:
+            # 如果包未安装，尝试从 pyproject.toml 读取
+            try:
+                import tomllib
+                pyproject_path = os.path.join(os.path.dirname(__file__), "..", "pyproject.toml")
+                with open(pyproject_path, "rb") as f:
+                    data = tomllib.load(f)
+                    return data["project"]["version"]
+            except Exception:
+                return "unknown"
+
+    def _validate_config_version(self, config_data: dict) -> bool:
+        """
+        验证配置文件版本是否与当前安装的包版本一致
+        """
+        try:
+            config_version = config_data.get("orcalab", {}).get("version", "")
+            package_version = self._get_package_version()
+            
+            if not config_version:
+                print(f"警告: 配置文件中未找到版本号")
+                return False
+                
+            if config_version != package_version:
+                print(f"错误: 配置文件版本不匹配!")
+                print(f"  配置文件版本: {config_version}")
+                print(f"  当前包版本: {package_version}")
+                print(f"  请更新配置文件或重新安装匹配版本的 orca-lab 包")
+                return False
+                
+            print(f"配置文件版本校验通过: {config_version}")
+            return True
+            
+        except Exception as e:
+            print(f"版本校验时发生错误: {e}")
+            return False
+
     def init_config(self, root_folder: str):
         self.config = {}
         self.config["orca_project_folder"] = str(get_project_dir())
 
         self.root_folder = root_folder
-        self.config_path = os.path.join(self.root_folder, "orca.config.toml")
-        self.user_config_path = os.path.join(self.root_folder, "orca.config.user.toml")
+        
+        # 智能查找配置文件路径
+        self.config_path = self._find_config_file("orca.config.toml", root_folder)
+        self.user_config_path = self._find_config_file("orca.config.user.toml", root_folder)
 
         with open(self.config_path, "rb") as file:
             shared_config = tomllib.load(file)
+
+        # 进行版本校验
+        if not self._validate_config_version(shared_config):
+            print("版本校验失败，程序将退出")
+            sys.exit(1)
 
         with open(self.user_config_path, "rb") as file:
             user_config = tomllib.load(file)
@@ -86,6 +157,9 @@ class ConfigService:
 
     def paks(self) -> list:
         return self.config["orcalab"].get("paks", [])
+    
+    def pak_urls(self) -> list:
+        return self.config["orcalab"].get("pak_urls", [])
     
     def level(self) -> str:
         return self.config["orcalab"].get("level", "Default_level")
