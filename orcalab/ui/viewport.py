@@ -4,8 +4,6 @@ import pathlib
 
 from orcalab.config_service import ConfigService
 
-from orcalab_pyside import Viewport as _Viewport
-
 
 class Viewport(QtWidgets.QWidget):
     assetDropped = QtCore.Signal(str, float, float)
@@ -15,14 +13,24 @@ class Viewport(QtWidgets.QWidget):
 
         self.setAcceptDrops(True)
 
-        self._viewport = _Viewport()
+        # 延迟导入 orcalab_pyside，直到实际需要时
+        try:
+            from orcalab_pyside import Viewport as _Viewport
+            self._viewport = _Viewport()
+        except ImportError:
+            print("警告: orcalab_pyside 包未安装，某些功能可能不可用")
+            self._viewport = None
 
         _layout = QtWidgets.QVBoxLayout(self)
         self.setLayout(_layout)
 
-        _layout.addWidget(self._viewport)
+        if self._viewport:
+            _layout.addWidget(self._viewport)
 
     def init_viewport(self):
+        if not self._viewport:
+            raise RuntimeError("orcalab_pyside 包未安装，无法初始化视口")
+            
         config_service = ConfigService()
 
         self.command_line = [
@@ -82,7 +90,8 @@ class Viewport(QtWidgets.QWidget):
             if not self._viewport_running:
                 return
                 
-            self._viewport.main_loop_tick()
+            if self._viewport:
+                self._viewport.main_loop_tick()
             
             # 如果还在运行，继续下一帧
             if self._viewport_running:

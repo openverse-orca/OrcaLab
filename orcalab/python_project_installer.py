@@ -145,6 +145,10 @@ def _is_installation_needed(config: ConfigService) -> bool:
                 print(f"  Current: {current_package_path}")
                 print(f"  Expected: {expected_package_path}")
                 return True
+        else:
+            # 包不存在，需要安装
+            print(f"orcalab-pyside package not found, need to install")
+            return True
         
         return False
     
@@ -272,8 +276,18 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
     # 保存安装状态
     state_update["installed_at"] = str(Path.cwd())  # 记录安装时的环境
     _save_install_state(state_update)
-    
+
     print("orcalab-pyside installation completed successfully")
+    print("\n" + "="*80)
+    print("🔄 包更新完成，程序自动退出")
+    print("="*80)
+    print("✅ orcalab_pyside 包已更新到最新版本")
+    print("   请重新运行 'orcalab' 命令以使用更新后的包")
+    print("="*80 + "\n")
+    
+    # 包更新后直接退出程序
+    import sys
+    sys.exit(0)
 
 
 def cli() -> None:
