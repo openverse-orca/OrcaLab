@@ -34,6 +34,8 @@ class ThemeService:
         self.set_color("button_text_pressed", "#FFFFFF")
         self.set_color("panel_icon", "#C2C2C2")
 
+        self.set_color("brand", "#F02C6D")
+
     def set_color(self, name: str, color: str):
         self._colors[name] = QtGui.QColor(color)
 

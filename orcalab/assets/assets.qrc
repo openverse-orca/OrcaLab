@@ -14,5 +14,8 @@
     <file alias="window_console">icons/ic_fluent_window_console_20_regular.svg</file>
     <file alias="text_bullet_list_tree">icons/ic_fluent_text_bullet_list_tree_20_regular.svg</file>
 
+    <file alias="subtract">icons/ic_fluent_subtract_20_regular.svg</file>
+    <file alias="add">icons/ic_fluent_add_20_filled.svg</file>
+
 </qresource>
 </RCC>

@@ -25,6 +25,8 @@ class PanelButton(Button):
         self.padding_top = 12
         self.padding_bottom = 12
 
+        self.mark_color = ThemeService().get_color("brand")
+
     def mouseReleaseEvent(self, event):
         self.panel_area.toggle_panel(self.panel)
         super().mouseReleaseEvent(event)
@@ -42,6 +44,23 @@ class PanelButton(Button):
 
         color = ThemeService().get_color("panel-icon")
         self._icon = make_text_icon(short_name, self.font(), color)
+
+    def paintEvent(self, event: QtGui.QPaintEvent):
+        super().paintEvent(event)
+
+        if self.panel_area.opened_panel == self.panel:
+            self._draw_mark()
+
+    def _draw_mark(self):
+        mark_size = 2
+
+        mark_rect = QtCore.QRect(0, 0, mark_size, self.height())
+        if self.panel_area.name == "right":
+            mark_rect.moveRight(self.width())
+
+        painter = QtGui.QPainter(self)
+        painter.fillRect(mark_rect, self.mark_color)
+        painter.end()
 
 
 class PanelButtonGroup(QtWidgets.QWidget):
@@ -149,6 +168,7 @@ class PanelArea(QtWidgets.QWidget):
 
     def _close_panel(self, panel: Panel):
         panel.hide()
+        self.panel_button_group.update()
 
     def close_panel(self, panel: str | Panel):
         panel = self._get_panel(panel)

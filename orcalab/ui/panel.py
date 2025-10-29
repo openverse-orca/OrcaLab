@@ -1,8 +1,9 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 
+from orcalab.ui.icon_util import make_icon
 from orcalab.ui.panel_bus import PanelRequestBus
 from orcalab.ui.button import Button
-from orcalab.ui.line import make_horizontal_line, make_vertical_line
+from orcalab.ui.line import make_horizontal_line
 from orcalab.ui.theme_service import ThemeService
 
 
@@ -24,12 +25,17 @@ class Panel(QtWidgets.QWidget):
         title_area = QtWidgets.QWidget()
         title_area.setFixedHeight(28)
 
-        close_btn = Button("-")
+        theme_service = ThemeService()
+        panel_icon_color = theme_service.get_color("panel_icon")
+        icon = make_icon(":/icons/subtract", panel_icon_color)
+
+        close_btn = Button(icon=icon)
+        close_btn.icon_size = 16
         close_btn.mouse_released.connect(self._request_close)
-        close_btn.setFixedSize(16, 16)
+        close_btn.setFixedSize(20, 20)
 
         self.title_area_layout = QtWidgets.QHBoxLayout(title_area)
-        self.title_area_layout.setContentsMargins(5, 0, 0, 5)
+        self.title_area_layout.setContentsMargins(5, 0, 5, 0)
         self.title_area_layout.setSpacing(0)
         self.title_area_layout.addWidget(QtWidgets.QLabel(self.panel_name), 0)
         self.title_area_layout.addStretch(1)
