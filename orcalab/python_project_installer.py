@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import json
 import hashlib
+import re
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -15,7 +16,24 @@ from orcalab.config_service import ConfigService
 from orcalab.project_util import project_id
 
 
-def _get_user_python_project_root() -> Path:
+def _extract_version_from_url(url: str) -> str:
+    """从 URL 中提取版本号"""
+    # 匹配类似 python-project.25.10.4.tar.xz 的模式
+    match = re.search(r'python-project\.(\d+\.\d+\.\d+)\.tar\.xz', url)
+    if match:
+        return match.group(1)
+    
+    # 如果没有匹配到，尝试从 URL 的其他部分提取版本号
+    # 匹配类似 /python-project.25.10.4/ 的模式
+    match = re.search(r'/(\d+\.\d+\.\d+)/', url)
+    if match:
+        return match.group(1)
+    
+    # 如果都没有匹配到，返回 "unknown"
+    return "unknown"
+
+
+def _get_user_python_project_root(version: str = None) -> Path:
     if sys.platform == "win32":
         local_appdata = os.getenv("LOCALAPPDATA")
         if not local_appdata:
@@ -23,7 +41,11 @@ def _get_user_python_project_root() -> Path:
         base = Path(local_appdata) / "Orca" / "OrcaStudio" / project_id / "user"
     else:
         base = Path.home() / "Orca" / "OrcaStudio" / project_id / "user"
-    return base / "orcalab-pyside"
+    
+    if version and version != "unknown":
+        return base / f"orcalab-pyside-{version}"
+    else:
+        return base / "orcalab-pyside"
 
 
 def _get_install_state_file() -> Path:
@@ -75,7 +97,6 @@ def _is_installation_needed(config: ConfigService) -> bool:
     orcalab_cfg = config.config.get("orcalab", {})
     local_path = str(orcalab_cfg.get("python_project_path", "") or "").strip()
     download_url = str(orcalab_cfg.get("python_project_url", "") or "").strip()
-    current_version = _get_current_orca_lab_version()
     
     # 开发者模式：检查本地路径是否变化
     if local_path:
@@ -86,13 +107,11 @@ def _is_installation_needed(config: ConfigService) -> bool:
             return True
         return False
     
-    # 用户模式：检查版本是否变化
+    # 用户模式：基于URL版本检查
     if download_url:
-        installed_version = state.get("installed_version")
-        if installed_version != current_version:
-            print(f"Orca-lab version changed: {installed_version} -> {current_version}")
-            return True
-            
+        # 从URL提取版本号
+        url_version = _extract_version_from_url(download_url)
+        
         # 检查URL是否变化
         current_url = download_url
         installed_url = state.get("installed_url")
@@ -100,8 +119,14 @@ def _is_installation_needed(config: ConfigService) -> bool:
             print(f"URL changed: {installed_url} -> {current_url}")
             return True
         
+        # 检查URL版本是否变化
+        installed_url_version = state.get("url_version")
+        if installed_url_version != url_version:
+            print(f"URL version changed: {installed_url_version} -> {url_version}")
+            return True
+        
         # 检查目标目录是否存在且包含有效项目
-        dest_root = _get_user_python_project_root()
+        dest_root = _get_user_python_project_root(url_version)
         if not dest_root.exists():
             print(f"Target directory does not exist: {dest_root}")
             return True
@@ -110,6 +135,16 @@ def _is_installation_needed(config: ConfigService) -> bool:
         if not _find_editable_root(dest_root):
             print(f"No valid Python project found in: {dest_root}")
             return True
+        
+        # 检查当前安装的 orcalab-pyside 是否指向正确的目录
+        current_package_path = _get_current_orcalab_pyside_path()
+        if current_package_path:
+            expected_package_path = _find_editable_root(dest_root)
+            if expected_package_path and current_package_path.resolve() != expected_package_path.resolve():
+                print(f"Package path mismatch:")
+                print(f"  Current: {current_package_path}")
+                print(f"  Expected: {expected_package_path}")
+                return True
         
         return False
     
@@ -147,6 +182,22 @@ def _find_editable_root(extracted_dir: Path) -> Optional[Path]:
     return None
 
 
+def _get_current_orcalab_pyside_path() -> Optional[Path]:
+    """获取当前安装的 orcalab-pyside 包的路径"""
+    try:
+        import orcalab_pyside
+        package_path = Path(orcalab_pyside.__file__).parent
+        # 找到包的根目录（包含 pyproject.toml 或 setup.py 的目录）
+        current = package_path
+        while current.parent != current:  # 直到根目录
+            if (current / "pyproject.toml").exists() or (current / "setup.py").exists():
+                return current
+            current = current.parent
+        return package_path
+    except ImportError:
+        return None
+
+
 def _pip_install_editable(package_root: Path) -> None:
     # Use current python's pip to ensure same environment
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", str(package_root)])
@@ -172,7 +223,6 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
     orcalab_cfg = cfg.config.get("orcalab", {})
     local_path = str(orcalab_cfg.get("python_project_path", "") or "").strip()
     download_url = str(orcalab_cfg.get("python_project_url", "") or "").strip()
-    current_version = _get_current_orca_lab_version()
 
     # Determine source and install
     editable_root: Optional[Path] = None
@@ -185,17 +235,23 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         editable_root = candidate
         state_update["installed_path"] = str(candidate)
         state_update["installed_url"] = None  # 开发者模式不使用URL
+        state_update["url_version"] = None
     else:
         if not download_url:
             raise ValueError("python_project_url is empty in configuration")
         
-        # 记录当前URL
+        # 从URL提取版本号
+        url_version = _extract_version_from_url(download_url)
+        print(f"Extracted version from URL: {url_version}")
+        
+        # 记录当前URL和版本
         state_update["installed_url"] = download_url
         state_update["installed_path"] = None  # 用户模式不使用本地路径
+        state_update["url_version"] = url_version
         
-        # Download to cache under user folder and extract to fixed dest
-        dest_root = _get_user_python_project_root()
-        archive_name = "python-project.tar.xz"
+        # Download to cache under user folder and extract to version-specific dest
+        dest_root = _get_user_python_project_root(url_version)
+        archive_name = f"python-project-{url_version}.tar.xz"
         archive_path = dest_root.parent / archive_name
 
         # 总是重新下载以确保版本同步
@@ -215,7 +271,6 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
     
     # 保存安装状态
     state_update["installed_at"] = str(Path.cwd())  # 记录安装时的环境
-    state_update["installed_version"] = current_version
     _save_install_state(state_update)
     
     print("orcalab-pyside installation completed successfully")
