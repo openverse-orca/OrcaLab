@@ -111,6 +111,18 @@ def main():
     # 同步订阅的资产包（带UI）
     run_asset_sync_ui(config_service)
 
+    # 场景选择
+    from orcalab.ui.scene_select_dialog import SceneSelectDialog
+    levels = config_service.levels() if hasattr(config_service, 'levels') else []
+    current = config_service.level() if hasattr(config_service, 'level') else None
+    if levels:
+        selected, ok = SceneSelectDialog.get_level(levels, current)
+        if ok and selected:
+            config_service.config["orcalab"]["level"] = selected
+            print(f"用户选择了场景: {selected}")
+        else:
+            print("用户未选择场景，使用默认值")
+
     event_loop = QEventLoop(q_app)
     asyncio.set_event_loop(event_loop)
 

@@ -15,8 +15,15 @@ sim_port = 50051
 # 如果为false，启动时什么也不做。默认值为true。
 init_paks = true
 
-# [个人配置] 启动关卡，默认值为orcalabdefaultscene，版本配套的PAK会带这个关卡
-level = "orcalabdefaultscene"
+# [个人配置] 启动关卡，在启动OrcaLab前需要选择一个启动关卡，如果切换启动关卡需要重启OrcaLab
+# 默认包带两个关卡，orcalab_day和orcalab_night，对于已订阅的关卡，在启动过程中从服务器获取关卡列表，并显示在UI中
+# 对于开发人员：在 orca.config.user.toml 中可以添加额外的调试关卡
+levels = [
+    "orcalab_day",
+    "orcalab_night",
+]
+
+level = "orcalab_day"
 
 # [个人配置] 锁帧
 lock_fps = 60

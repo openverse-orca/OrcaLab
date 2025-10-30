@@ -164,6 +164,9 @@ class ConfigService:
     def level(self) -> str:
         return self.config["orcalab"].get("level", "Default_level")
     
+    def levels(self) -> list:
+        return self.config["orcalab"].get("levels", [])
+    
     def orca_project_folder(self) -> str:
         return self.config["orca_project_folder"]
     
