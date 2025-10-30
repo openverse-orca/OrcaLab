@@ -1,3 +1,9 @@
+# Patch PySide6 first.
+from orcalab.patch_pyside6 import patch_pyside6
+
+patch_pyside6()
+
+
 import asyncio
 import sys
 import signal
@@ -73,10 +79,10 @@ if __name__ == "__main__":
     print("正在准备资产包...")
     if config_service.init_paks() and config_service.paks():
         copy_packages(config_service.paks())
-    
+
     # 创建 Qt 应用（需要在创建窗口之前）
     q_app = QtWidgets.QApplication(sys.argv)
-    
+
     # 同步订阅的资产包（带UI）
     run_asset_sync_ui(config_service)
 
