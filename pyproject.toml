@@ -24,7 +24,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "orca-gym==25.10.3",
+    "orca-gym==25.10.5",
     "pyside6==6.9.2",
     "aiohttp==3.13.1",
     "qasync==0.28.0",

@@ -48,7 +48,7 @@ pip install -e "[dev]"
 ## 包名说明
 
 - **正式包**: `orca-lab` - 发布到 PyPI
-- **测试包**: `orca-lab-test` - 发布到 TestPyPI
+- **测试包**: `orca-lab` - 发布到 TestPyPI (使用相同包名以便完整测试)
 
 ## 🚀 快速开始
 
@@ -221,7 +221,7 @@ make test-download-pypi
 
 #### 从 TestPyPI 安装
 ```bash
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ orca-lab-test
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ orca-lab
 ```
 
 #### 从 PyPI 安装
@@ -259,4 +259,4 @@ make test-download-pypi
 - 发布到 PyPI 是不可逆的操作
 - 建议先在 TestPyPI 上测试
 - 确保版本号遵循语义化版本规范
-- 保持 `orca-lab` 和 `orca-lab-test` 包名的一致性
+- 保持 `orca-lab` 包名在 PyPI 和 TestPyPI 上的一致性

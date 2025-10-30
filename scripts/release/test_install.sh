@@ -40,9 +40,9 @@ case "$SOURCE" in
         ;;
     test)
         echo "📦 Installing from TestPyPI..."
-        echo "   Package: orca-lab-test"
+        echo "   Package: orca-lab"
         echo "   Index: https://test.pypi.org/simple/"
-        pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ orca-lab-test
+        pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ orca-lab
         ;;
     prod)
         echo "📦 Installing from PyPI..."
