@@ -1,6 +1,7 @@
 import subprocess
 from pathlib import Path
 import shutil
+import sys
 
 
 def download_file(folder: Path):
@@ -73,6 +74,9 @@ def find_libxcb_cursor_path() -> bool:
 
 
 def patch_pyside6():
+    if sys.platform != "linux":
+        return
+
     if find_libxcb_cursor_path():
         print("libxcb-cursor0 is already installed. No patching needed.")
         return
@@ -93,7 +97,9 @@ def patch_pyside6():
     deb_file = download_file(temp_folder)
     extract_deb(deb_file, temp_folder)
 
-    files = list((temp_folder / "usr" / "lib" / "x86_64-linux-gnu").glob("libxcb-cursor.so*"))
+    files = list(
+        (temp_folder / "usr" / "lib" / "x86_64-linux-gnu").glob("libxcb-cursor.so*")
+    )
     if not files:
         raise FileNotFoundError(
             "No libxcb-cursor files found in the extracted package."
