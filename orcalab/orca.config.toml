@@ -75,6 +75,13 @@ timeout = 180
 # 生产环境使用 HTTPS
 base_url = "http://8.159.136.178:8080/api"
 
+
+# 资产库服务器地址
+# 生产环境使用 HTTPS
+web_server_url = "https://simassets.orca3d.cn/"
+# 本地开发环境使用 HTTP
+# web_server_url = "http://127.0.0.1:34511"
+
 # 认证服务器地址（统一使用生产环境认证服务器）
 auth_server_url = "https://datalink.orca3d.cn:8081"
 

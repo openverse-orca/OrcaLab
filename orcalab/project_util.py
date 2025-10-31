@@ -46,6 +46,14 @@ def get_cache_folder():
             raise EnvironmentError("LOCALAPPDATA environment variable is not set.")
     else:
         return pathlib.Path.home() / "Orca" / "OrcaStudio" / project_id / "Cache" / "linux"
+
+
+def get_orcalab_cache_folder():
+    """
+    获取orcalab子目录的缓存文件夹路径
+    pak_urls 下载的文件存储在这个子目录下
+    """
+    return get_cache_folder() / "orcalab"
    
 
 def get_md5_cache_file() -> pathlib.Path:
@@ -132,6 +140,33 @@ def files_are_identical_fast(source: pathlib.Path, target: pathlib.Path) -> Opti
         return False
 
 
+def clear_cache_packages(exclude_names: Optional[List[str]] = None):
+    """
+    清除缓存目录下的pak文件
+    
+    Args:
+        exclude_names: 要保留的文件名列表（不删除这些文件）
+    """
+    cache_folder = get_cache_folder()
+    if not cache_folder.exists():
+        return
+    
+    exclude_set = set(exclude_names) if exclude_names else set()
+    deleted_count = 0
+    
+    for pak_file in cache_folder.glob("*.pak"):
+        if pak_file.name not in exclude_set:
+            try:
+                pak_file.unlink()
+                deleted_count += 1
+                print(f"Deleted {pak_file.name} from cache")
+            except Exception as e:
+                print(f"Error deleting {pak_file.name}: {e}")
+    
+    if deleted_count > 0:
+        print(f"Cleared {deleted_count} pak file(s) from cache folder")
+
+
 def copy_packages(packages: List[str]):
     """
     复制包文件到缓存目录
@@ -188,9 +223,10 @@ async def download_pak_from_url(url: str, target_path: pathlib.Path) -> bool:
         return False
 
 
-def download_pak_files_sync(pak_urls: List[str]) -> List[str]:
+def sync_pak_urls(pak_urls: List[str]) -> List[str]:
     """
-    同步下载pak文件到缓存目录
+    同步pak_urls列表到缓存目录
+    确保缓存目录下的文件与pak_urls列表一致（先检查后决定删除和下载）
     
     Args:
         pak_urls: pak文件下载URL列表
@@ -201,16 +237,32 @@ def download_pak_files_sync(pak_urls: List[str]) -> List[str]:
     cache_folder = get_cache_folder()
     cache_folder.mkdir(parents=True, exist_ok=True)
     
-    downloaded_files = []
-    
+    # 从URL列表提取预期的文件名
+    expected_file_names = set()
+    url_to_filename = {}
     for url in pak_urls:
-        # 从URL中提取文件名
         filename = url.split("/")[-1]
+        expected_file_names.add(filename)
+        url_to_filename[url] = filename
+    
+    # 检查现有文件，删除不在预期列表中的文件
+    # 注意：只删除那些确定是来自pak_urls的文件（通过文件名匹配）
+    deleted_count = 0
+    for pak_file in cache_folder.glob("*.pak"):
+        if pak_file.name not in expected_file_names:
+            # 不在这里删除，因为可能还有其他来源的文件（手工pak或订阅pak）
+            # pak_urls的清理会在asset_sync_service中与其他来源一起处理
+            pass
+    
+    # 下载缺失的文件
+    downloaded_files = []
+    for url in pak_urls:
+        filename = url_to_filename[url]
         target_path = cache_folder / filename
         
-        # 如果文件已存在，跳过下载
+        # 如果文件已存在，检查是否需要更新（跳过下载，避免重复下载）
         if target_path.exists():
-            print(f"File {filename} already exists, skipping download")
+            print(f"File {filename} already exists in cache, skipping download")
             downloaded_files.append(str(target_path))
             continue
         
@@ -227,8 +279,22 @@ def download_pak_files_sync(pak_urls: List[str]) -> List[str]:
             
             if success:
                 downloaded_files.append(str(target_path))
+                print(f"Downloaded {filename} to cache")
         except Exception as e:
             print(f"Error downloading {url}: {e}")
     
     return downloaded_files
+
+
+def download_pak_files_sync(pak_urls: List[str]) -> List[str]:
+    """
+    同步下载pak文件到缓存目录（已废弃，请使用 sync_pak_urls）
+    
+    Args:
+        pak_urls: pak文件下载URL列表
+        
+    Returns:
+        List[str]: 下载成功的文件路径列表
+    """
+    return sync_pak_urls(pak_urls)
     

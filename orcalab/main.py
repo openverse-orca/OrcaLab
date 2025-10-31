@@ -4,7 +4,7 @@ import signal
 import atexit
 
 from orcalab.config_service import ConfigService
-from orcalab.project_util import check_project_folder, copy_packages, download_pak_files_sync
+from orcalab.project_util import check_project_folder, copy_packages, sync_pak_urls
 from orcalab.asset_sync_ui import run_asset_sync_ui
 from orcalab.url_service.url_util import register_protocol
 from orcalab.ui.main_window import MainWindow
@@ -89,21 +89,12 @@ def main():
             # 如果paks有内容，则复制本地文件
             print("使用本地pak文件...")
             copy_packages(paks)
-        else:
-            # 如果paks为空，则从URL下载
-            pak_urls = config_service.pak_urls()
-            if pak_urls:
-                print("从OSS下载pak文件...")
-                downloaded_files = download_pak_files_sync(pak_urls)
-                if downloaded_files:
-                    print(f"成功下载 {len(downloaded_files)} 个pak文件")
-                    # 将下载的文件路径添加到配置中，避免被资产同步删除
-                    config_service.config["orcalab"]["paks"] = downloaded_files
-                    print("已将下载的pak文件添加到配置中")
-                else:
-                    print("警告: 没有成功下载任何pak文件")
-            else:
-                print("警告: 没有配置pak文件路径或下载URL")
+    
+    # 处理pak_urls（独立于paks和订阅列表，下载到orcalab子目录）
+    pak_urls = config_service.pak_urls()
+    if pak_urls:
+        print("正在同步pak_urls列表...")
+        sync_pak_urls(pak_urls)
     
     # 创建 Qt 应用（需要在创建窗口之前）
     q_app = QtWidgets.QApplication(sys.argv)

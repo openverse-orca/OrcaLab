@@ -66,7 +66,7 @@ class AssetSyncService:
     """资产同步服务"""
     
     def __init__(self, username: str, access_token: str, base_url: str, cache_folder: pathlib.Path, 
-                 config_paks: List[str], timeout: int = 60, callbacks: Optional[AssetSyncCallbacks] = None,
+                 config_paks: List[str], pak_urls: List[str] = None, timeout: int = 60, callbacks: Optional[AssetSyncCallbacks] = None,
                  verbose: bool = False):
         """
         初始化资产同步服务
@@ -77,6 +77,7 @@ class AssetSyncService:
             base_url: 后端 API 地址
             cache_folder: 本地资产包存储目录（目标目录）
             config_paks: 配置文件中的 paks 列表（绝对路径）
+            pak_urls: 配置文件中的 pak_urls 列表（URL列表）
             timeout: 请求超时时间（秒）
             callbacks: 回调接口
             verbose: 是否输出详细日志
@@ -95,8 +96,15 @@ class AssetSyncService:
             pak_file = pathlib.Path(pak_path)
             self.config_pak_names.add(pak_file.name)
         
+        # 提取pak_urls的文件名（用于后续比对）
+        self.pak_url_names = set()
+        if pak_urls:
+            for url in pak_urls:
+                filename = url.split("/")[-1]
+                self.pak_url_names.add(filename)
+        
         if self.verbose:
-            print(f"资产同步服务初始化: 用户={self.username}, 配置pak数={len(self.config_pak_names)}")
+            print(f"资产同步服务初始化: 用户={self.username}, 配置pak数={len(self.config_pak_names)}, pak_urls数={len(self.pak_url_names)}")
     
     def log(self, message: str):
         """简化日志输出"""
@@ -181,10 +189,13 @@ class AssetSyncService:
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
             subscribed_file_names.add(file_name)
         
+        # 合并所有需要保留的文件名：订阅包、手工pak、pak_urls
+        keep_file_names = subscribed_file_names | self.config_pak_names | self.pak_url_names
+        
         to_delete = []
         for pak_file in self.cache_folder.glob("*.pak"):
             file_name = pak_file.name
-            if file_name not in subscribed_file_names and file_name not in self.config_pak_names:
+            if file_name not in keep_file_names:
                 to_delete.append(file_name)
                 self.callbacks.on_delete(file_name)
                 self.log(f"✗ {file_name} 待删除")
@@ -332,9 +343,12 @@ class AssetSyncService:
             except Exception as e:
                 self.log(f"✗ 删除失败 {file_name}: {e}")
     
-    def sync_packages(self) -> bool:
+    def sync_packages(self, init_paks: bool = False) -> bool:
         """
         同步资产包（主流程）
+        
+        Args:
+            init_paks: 是否初始化pak包（如果为true，会在查询订阅列表后清除既不在手工列表也不在订阅列表中的包）
         
         Returns:
             同步是否成功，如果返回 'TOKEN_EXPIRED' 表示 token 过期
@@ -354,9 +368,30 @@ class AssetSyncService:
             self.callbacks.on_complete(False, "查询订阅列表失败")
             return False
         
+        # 收集订阅列表中的文件名
+        subscribed_file_names = set()
+        if packages:
+            for pkg in packages:
+                file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
+                subscribed_file_names.add(file_name)
+        
+        # 如果 init_paks=true，清除既不在手工列表、订阅列表也不在pak_urls列表中的包
+        if init_paks:
+            # 合并手工pak、订阅pak和pak_urls的文件名（要保留的文件）
+            keep_file_names = subscribed_file_names | self.config_pak_names | self.pak_url_names
+            
+            if keep_file_names:
+                from orcalab.project_util import clear_cache_packages
+                clear_cache_packages(exclude_names=list(keep_file_names))
+                self.log(f"已清除不在保留列表中的pak文件（保留 {len(keep_file_names)} 个包：{len(self.config_pak_names)} 个手工 + {len(subscribed_file_names)} 个订阅 + {len(self.pak_url_names)} 个pak_urls）")
+            else:
+                # 如果没有任何要保留的包，清除所有
+                from orcalab.project_util import clear_cache_packages
+                clear_cache_packages()
+                self.log("已清除所有pak文件（没有任何需要保留的包）")
+        
         if not packages:
-            self.log("没有订阅的资产包，保留现有资产包")
-            # 不执行清理操作，保留现有资产包以离线模式使用
+            self.log("没有订阅的资产包")
             self.callbacks.on_complete(True, "没有订阅的资产包")
             return True
         
@@ -435,7 +470,9 @@ def sync_assets(config_service, callbacks: Optional[AssetSyncCallbacks] = None, 
     base_url = config_service.datalink_base_url()
     cache_folder = get_cache_folder()
     config_paks = config_service.paks()
+    pak_urls = config_service.pak_urls()
     timeout = config_service.datalink_timeout()
+    init_paks = config_service.init_paks()
     
     # 创建同步服务并执行同步
     sync_service = AssetSyncService(
@@ -444,9 +481,10 @@ def sync_assets(config_service, callbacks: Optional[AssetSyncCallbacks] = None, 
         base_url=base_url,
         cache_folder=cache_folder,
         config_paks=config_paks,
+        pak_urls=pak_urls,
         timeout=timeout,
         callbacks=callbacks,
         verbose=verbose
     )
     
-    return sync_service.sync_packages()
+    return sync_service.sync_packages(init_paks=init_paks)

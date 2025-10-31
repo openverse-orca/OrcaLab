@@ -10,7 +10,7 @@ import signal
 import atexit
 
 from orcalab.config_service import ConfigService
-from orcalab.project_util import check_project_folder, copy_packages
+from orcalab.project_util import check_project_folder, copy_packages, clear_cache_packages, sync_pak_urls
 from orcalab.asset_sync_ui import run_asset_sync_ui
 from orcalab.url_service.url_util import register_protocol
 from orcalab.ui.main_window import MainWindow
@@ -75,10 +75,21 @@ if __name__ == "__main__":
     config_service = ConfigService()
     config_service.init_config(os.path.dirname(__file__))
 
-    # 复制配置的pak包
+    # 准备资产包
     print("正在准备资产包...")
-    if config_service.init_paks() and config_service.paks():
+    
+    # 1. 处理手工指定的pak包（复制到缓存目录）
+    if config_service.paks():
         copy_packages(config_service.paks())
+    
+    # 2. 处理pak_urls（下载到缓存目录，与手工pak和订阅列表并行）
+    pak_urls = config_service.pak_urls()
+    if pak_urls:
+        print("正在同步pak_urls列表...")
+        sync_pak_urls(pak_urls)
+    
+    # 3. 清除逻辑在同步订阅列表后执行（在 asset_sync_service 中处理）
+    # 这样可以结合订阅列表、手工pak列表和pak_urls列表，只删除不在三者中的包
 
     # 创建 Qt 应用（需要在创建窗口之前）
     q_app = QtWidgets.QApplication(sys.argv)
