@@ -115,8 +115,14 @@ class ConfigService:
             print("版本校验失败，程序将退出")
             sys.exit(1)
 
-        with open(self.user_config_path, "rb") as file:
-            user_config = tomllib.load(file)
+        # 加载用户配置（如果存在）
+        user_config = {}
+        if os.path.exists(self.user_config_path):
+            with open(self.user_config_path, "rb") as file:
+                user_config = tomllib.load(file)
+        else:
+            print(f"用户配置文件不存在: {self.user_config_path}")
+            print("将使用默认配置。如需自定义配置，请创建该文件或参考 orca.config.user.toml.example")
 
         self.config = deep_merge(self.config, shared_config)
         self.config = deep_merge(self.config, user_config)

@@ -3,7 +3,7 @@ include README.md
 include LICENSE
 include pyproject.toml
 include run.py
-include orca.config.user.toml
+# Note: orca.config.user.toml is intentionally excluded - it's a user-specific config file
 
 # Include proto files
 recursive-include orcalab/protos *.proto
@@ -19,6 +19,8 @@ recursive-include orcalab/assets *.jpeg
 recursive-include orcalab *.toml
 recursive-include orcalab *.yaml
 recursive-include orcalab *.yml
+# Exclude example files (for developers only, not needed in pip packages)
+recursive-exclude orcalab *.example
 
 # Include type hints
 recursive-include orcalab *.pyi
