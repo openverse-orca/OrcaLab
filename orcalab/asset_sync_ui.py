@@ -94,13 +94,14 @@ def authenticate_user(config_service, window=None) -> bool:
     base_url = config_service.datalink_base_url()
     auth_server_url = config_service.datalink_auth_server_url()
     timeout = config_service.datalink_timeout()
+    redirect_url = config_service.web_server_url()
     
     # 创建认证服务
     auth_service = AuthService(base_url, auth_server_url=auth_server_url, timeout=timeout)
     
     def auth_func():
         """认证函数，带进度回调"""
-        return auth_service.authenticate(window=window)
+        return auth_service.authenticate(window=window, redirect_url=redirect_url)
     
     # 如果没有传入 window，则显示认证对话框
     if window is None:

@@ -242,3 +242,7 @@ class ConfigService:
     def datalink_auth_server_url(self) -> str:
         """获取 DataLink 认证服务器地址"""
         return self.config.get("datalink", {}).get("auth_server_url", "https://datalink.orca3d.cn:8081")
+    
+    def web_server_url(self) -> str:
+        """获取资产库服务器地址（用于认证后跳转）"""
+        return self.config.get("web_server_url", "https://simassets.orca3d.cn/")

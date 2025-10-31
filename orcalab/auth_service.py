@@ -138,18 +138,22 @@ class AuthService:
             print(f"验证 nonce 失败: {e}")
             return None
     
-    def open_auth_page(self, nonce: str, redirect_url: str = "http://127.0.0.1:34511/") -> bool:
+    def open_auth_page(self, nonce: str, redirect_url: Optional[str] = None) -> bool:
         """
         在浏览器中打开认证页面
         
         Args:
             nonce: 认证 nonce
-            redirect_url: 认证完成后的重定向地址
+            redirect_url: 认证完成后的重定向地址（如果为 None，则使用默认值）
         
         Returns:
             是否成功打开浏览器
         """
         try:
+            # 如果没有提供 redirect_url，使用默认值
+            if redirect_url is None:
+                redirect_url = "http://127.0.0.1:34511/"
+            
             # 构造认证URL
             # server 参数应该指向认证服务器期望的 API 服务器地址
             # 根据观察，认证服务器期望的是 datalink.orca3d.cn:7000
@@ -171,13 +175,14 @@ class AuthService:
             print(f"打开浏览器失败: {e}")
             return False
     
-    def authenticate(self, progress_callback: Optional[Callable[[str], None]] = None, window=None) -> Optional[Dict[str, str]]:
+    def authenticate(self, progress_callback: Optional[Callable[[str], None]] = None, window=None, redirect_url: Optional[str] = None) -> Optional[Dict[str, str]]:
         """
         完整的认证流程
         
         Args:
             progress_callback: 进度回调函数
             window: AuthWindow 实例（用于更新进度）
+            redirect_url: 认证完成后的重定向地址（可选）
         
         Returns:
             包含 username, access_token, refresh_token 的字典，失败返回 None
@@ -205,7 +210,7 @@ class AuthService:
         if window:
             window.update_status(msg)
         
-        if not self.open_auth_page(nonce):
+        if not self.open_auth_page(nonce, redirect_url=redirect_url):
             msg = "无法打开浏览器"
             if progress_callback:
                 progress_callback(msg)
