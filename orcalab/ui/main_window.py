@@ -731,8 +731,9 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         await self.remote_scene.change_sim_state(True)
 
         """完成模拟启动的异步操作（从 run_sim 函数中复制的缺失部分）"""
-        await self.remote_scene.save_body_transform()
         await self.remote_scene.publish_scene()
+        await asyncio.sleep(.1)
+        await self.remote_scene.save_body_transform()
 
     async def _start_external_process_in_main_thread_async(self, command: str, args: list):
         """在主线程中启动外部进程，并将输出重定向到terminal_widget（异步版本）"""
@@ -862,9 +863,9 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
             self.local_scene.selection = []
             await self.remote_scene.set_selection([])
         await self.remote_scene.change_sim_state(self.sim_process_running)
-
-        await self.remote_scene.save_body_transform()
         await self.remote_scene.publish_scene()
+        await asyncio.sleep(.1)
+        await self.remote_scene.save_body_transform()
 
         cmd = [
             "python",
@@ -885,6 +886,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
 
         async with self._sim_process_check_lock:
             await self.remote_scene.publish_scene()
+            await self.remote_scene.restore_body_transform()
             await self.remote_scene.set_sync_from_mujoco_to_scene(False)
             self.sim_process_running = False
             self._update_button_states()
@@ -905,6 +907,8 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
                 
                 self.sim_process = None
             
+            # await asyncio.sleep(0.5)
+            await self.remote_scene.restore_body_transform()
             self.enable_control.emit()
             await self.remote_scene.change_sim_state(self.sim_process_running)
 
