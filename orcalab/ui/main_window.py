@@ -654,12 +654,12 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
 
         # Window actions.
 
-        action_undo = QtGui.QAction("Undo")
+        action_undo = QtGui.QAction("Undo", self)
         action_undo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
         action_undo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
         connect(action_undo.triggered, self.undo)
 
-        action_redo = QtGui.QAction("Redo")
+        action_redo = QtGui.QAction("Redo", self)
         action_redo.setShortcut(QtGui.QKeySequence("Ctrl+Shift+Z"))
         action_redo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
         connect(action_redo.triggered, self.redo)
