@@ -1096,7 +1096,12 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
             parent_path = self.local_scene.get_actor_path(parent_actor)
 
         name = make_unique_name(item_name, parent_path)
-        actor = AssetActor(name=name, asset_path=item_name)
+        try:
+            actor = AssetActor(name=name, asset_path=item_name)
+        except Exception as e:
+            print(f"Failed to create AssetActor: {e}")
+            actor = None
+            return
         await SceneEditRequestBus().add_actor(actor, parent_path)
         if output is not None:
             output.append(actor)
