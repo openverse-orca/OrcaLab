@@ -2,7 +2,7 @@
 """
 测试 OrcaLab 启动流程中的资产同步功能
 
-这个脚本模拟 run.py 中的资产同步部分，但不启动 GUI
+这个脚本模拟 orcalab/main.py 中的资产同步部分，但不启动 GUI
 """
 
 import os

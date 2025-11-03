@@ -57,10 +57,20 @@ OrcaLab 是 OrcaGym 的前端界面，提供场景组装和仿真的用户界面
 
 ## 使用方法
 
-启动 OrcaLab：
+### 启动方式
+
+安装后使用命令行启动：
+```bash
+orcalab
+```
+
+### 应急启动方式
+
+如果 `orcalab` 命令不可用（例如打包不完整时），可以直接运行 `main.py`：
 
 ```bash
-python run.py
+# 需要确保在项目根目录
+python orcalab/main.py
 ```
 
 

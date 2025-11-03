@@ -2,7 +2,6 @@
 include README.md
 include LICENSE
 include pyproject.toml
-include run.py
 # Note: orca.config.user.toml is intentionally excluded - it's a user-specific config file
 
 # Include proto files
