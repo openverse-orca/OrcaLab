@@ -8,6 +8,7 @@ OrcaLab 资产同步服务
 4. 删除既不在订阅列表也不在配置 paks 列表中的 pak 文件
 """
 
+import json
 import requests
 import pathlib
 from typing import List, Dict, Optional, Callable
@@ -206,6 +207,65 @@ class AssetSyncService:
             self.log(f"❌ 获取下载链接失败: {e}")
             return None
     
+    def get_image_url(self, asset_id: str) -> str:
+        get_asset_metadata_url = f"{self.base_url}/asset/{asset_id}/"
+        response = requests.get(get_asset_metadata_url, headers=self.get_headers(), timeout=self.timeout)
+        if response.status_code != 200:
+            return None
+        asset_metadata = response.json()
+        return json.dumps(asset_metadata, ensure_ascii=False, indent=2)
+
+    def check_metadata(self, packages: List[Dict], to_delete: List[str], to_missing: List[Dict]):
+        metadata_path = self.cache_folder / "metadata.json"
+        if not metadata_path.exists():
+            with open(metadata_path, 'w') as f:
+                json.dump({}, f)
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+        for to_delete_pak in to_delete:
+            pak_id = to_delete_pak.removesuffix('.pak')
+            if pak_id in metadata.keys():
+                del metadata[pak_id]
+        
+        to_update_metadata = set()
+        for package in packages:
+            package_id = package['id']
+            if package_id not in metadata.keys():
+                to_update_metadata.add(package_id)
+
+        for to_missing_pak in to_missing:
+            to_update_metadata.add(to_missing_pak['id'])
+        
+        to_update_metadata_json = {}
+        for package_id in to_update_metadata:
+            to_update_metadata_json[package_id] = {}
+        if len(to_update_metadata) > 0:
+            response = requests.get(f"{self.base_url}/meta/?isPublished=true", headers=self.get_headers(), timeout=self.timeout)
+            if response.status_code != 200:
+                self.log(f"❌ 获取metadata失败: HTTP {response.status_code}")
+                return
+            remote_metadata = response.json()
+            
+            for sub_metadata in remote_metadata:
+                if sub_metadata['id'] in to_update_metadata:
+                    for key, value in sub_metadata.items():
+                        if sub_metadata['id'] not in metadata.keys():
+                            metadata[sub_metadata['id']] = {}
+                            metadata[sub_metadata['id']]['children'] = []
+                        metadata[sub_metadata['id']][key] = value
+                if 'parentPackageId' in sub_metadata and sub_metadata['parentPackageId'] in to_update_metadata:
+                    if sub_metadata['parentPackageId'] not in metadata.keys():
+                        metadata[sub_metadata['parentPackageId']] = {}
+                        metadata[sub_metadata['parentPackageId']]['children'] = []
+                    metadata[sub_metadata['parentPackageId']]['children'].append(sub_metadata)
+                    asset_id = sub_metadata['id']
+                    image_url = self.get_image_url(asset_id)
+                    if image_url is not None:
+                        image_url = json.loads(image_url)
+                        sub_metadata['pictures'] = image_url['pictures']
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=2)
+
     def download_package(self, package_id: str, file_name: str, download_url: str, expected_size: int) -> bool:
         """下载资产包"""
         try:
@@ -328,6 +388,9 @@ class AssetSyncService:
             else:
                 fail_count += 1
         
+        # check metadata
+        self.check_metadata(packages, to_delete, missing_packages)
+
         # 4. 清理不需要的文件
         self.clean_unsubscribed_packages(to_delete)
         

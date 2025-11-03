@@ -3,6 +3,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.ui.asset_browser.asset_info import AssetInfo
 from orcalab.ui.asset_browser.thumbnail_model import ThumbnailModel
+from orcalab.ui.asset_browser.apng_player import ApngPlayer
 
 
 class AssetModel(ThumbnailModel):
@@ -30,6 +31,13 @@ class AssetModel(ThumbnailModel):
         return image
 
     @override
+    def movie_at(self, index: int) -> ApngPlayer | None:
+        if index < 0 or index >= len(self._filtered_assets):
+            return None
+        return self._filtered_assets[index].apng_player
+
+
+    @override
     def text_at(self, index: int) -> str:
         return self._filtered_assets[index].name
 
@@ -46,6 +54,9 @@ class AssetModel(ThumbnailModel):
         self._filtered_assets = list2
         self.data_updated.emit()
 
+    def get_all_assets(self) -> List[AssetInfo]:
+        return self._all_assets
+    
     def _apply_include_filter(self, input: List[AssetInfo]):
         if not self.include_filter:
             return input

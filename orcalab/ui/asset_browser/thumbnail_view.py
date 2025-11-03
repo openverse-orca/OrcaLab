@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.ui.asset_browser.thumbnail_model import ThumbnailModel
@@ -63,11 +63,14 @@ class ThumbnailView(QtWidgets.QWidget):
         self._left_click_item: _ThumbnailViewItem | None = None
 
         self._dragging = False
+        
+        self._movies: Dict[int, QtGui.QMovie] = {}
 
     def set_model(self, model: ThumbnailModel):
         self._model = model
         self._on_model_updated()
         self._model.data_updated.connect(self._on_model_updated)
+        self._model.item_updated.connect(self._on_item_updated)
 
     def item_count(self) -> int:
         return self._model.size() if self._model else 0
@@ -129,6 +132,7 @@ class ThumbnailView(QtWidgets.QWidget):
             if self._selected_item != self._left_click_item:
                 self._selected_item = self._left_click_item
                 self.selection_changed.emit()
+                self._update_playing_state()  # 更新动画播放状态
                 self.update()
 
             self._left_mouse_pressed_pos = None
@@ -142,6 +146,7 @@ class ThumbnailView(QtWidgets.QWidget):
         item = self._item_at(pos)
         if self._hover_item != item:
             self._hover_item = item
+            self._update_playing_state()  # 更新动画播放状态
             self.update()
 
         if not self._dragging and self._left_mouse_pressed_pos:
@@ -149,6 +154,13 @@ class ThumbnailView(QtWidgets.QWidget):
             if distance >= QtWidgets.QApplication.startDragDistance():
                 self._dragging = True
                 self._drag_started()
+    
+    def leaveEvent(self, event: QtCore.QEvent):
+        """鼠标离开时停止所有动画"""
+        if self._hover_item:
+            self._hover_item = None
+            self._update_playing_state()
+            self.update()
 
     # Override `_drag_started`` to start a drag operation.
     # Dragging end when mouse release. However, there is no mouse release event.
@@ -225,6 +237,7 @@ class ThumbnailView(QtWidgets.QWidget):
         start_row = offset_y // self.cell_height
         end_row = (offset_y + self.height()) // self.cell_height + 1
 
+        visible_indices = set()
         for row in range(start_row, min(end_row, self.row_count)):
             for col in range(self.column_count):
                 index = row * self.column_count + col
@@ -244,6 +257,9 @@ class ThumbnailView(QtWidgets.QWidget):
                         -self.cell_padding_bottom,
                     )
                     self.visible_items.append(item)
+                    visible_indices.add(index)
+        
+        self._update_movies(visible_indices)
 
     def _draw_background(self, painter: QtGui.QPainter, rect: QtCore.QRect):
         painter.fillRect(rect, self.bg_color)
@@ -286,11 +302,28 @@ class ThumbnailView(QtWidgets.QWidget):
         if not self._model:
             return
 
+        if item.index in self._movies:
+            player = self._movies[item.index]
+            pixmap = player.current_pixmap()
+            if not pixmap.isNull():  
+                x = rect.x() + (rect.width() - pixmap.width()) // 2
+                y = rect.y() + (rect.height() - pixmap.height()) // 2             
+                painter.drawPixmap(x, y, pixmap)
+                return
+        
         image = self._model.image_at(item.index)
         if not image or image.isNull():
             return
 
-        painter.drawImage(rect, image)
+        # 静态图片也进行等比缩放和居中绘制
+        scaled_image = image.scaled(
+            rect.size(),
+            QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+            QtCore.Qt.TransformationMode.SmoothTransformation
+        )
+        x = rect.x() + (rect.width() - scaled_image.width()) // 2
+        y = rect.y() + (rect.height() - scaled_image.height()) // 2
+        painter.drawImage(x, y, scaled_image)
 
     def _draw_text(
         self, painter: QtGui.QPainter, rect: QtCore.QRect, item: _ThumbnailViewItem
@@ -331,7 +364,80 @@ class ThumbnailView(QtWidgets.QWidget):
         self.update()
 
     def _on_model_updated(self):
+        self._clear_all_movies()
         self._update_content_layout()
         self._update_scrollbar()
         self._update_visible_items()
         self.update()
+    
+    def _on_item_updated(self, index: int):
+        for item in self.visible_items:
+            if item.index == index:
+                self.update(item.cell_rect)
+                break
+    
+    def _update_movies(self, visible_indices: set):
+        """更新可见的动画（加载但不启动）"""
+        indices_to_remove = set(self._movies.keys()) - visible_indices
+        for index in indices_to_remove:
+            self._unload_movie(index)
+        
+        if not self._model:
+            return
+        
+        # 加载可见的动画（但不启动）
+        for index in visible_indices:
+            if index not in self._movies:
+                player = self._model.movie_at(index)
+                if player:
+                    self._load_movie(index, player)
+        
+        # 更新播放状态（只播放选中或悬停的）
+        self._update_playing_state()
+    
+    def _load_movie(self, index: int, player):
+        """加载动画但不启动播放"""
+        self._movies[index] = player
+        player.frame_changed.connect(lambda: self._on_movie_frame_changed(index))
+    
+    def _unload_movie(self, index: int):
+        """卸载动画"""
+        if index in self._movies:
+            player = self._movies[index]
+            player.stop()
+            try:
+                player.frame_changed.disconnect()
+            except:
+                pass
+            del self._movies[index]
+    
+    def _update_playing_state(self):
+        """更新动画播放状态：只播放选中或悬停的"""
+        should_play_indices = set()
+        
+        # 选中的项应该播放
+        if self._selected_item:
+            should_play_indices.add(self._selected_item.index)
+        
+        # 悬停的项应该播放
+        if self._hover_item:
+            should_play_indices.add(self._hover_item.index)
+        
+        # 停止不应该播放的动画
+        for index, player in self._movies.items():
+            if index in should_play_indices:
+                if not player.is_playing:
+                    player.start()
+            else:
+                if player.is_playing:
+                    player.stop()
+    
+    def _clear_all_movies(self):
+        for index in list(self._movies.keys()):
+            self._unload_movie(index)
+    
+    def _on_movie_frame_changed(self, index: int):
+        for item in self.visible_items:
+            if item.index == index:
+                self.update(item.cell_rect)
+                break

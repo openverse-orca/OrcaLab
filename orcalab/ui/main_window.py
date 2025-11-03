@@ -25,7 +25,9 @@ from orcalab.ui.actor_editor import ActorEditor
 from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.asset_browser.asset_browser import AssetBrowser
+from orcalab.ui.asset_browser.thumbnail_render_bus import ThumbnailRenderRequestBus
 from orcalab.ui.copilot import CopilotPanel
+from orcalab.ui.image_utils import ImageProcessor
 from orcalab.ui.icon_util import make_icon
 from orcalab.ui.theme_service import ThemeService
 from orcalab.ui.tool_bar import ToolBar
@@ -47,7 +49,7 @@ from orcalab.asset_service_bus import (
     AssetServiceNotificationBus,
 )
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
-
+from orcalab.http_service.http_service import HttpService
 
 
 class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
@@ -82,11 +84,11 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         self.sim_process_running = False
 
         self.asset_service = AssetService()
-        
+
         self.url_server = UrlServiceServer()
-        
+
         self.undo_service = UndoService()
-    
+
         self.scene_edit_service = SceneEditService(self.local_scene)
 
         self._viewport_widget = Viewport()
@@ -101,25 +103,25 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         self.show()
 
         self._viewport_widget.start_viewport_main_loop()
-        
+
         # # 启动前检查GPU环境
         # await self._pre_init_gpu_check()
-        
+
         # # 分阶段初始化viewport，添加错误恢复机制
         # await self._init_viewport_with_retry()
 
         # 等待viewport完全启动并检查就绪状态
         # print("等待viewport启动...")
         # await asyncio.sleep(5)
-        
+
         # # 等待viewport就绪状态
         # viewport_ready = await self._wait_for_viewport_ready()
         # if not viewport_ready:
         #     print("警告: Viewport可能未完全就绪，但继续初始化...")
-        
+
         # 检查GPU状态
         # await self._check_gpu_status()
-        
+
         # 确保GPU资源稳定后再继续
         # await self._stabilize_gpu_resources()
         # print("Viewport启动完成，继续初始化...")
@@ -129,7 +131,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         connect(self.actor_outline_model.add_item, self.add_item_to_scene)
 
         connect(self.asset_browser_widget.add_item, self.add_item_to_scene)
-        connect(self.asset_browser_widget.create_panorama_gif, self.create_panorama_gif)
 
         connect(self.copilot_widget.add_item_with_transform, self.add_item_to_scene_with_transform)
         connect(self.copilot_widget.request_add_group, self.on_copilot_add_group)
@@ -162,7 +163,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
 
         self.cache_folder = await self.remote_scene.get_cache_folder()
         await self.url_server.start()
-        
+
         print("启动异步资产加载...")
         asyncio.create_task(self._load_assets_async())
 
@@ -503,14 +504,14 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
                 self.remote_scene.get_actor_assets(), 
                 timeout=10.0
             )
-            self.asset_browser_widget.set_assets(assets)
+            await self.asset_browser_widget.set_assets(assets)
             print(f"资产加载完成，共 {len(assets)} 个资产")
         except asyncio.TimeoutError:
             print("资产加载超时，使用空列表")
-            self.asset_browser_widget.set_assets([])
+            await self.asset_browser_widget.set_assets([])
         except Exception as e:
             print(f"资产加载失败: {e}")
-            self.asset_browser_widget.set_assets([])
+            await self.asset_browser_widget.set_assets([])
 
     async def _init_ui(self):
         print("创建工具栏...")
@@ -1087,7 +1088,8 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         t = await self.remote_scene.get_generate_pos(x, y)
         await self.add_item_to_scene_with_transform(asset_name, asset_name, transform=t)
 
-    async def add_item_to_scene(self, item_name, parent_actor=None):
+    @override
+    async def add_item_to_scene(self, item_name, parent_actor=None, output: List[AssetActor] = None) -> None:
         if parent_actor is None:
             parent_path = Path.root_path()
         else:
@@ -1096,9 +1098,11 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         name = make_unique_name(item_name, parent_path)
         actor = AssetActor(name=name, asset_path=item_name)
         await SceneEditRequestBus().add_actor(actor, parent_path)
-        return actor
+        if output is not None:
+            output.append(actor)
 
-    async def add_item_to_scene_with_transform(self, item_name, item_asset_path, parent_path=None, transform=None):
+    @override
+    async def add_item_to_scene_with_transform(self, item_name, item_asset_path, parent_path=None, transform=None, output: List[AssetActor] = None) -> None:
         if parent_path is None:
             parent_path = Path.root_path()
 
@@ -1106,7 +1110,8 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         actor = AssetActor(name=name, asset_path=item_asset_path)
         actor.transform = transform
         await SceneEditRequestBus().add_actor(actor, parent_path)
-        return actor
+        if output is not None:
+            output.append(actor)
 
     async def on_copilot_add_group(self, group_path: Path):
         group_actor = GroupActor(name=group_path.name())
@@ -1125,67 +1130,8 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
 
         await SceneEditRequestBus().add_actor(actor, Path.root_path())
 
-    async def create_panorama_gif(self, actor_name: str):
-        self.terminal_widget._append_output(f"Creating panorama gif for {actor_name}\n")
-        actor = await self.add_item_to_scene(actor_name)
-        quat = Rotation.from_euler("xyz", [-15, 0, 0], degrees=True).as_quat()[[3, 0, 1, 2]]
-        actor_1 = await self.add_item_to_scene_with_transform("mujococamera1080", "prefabs/mujococamera1080", parent_path=Path.root_path(), transform=Transform(position=np.array([0, -2.5, 2]), rotation=quat, scale=1.0))
-        actor_2 = await self.add_item_to_scene_with_transform("mujococamera256", "prefabs/mujococamera256", parent_path=Path.root_path(), transform=Transform(position=np.array([0, -2.5, 2]), rotation=quat, scale=1.0))
-
-        tmp_path = os.path.join(os.path.expanduser("~"), ".orcalab", "tmp")
-        await self.remote_scene.get_camera_png("mujococamera1080", tmp_path, f"{actor.name}_1080.png")
-
-        # 生成所有旋转角度的PNG图像
-        png_files = []
-        for rotation_z in range(0, 360, 24):
-            quat = Rotation.from_euler("xyz", [0, 0, rotation_z], degrees=True).as_quat()[[3, 0, 1, 2]]
-            await self.scene_edit_service.set_transform(actor, Transform(position=np.array([0, 0, 0]), rotation=quat, scale=1.0), local=True, undo=False, source="create_panorama_gif")
-            png_filename = f"{actor.name}_256_{rotation_z}.png"
-            await self.remote_scene.get_camera_png("mujococamera256", tmp_path, png_filename)
-            png_files.append(os.path.join(tmp_path, png_filename))
-
-        await asyncio.sleep(0.01)
-        # 生成GIF动图
-        gif_path = os.path.join(tmp_path, f"{actor.name}_panorama.gif")
-
-        images = []
-        for png_file in png_files:
-            retry = 1
-            while retry < 3:
-                if os.path.exists(png_file):
-                    try:
-                        img = Image.open(png_file)
-                        images.append(img)
-                        break
-                    except Exception as e:
-                        self.terminal_widget._append_output(f"Error opening {png_file}: {e}\n")
-                        self.terminal_widget._append_output(f"Retrying... {retry} times\n")
-                        retry += 1
-                        await asyncio.sleep(0.01)
-
-        if images:
-            duration = 200  # 毫秒
-            images[0].save(
-                gif_path,
-                save_all=True,
-                append_images=images[1:],
-                duration=duration,
-                loop=0
-            )
-
-            for png_file in png_files:
-                if os.path.exists(png_file):
-                    try:
-                        os.remove(png_file)
-                    except OSError as e:
-                        self.terminal_widget._append_output(f"Error deleting {png_file}: {e}\n")
-            self.terminal_widget._append_output(f"GIF saved to: {gif_path}\n")
-        else:
-            self.terminal_widget._append_output("No images found to create GIF\n")
-
-        await self.scene_edit_service.delete_actor(actor_2, undo=False, source="create_panorama_gif")
-        await self.scene_edit_service.delete_actor(actor_1, undo=False, source="create_panorama_gif")
-        await self.scene_edit_service.delete_actor(actor, undo=False, source="create_panorama_gif")
+    async def render_thumbnail(self, asset_paths: list[str]):
+        await ThumbnailRenderRequestBus().render_thumbnail(asset_paths)
 
 
     def enable_widgets(self):

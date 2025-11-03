@@ -179,7 +179,14 @@ class SceneEditNotification:
         source: str,
     ):
         pass
-
+    
+    async def get_camera_png(
+        self, 
+        camera_name: str, 
+        png_path: str, 
+        png_name: str
+    ):
+        pass
 
 SceneEditNotificationBus = create_event_bus(SceneEditNotification)
 
