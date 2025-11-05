@@ -1,6 +1,6 @@
 from copy import deepcopy
 from typing import List, override
-from orcalab.actor import BaseActor, GroupActor
+from orcalab.actor import BaseActor, GroupActor, AssetActor
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.scene_edit_bus import (
@@ -12,6 +12,7 @@ from orcalab.scene_edit_bus import (
 from orcalab.undo_service.command import (
     CommandGroup,
     CreateGroupCommand,
+    CreateActorCommand,
     DeleteActorCommand,
     RenameActorCommand,
     ReparentActorCommand,
@@ -120,9 +121,15 @@ class SceneEditService(SceneEditRequest):
         await bus.on_actor_added(actor, parent_actor_path, source)
 
         if undo:
-            command = CreateGroupCommand()
-            command.path = parent_actor_path / actor.name
-            UndoRequestBus().add_command(command)
+            if isinstance(actor, AssetActor):
+                command = CreateActorCommand()
+                command.actor = actor
+                command.path = parent_actor_path / actor.name
+                UndoRequestBus().add_command(command)
+            else:
+                command = CreateGroupCommand()
+                command.path = parent_actor_path / actor.name
+                UndoRequestBus().add_command(command)
 
     @override
     async def delete_actor(

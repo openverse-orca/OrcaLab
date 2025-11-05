@@ -1,6 +1,6 @@
 from copy import deepcopy
 from typing import override, List
-from orcalab.actor import BaseActor, GroupActor
+from orcalab.actor import BaseActor, GroupActor, AssetActor
 from orcalab.path import Path
 
 from orcalab.undo_service.command import (
