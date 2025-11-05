@@ -3,6 +3,9 @@ from PySide6 import QtCore, QtWidgets, QtGui
 import pathlib
 
 from orcalab.config_service import ConfigService
+from orcalab.ui.user_event_bus import UserEventRequestBus
+from orcalab.ui.user_event import MouseAction, MouseButton, KeyAction
+from orcalab.ui.user_event_util import convert_key_code
 
 
 class Viewport(QtWidgets.QWidget):
@@ -16,6 +19,7 @@ class Viewport(QtWidgets.QWidget):
         # 延迟导入 orcalab_pyside，直到实际需要时
         try:
             from orcalab_pyside import Viewport as _Viewport
+
             self._viewport = _Viewport()
         except ImportError:
             print("警告: orcalab_pyside 包未安装，某些功能可能不可用")
@@ -30,11 +34,12 @@ class Viewport(QtWidgets.QWidget):
     def init_viewport(self):
         if not self._viewport:
             raise RuntimeError("orcalab_pyside 包未安装，无法初始化视口")
-            
+
         config_service = ConfigService()
 
         self.command_line = [
             "pseudo.exe",
+            # TODO: remove datalink host and port. Auth on C++ side is removed.
             "--datalink_host=54.223.63.47",
             "--datalink_port=7000",
             # '--rhi-device-validation="enable"'
@@ -55,7 +60,12 @@ class Viewport(QtWidgets.QWidget):
 
         self.command_line.append(f"--project-path={project_path}")
 
-        if not self._viewport.init_viewport(self.command_line, connect_builder_hub):
+        if not self._viewport.init_viewport(
+            self.command_line,
+            connect_builder_hub,
+            enable_default_event_filter=True,
+            custom_event_filter=None,
+        ):
             raise RuntimeError("Failed to initialize viewport")
 
     def _validate_project_path(self, path: str) -> bool:
@@ -85,14 +95,14 @@ class Viewport(QtWidgets.QWidget):
             except RuntimeError:
                 # 事件循环已停止，退出
                 return
-            
+
             # 检查viewport是否还在运行
             if not self._viewport_running:
                 return
-                
+
             if self._viewport:
                 self._viewport.main_loop_tick()
-            
+
             # 如果还在运行，继续下一帧
             if self._viewport_running:
                 # 使用asyncio.sleep而不是立即创建新任务，避免递归过深
@@ -124,3 +134,56 @@ class Viewport(QtWidgets.QWidget):
             event.acceptProposedAction()
         else:
             event.ignore()
+
+    # Example to send user events to the viewport by grpc.
+    # Off by default.
+    def eventFilter(self, watched, event: QtCore.QEvent) -> bool:
+        if (
+            event.type() == QtCore.QEvent.Type.KeyPress
+            or event.type() == QtCore.QEvent.Type.KeyRelease
+        ):
+            assert isinstance(event, QtGui.QKeyEvent)
+            key_event: QtGui.QKeyEvent = event
+            key_code = convert_key_code(key_event)
+
+            if event.type() == QtCore.QEvent.Type.KeyPress:
+                UserEventRequestBus().queue_key_event(key_code, KeyAction.Down)
+            elif event.type() == QtCore.QEvent.Type.KeyRelease:
+                UserEventRequestBus().queue_key_event(key_code, KeyAction.Up)
+
+        if event.type() == QtCore.QEvent.Type.Wheel:
+            assert isinstance(event, QtGui.QWheelEvent)
+            wheel_event: QtGui.QWheelEvent = event
+            delta = wheel_event.angleDelta().y()
+            UserEventRequestBus().queue_mouse_wheel_event(delta)
+
+        if (
+            event.type() == QtCore.QEvent.Type.MouseButtonPress
+            or event.type() == QtCore.QEvent.Type.MouseButtonRelease
+            or event.type() == QtCore.QEvent.Type.MouseMove
+        ):
+            assert isinstance(event, QtGui.QMouseEvent)
+            mouse_event: QtGui.QMouseEvent = event
+
+            if mouse_event.button() == QtCore.Qt.MouseButton.NoButton:
+                button = MouseButton.NoButton
+            elif mouse_event.button() == QtCore.Qt.MouseButton.LeftButton:
+                button = MouseButton.Left
+            elif mouse_event.button() == QtCore.Qt.MouseButton.RightButton:
+                button = MouseButton.Right
+            elif mouse_event.button() == QtCore.Qt.MouseButton.MiddleButton:
+                button = MouseButton.Middle
+            else:
+                raise RuntimeError("Unsupported mouse button")
+
+            x = mouse_event.position().x() / self.width()
+            y = mouse_event.position().y() / self.height()
+
+            if event.type() == QtCore.QEvent.Type.MouseButtonRelease:
+                UserEventRequestBus().queue_mouse_event(x, y, button, MouseAction.Up)
+            elif event.type() == QtCore.QEvent.Type.MouseButtonPress:
+                UserEventRequestBus().queue_mouse_event(x, y, button, MouseAction.Down)
+            elif event.type() == QtCore.QEvent.Type.MouseMove:
+                UserEventRequestBus().queue_mouse_event(x, y, button, MouseAction.Move)
+
+        return super().eventFilter(watched, event)

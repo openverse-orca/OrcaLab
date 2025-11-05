@@ -154,6 +154,21 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.GetCameraPNGRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetCameraPNGResponse.FromString,
                 _registered_method=True)
+        self.QueueMouseEvent = channel.unary_unary(
+                '/SceneEdit.GrpcService/QueueMouseEvent',
+                request_serializer=edit__service__pb2.QueueMouseEventRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.QueueMouseEventResponse.FromString,
+                _registered_method=True)
+        self.QueueMouseWheelEvent = channel.unary_unary(
+                '/SceneEdit.GrpcService/QueueMouseWheelEvent',
+                request_serializer=edit__service__pb2.QueueMouseWheelEventRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.QueueMouseWheelEventResponse.FromString,
+                _registered_method=True)
+        self.QueueKeyEvent = channel.unary_unary(
+                '/SceneEdit.GrpcService/QueueKeyEvent',
+                request_serializer=edit__service__pb2.QueueKeyEventRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.QueueKeyEventResponse.FromString,
+                _registered_method=True)
 
 
 class GrpcServiceServicer(object):
@@ -303,6 +318,24 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def QueueMouseEvent(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def QueueMouseWheelEvent(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def QueueKeyEvent(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GrpcServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -425,6 +458,21 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.GetCameraPNG,
                     request_deserializer=edit__service__pb2.GetCameraPNGRequest.FromString,
                     response_serializer=edit__service__pb2.GetCameraPNGResponse.SerializeToString,
+            ),
+            'QueueMouseEvent': grpc.unary_unary_rpc_method_handler(
+                    servicer.QueueMouseEvent,
+                    request_deserializer=edit__service__pb2.QueueMouseEventRequest.FromString,
+                    response_serializer=edit__service__pb2.QueueMouseEventResponse.SerializeToString,
+            ),
+            'QueueMouseWheelEvent': grpc.unary_unary_rpc_method_handler(
+                    servicer.QueueMouseWheelEvent,
+                    request_deserializer=edit__service__pb2.QueueMouseWheelEventRequest.FromString,
+                    response_serializer=edit__service__pb2.QueueMouseWheelEventResponse.SerializeToString,
+            ),
+            'QueueKeyEvent': grpc.unary_unary_rpc_method_handler(
+                    servicer.QueueKeyEvent,
+                    request_deserializer=edit__service__pb2.QueueKeyEventRequest.FromString,
+                    response_serializer=edit__service__pb2.QueueKeyEventResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1075,6 +1123,87 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/GetCameraPNG',
             edit__service__pb2.GetCameraPNGRequest.SerializeToString,
             edit__service__pb2.GetCameraPNGResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def QueueMouseEvent(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/QueueMouseEvent',
+            edit__service__pb2.QueueMouseEventRequest.SerializeToString,
+            edit__service__pb2.QueueMouseEventResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def QueueMouseWheelEvent(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/QueueMouseWheelEvent',
+            edit__service__pb2.QueueMouseWheelEventRequest.SerializeToString,
+            edit__service__pb2.QueueMouseWheelEventResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def QueueKeyEvent(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/QueueKeyEvent',
+            edit__service__pb2.QueueKeyEventRequest.SerializeToString,
+            edit__service__pb2.QueueKeyEventResponse.FromString,
             options,
             channel_credentials,
             insecure,

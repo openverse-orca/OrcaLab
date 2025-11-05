@@ -240,6 +240,34 @@ message GetCameraPNGResponse {
     string error_message = 2;
 }
 
+message QueueMouseEventRequest {
+    uint32 button = 1;
+    uint32 action = 2;
+    float x = 3;
+    float y = 4;
+}
+message QueueMouseEventResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+message QueueMouseWheelEventRequest {
+    int32 delta = 1;
+}
+message QueueMouseWheelEventResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+message QueueKeyEventRequest {
+    uint32 key = 1;
+    uint32 action = 2;
+}
+message QueueKeyEventResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
 service GrpcService {
     rpc Aloha(AlohaRequest) returns (AlohaResponse);
     
@@ -275,4 +303,9 @@ service GrpcService {
     rpc ChangeSimState(ChangeSimStateRequest) returns (ChangeSimStateResponse);
 
     rpc GetCameraPNG(GetCameraPNGRequest) returns (GetCameraPNGResponse);
+
+    rpc QueueMouseEvent(QueueMouseEventRequest) returns (QueueMouseEventResponse);
+    rpc QueueMouseWheelEvent(QueueMouseWheelEventRequest) returns (QueueMouseWheelEventResponse);
+    rpc QueueKeyEvent(QueueKeyEventRequest) returns (QueueKeyEventResponse);
+
 }

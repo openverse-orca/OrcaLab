@@ -160,7 +160,7 @@ class RemoteScene(SceneEditNotification):
         #     await self._attach()
 
         await self._attach()
-        
+
         await self.change_sim_state(False)
         print("connected to server.")
 
@@ -703,3 +703,36 @@ class RemoteScene(SceneEditNotification):
                 retry -= 1
                 await asyncio.sleep(0.01)
         return response
+
+    async def queue_mouse_event(
+        self,
+        x: float,
+        y: float,
+        button: int,
+        action: int,
+    ):
+        request = edit_service_pb2.QueueMouseEventRequest(
+            x=x,
+            y=y,
+            button=button,
+            action=action,
+        )
+        response = await self.edit_stub.QueueMouseEvent(request)
+        self._check_response(response)
+
+    async def queue_mouse_wheel_event(self, delta: int):
+        request = edit_service_pb2.QueueMouseWheelEventRequest(delta=delta)
+        response = await self.edit_stub.QueueMouseWheelEvent(request)
+        self._check_response(response)
+
+    async def queue_key_event(
+        self,
+        key: int,
+        action: int,
+    ):
+        request = edit_service_pb2.QueueKeyEventRequest(
+            key=key,
+            action=action,
+        )
+        response = await self.edit_stub.QueueKeyEvent(request)
+        self._check_response(response)

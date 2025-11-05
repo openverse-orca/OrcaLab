@@ -51,8 +51,10 @@ from orcalab.asset_service_bus import (
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 from orcalab.http_service.http_service import HttpService
 
+from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
 
-class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
+
+class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, UserEventRequest):
 
     add_item_by_drag = QtCore.Signal(str, Transform)
     load_scene_sig = QtCore.Signal(str)
@@ -67,8 +69,10 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         super().connect_buses()
         ApplicationRequestBus.connect(self)
         AssetServiceNotificationBus.connect(self)
+        UserEventRequestBus.connect(self)
 
     def disconnect_buses(self):
+        UserEventRequestBus.disconnect(self)
         AssetServiceNotificationBus.disconnect(self)
         ApplicationRequestBus.disconnect(self)
         super().disconnect_buses()
@@ -1242,3 +1246,22 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification):
         
         # Create and run the cleanup task
         asyncio.create_task(cleanup_and_close())
+
+    #
+    # UserEventRequestBus overrides
+    #
+
+    @override
+    def queue_mouse_event(self, x, y, button, action):
+        # print(f"Mouse event at ({x}, {y}), button: {button}, action: {action}")
+        asyncio.create_task(self.remote_scene.queue_mouse_event(x, y, button.value, action.value))
+    
+    @override
+    def queue_mouse_wheel_event(self, delta):
+        # print(f"Mouse wheel event, delta: {delta}")
+        asyncio.create_task(self.remote_scene.queue_mouse_wheel_event(delta))
+    
+    @override
+    def queue_key_event(self, key, action):
+        # print(f"Key event, key: {key}, action: {action}")
+        asyncio.create_task(self.remote_scene.queue_key_event(key.value, action.value))
