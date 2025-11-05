@@ -176,7 +176,7 @@ class AssetBrowser(QtWidgets.QWidget):
     async def set_assets(self, assets: List[str]):
         infos = []
         thumbnail_cache_path = get_cache_folder() / "thumbnail"
-        exclude_assets = ['prefabs/mujococamera1080', 'prefabs/mujococamera256']
+        exclude_assets = ['prefabs/mujococamera1080', 'prefabs/mujococamera256', 'prefabs/mujococamera512']
         
         # 第一步：创建所有 AssetInfo，为本地已有缩略图的设置播放器
         get_url_tasks = []
@@ -215,7 +215,7 @@ class AssetBrowser(QtWidgets.QWidget):
                 if url_result is not None and not isinstance(url_result, Exception):
                     image_url = json.loads(url_result)
                     for picture_url in image_url['pictures']:
-                        if picture_url['viewType'] == "other":
+                        if picture_url['viewType'] == "dynamic":
                             thumbnail_path = thumbnail_cache_path / (info.path + "_panorama.apng")
                             download_tasks.append(
                                 self._http_service.get_asset_thumbnail2cache(picture_url['imgUrl'], thumbnail_path)
@@ -300,10 +300,16 @@ class AssetBrowser(QtWidgets.QWidget):
             asset_metadata = asset_map.get(asset_path, None)
             if asset_metadata:
                 if ('pictures' not in asset_metadata.keys() 
-                    or len(asset_metadata['pictures']) == 0):
+                    or len(asset_metadata['pictures']) <= 5):
+                    # apng和512_png共6张
                     apng_path = os.path.join(tmp_path, f"{asset_path}_panorama.apng").__str__()
                     png_path = os.path.join(tmp_path, f"{asset_path}_1080.png").__str__()
                     files = [apng_path, png_path]
+                    for rotation_z in range(0, 360, 72):
+                        png_512_path = os.path.join(tmp_path, f"{asset_path}_{rotation_z}_512.png").__str__()
+                        if os.path.exists(png_512_path):
+                            files.append(png_512_path)
+
                     upload_tasks.append(self._http_service.post_asset_thumbnail(asset_metadata['id'], files))
         
         if upload_tasks:
@@ -316,6 +322,10 @@ class AssetBrowser(QtWidgets.QWidget):
         if subscription_metadata is None:
             return
         subscription_metadata = json.loads(subscription_metadata)
+        with open(os.path.join(get_cache_folder(), "metadata.json"), "w") as f:
+            json.dump(subscription_metadata, f, ensure_ascii=False, indent=2)
+
+        self._metadata_service.reload_metadata()
         all_assets = self._model.get_all_assets()
         # 移除相机
         asset_paths = [asset.path for asset in all_assets]
@@ -324,7 +334,10 @@ class AssetBrowser(QtWidgets.QWidget):
             asset_paths.pop(asset_paths.index('prefabs/mujococamera1080'))
         if 'prefabs/mujococamera256' in asset_paths:
             all_assets.pop(asset_paths.index('prefabs/mujococamera256'))
-
+            asset_paths.pop(asset_paths.index('prefabs/mujococamera256'))
+        if 'prefabs/mujococamera512' in asset_paths:
+            all_assets.pop(asset_paths.index('prefabs/mujococamera512'))
+            asset_paths.pop(asset_paths.index('prefabs/mujococamera512'))
         # 预处理：拷贝本地缩略图，收集需要下载的任务
         new_assets = []
         download_tasks = []
@@ -334,7 +347,7 @@ class AssetBrowser(QtWidgets.QWidget):
             new_assets.append(asset)
             tmp_thumbnail_path = os.path.join(tmp_path, f"{asset.path}_panorama.apng").__str__()
             cache_thumbnail_path = os.path.join(get_cache_folder(), "thumbnail", f"{asset.path}_panorama.apng").__str__()
-            
+            asset.metadata = self._metadata_service.get_asset_info(asset.path)
             if asset.metadata is None:
                 if not os.path.exists(cache_thumbnail_path):
                     os.makedirs(os.path.dirname(cache_thumbnail_path), exist_ok=True)
@@ -347,7 +360,7 @@ class AssetBrowser(QtWidgets.QWidget):
                 if not os.path.exists(cache_thumbnail_path):
                     pictures_url = asset.metadata['pictures']
                     for picture_url in pictures_url:
-                        if picture_url['viewType'] == "other":
+                        if picture_url['viewType'] == "dynamic":
                             download_tasks.append(
                                 self._http_service.get_asset_thumbnail2cache(picture_url['imgUrl'], cache_thumbnail_path)
                             )
@@ -367,9 +380,7 @@ class AssetBrowser(QtWidgets.QWidget):
                         new_assets[asset_idx].apng_player = player
         
         self._model.set_assets(new_assets)
-        with open(os.path.join(get_cache_folder(), "metadata.json"), "w") as f:
-            json.dump(subscription_metadata, f, ensure_ascii=False, indent=2)
-        self._metadata_service.reload_metadata()
+
         if os.path.exists(tmp_path):
             shutil.rmtree(tmp_path)
 

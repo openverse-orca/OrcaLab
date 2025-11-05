@@ -22,6 +22,7 @@ message Transform {
 message AlohaRequest {
     int32 value = 1;
 }
+
 message AlohaResponse {
     StatusCode status_code = 1;
     string error_message = 2;
@@ -240,6 +241,17 @@ message GetCameraPNGResponse {
     string error_message = 2;
 }
 
+message GetActorAssetAabbRequest {
+    string actor_path = 1;
+}
+
+message GetActorAssetAabbResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    repeated float min = 3;
+    repeated float max = 4;
+}
+
 message QueueMouseEventRequest {
     uint32 button = 1;
     uint32 action = 2;
@@ -303,6 +315,7 @@ service GrpcService {
     rpc ChangeSimState(ChangeSimStateRequest) returns (ChangeSimStateResponse);
 
     rpc GetCameraPNG(GetCameraPNGRequest) returns (GetCameraPNGResponse);
+    rpc GetActorAssetAabb(GetActorAssetAabbRequest) returns (GetActorAssetAabbResponse);
 
     rpc QueueMouseEvent(QueueMouseEventRequest) returns (QueueMouseEventResponse);
     rpc QueueMouseWheelEvent(QueueMouseWheelEventRequest) returns (QueueMouseWheelEventResponse);

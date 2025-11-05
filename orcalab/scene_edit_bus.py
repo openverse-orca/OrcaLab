@@ -188,6 +188,13 @@ class SceneEditNotification:
     ):
         pass
 
+    async def get_actor_asset_aabb(
+        self,
+        actor_path: Path,
+        output: List[float] = None
+    ):
+        pass
+
 SceneEditNotificationBus = create_event_bus(SceneEditNotification)
 
 

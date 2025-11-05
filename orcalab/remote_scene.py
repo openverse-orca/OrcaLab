@@ -704,6 +704,15 @@ class RemoteScene(SceneEditNotification):
                 await asyncio.sleep(0.01)
         return response
 
+    async def get_actor_asset_aabb(self, actor_path: Path, output: List[float] = None):
+        request = edit_service_pb2.GetActorAssetAabbRequest(actor_path=actor_path.string())
+        response = await self.edit_stub.GetActorAssetAabb(request)
+        self._check_response(response)
+        if output is not None:
+            output.extend(response.min)
+            output.extend(response.max)
+        return response
+
     async def queue_mouse_event(
         self,
         x: float,
