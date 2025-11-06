@@ -255,8 +255,15 @@ class AssetSyncService:
             if response.status_code != 200:
                 self.log(f"❌ 获取metadata失败: HTTP {response.status_code}")
                 return
-            remote_metadata = response.json()
+            remote_metadata_published = response.json()
             
+            response = requests.get(f"{self.base_url}/meta/?isPublished=false", headers=self.get_headers(), timeout=self.timeout)
+            if response.status_code != 200:
+                self.log(f"❌ 获取metadata失败: HTTP {response.status_code}")
+                return
+            remote_metadata_unpublished = response.json()
+            remote_metadata = remote_metadata_published + remote_metadata_unpublished
+
             for sub_metadata in remote_metadata:
                 if sub_metadata['id'] in to_update_metadata:
                     for key, value in sub_metadata.items():

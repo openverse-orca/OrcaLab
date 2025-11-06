@@ -39,11 +39,17 @@ class HttpService(HttpServiceRequest):
     @override
     async def get_all_metadata(self, output: List[str] = None) -> str:
         metadata_url = f"{self.base_url}/meta/?isPublished=true"
+        metadata_url_unpublished = f"{self.base_url}/meta/?isPublished=false"
         async with aiohttp.ClientSession() as session:
             async with session.get(metadata_url, headers=self._get_headers()) as response:
                 if response.status != 200:
                     return None
-                metadata = await response.json()
+                metadata_published = await response.json()
+                async with session.get(metadata_url_unpublished, headers=self._get_headers()) as response:
+                    if response.status != 200:
+                        return None
+                    metadata_unpublished = await response.json()
+                metadata = metadata_published + metadata_unpublished
                 metadata = json.dumps(metadata, ensure_ascii=False, indent=2)
                 if output is not None:
                     output.extend(metadata)
