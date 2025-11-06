@@ -154,6 +154,11 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.GetCameraPNGRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetCameraPNGResponse.FromString,
                 _registered_method=True)
+        self.GetActorAssetAabb = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetActorAssetAabb',
+                request_serializer=edit__service__pb2.GetActorAssetAabbRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetActorAssetAabbResponse.FromString,
+                _registered_method=True)
         self.QueueMouseEvent = channel.unary_unary(
                 '/SceneEdit.GrpcService/QueueMouseEvent',
                 request_serializer=edit__service__pb2.QueueMouseEventRequest.SerializeToString,
@@ -318,6 +323,12 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetActorAssetAabb(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def QueueMouseEvent(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -458,6 +469,11 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.GetCameraPNG,
                     request_deserializer=edit__service__pb2.GetCameraPNGRequest.FromString,
                     response_serializer=edit__service__pb2.GetCameraPNGResponse.SerializeToString,
+            ),
+            'GetActorAssetAabb': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetActorAssetAabb,
+                    request_deserializer=edit__service__pb2.GetActorAssetAabbRequest.FromString,
+                    response_serializer=edit__service__pb2.GetActorAssetAabbResponse.SerializeToString,
             ),
             'QueueMouseEvent': grpc.unary_unary_rpc_method_handler(
                     servicer.QueueMouseEvent,
@@ -1123,6 +1139,33 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/GetCameraPNG',
             edit__service__pb2.GetCameraPNGRequest.SerializeToString,
             edit__service__pb2.GetCameraPNGResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetActorAssetAabb(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetActorAssetAabb',
+            edit__service__pb2.GetActorAssetAabbRequest.SerializeToString,
+            edit__service__pb2.GetActorAssetAabbResponse.FromString,
             options,
             channel_credentials,
             insecure,
