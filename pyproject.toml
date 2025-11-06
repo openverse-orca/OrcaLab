@@ -55,6 +55,9 @@ dev = [
     "mypy",       # 静态类型检查工具
 ]
 
+[tool.setuptools]
+license-files = []
+
 [tool.setuptools.packages.find]
 # Only include orcalab package, exclude examples, test, doc
 include = ["orcalab*"]
