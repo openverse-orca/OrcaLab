@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package OrcaUrl;
+
+enum StatusCode {
+    Success = 0;
+    Error = 1;
+}
+
+message ProcessUrlRequest {
+    string url = 1;
+}
+
+message ProcessUrlResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+service GrpcService {
+    rpc ProcessUrl(ProcessUrlRequest) returns (ProcessUrlResponse);
+}

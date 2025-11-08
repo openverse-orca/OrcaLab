@@ -1,0 +1,386 @@
+import asyncio
+import json
+import os
+import shutil
+from typing import List, override
+from PySide6 import QtCore, QtWidgets, QtGui
+from PySide6.QtCore import Qt
+import time
+from orcalab.actor import BaseActor, GroupActor
+
+from orcalab.ui.asset_browser.asset_info import AssetInfo
+from orcalab.ui.asset_browser.asset_view import AssetView
+from orcalab.ui.asset_browser.asset_model import AssetModel
+from orcalab.ui.asset_browser.asset_info_view import AssetInfoView
+from orcalab.ui.asset_browser.apng_player import ApngPlayer
+from orcalab.metadata_service import MetadataService
+from orcalab.ui.asset_browser.thumbnail_render_bus import ThumbnailRenderRequestBus
+from orcalab.ui.asset_browser.thumbnail_render_service import ThumbnailRenderService
+from orcalab.http_service.http_service import HttpService
+from orcalab.project_util import get_cache_folder
+
+class AssetBrowser(QtWidgets.QWidget):
+
+    add_item = QtCore.Signal(str, BaseActor)
+
+    render_thumbnail = QtCore.Signal(list)
+    on_render_thumbnail_finished = QtCore.Signal(list)
+    on_upload_thumbnail_finished = QtCore.Signal()
+
+    def __init__(self):
+        super().__init__()
+        self._metadata_service = MetadataService()
+        self._thumbnail_render_service = ThumbnailRenderService()
+        self._http_service = HttpService()
+        self._setup_ui()
+        self._setup_connections()
+
+    def _setup_ui(self):
+
+        # 正向匹配搜索框
+
+        include_label = QtWidgets.QLabel("包含:")
+        include_label.setFixedWidth(40)
+        include_label.setStyleSheet("color: #ffffff; font-size: 11px;")
+
+        self.include_search_box = QtWidgets.QLineEdit()
+        self.include_search_box.setPlaceholderText("输入要包含的文本...")
+        self.include_search_box.setStyleSheet(
+            """
+            QLineEdit {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+            QLineEdit:focus {
+                border-color: #0078d4;
+            }
+        """
+        )
+
+        # 剔除匹配搜索框
+
+        exclude_label = QtWidgets.QLabel("排除:")
+        exclude_label.setFixedWidth(40)
+        exclude_label.setStyleSheet("color: #ffffff; font-size: 11px;")
+
+        self.exclude_search_box = QtWidgets.QLineEdit()
+        self.exclude_search_box.setPlaceholderText("输入要排除的文本...")
+        self.exclude_search_box.setStyleSheet(
+            """
+            QLineEdit {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+            QLineEdit:focus {
+                border-color: #dc3545;
+            }
+        """
+        )
+
+        self.create_panorama_apng_button = QtWidgets.QPushButton("渲染缩略图")
+        self.create_panorama_apng_button.setToolTip("渲染资产缩略图")
+        self.create_panorama_apng_button.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #007acc;
+                color: #ffffff;
+                border: none;
+                border-radius: 3px;
+                padding: 6px 12px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #005a9e;
+            }
+            QPushButton:pressed {
+                background-color: #004578;
+            }
+            QPushButton:disabled {
+                background-color: #555555;
+                color: #999999;
+            }
+        """
+        )
+
+        # 状态标签
+        self.status_label = QtWidgets.QLabel("0 assets")
+        self.status_label.setStyleSheet(
+            """
+            QLabel {
+                color: #888888;
+                font-size: 11px;
+                padding: 2px 8px;
+                background-color: #2b2b2b;
+                border-top: 1px solid #404040;
+            }
+        """
+        )
+
+        self._view = AssetView()
+        self._model = AssetModel()
+        self._view.set_model(self._model)
+
+        self._info_view = AssetInfoView()
+        self._info_view.setFixedWidth(250)
+
+        tool_bar_layout = QtWidgets.QHBoxLayout()
+        tool_bar_layout.setContentsMargins(0, 0, 0, 0)
+        tool_bar_layout.setSpacing(0)
+
+        tool_bar_layout.addWidget(include_label)
+        tool_bar_layout.addWidget(self.include_search_box)
+        tool_bar_layout.addSpacing(10)
+        tool_bar_layout.addWidget(exclude_label)
+        tool_bar_layout.addWidget(self.exclude_search_box)
+        tool_bar_layout.addStretch()
+        tool_bar_layout.addWidget(self.create_panorama_apng_button)
+        tool_bar_layout.addSpacing(5)
+        tool_bar_layout.addWidget(self.status_label)
+
+        left_layout = QtWidgets.QVBoxLayout()
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
+        left_layout.addLayout(tool_bar_layout)
+        left_layout.addWidget(self._view, 1)
+
+        root_layout = QtWidgets.QHBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+        root_layout.addLayout(left_layout)
+        root_layout.addWidget(self._info_view)
+
+        self._view.selection_changed.connect(self._on_selection_changed)
+
+    def _setup_connections(self):
+        """设置信号连接"""
+        self.include_search_box.textChanged.connect(self._on_include_filter_changed)
+        self.exclude_search_box.textChanged.connect(self._on_exclude_filter_changed)
+        self.create_panorama_apng_button.clicked.connect(
+            lambda: asyncio.create_task(self._on_create_panorama_apng_clicked())
+        )
+        self.on_render_thumbnail_finished.connect(
+            lambda asset_paths: asyncio.create_task(self._on_render_thumbnail_finished(asset_paths))
+        )
+        self.on_upload_thumbnail_finished.connect(
+            lambda: asyncio.create_task(self._on_upload_thumbnail_finished())
+        )
+    async def set_assets(self, assets: List[str]):
+        infos = []
+        thumbnail_cache_path = get_cache_folder() / "thumbnail"
+        exclude_assets = ['prefabs/mujococamera1080', 'prefabs/mujococamera256', 'prefabs/mujococamera512']
+        
+        # 第一步：创建所有 AssetInfo，为本地已有缩略图的设置播放器
+        get_url_tasks = []
+        need_download_infos = []  # 需要下载缩略图的 info
+        
+        for asset in assets:
+            info = AssetInfo()
+            info.name = asset.split("/")[-1]
+            info.path = asset
+            if info.path in exclude_assets:
+                continue
+            info.metadata = self._metadata_service.get_asset_info(asset)
+            
+            thumbnail_path = thumbnail_cache_path / (asset + "_panorama.apng")
+            if thumbnail_path.exists():
+                player = ApngPlayer(str(thumbnail_path))
+                if player.is_valid():
+                    player.set_scaled_size(QtCore.QSize(96, 96))
+                    info.apng_player = player
+            else:
+                if info.metadata is not None:
+                    get_url_tasks.append(self._http_service.get_image_url(info.metadata['id']))
+                    need_download_infos.append(info)
+            
+            infos.append(info)
+        
+        # 第二步：并行获取所有图片 URL
+        if get_url_tasks:
+            url_results = await asyncio.gather(*get_url_tasks, return_exceptions=True)
+            
+            # 第三步：收集下载任务
+            download_tasks = []
+            download_info_map = []  # (info, thumbnail_path)
+            
+            for info, url_result in zip(need_download_infos, url_results):
+                if url_result is not None and not isinstance(url_result, Exception):
+                    image_url = json.loads(url_result)
+                    for picture_url in image_url['pictures']:
+                        if picture_url['viewType'] == "dynamic":
+                            thumbnail_path = thumbnail_cache_path / (info.path + "_panorama.apng")
+                            download_tasks.append(
+                                self._http_service.get_asset_thumbnail2cache(picture_url['imgUrl'], thumbnail_path)
+                            )
+                            download_info_map.append((info, thumbnail_path))
+                            break
+            
+            # 第四步：并行下载所有缩略图
+            if download_tasks:
+                await asyncio.gather(*download_tasks, return_exceptions=True)
+                
+                # 为下载成功的资产创建播放器
+                for info, thumbnail_path in download_info_map:
+                    if thumbnail_path.exists():
+                        player = ApngPlayer(str(thumbnail_path))
+                        if player.is_valid():
+                            player.set_scaled_size(QtCore.QSize(96, 96))
+                            info.apng_player = player
+        
+        self._model.set_assets(infos)
+
+    def _on_include_filter_changed(self, text: str):
+        self._model.include_filter = text
+        self._model.apply_filters()
+
+    def _on_exclude_filter_changed(self, text: str):
+        self._model.exclude_filter = text
+        self._model.apply_filters()
+
+    def _on_selection_changed(self):
+        index = self._view.selected_index()
+        if index == -1:
+            self._info_view.set_asset_info(None)
+        else:
+            info = self._model.info_at(index)
+            self._info_view.set_asset_info(info)
+
+    # def _update_status(self):
+    #     total_count = self._model.get_total_count()
+    #     filtered_count = self._model.get_filtered_count()
+
+    #     if self.include_search_box.text() or self.exclude_search_box.text():
+    #         self.status_label.setText(f"{filtered_count} / {total_count} assets")
+    #     else:
+    #         self.status_label.setText(f"{total_count} assets")
+
+    # def show_context_menu(self, pos):
+    #     """显示右键菜单"""
+    #     index = self.list_view.indexAt(pos)
+    #     if not index.isValid():
+    #         return
+    #     selected_item_name = index.data(QtCore.Qt.DisplayRole)
+    #     context_menu = QtWidgets.QMenu(self)
+    #     add_action = QtGui.QAction(f"Add {selected_item_name}", self)
+    #     add_action.triggered.connect(lambda: self.on_add_item(selected_item_name))
+    #     context_menu.addAction(add_action)
+    #     context_menu.exec(self.list_view.mapToGlobal(pos))
+
+    async def _on_create_panorama_apng_clicked(self):
+        """创建APNG全景图"""
+        assets = self._model.get_all_assets()
+        asset_paths = []
+        cache_thumbnail_path = get_cache_folder() / "thumbnail"
+        for asset in assets:
+            asset_path = asset.path.removesuffix('.spawnable')
+            if not os.path.exists(cache_thumbnail_path / (asset_path + "_panorama.apng")):
+                asset_paths.append(asset_path)
+        if len(assets) == 0:
+            return
+        await self._thumbnail_render_service.render_thumbnail(asset_paths)
+        self.on_render_thumbnail_finished.emit(asset_paths)
+
+    async def _on_render_thumbnail_finished(self, asset_paths: List[str]):
+        asset_map = self._metadata_service.get_asset_map()
+        if asset_map is None:
+            return
+        tmp_path = os.path.join(os.path.expanduser("~"), ".orcalab", "tmp")
+        
+        # 并行上传缩略图
+        upload_tasks = []
+        for asset_path in asset_paths:
+            asset_metadata = asset_map.get(asset_path, None)
+            if asset_metadata:
+                if ('pictures' not in asset_metadata.keys() 
+                    or len(asset_metadata['pictures']) <= 5):
+                    # apng和512_png共6张
+                    apng_path = os.path.join(tmp_path, f"{asset_path}_panorama.apng").__str__()
+                    png_path = os.path.join(tmp_path, f"{asset_path}_1080.png").__str__()
+                    files = [apng_path, png_path]
+                    for rotation_z in range(0, 360, 72):
+                        png_512_path = os.path.join(tmp_path, f"{asset_path}_{rotation_z}_512.png").__str__()
+                        if os.path.exists(png_512_path):
+                            files.append(png_512_path)
+
+                    upload_tasks.append(self._http_service.post_asset_thumbnail(asset_metadata['id'], files))
+        
+        if upload_tasks:
+            await asyncio.gather(*upload_tasks, return_exceptions=True)
+        self.on_upload_thumbnail_finished.emit()
+
+    async def _on_upload_thumbnail_finished(self):
+        tmp_path = os.path.join(os.path.expanduser("~"), ".orcalab", "tmp")
+        subscription_metadata = await self._http_service.get_subscription_metadata()
+        if subscription_metadata is None:
+            return
+        subscription_metadata = json.loads(subscription_metadata)
+        with open(os.path.join(get_cache_folder(), "metadata.json"), "w") as f:
+            json.dump(subscription_metadata, f, ensure_ascii=False, indent=2)
+
+        self._metadata_service.reload_metadata()
+        all_assets = self._model.get_all_assets()
+        # 移除相机
+        asset_paths = [asset.path for asset in all_assets]
+        if 'prefabs/mujococamera1080' in asset_paths:
+            all_assets.pop(asset_paths.index('prefabs/mujococamera1080'))
+            asset_paths.pop(asset_paths.index('prefabs/mujococamera1080'))
+        if 'prefabs/mujococamera256' in asset_paths:
+            all_assets.pop(asset_paths.index('prefabs/mujococamera256'))
+            asset_paths.pop(asset_paths.index('prefabs/mujococamera256'))
+        if 'prefabs/mujococamera512' in asset_paths:
+            all_assets.pop(asset_paths.index('prefabs/mujococamera512'))
+            asset_paths.pop(asset_paths.index('prefabs/mujococamera512'))
+        # 预处理：拷贝本地缩略图，收集需要下载的任务
+        new_assets = []
+        download_tasks = []
+        download_info = []  # (asset_index, cache_path)
+        
+        for asset in all_assets:
+            new_assets.append(asset)
+            tmp_thumbnail_path = os.path.join(tmp_path, f"{asset.path}_panorama.apng").__str__()
+            cache_thumbnail_path = os.path.join(get_cache_folder(), "thumbnail", f"{asset.path}_panorama.apng").__str__()
+            asset.metadata = self._metadata_service.get_asset_info(asset.path)
+            if asset.metadata is None:
+                if not os.path.exists(cache_thumbnail_path):
+                    os.makedirs(os.path.dirname(cache_thumbnail_path), exist_ok=True)
+                    shutil.copy(tmp_thumbnail_path, cache_thumbnail_path)
+                    player = ApngPlayer(str(cache_thumbnail_path))
+                    if player.is_valid():
+                        player.set_scaled_size(QtCore.QSize(96, 96))
+                        asset.apng_player = player
+            else:
+                if not os.path.exists(cache_thumbnail_path):
+                    pictures_url = asset.metadata['pictures']
+                    for picture_url in pictures_url:
+                        if picture_url['viewType'] == "dynamic":
+                            download_tasks.append(
+                                self._http_service.get_asset_thumbnail2cache(picture_url['imgUrl'], cache_thumbnail_path)
+                            )
+                            download_info.append((len(new_assets) - 1, cache_thumbnail_path))
+                            break
+        
+        # 并行下载所有缩略图
+        if download_tasks:
+            await asyncio.gather(*download_tasks, return_exceptions=True)
+            
+            # 为下载成功的资产创建播放器
+            for asset_idx, cache_path in download_info:
+                if os.path.exists(cache_path):
+                    player = ApngPlayer(str(cache_path))
+                    if player.is_valid():
+                        player.set_scaled_size(QtCore.QSize(96, 96))
+                        new_assets[asset_idx].apng_player = player
+        
+        self._model.set_assets(new_assets)
+
+        if os.path.exists(tmp_path):
+            shutil.rmtree(tmp_path)
+

@@ -1,0 +1,41 @@
+# Include package data files
+include README.md
+include LICENSE
+include pyproject.toml
+# Note: orca.config.user.toml is intentionally excluded - it's a user-specific config file
+
+# Include proto files
+recursive-include orcalab/protos *.proto
+
+# Include asset files
+recursive-include orcalab/assets *.qrc
+recursive-include orcalab/assets *.svg
+recursive-include orcalab/assets *.png
+recursive-include orcalab/assets *.jpg
+recursive-include orcalab/assets *.jpeg
+
+# Include configuration files
+recursive-include orcalab *.toml
+recursive-include orcalab *.yaml
+recursive-include orcalab *.yml
+# Exclude example files (for developers only, not needed in pip packages)
+recursive-exclude orcalab *.example
+
+# Include type hints
+recursive-include orcalab *.pyi
+
+# Exclude test files
+recursive-exclude test *
+recursive-exclude tests *
+recursive-exclude examples *
+recursive-exclude doc *
+recursive-exclude docs *
+
+# Exclude build artifacts
+exclude Makefile
+recursive-exclude scripts *
+recursive-exclude .git *
+recursive-exclude __pycache__ *
+recursive-exclude *.pyc
+recursive-exclude *.pyo
+recursive-exclude *.egg-info *

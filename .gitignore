@@ -11,6 +11,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+dist-test/
 downloads/
 eggs/
 .eggs/
@@ -205,3 +206,18 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# vscode
+.VSCodeCounter/
+.vscode/
+.cursor/
+
+
+# personal config file
+orcalab/orca.config.user.toml
+
+MUJOCO_LOG.TXT
+
+/imgui.ini
+/out.xml
+/tmp/
