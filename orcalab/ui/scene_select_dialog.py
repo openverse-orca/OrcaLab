@@ -6,8 +6,10 @@ class SceneSelectDialog(QtWidgets.QDialog):
         self.setWindowTitle("选择场景")
         self.setModal(True)
         self.resize(350, 250)
-        self.levels = levels
-        self.selected_level = current_level or (levels[0] if levels else None)
+        self.levels = self._normalize_levels(levels)
+        self.selected_level = current_level or (
+            self.levels[0]["path"] if self.levels else None
+        )
         self._init_ui()
 
     def _init_ui(self):
@@ -27,8 +29,9 @@ class SceneSelectDialog(QtWidgets.QDialog):
         self.radio_buttons = []
         group = QtWidgets.QButtonGroup(self)
         for idx, level in enumerate(self.levels):
-            radio = QtWidgets.QRadioButton(level, self)
-            if level == self.selected_level:
+            radio = QtWidgets.QRadioButton(level["name"], self)
+            radio.setProperty("level_path", level["path"])
+            if level["path"] == self.selected_level:
                 radio.setChecked(True)
             group.addButton(radio)
             self.radio_buttons.append(radio)
@@ -49,7 +52,31 @@ class SceneSelectDialog(QtWidgets.QDialog):
     def get_selected_level(self):
         for btn in self.radio_buttons:
             if btn.isChecked():
-                return btn.text()
+                path = btn.property("level_path")
+                return self._get_level_by_path(path)
+        return None
+
+    @staticmethod
+    def _normalize_levels(levels):
+        normalized = []
+        for item in levels or []:
+            if isinstance(item, dict):
+                path = item.get("path") or item.get("name")
+                if not path:
+                    continue
+                name = item.get("name") or path
+            else:
+                path = str(item)
+                name = path
+            normalized.append({"name": name, "path": path})
+        return normalized
+
+    def _get_level_by_path(self, path):
+        if not path:
+            return None
+        for item in self.levels:
+            if item["path"] == path:
+                return item
         return None
 
     @staticmethod

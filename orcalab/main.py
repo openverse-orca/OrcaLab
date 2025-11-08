@@ -139,6 +139,12 @@ def main():
     # 同步订阅的资产包（带UI）
     run_asset_sync_ui(config_service)
 
+    from orcalab.level_discovery import discover_levels_from_cache
+
+    discovered_levels = discover_levels_from_cache()
+    if discovered_levels:
+        config_service.merge_levels(discovered_levels)
+
     # 场景选择
     from orcalab.ui.scene_select_dialog import SceneSelectDialog
     levels = config_service.levels() if hasattr(config_service, 'levels') else []
@@ -146,8 +152,8 @@ def main():
     if levels:
         selected, ok = SceneSelectDialog.get_level(levels, current)
         if ok and selected:
-            config_service.config["orcalab"]["level"] = selected
-            logger.info("用户选择了场景: %s", selected)
+            config_service.set_current_level(selected)
+            logger.info("用户选择了场景: %s", selected.get("name"))
         else:
             logger.info("用户未选择场景，使用默认值")
 
