@@ -727,6 +727,16 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
             logger.info("外部程序 %s 启动成功", program_name)
         else:
             logger.error("外部程序 %s 启动失败", program_name)
+            self.terminal_widget._append_output(f"外部程序 {program_name} 启动失败，请检查命令配置或日志输出。\n")
+            try:
+                await self.remote_scene.restore_body_transform()
+                await self.remote_scene.change_sim_state(False)
+            except Exception as e:
+                logger.exception("回滚模拟状态时发生错误: %s", e)
+            finally:
+                self.sim_process_running = False
+                self.enable_control.emit()
+                self._update_button_states()
     
     async def _before_sim_startup(self):
         # 清除选择状态
@@ -747,7 +757,10 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         """在主线程中启动外部进程，并将输出重定向到terminal_widget（异步版本）"""
         try:
             # 构建完整的命令
-            cmd = [command] + args
+            resolved_command = command
+            if command in ("python", "python3"):
+                resolved_command = sys.executable or command
+            cmd = [resolved_command] + args
             
             # 启动进程，将输出重定向到terminal_widget
             self.sim_process = subprocess.Popen(
@@ -763,6 +776,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
             self.terminal_widget._append_output(f"启动进程: {' '.join(cmd)}\n")
             self.terminal_widget._append_output(f"工作目录: {os.getcwd()}\n")
             self.terminal_widget._append_output("-" * 50 + "\n")
+            logger.info("启动外部程序: %s", " ".join(cmd))
             
             # 启动输出读取线程
             self._start_output_redirect_thread()
@@ -770,6 +784,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
             return True
             
         except Exception as e:
+            logger.exception("启动外部程序失败: %s", e)
             self.terminal_widget._append_output(f"启动进程失败: {str(e)}\n")
             return False
     
