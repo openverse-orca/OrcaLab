@@ -70,6 +70,27 @@ def register_signal_handlers():
         signal.signal(signal.SIGHUP, signal_handler)  # Hangup signal
 
 
+def _looks_like_orcalab_process(name: str, exe: str, cmdline: str) -> bool:
+    """Return True if process metadata suggests it is an OrcaLab instance."""
+    if "orcalab" in name or "orcalab" in exe:
+        return True
+
+    if "orcalab" not in cmdline:
+        return False
+
+    # Only treat as OrcaLab if it's a Python process or directly invokes the orcalab module
+    python_markers = ("python", "python3", "pypy")
+    module_markers = ("-m orcalab", "orcalab/main", "orcalab/__main__", "orcalab.py")
+
+    if any(marker in cmdline for marker in python_markers):
+        return True
+
+    if any(marker in cmdline for marker in module_markers):
+        return True
+
+    return False
+
+
 def _find_other_orcalab_processes() -> list[psutil.Process]:
     """查找当前之外仍在运行的 OrcaLab 进程"""
     current_pid = os.getpid()
@@ -85,8 +106,11 @@ def _find_other_orcalab_processes() -> list[psutil.Process]:
             exe = (info.get("exe") or "").lower()
             cmdline = " ".join(str(part).lower() for part in info.get("cmdline") or [])
 
-            if "orcalab" in name or "orcalab" in exe or "orcalab" in cmdline:
-                processes.append(proc)
+            # Skip helper processes that reference OrcaLab only in arguments
+            if not _looks_like_orcalab_process(name, exe, cmdline):
+                continue
+
+            processes.append(proc)
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
 

@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, UserEventRequest):
 
     add_item_by_drag = QtCore.Signal(str, Transform)
-    load_scene_sig = QtCore.Signal(str)
+    load_scene_layout_sig = QtCore.Signal(str)
     enable_control = QtCore.Signal()
     disanble_control = QtCore.Signal()
 
@@ -147,7 +147,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         connect(self.menu_edit.aboutToShow, self.prepare_edit_menu)
 
         connect(self.add_item_by_drag, self.add_item_drag)
-        connect(self.load_scene_sig, self.load_scene)
+        connect(self.load_scene_layout_sig, self.load_scene_layout)
 
         connect(self.enable_control, self.enable_widgets)
         connect(self.disanble_control, self.disable_widgets)
@@ -973,18 +973,18 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         action_exit = self.menu_file.addAction("Exit")
         connect(action_exit.triggered, self.close)
 
-        action_sava = self.menu_file.addAction("Save")
-        connect(action_sava.triggered, self.save_scene)
+        action_sava = self.menu_file.addAction("Save Scene Layout")
+        connect(action_sava.triggered, self.save_scene_layout)
 
-        action_open = self.menu_file.addAction("Open")
-        connect(action_open.triggered, self.open_scene)
+        action_open = self.menu_file.addAction("Open Scene Layout")
+        connect(action_open.triggered, self.open_scene_layout)
 
-    def save_scene(self, filename: str = None):
+    def save_scene_layout(self, filename: str = None):
         filename, _ = QtWidgets.QFileDialog.getSaveFileName(
             self,  
-            "Save Scene",  
+            "Save Scene Layout",  
             self.cwd, 
-            "JSON Files (*.json);;All Files (*)"
+            "Scene Layout Files (*.json);;All Files (*)"
         )
 
         if filename == "":
@@ -992,14 +992,14 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         if not filename.lower().endswith(".json"):
             filename += ".json"
         root = self.local_scene.root_actor
-        scene_dict = self.actor_to_dict(root)
+        scene_layout_dict = self.actor_to_dict(root)
 
         try:
             with open(filename, "w", encoding="utf-8") as f:
-                json.dump(scene_dict, f, indent=4, ensure_ascii=False)
-            logger.info("场景已保存至 %s", filename)
+                json.dump(scene_layout_dict, f, indent=4, ensure_ascii=False)
+            logger.info("场景布局已保存至 %s", filename)
         except Exception as e:
-            logger.exception("保存场景失败: %s", e)
+            logger.exception("保存场景布局失败: %s", e)
 
     def actor_to_dict(self, actor: AssetActor | GroupActor):
         def to_list(v):
@@ -1032,36 +1032,36 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
 
         return data
 
-    def open_scene(self, filename: str = None):
+    def open_scene_layout(self, filename: str = None):
         filename, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
-            "Open Scene",
+            "Open Scene Layout",
             self.cwd,
-            "Scene Files (*.json);;All Files (*)"
+            "Scene Layout Files (*.json);;All Files (*)"
         )
         if not filename:
             return
         else:
-            self.load_scene_sig.emit(filename)
+            self.load_scene_layout_sig.emit(filename)
 
-    async def load_scene(self, filename):
+    async def load_scene_layout(self, filename):
         try:
             with open(filename, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as e:
-            logger.exception("读取场景文件失败: %s", e)
+            logger.exception("读取场景布局文件失败: %s", e)
 
-        await self.clear_scene(self.local_scene.root_actor)
-        await self.create_actor_from_scene(data)
+        await self.clear_scene_layout(self.local_scene.root_actor)
+        await self.create_actor_from_scene_layout(data)
 
-    async def clear_scene(self, actor):
+    async def clear_scene_layout(self, actor):
         if isinstance(actor, GroupActor):
             for child_actor in actor.children:
-                await self.clear_scene(child_actor)
+                await self.clear_scene_layout(child_actor)
         if actor != self.local_scene.root_actor:
             await SceneEditRequestBus().delete_actor(actor)
     
-    async def create_actor_from_scene(self, actor_data, parent: GroupActor = None):
+    async def create_actor_from_scene_layout(self, actor_data, parent: GroupActor = None):
         name = actor_data["name"]
         actor_type = actor_data.get("type", "BaseActor")
         if actor_type == "AssetActor":
@@ -1084,7 +1084,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
 
         if isinstance(actor, GroupActor):
             for child_data in actor_data.get("children", []):
-                await self.create_actor_from_scene(child_data, actor)
+                await self.create_actor_from_scene_layout(child_data, actor)
 
 
     def prepare_edit_menu(self):
