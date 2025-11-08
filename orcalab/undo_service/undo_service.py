@@ -1,5 +1,6 @@
 from copy import deepcopy
 from typing import override, List
+import logging
 from orcalab.actor import BaseActor, GroupActor, AssetActor
 from orcalab.path import Path
 
@@ -17,6 +18,8 @@ from orcalab.undo_service.command import (
 
 from orcalab.undo_service.undo_service_bus import UndoRequest, UndoRequestBus
 from orcalab.scene_edit_bus import SceneEditRequestBus, get_actor_and_path
+
+logger = logging.getLogger(__name__)
 
 
 class UndoService(UndoRequest):
@@ -45,7 +48,7 @@ class UndoService(UndoRequest):
 
         self.command_history_index = self.command_history_index + 1
 
-        print(f"Added command: {command}")
+        logger.debug("Added command: %s", command)
 
     @override
     def can_undo(self, out: List[bool]):

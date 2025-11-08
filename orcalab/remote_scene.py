@@ -24,9 +24,12 @@ import subprocess
 import time
 import pathlib
 import psutil
+import logging
 
 Success = edit_service_pb2.StatusCode.Success
 Error = edit_service_pb2.StatusCode.Error
+
+logger = logging.getLogger(__name__)
 
 
 # 由于Qt是异步的，所以这里只提供异步接口。
@@ -78,51 +81,49 @@ class RemoteScene(SceneEditNotification):
                 ):
                     pass
         except Exception as e:
-            print(f"Error finding OrcaStudio processes: {e}")
+            logger.exception("查找 OrcaStudio 进程失败: %s", e)
         return processes
 
     def _cleanup_orca_processes(self, timeout=1):
         """Clean up only the OrcaStudio.GameLauncher process launched by this instance"""
-        print("Starting OrcaStudio.GameLauncher process cleanup...")
+        logger.info("开始清理 OrcaStudio.GameLauncher 进程…")
 
         # Only clean up the process we launched (if any)
         if self.server_process_pid is None:
-            print("No tracked OrcaStudio.GameLauncher process to clean up")
+            logger.info("没有需要清理的 OrcaStudio.GameLauncher 进程")
             return
 
         try:
             # Find the specific process by PID
             proc = psutil.Process(self.server_process_pid)
             if not proc.is_running():
-                print(f"Process PID {self.server_process_pid} is no longer running")
+                logger.info("进程 PID %s 已不在运行", self.server_process_pid)
                 self.server_process_pid = None
                 return
 
-            print(
-                f"Found OrcaStudio.GameLauncher process to clean up: PID {self.server_process_pid}"
-            )
+            logger.info("找到需要清理的 OrcaStudio.GameLauncher 进程，PID %s", self.server_process_pid)
 
             # Try graceful termination
-            print(f"Sending TERM signal to PID {self.server_process_pid}")
+            logger.info("发送 TERM 信号至 PID %s", self.server_process_pid)
             proc.terminate()
 
             # Wait for graceful termination
-            print(f"Waiting {timeout} seconds for graceful termination...")
+            logger.info("等待 %s 秒以便进程优雅退出…", timeout)
             time.sleep(timeout)
 
             # Check if process is still running
             if proc.is_running():
-                print(f"Force killing PID {self.server_process_pid}")
+                logger.warning("进程 PID %s 未退出，执行强制结束", self.server_process_pid)
                 proc.kill()
                 proc.wait(timeout=5)
-                print(f"Successfully killed PID {self.server_process_pid}")
+                logger.info("已成功强制结束 PID %s", self.server_process_pid)
             else:
-                print(f"Process PID {self.server_process_pid} terminated gracefully")
+                logger.info("进程 PID %s 已优雅退出", self.server_process_pid)
 
         except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
-            print(f"Could not clean up process PID {self.server_process_pid}: {e}")
+            logger.warning("无法清理进程 PID %s: %s", self.server_process_pid, e)
         except Exception as e:
-            print(f"Error during process cleanup: {e}")
+            logger.exception("清理进程时出错: %s", e)
         finally:
             # Clear the tracked PID
             self.server_process_pid = None
@@ -130,11 +131,11 @@ class RemoteScene(SceneEditNotification):
     def __del__(self):
         """Destructor to ensure server process is cleaned up"""
         try:
-            print("Cleaning up server process in destructor...")
+            logger.debug("析构时清理服务器进程…")
             # Use the new cleanup mechanism
             self._cleanup_orca_processes(timeout=1)
         except Exception as e:
-            print(f"Error in destructor cleaning up server process: {e}")
+            logger.exception("析构时清理服务器进程失败: %s", e)
 
     async def init_grpc(self):
         options = [
@@ -162,13 +163,13 @@ class RemoteScene(SceneEditNotification):
         await self._attach()
 
         await self.change_sim_state(False)
-        print("connected to server.")
+        logger.info("已连接到服务器")
 
         # Start the pending operation loop.
         await self._query_pending_operation_loop()
 
     async def _launch(self):
-        print(f"launching server: {self.edit_grpc_addr}")
+        logger.info("启动服务器: %s", self.edit_grpc_addr)
 
         executable = pathlib.Path(self.config_service.executable())
         if not executable.exists():
@@ -189,7 +190,7 @@ class RemoteScene(SceneEditNotification):
             self.config_service.lock_fps(),
         ]
 
-        print(" ".join(cmds))
+        logger.debug("启动命令: %s", " ".join(cmds))
 
         # Viewport 会生成一些文件，所以需要指定工作目录。
         server_process = subprocess.Popen(cmds, cwd=str(executable_folder))
@@ -198,7 +199,7 @@ class RemoteScene(SceneEditNotification):
 
         # Record the process PID for tracking
         self.server_process_pid = server_process.pid
-        print(f"Launched OrcaStudio.GameLauncher with PID: {self.server_process_pid}")
+        logger.info("已启动 OrcaStudio.GameLauncher，PID=%s", self.server_process_pid)
 
         # We can 'block' here.
         max_wait_time = 60  # 资产太多的时候，重启电脑加载会比较久
@@ -209,7 +210,7 @@ class RemoteScene(SceneEditNotification):
             except Exception as e:
                 pass
             time.sleep(1)
-            print("waiting for server to be ready...")
+            logger.debug("等待服务器就绪…")
             if server_process.poll() is not None:
                 raise Exception("Server process exited unexpectedly.")
             max_wait_time -= 1
@@ -220,7 +221,7 @@ class RemoteScene(SceneEditNotification):
         self.server_process = server_process
 
     async def _attach(self):
-        print(f"connecting to existing server: {self.edit_grpc_addr}")
+        logger.info("连接现有服务器: %s", self.edit_grpc_addr)
         if not await self.aloha():
             raise Exception("Failed to connect to server.")
         self.server_process = None
@@ -245,7 +246,7 @@ class RemoteScene(SceneEditNotification):
             try:
                 self.server_process = None
             except Exception as e:
-                print(f"Error cleaning up server process object: {e}")
+                logger.exception("清理 server_process 对象失败: %s", e)
 
     async def _query_pending_operation_loop(self):
         operations = await self.query_pending_operation_loop()
@@ -558,19 +559,19 @@ class RemoteScene(SceneEditNotification):
         self._check_response(response)
 
     async def publish_scene(self):
-        print(f"publish_scene")
+        logger.debug("Publish scene")
         request = mjc_message_pb2.PublishSceneRequest()
         response = await self.sim_stub.PublishScene(request)
         if response.status != mjc_message_pb2.PublishSceneResponse.SUCCESS:
-            print("Publish scene failed: ", response.error_message)
+            logger.error("Publish scene failed: %s", response.error_message)
             raise Exception("Publish scene failed.")
-        print("done")
+        logger.debug("Publish scene completed")
 
     async def forward_scene(self):
-        print(f"forward_scene")
+        logger.debug("Forward scene")
         request = mjc_message_pb2.MJ_ForwardRequest()
         response = await self.sim_stub.MJ_Forward(request)
-        print("done")
+        logger.debug("Forward scene completed")
 
     async def get_sync_from_mujoco_to_scene(self) -> bool:
         request = edit_service_pb2.GetSyncFromMujocoToSceneRequest()
@@ -579,11 +580,11 @@ class RemoteScene(SceneEditNotification):
         return response.value
 
     async def set_sync_from_mujoco_to_scene(self, value: bool):
-        print(f"set_sync_from_mujoco_to_scene {value}")
+        logger.debug("Set sync_from_mujoco_to_scene: %s", value)
         request = edit_service_pb2.SetSyncFromMujocoToSceneRequest(value=value)
         response = await self.edit_stub.SetSyncFromMujocoToScene(request)
         self._check_response(response)
-        print("done")
+        logger.debug("Set sync_from_mujoco_to_scene completed")
 
     async def clear_scene(self):
         request = edit_service_pb2.ClearSceneRequest()
@@ -679,7 +680,7 @@ class RemoteScene(SceneEditNotification):
         self._check_response(response)
 
     async def change_sim_state(self, sim_process_running: bool) -> bool:
-        print(f"change_sim_state {sim_process_running}")
+        logger.debug("Change sim_state -> %s", sim_process_running)
         request = edit_service_pb2.ChangeSimStateRequest(
             sim_process_running=sim_process_running
         )

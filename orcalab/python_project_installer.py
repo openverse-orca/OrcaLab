@@ -4,16 +4,18 @@ import tarfile
 import shutil
 import subprocess
 import json
-import hashlib
 import re
 from pathlib import Path
 from typing import Optional, Dict, Any
+import logging
 
 import requests
 import importlib.metadata
 
 from orcalab.config_service import ConfigService
 from orcalab.project_util import project_id
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_version_from_url(url: str) -> str:
@@ -68,7 +70,7 @@ def _load_install_state() -> Dict[str, Any]:
             with open(state_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Warning: Could not load install state: {e}")
+            logger.warning("Could not load install state: %s", e)
     return {}
 
 
@@ -80,7 +82,7 @@ def _save_install_state(state: Dict[str, Any]) -> None:
         with open(state_file, 'w', encoding='utf-8') as f:
             json.dump(state, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        print(f"Warning: Could not save install state: {e}")
+        logger.warning("Could not save install state: %s", e)
 
 
 def _get_current_orca_lab_version() -> str:
@@ -103,7 +105,7 @@ def _is_installation_needed(config: ConfigService) -> bool:
         current_path = str(Path(local_path).expanduser().resolve())
         installed_path = state.get("installed_path")
         if installed_path != current_path:
-            print(f"Local path changed: {installed_path} -> {current_path}")
+            logger.info("Local path changed: %s -> %s", installed_path, current_path)
             return True
         return False
     
@@ -116,24 +118,24 @@ def _is_installation_needed(config: ConfigService) -> bool:
         current_url = download_url
         installed_url = state.get("installed_url")
         if installed_url != current_url:
-            print(f"URL changed: {installed_url} -> {current_url}")
+            logger.info("URL changed: %s -> %s", installed_url, current_url)
             return True
         
         # 检查URL版本是否变化
         installed_url_version = state.get("url_version")
         if installed_url_version != url_version:
-            print(f"URL version changed: {installed_url_version} -> {url_version}")
+            logger.info("URL version changed: %s -> %s", installed_url_version, url_version)
             return True
         
         # 检查目标目录是否存在且包含有效项目
         dest_root = _get_user_python_project_root(url_version)
         if not dest_root.exists():
-            print(f"Target directory does not exist: {dest_root}")
+            logger.info("Target directory does not exist: %s", dest_root)
             return True
         
         # 检查是否有有效的Python项目文件
         if not _find_editable_root(dest_root):
-            print(f"No valid Python project found in: {dest_root}")
+            logger.info("No valid Python project found in: %s", dest_root)
             return True
         
         # 检查当前安装的 orcalab-pyside 是否指向正确的目录
@@ -141,13 +143,11 @@ def _is_installation_needed(config: ConfigService) -> bool:
         if current_package_path:
             expected_package_path = _find_editable_root(dest_root)
             if expected_package_path and current_package_path.resolve() != expected_package_path.resolve():
-                print(f"Package path mismatch:")
-                print(f"  Current: {current_package_path}")
-                print(f"  Expected: {expected_package_path}")
+                logger.info("Package path mismatch: current=%s, expected=%s", current_package_path, expected_package_path)
                 return True
         else:
             # 包不存在，需要安装
-            print(f"orcalab-pyside package not found, need to install")
+            logger.info("orcalab-pyside package not found, need to install")
             return True
         
         return False
@@ -219,10 +219,10 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
 
     # 检查是否需要安装或更新
     if not _is_installation_needed(cfg):
-        print("orcalab-pyside is already up to date, skipping installation")
+        logger.info("orcalab-pyside is already up to date, skipping installation")
         return
 
-    print("Installing or updating orcalab-pyside...")
+    logger.info("Installing or updating orcalab-pyside...")
     
     orcalab_cfg = cfg.config.get("orcalab", {})
     local_path = str(orcalab_cfg.get("python_project_path", "") or "").strip()
@@ -246,7 +246,7 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         
         # 从URL提取版本号
         url_version = _extract_version_from_url(download_url)
-        print(f"Extracted version from URL: {url_version}")
+        logger.info("Extracted version from URL: %s", url_version)
         
         # 记录当前URL和版本
         state_update["installed_url"] = download_url
@@ -259,10 +259,10 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         archive_path = dest_root.parent / archive_name
 
         # 总是重新下载以确保版本同步
-        print(f"Downloading from {download_url}...")
+        logger.info("Downloading from %s...", download_url)
         _download_archive(download_url, archive_path)
 
-        print(f"Extracting to {dest_root}...")
+        logger.info("Extracting to %s...", dest_root)
         _extract_tar_xz(archive_path, dest_root)
         
         # Try to locate package root (in case archive contains a top-level directory)
@@ -270,20 +270,20 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         editable_root = found or dest_root
 
     # Install editable package into current environment
-    print(f"Installing editable package from {editable_root}...")
+    logger.info("Installing editable package from %s...", editable_root)
     _pip_install_editable(editable_root)
     
     # 保存安装状态
     state_update["installed_at"] = str(Path.cwd())  # 记录安装时的环境
     _save_install_state(state_update)
 
-    print("orcalab-pyside installation completed successfully")
-    print("\n" + "="*80)
-    print("🔄 包更新完成，程序自动退出")
-    print("="*80)
-    print("✅ orcalab_pyside 包已更新到最新版本")
-    print("   请重新运行 'orcalab' 命令以使用更新后的包")
-    print("="*80 + "\n")
+    logger.info("orcalab-pyside installation completed successfully")
+    logger.info("=" * 80)
+    logger.info("🔄 包更新完成，程序自动退出")
+    logger.info("=" * 80)
+    logger.info("✅ orcalab_pyside 包已更新到最新版本")
+    logger.info("   请重新运行 'orcalab' 命令以使用更新后的包")
+    logger.info("=" * 80)
     
     # 包更新后直接退出程序
     import sys

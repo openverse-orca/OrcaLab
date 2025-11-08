@@ -1,4 +1,5 @@
 import os
+import logging
 from orcalab.http_service.http_bus import HttpServiceRequest, HttpServiceRequestBus
 from typing import List, Dict, Optional, Callable, Any, override
 from orcalab.token_storage import TokenStorage
@@ -8,6 +9,8 @@ import aiohttp
 import asyncio
 import functools
 import json
+
+logger = logging.getLogger(__name__)
 
 def require_online(func: Callable) -> Callable:
     """装饰器：检查在线状态，离线时跳过请求"""
@@ -138,8 +141,10 @@ class HttpService(HttpServiceRequest):
                                       filename=filename,
                                       content_type=content_type)
                 except FileNotFoundError:
+                    logger.error("Thumbnail file not found: %s", file_path)
                     return False
                 except Exception as e:
+                    logger.exception("Error reading thumbnail file %s: %s", file_path, e)
                     return False
             
             # 不包含Content-Type，让aiohttp自动设置multipart/form-data
@@ -148,9 +153,9 @@ class HttpService(HttpServiceRequest):
                                    data=data, 
                                    headers=headers) as response:
                 if response.status in [200, 201, 204]:
-                    print(f"Upload thumbnail success: {response.status}, files: {thumbnail_path}")
+                    logger.info("Upload thumbnail success: %s, files: %s", response.status, thumbnail_path)
                     return True
-                print(f"Upload thumbnail failed: {response.status}, files: {thumbnail_path}")
+                logger.error("Upload thumbnail failed: %s, files: %s", response.status, thumbnail_path)
                 return False
 
     @require_online

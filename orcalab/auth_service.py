@@ -9,6 +9,9 @@ import webbrowser
 import time
 from typing import Optional, Dict, Callable
 from urllib.parse import urlencode
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -52,43 +55,43 @@ class AuthService:
         for attempt in range(max_retries):
             try:
                 url = f"{self.auth_url}/nonce/"
-                print(f"尝试获取 nonce (第 {attempt + 1} 次): {url}")
+                logger.info("尝试获取 nonce (第 %s 次): %s", attempt + 1, url)
                 response = requests.get(url, timeout=self.timeout)
                 
                 if response.status_code == 200:
                     data = response.json()
                     nonce = data.get('nonce')
                     if nonce:
-                        print(f"✓ 成功获取 nonce: {nonce[:8]}...")
+                        logger.info("✓ 成功获取 nonce: %s...", nonce[:8])
                         return nonce
                     else:
-                        print("✗ 响应中未找到 nonce")
+                        logger.error("✗ 响应中未找到 nonce")
                 else:
-                    print(f"✗ 获取 nonce 失败: HTTP {response.status_code}")
+                    logger.error("✗ 获取 nonce 失败: HTTP %s", response.status_code)
                     if response.text:
-                        print(f"响应内容: {response.text[:200]}...")
+                        logger.debug("响应内容: %s...", response.text[:200])
                 
                 if attempt < max_retries - 1:
-                    print(f"等待 2 秒后重试...")
+                    logger.info("等待 2 秒后重试...")
                     time.sleep(2)
                     
             except requests.exceptions.ConnectionError as e:
-                print(f"✗ 连接错误 (第 {attempt + 1} 次): {e}")
+                logger.warning("✗ 连接错误 (第 %s 次): %s", attempt + 1, e)
                 if attempt < max_retries - 1:
-                    print(f"等待 2 秒后重试...")
+                    logger.info("等待 2 秒后重试...")
                     time.sleep(2)
             except requests.exceptions.Timeout as e:
-                print(f"✗ 请求超时 (第 {attempt + 1} 次): {e}")
+                logger.warning("✗ 请求超时 (第 %s 次): %s", attempt + 1, e)
                 if attempt < max_retries - 1:
-                    print(f"等待 2 秒后重试...")
+                    logger.info("等待 2 秒后重试...")
                     time.sleep(2)
             except Exception as e:
-                print(f"✗ 获取 nonce 失败 (第 {attempt + 1} 次): {e}")
+                logger.exception("✗ 获取 nonce 失败 (第 %s 次): %s", attempt + 1, e)
                 if attempt < max_retries - 1:
-                    print(f"等待 2 秒后重试...")
+                    logger.info("等待 2 秒后重试...")
                     time.sleep(2)
         
-        print(f"✗ 获取 nonce 失败，已尝试 {max_retries} 次")
+        logger.error("✗ 获取 nonce 失败，已尝试 %s 次", max_retries)
         return None
     
     def verify_nonce(self, nonce: str, max_retries: int = 60, retry_interval: float = 2.0) -> Optional[Dict[str, str]]:
@@ -131,11 +134,11 @@ class AuthService:
                         time.sleep(retry_interval)
                     continue
             
-            print(f"验证 nonce 超时（尝试 {max_retries} 次）")
+            logger.warning("验证 nonce 超时（尝试 %s 次）", max_retries)
             return None
             
         except Exception as e:
-            print(f"验证 nonce 失败: {e}")
+            logger.exception("验证 nonce 失败: %s", e)
             return None
     
     def open_auth_page(self, nonce: str, redirect_url: Optional[str] = None) -> bool:
@@ -172,7 +175,7 @@ class AuthService:
             return True
             
         except Exception as e:
-            print(f"打开浏览器失败: {e}")
+            logger.exception("打开浏览器失败: %s", e)
             return False
     
     def authenticate(self, progress_callback: Optional[Callable[[str], None]] = None, window=None, redirect_url: Optional[str] = None) -> Optional[Dict[str, str]]:
@@ -269,6 +272,6 @@ class AuthService:
             return response.status_code == 200
             
         except Exception as e:
-            print(f"验证 token 失败: {e}")
+            logger.exception("验证 token 失败: %s", e)
             return False
 

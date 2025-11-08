@@ -9,9 +9,12 @@ import pickle
 import aiohttp
 import aiofiles
 import asyncio
+import logging
 
 
 project_id = "{3DB8A56E-2458-4543-93A1-1A41756B97DA}"
+
+logger = logging.getLogger(__name__)
 
 
 def get_project_dir():
@@ -19,12 +22,25 @@ def get_project_dir():
     return project_dir
 
 
+def get_orca_studio_root() -> pathlib.Path:
+    """获取 OrcaStudio 项目的根目录"""
+    if sys.platform == "win32":
+        local_appdata = os.getenv("LOCALAPPDATA")
+        if local_appdata:
+            base_path = pathlib.Path(local_appdata)
+        else:
+            raise EnvironmentError("LOCALAPPDATA environment variable is not set.")
+    else:
+        base_path = pathlib.Path.home()
+    return base_path / "Orca" / "OrcaStudio" / project_id
+
+
 def check_project_folder():
 
     project_dir = get_project_dir()
     if not project_dir.exists():
         project_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Created default project folder at: {project_dir}")
+        logger.info("Created default project folder at: %s", project_dir)
 
         data = {
             "project_name": "DefaultProject",
@@ -39,13 +55,19 @@ def check_project_folder():
 
 def get_cache_folder():
     if sys.platform == "win32":
-        local_appdata = os.getenv("LOCALAPPDATA")
-        if local_appdata:
-            return pathlib.Path(local_appdata) / "Orca" / "OrcaStudio" / project_id / "Cache" / "pc"
-        else:
-            raise EnvironmentError("LOCALAPPDATA environment variable is not set.")
+        return get_orca_studio_root() / "Cache" / "pc"
     else:
-        return pathlib.Path.home() / "Orca" / "OrcaStudio" / project_id / "Cache" / "linux"
+        return get_orca_studio_root() / "Cache" / "linux"
+
+
+def get_user_folder() -> pathlib.Path:
+    """获取用户数据目录"""
+    return get_orca_studio_root() / "user"
+
+
+def get_user_log_folder() -> pathlib.Path:
+    """获取日志输出目录"""
+    return get_user_folder() / "log"
 
 
 def get_orcalab_cache_folder():
@@ -69,7 +91,7 @@ def load_md5_cache() -> Dict[str, Dict]:
             with open(cache_file, 'rb') as f:
                 return pickle.load(f)
         except Exception as e:
-            print(f"Warning: Could not load MD5 cache: {e}")
+            logger.warning("Could not load MD5 cache: %s", e)
     return {}
 
 def save_md5_cache(cache: Dict[str, Dict]):
@@ -79,7 +101,7 @@ def save_md5_cache(cache: Dict[str, Dict]):
         with open(cache_file, 'wb') as f:
             pickle.dump(cache, f)
     except Exception as e:
-        print(f"Warning: Could not save MD5 cache: {e}")
+        logger.warning("Could not save MD5 cache: %s", e)
 
 def get_file_metadata(file_path: pathlib.Path) -> Dict:
     """获取文件元数据"""
@@ -103,7 +125,7 @@ def calculate_file_md5(file_path: pathlib.Path) -> str:
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
     except Exception as e:
-        print(f"Error calculating MD5 for {file_path}: {e}")
+        logger.error("Error calculating MD5 for %s: %s", file_path, e)
         return ""
 
 def get_cached_md5(file_path: pathlib.Path, cache: Dict[str, Dict]) -> Optional[str]:
@@ -159,12 +181,12 @@ def clear_cache_packages(exclude_names: Optional[List[str]] = None):
             try:
                 pak_file.unlink()
                 deleted_count += 1
-                print(f"Deleted {pak_file.name} from cache")
+                logger.info("Deleted %s from cache", pak_file.name)
             except Exception as e:
-                print(f"Error deleting {pak_file.name}: {e}")
+                logger.error("Error deleting %s: %s", pak_file.name, e)
     
     if deleted_count > 0:
-        print(f"Cleared {deleted_count} pak file(s) from cache folder")
+        logger.info("Cleared %s pak file(s) from cache folder", deleted_count)
 
 
 def copy_packages(packages: List[str]):
@@ -182,11 +204,11 @@ def copy_packages(packages: List[str]):
             target_file = cache_folder / package_path.name
             try:
                 shutil.copy2(package_path, target_file)  # 使用copy2保持元数据
-                print(f"Copied {package_path.name} to {cache_folder}")
+                logger.info("Copied %s to %s", package_path.name, cache_folder)
             except Exception as e:
-                print(f"Error copying {package_path.name}: {e}")
+                logger.error("Error copying %s: %s", package_path.name, e)
         else:
-            print(f"Warning: Package {package} does not exist or is not a file.")
+            logger.warning("Package %s does not exist or is not a file.", package)
 
 
 async def download_pak_from_url(url: str, target_path: pathlib.Path) -> bool:
@@ -204,7 +226,7 @@ async def download_pak_from_url(url: str, target_path: pathlib.Path) -> bool:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 if response.status != 200:
-                    print(f"Failed to download {url}. Status code: {response.status}")
+                    logger.error("Failed to download %s. Status code: %s", url, response.status)
                     return False
                 
                 # 确保目标目录存在
@@ -215,11 +237,11 @@ async def download_pak_from_url(url: str, target_path: pathlib.Path) -> bool:
                     async for chunk in response.content.iter_chunked(8192):
                         await f.write(chunk)
                 
-                print(f"Downloaded {url} to {target_path}")
+                logger.info("Downloaded %s to %s", url, target_path)
                 return True
                 
     except Exception as e:
-        print(f"Error downloading {url}: {e}")
+        logger.error("Error downloading %s: %s", url, e)
         return False
 
 
@@ -262,7 +284,7 @@ def sync_pak_urls(pak_urls: List[str]) -> List[str]:
         
         # 如果文件已存在，检查是否需要更新（跳过下载，避免重复下载）
         if target_path.exists():
-            print(f"File {filename} already exists in cache, skipping download")
+            logger.info("File %s already exists in cache, skipping download", filename)
             downloaded_files.append(str(target_path))
             continue
         
@@ -279,9 +301,9 @@ def sync_pak_urls(pak_urls: List[str]) -> List[str]:
             
             if success:
                 downloaded_files.append(str(target_path))
-                print(f"Downloaded {filename} to cache")
+                logger.info("Downloaded %s to cache", filename)
         except Exception as e:
-            print(f"Error downloading {url}: {e}")
+            logger.error("Error downloading %s: %s", url, e)
     
     return downloaded_files
 

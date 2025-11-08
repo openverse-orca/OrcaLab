@@ -13,7 +13,9 @@ import requests
 import pathlib
 from typing import List, Dict, Optional, Callable
 import time
+import logging
 
+logger = logging.getLogger(__name__)
 
 class AssetSyncCallbacks:
     """资产同步回调接口"""
@@ -104,12 +106,17 @@ class AssetSyncService:
                 self.pak_url_names.add(filename)
         
         if self.verbose:
-            print(f"资产同步服务初始化: 用户={self.username}, 配置pak数={len(self.config_pak_names)}, pak_urls数={len(self.pak_url_names)}")
+            logger.info(
+                "资产同步服务初始化: 用户=%s, 配置pak数=%s, pak_urls数=%s",
+                self.username,
+                len(self.config_pak_names),
+                len(self.pak_url_names),
+            )
     
     def log(self, message: str):
         """简化日志输出"""
         if self.verbose:
-            print(message)
+            logger.info(message)
     
     def get_headers(self) -> Dict[str, str]:
         """构造请求头"""
@@ -461,7 +468,7 @@ def sync_assets(config_service, callbacks: Optional[AssetSyncCallbacks] = None, 
     # 检查是否启用资产同步
     if not config_service.datalink_enable_sync():
         if verbose:
-            print("资产同步已禁用")
+            logger.info("资产同步已禁用")
         return True
     
     # 检查认证信息
@@ -470,7 +477,7 @@ def sync_assets(config_service, callbacks: Optional[AssetSyncCallbacks] = None, 
     
     if not username or not token:
         if verbose:
-            print("⚠️  DataLink 认证信息未配置，跳过资产同步")
+            logger.warning("⚠️  DataLink 认证信息未配置，跳过资产同步")
         return True
     
     # 获取配置

@@ -10,6 +10,10 @@ import pathlib
 import os
 from typing import Optional, Dict
 from datetime import datetime
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class TokenStorage:
@@ -44,7 +48,7 @@ class TokenStorage:
             return True
             
         except Exception as e:
-            print(f"保存 token 失败: {e}")
+            logger.exception("保存 token 失败: %s", e)
             return False
     
     @classmethod
@@ -74,7 +78,7 @@ class TokenStorage:
             return None
             
         except Exception as e:
-            print(f"加载 token 失败: {e}")
+            logger.exception("加载 token 失败: %s", e)
             return None
     
     @classmethod
@@ -91,7 +95,7 @@ class TokenStorage:
             return True
             
         except Exception as e:
-            print(f"清除 token 失败: {e}")
+            logger.exception("清除 token 失败: %s", e)
             return False
     
     @classmethod

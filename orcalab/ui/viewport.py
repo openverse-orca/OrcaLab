@@ -1,11 +1,14 @@
 import asyncio
 from PySide6 import QtCore, QtWidgets, QtGui
 import pathlib
+import logging
 
 from orcalab.config_service import ConfigService
 from orcalab.ui.user_event_bus import UserEventRequestBus
 from orcalab.ui.user_event import MouseAction, MouseButton, KeyAction
 from orcalab.ui.user_event_util import convert_key_code
+
+logger = logging.getLogger(__name__)
 
 
 class Viewport(QtWidgets.QWidget):
@@ -22,7 +25,7 @@ class Viewport(QtWidgets.QWidget):
 
             self._viewport = _Viewport()
         except ImportError:
-            print("警告: orcalab_pyside 包未安装，某些功能可能不可用")
+            logger.warning("orcalab_pyside 包未安装，某些功能可能不可用")
             self._viewport = None
 
         _layout = QtWidgets.QVBoxLayout(self)
@@ -109,7 +112,7 @@ class Viewport(QtWidgets.QWidget):
                 await asyncio.sleep(0.016)  # ~60 FPS
                 asyncio.create_task(self._viewport_main_loop())
         except Exception as e:
-            print(f"Viewport主循环错误: {e}")
+            logger.exception("Viewport 主循环错误: %s", e)
             # 发生错误时停止循环
             self._viewport_running = False
 

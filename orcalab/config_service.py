@@ -3,8 +3,11 @@ import tomllib
 import sys
 from pathlib import Path
 import importlib.metadata
+import logging
 
 from orcalab.project_util import get_project_dir
+
+logger = logging.getLogger(__name__)
 
 
 def deep_merge(dict1, dict2):
@@ -80,21 +83,19 @@ class ConfigService:
             package_version = self._get_package_version()
             
             if not config_version:
-                print(f"警告: 配置文件中未找到版本号")
+                logger.warning("配置文件中未找到版本号")
                 return False
                 
             if config_version != package_version:
-                print(f"错误: 配置文件版本不匹配!")
-                print(f"  配置文件版本: {config_version}")
-                print(f"  当前包版本: {package_version}")
-                print(f"  请更新配置文件或重新安装匹配版本的 orca-lab 包")
+                logger.error("配置文件版本不匹配! 配置文件版本: %s, 当前包版本: %s", config_version, package_version)
+                logger.error("请更新配置文件或重新安装匹配版本的 orca-lab 包")
                 return False
                 
-            print(f"配置文件版本校验通过: {config_version}")
+            logger.info("配置文件版本校验通过: %s", config_version)
             return True
             
         except Exception as e:
-            print(f"版本校验时发生错误: {e}")
+            logger.exception("版本校验时发生错误: %s", e)
             return False
 
     def init_config(self, root_folder: str):
@@ -112,7 +113,7 @@ class ConfigService:
 
         # 进行版本校验
         if not self._validate_config_version(shared_config):
-            print("版本校验失败，程序将退出")
+            logger.error("版本校验失败，程序将退出")
             sys.exit(1)
 
         # 加载用户配置（如果存在）
@@ -121,13 +122,13 @@ class ConfigService:
             with open(self.user_config_path, "rb") as file:
                 user_config = tomllib.load(file)
         else:
-            print(f"用户配置文件不存在: {self.user_config_path}")
-            print("将使用默认配置。如需自定义配置，请创建该文件或参考 orca.config.user.toml.example")
+            logger.warning("用户配置文件不存在: %s", self.user_config_path)
+            logger.info("将使用默认配置。如需自定义配置，请创建该文件或参考 orca.config.user.toml.example")
 
         self.config = deep_merge(self.config, shared_config)
         self.config = deep_merge(self.config, user_config)
 
-        print(self.config)
+        logger.debug("加载的配置: %s", self.config)
 
     def edit_port(self) -> int:
         return self.config["orcalab"]["edit_port"]
