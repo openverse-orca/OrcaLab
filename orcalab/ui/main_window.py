@@ -69,21 +69,26 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
     def __init__(self):
         super().__init__()
         self.cwd = os.getcwd()
+        self._base_title = "orcalab 25.11.2"
         self.config_service = ConfigService()
         self.default_layout_path: str | None = None
         self.current_layout_path: str | None = None
+        self._cleanup_in_progress = False
+        self._cleanup_completed = False
 
     def connect_buses(self):
         super().connect_buses()
         ApplicationRequestBus.connect(self)
         AssetServiceNotificationBus.connect(self)
         UserEventRequestBus.connect(self)
+        logger.debug("connect_buses: ApplicationRequestBus=%s AssetServiceNotificationBus=%s UserEventRequestBus=%s", True, True, True)
 
     def disconnect_buses(self):
         UserEventRequestBus.disconnect(self)
         AssetServiceNotificationBus.disconnect(self)
         ApplicationRequestBus.disconnect(self)
         super().disconnect_buses()
+        logger.debug("disconnect_buses: 子总线已断开")
 
     # def start_viewport_main_loop(self):
     #     self._viewport_widget.start_viewport_main_loop()
@@ -101,10 +106,24 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
 
         self.undo_service = UndoService()
 
+        original_add_command = self.undo_service.add_command
+
+        def add_command_with_dirty(command, _orig=original_add_command):
+            _orig(command)
+            if not self.undo_service._in_undo_redo:
+                self._layout_modified = True
+                self._update_title()
+
+        self.undo_service.add_command = add_command_with_dirty
+
         self.scene_edit_service = SceneEditService(self.local_scene)
 
         self._viewport_widget = Viewport()
         self._viewport_widget.init_viewport()
+
+        self._current_scene_name: str | None = None
+        self._current_layout_name: str | None = None
+        self._layout_modified: bool = False
 
         logger.info("开始初始化 UI…")
         await self._init_ui()
@@ -192,6 +211,8 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
                 )
                 QtWidgets.QApplication.quit()
                 return
+            else:
+                self._mark_layout_clean()
 
         self.cache_folder = await self.remote_scene.get_cache_folder()
         await self.url_server.start()
@@ -1045,6 +1066,12 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
             logger.info("场景布局已保存至 %s", filename)
         except Exception as e:
             logger.exception("保存场景布局失败: %s", e)
+        else:
+            self.current_layout_path = self._resolve_path(filename)
+            self._infer_scene_and_layout_names()
+            self._mark_layout_clean()
+            logger.debug("_write_scene_layout_file: 保存完成 path=%s", self.current_layout_path)
+            self._update_title()
 
     def save_scene_layout(self):
         if not self.current_layout_path or self._is_default_layout(self.current_layout_path):
@@ -1066,9 +1093,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
             filename += ".json"
 
         self._write_scene_layout_file(filename)
-        resolved = self._resolve_path(filename)
-        if resolved:
-            self.current_layout_path = resolved
         self.cwd = os.path.dirname(filename)
 
     def actor_to_dict(self, actor: AssetActor | GroupActor):
@@ -1111,8 +1135,14 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         )
         if not filename:
             return
+        if not self._confirm_discard_changes():
+            return
         self.load_scene_layout_sig.emit(filename)
         self.cwd = os.path.dirname(filename)
+        self._infer_scene_and_layout_names()
+        self._mark_layout_clean()
+        self._update_title()
+        logger.debug("open_scene_layout: 用户打开 path=%s", filename)
 
     async def load_scene_layout(self, filename):
         resolved = self._resolve_path(filename)
@@ -1126,6 +1156,9 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         await self.clear_scene_layout(self.local_scene.root_actor)
         await self.create_actor_from_scene_layout(data)
         self.current_layout_path = resolved
+        self._infer_scene_and_layout_names()
+        self._mark_layout_clean()
+        self._update_title()
 
     async def clear_scene_layout(self, actor):
         if isinstance(actor, GroupActor):
@@ -1158,7 +1191,9 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         if isinstance(actor, GroupActor):
             for child_data in actor_data.get("children", []):
                 await self.create_actor_from_scene_layout(child_data, actor)
-
+        self._layout_modified = True
+        self._update_title()
+        logger.debug("create_actor_from_scene_layout: 标记布局已修改")
 
     def prepare_edit_menu(self):
         self.menu_edit.clear()
@@ -1275,10 +1310,12 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
             self.tool_bar.action_stop.setEnabled(False)
     
     async def cleanup(self):
-        """Clean up resources when the application is closing"""
+        if self._cleanup_completed:
+            logger.info("cleanup: 已完成，直接返回")
+            return
+        logger.info("cleanup: 清理主窗口资源开始")
+        logger.debug("cleanup: 当前连接状态 - actor_outline_widget=%s", getattr(self, 'actor_outline_widget', None) is not None)
         try:
-            logger.info("清理主窗口资源…")
-            
             # 1. 首先停止viewport主循环，避免事件循环问题
             await self.cleanup_viewport_resources()
             
@@ -1291,9 +1328,9 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
             
             # 4. 清理远程场景（这会终止服务器进程）
             if hasattr(self, 'remote_scene'):
-                logger.info("调用 remote_scene.destroy_grpc()…")
+                logger.info("cleanup: 调用 remote_scene.destroy_grpc()…")
                 await self.remote_scene.destroy_grpc()
-                logger.info("remote_scene.destroy_grpc() 完成")
+                logger.info("cleanup: remote_scene.destroy_grpc() 完成")
             
             # 5. 停止URL服务器
             if hasattr(self, 'url_server'):
@@ -1303,20 +1340,34 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
             import gc
             gc.collect()
             
-            logger.info("主窗口清理完成")
+            logger.info("cleanup: 主窗口清理完成")
+            self._cleanup_completed = True
         except Exception as e:
             logger.exception("清理过程中出现错误: %s", e)
-    
+            self._cleanup_completed = True
+        finally:
+            self._cleanup_in_progress = False
+
     def closeEvent(self, event):
         """Handle window close event"""
-        logger.info("Window close 事件触发")
-        
+        logger.info("Window close 事件触发 (cleanup_in_progress=%s, layout_modified=%s)", getattr(self, '_cleanup_in_progress', False), self._layout_modified)
+
+        if self._cleanup_completed:
+            logger.debug("closeEvent: 清理已完成，接受关闭")
+            event.accept()
+            return
+
+        if not self._confirm_discard_changes():
+            logger.debug("closeEvent: 用户取消关闭")
+            event.ignore()
+            return
+
         # Check if we're already in cleanup process to avoid infinite loop
         if hasattr(self, '_cleanup_in_progress') and self._cleanup_in_progress:
             logger.info("清理进行中，接受关闭事件")
             event.accept()
             return
-            
+
         # Mark cleanup as in progress
         self._cleanup_in_progress = True
         
@@ -1326,17 +1377,21 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         # Schedule cleanup to run in the event loop and wait for it
         async def cleanup_and_close():
             try:
+                logger.debug("cleanup_and_close: 开始执行 cleanup")
                 await self.cleanup()
-                logger.info("清理完成，关闭窗口")
+                logger.info("cleanup_and_close: 清理完成，调用 QApplication.quit()")
                 # Use QApplication.quit() instead of self.close() to avoid triggering closeEvent again
                 QtWidgets.QApplication.quit()
             except Exception as e:
                 logger.exception("清理过程中出现错误: %s", e)
                 # Close anyway if cleanup fails
                 QtWidgets.QApplication.quit()
-        
+
+        logger.debug("closeEvent: 创建 cleanup_and_close 任务")
         # Create and run the cleanup task
         asyncio.create_task(cleanup_and_close())
+        # cleanup will reset the flag; ensure we don't re-enter before task completes
+        # event remains ignored; QApplication.quit will drive shutdown
 
     #
     # UserEventRequestBus overrides
@@ -1356,3 +1411,55 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
     def queue_key_event(self, key, action):
         # print(f"Key event, key: {key}, action: {action}")
         asyncio.create_task(self.remote_scene.queue_key_event(key.value, action.value))
+
+    def _mark_layout_clean(self):
+        self._layout_modified = False
+        self._update_title()
+
+    def _infer_scene_and_layout_names(self):
+        level_info = self.config_service.current_level_info()
+        self._current_scene_name = None
+        if level_info:
+            name = level_info.get("name") or level_info.get("path")
+            self._current_scene_name = name
+
+        if self.current_layout_path:
+            self._current_layout_name = SystemPath(self.current_layout_path).stem
+        else:
+            self._current_layout_name = None
+
+    def _update_title(self):
+        scene_part = self._current_scene_name or "Unknown Scene"
+        layout_part = self._current_layout_name or "Unsaved Layout"
+        if self._layout_modified:
+            layout_label = f"[* {layout_part}]"
+        else:
+            layout_label = f"[{layout_part}]"
+        self.setWindowTitle(f"{self._base_title}    [{scene_part}]    {layout_label}")
+
+    def _confirm_discard_changes(self) -> bool:
+        if not self._layout_modified:
+            return True
+        logger.debug("_confirm_discard_changes: 布局已修改，弹窗确认")
+        message_box = QtWidgets.QMessageBox(self)
+        message_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
+        message_box.setWindowTitle("未保存的修改")
+        message_box.setText("当前布局有未保存的修改")
+
+        cancel_button = message_box.addButton("取消", QtWidgets.QMessageBox.ButtonRole.RejectRole)
+        discard_button = message_box.addButton("放弃修改", QtWidgets.QMessageBox.ButtonRole.DestructiveRole)
+        save_button = message_box.addButton("保存修改", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+        message_box.setDefaultButton(save_button)
+
+        message_box.exec()
+        clicked = message_box.clickedButton()
+
+        if clicked == cancel_button:
+            return False
+        if clicked == save_button:
+            self.save_scene_layout()
+            return not self._layout_modified
+        # 放弃修改
+        logger.debug("_confirm_discard_changes: 用户选择放弃修改，重置状态")
+        self._mark_layout_clean()
+        return True

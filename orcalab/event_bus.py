@@ -91,7 +91,8 @@ def create_event_bus[T](interface: Type[T]) -> EventBusProxy[T]:
         def _disconnect(self, handler):
             if not isinstance(handler, interface):
                 raise TypeError(f"handler must be an instance of {interface}")
-            self.handlers.remove(handler)
+            if handler in self.handlers:
+                self.handlers.remove(handler)
             # print(f"Disconnected handler {handler}, total {len(self.handlers)}")
 
         @classmethod
