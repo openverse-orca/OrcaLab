@@ -5,7 +5,10 @@ from io import TextIOWrapper
 from pathlib import Path
 from typing import Dict, List
 
-from orcalab.project_util import get_cache_folder
+from orcalab.project_util import (
+    get_cache_folder,
+    get_user_scene_layout_folder,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,16 @@ def _read_scene_layouts(pak_path: Path) -> List[Dict[str, str]]:
         logger.warning("读取pak文件失败 %s: %s", pak_path, exc)
         return []
 
+    scene_layout_file: Path | None = None
+    try:
+        output_dir = get_user_scene_layout_folder()
+        scene_layout_file = output_dir / f"{pak_path.stem}.json"
+        with scene_layout_file.open("w", encoding="utf-8") as fp:
+            json.dump(data, fp, ensure_ascii=False, indent=2)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("写入场景布局缓存失败 %s: %s", pak_path.name, exc)
+        scene_layout_file = None
+
     if isinstance(data, list):
         scenes = data
     elif isinstance(data, dict):
@@ -44,12 +57,13 @@ def _read_scene_layouts(pak_path: Path) -> List[Dict[str, str]]:
         path = _to_spawnable_path(scene.get("path"))
         if not path:
             continue
-        results.append(
-            {
-                "name": name or path,
-                "path": path,
-            }
-        )
+        item = {
+            "name": name or path,
+            "path": path,
+        }
+        if scene_layout_file is not None:
+            item["scene_layout_file"] = str(scene_layout_file)
+        results.append(item)
 
     return results
 

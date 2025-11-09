@@ -14,6 +14,7 @@ import ast
 import os
 import time
 import platform
+from pathlib import Path as SystemPath
 from PySide6 import QtCore, QtWidgets, QtGui
 from PIL import Image
 
@@ -68,6 +69,9 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
     def __init__(self):
         super().__init__()
         self.cwd = os.getcwd()
+        self.config_service = ConfigService()
+        self.default_layout_path: str | None = None
+        self.current_layout_path: str | None = None
 
     def connect_buses(self):
         super().connect_buses()
@@ -86,7 +90,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
 
     async def init(self):
         self.local_scene = LocalScene()
-        self.remote_scene = RemoteScene(ConfigService())
+        self.remote_scene = RemoteScene(self.config_service)
 
         self._sim_process_check_lock = asyncio.Lock()
         self.sim_process_running = False
@@ -168,6 +172,26 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         await self.remote_scene.set_sync_from_mujoco_to_scene(False)
         await self.remote_scene.set_selection([])
         await self.remote_scene.clear_scene()
+
+        self.default_layout_path = self._resolve_path(self.config_service.default_layout_file())
+        if self.default_layout_path and SystemPath(self.default_layout_path).exists():
+            try:
+                await self.load_scene_layout(self.default_layout_path)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("加载默认布局失败: %s", exc)
+                import traceback
+
+                detail_text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+                QtWidgets.QMessageBox.critical(
+                    self,
+                    "加载默认布局失败",
+                    "所选场景的默认布局加载失败。\n"
+                    "请复制下方错误信息寻求帮助，并重新启动程序选择“空白布局”。\n\n"
+                    f"{detail_text}",
+                    QtWidgets.QMessageBox.StandardButton.Ok,
+                )
+                QtWidgets.QApplication.quit()
+                return
 
         self.cache_folder = await self.remote_scene.get_cache_folder()
         await self.url_server.start()
@@ -588,10 +612,9 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         logger.info("创建 Copilot 组件…")
         self.copilot_widget = CopilotPanel(self.remote_scene, self)
         # Configure copilot with server settings from config
-        config_service = ConfigService()
         self.copilot_widget.set_server_config(
-            config_service.copilot_server_url(),
-            config_service.copilot_timeout()
+            self.config_service.copilot_server_url(),
+            self.config_service.copilot_timeout()
         )
         panel = Panel("Copilot", self.copilot_widget)
         panel.panel_icon = make_icon(":/icons/chat_sparkle", panel_icon_color)
@@ -643,8 +666,29 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
             }
         """)
 
-        self.menu_file = self.menu_bar.addMenu("File")
-        self.menu_edit = self.menu_bar.addMenu("Edit")
+        self.menu_file = self.menu_bar.addMenu("文件")
+        self.menu_edit = self.menu_bar.addMenu("编辑")
+
+        self.action_open_layout = QtGui.QAction("打开布局…", self)
+        self.action_open_layout.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Open))
+        self.action_open_layout.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
+        connect(self.action_open_layout.triggered, self.open_scene_layout)
+        self.addAction(self.action_open_layout)
+
+        self.action_save_layout = QtGui.QAction("保存布局", self)
+        self.action_save_layout.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Save))
+        self.action_save_layout.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
+        connect(self.action_save_layout.triggered, self.save_scene_layout)
+        self.addAction(self.action_save_layout)
+
+        self.action_save_layout_as = QtGui.QAction("另存为…", self)
+        self.action_save_layout_as.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.SaveAs))
+        self.action_save_layout_as.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
+        connect(self.action_save_layout_as.triggered, self.save_scene_layout_as)
+        self.addAction(self.action_save_layout_as)
+
+        self.action_exit = QtGui.QAction("退出", self)
+        connect(self.action_exit.triggered, self.close)
 
         # 为主窗体设置背景色
         self.setStyleSheet("""
@@ -698,8 +742,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
     
     async def _on_external_program_selected_async(self, program_name: str):
         """外部程序选择处理（异步版本）"""
-        config_service = ConfigService()
-        program_config = config_service.get_external_program_config(program_name)
+        program_config = self.config_service.get_external_program_config(program_name)
         
         if not program_config:
             logger.error("未找到程序配置: %s", program_name)
@@ -969,28 +1012,30 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
 
     def prepare_file_menu(self):
         self.menu_file.clear()
+        self.menu_file.addAction(self.action_open_layout)
+        self.menu_file.addSeparator()
+        self.menu_file.addAction(self.action_save_layout)
+        self.menu_file.addAction(self.action_save_layout_as)
+        self.menu_file.addSeparator()
+        self.menu_file.addAction(self.action_exit)
 
-        action_exit = self.menu_file.addAction("Exit")
-        connect(action_exit.triggered, self.close)
+    def _resolve_path(self, path: str | None) -> str | None:
+        if not path:
+            return None
+        try:
+            return str(SystemPath(path).expanduser().resolve())
+        except Exception:
+            return str(path)
 
-        action_sava = self.menu_file.addAction("Save Scene Layout")
-        connect(action_sava.triggered, self.save_scene_layout)
+    def _is_default_layout(self, path: str | None) -> bool:
+        if not path or not self.default_layout_path:
+            return False
+        try:
+            return SystemPath(path).expanduser().resolve() == SystemPath(self.default_layout_path).expanduser().resolve()
+        except Exception:
+            return False
 
-        action_open = self.menu_file.addAction("Open Scene Layout")
-        connect(action_open.triggered, self.open_scene_layout)
-
-    def save_scene_layout(self, filename: str = None):
-        filename, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self,  
-            "Save Scene Layout",  
-            self.cwd, 
-            "Scene Layout Files (*.json);;All Files (*)"
-        )
-
-        if filename == "":
-            return
-        if not filename.lower().endswith(".json"):
-            filename += ".json"
+    def _write_scene_layout_file(self, filename: str):
         root = self.local_scene.root_actor
         scene_layout_dict = self.actor_to_dict(root)
 
@@ -1000,6 +1045,31 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
             logger.info("场景布局已保存至 %s", filename)
         except Exception as e:
             logger.exception("保存场景布局失败: %s", e)
+
+    def save_scene_layout(self):
+        if not self.current_layout_path or self._is_default_layout(self.current_layout_path):
+            self.save_scene_layout_as()
+            return
+        self._write_scene_layout_file(self.current_layout_path)
+
+    def save_scene_layout_as(self):
+        filename, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "保存场景布局",
+            self.cwd,
+            "布局文件 (*.json);;所有文件 (*)"
+        )
+
+        if not filename:
+            return
+        if not filename.lower().endswith(".json"):
+            filename += ".json"
+
+        self._write_scene_layout_file(filename)
+        resolved = self._resolve_path(filename)
+        if resolved:
+            self.current_layout_path = resolved
+        self.cwd = os.path.dirname(filename)
 
     def actor_to_dict(self, actor: AssetActor | GroupActor):
         def to_list(v):
@@ -1035,24 +1105,27 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
     def open_scene_layout(self, filename: str = None):
         filename, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
-            "Open Scene Layout",
+            "打开场景布局",
             self.cwd,
-            "Scene Layout Files (*.json);;All Files (*)"
+            "布局文件 (*.json);;所有文件 (*)"
         )
         if not filename:
             return
-        else:
-            self.load_scene_layout_sig.emit(filename)
+        self.load_scene_layout_sig.emit(filename)
+        self.cwd = os.path.dirname(filename)
 
     async def load_scene_layout(self, filename):
+        resolved = self._resolve_path(filename)
         try:
             with open(filename, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as e:
             logger.exception("读取场景布局文件失败: %s", e)
+            return
 
         await self.clear_scene_layout(self.local_scene.root_actor)
         await self.create_actor_from_scene_layout(data)
+        self.current_layout_path = resolved
 
     async def clear_scene_layout(self, actor):
         if isinstance(actor, GroupActor):

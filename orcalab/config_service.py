@@ -218,7 +218,7 @@ class ConfigService:
         if not normalized:
             return
 
-        merged = self._deduplicate_levels(self.levels() + normalized)
+        merged = self._deduplicate_levels(normalized + self.levels())
         self.config["orcalab"]["levels"] = merged
 
     def set_current_level(self, level_info: dict):
@@ -243,7 +243,11 @@ class ConfigService:
                 logger.warning("忽略无效的场景配置: %s", item)
                 return None
             name = item.get("name") or path
-            return {"name": name, "path": path}
+            normalized = {"name": name, "path": path}
+            for key, value in item.items():
+                if key not in {"name", "path"}:
+                    normalized[key] = value
+            return normalized
 
         logger.warning("无法识别的场景配置类型: %s", item)
         return None
@@ -335,3 +339,29 @@ class ConfigService:
     def web_server_url(self) -> str:
         """获取资产库服务器地址（用于认证后跳转）"""
         return self.config.get("web_server_url", "https://simassets.orca3d.cn/")
+
+    def layout_mode(self) -> str:
+        return self.config.setdefault("orcalab", {}).get("layout_mode", "default")
+
+    def set_layout_mode(self, mode: str):
+        self.config.setdefault("orcalab", {})["layout_mode"] = mode
+
+    def default_layout_file(self) -> str | None:
+        path = self.config.setdefault("orcalab", {}).get("default_layout_file")
+        if not path:
+            return None
+        return path
+
+    def set_default_layout_file(self, path: str | None):
+        if path:
+            self.config.setdefault("orcalab", {})["default_layout_file"] = path
+        else:
+            self.config.setdefault("orcalab", {}).pop("default_layout_file", None)
+
+    def current_level_info(self) -> dict | None:
+        level_value = self.config["orcalab"].get("level")
+        if isinstance(level_value, dict):
+            return level_value
+        if isinstance(level_value, str):
+            return {"name": level_value, "path": level_value}
+        return None

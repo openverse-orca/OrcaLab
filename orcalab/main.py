@@ -10,6 +10,8 @@ from orcalab.asset_sync_ui import run_asset_sync_ui
 from orcalab.url_service.url_util import register_protocol
 from orcalab.ui.main_window import MainWindow
 from orcalab.logging_util import setup_logging, resolve_log_level
+from orcalab.default_layout import prepare_default_layout
+from orcalab.process_guard import ensure_single_instance
 
 import os
 
@@ -18,8 +20,6 @@ from PySide6 import QtWidgets
 
 from qasync import QEventLoop
 from orcalab.python_project_installer import ensure_python_project_installed
-
-import psutil
 
 # Global variable to store main window instance for cleanup
 _main_window = None
@@ -68,121 +68,6 @@ def register_signal_handlers():
     signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
     if hasattr(signal, "SIGHUP"):
         signal.signal(signal.SIGHUP, signal_handler)  # Hangup signal
-
-
-def _looks_like_orcalab_process(name: str, exe: str, cmdline: str) -> bool:
-    """Return True if process metadata suggests it is an OrcaLab instance."""
-    if "orcalab" in name or "orcalab" in exe:
-        return True
-
-    if "orcalab" not in cmdline:
-        return False
-
-    # Only treat as OrcaLab if it's a Python process or directly invokes the orcalab module
-    python_markers = ("python", "python3", "pypy")
-    module_markers = ("-m orcalab", "orcalab/main", "orcalab/__main__", "orcalab.py")
-
-    if any(marker in cmdline for marker in python_markers):
-        return True
-
-    if any(marker in cmdline for marker in module_markers):
-        return True
-
-    return False
-
-
-def _find_other_orcalab_processes() -> list[psutil.Process]:
-    """查找当前之外仍在运行的 OrcaLab 进程"""
-    current_pid = os.getpid()
-    processes: list[psutil.Process] = []
-
-    for proc in psutil.process_iter(["pid", "name", "cmdline", "exe"]):
-        try:
-            if proc.pid == current_pid:
-                continue
-
-            info = proc.info
-            name = (info.get("name") or "").lower()
-            exe = (info.get("exe") or "").lower()
-            cmdline = " ".join(str(part).lower() for part in info.get("cmdline") or [])
-
-            # Skip helper processes that reference OrcaLab only in arguments
-            if not _looks_like_orcalab_process(name, exe, cmdline):
-                continue
-
-            processes.append(proc)
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            continue
-
-    return processes
-
-
-def _ensure_single_instance():
-    """确保不会在同一台机器上启动多个 OrcaLab 实例"""
-    existing = _find_other_orcalab_processes()
-    if not existing:
-        return
-
-    details_lines = []
-    for proc in existing:
-        try:
-            cmdline = " ".join(proc.cmdline())
-        except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
-            cmdline = "<unavailable>"
-        details_lines.append(f"PID: {proc.pid} | CMD: {cmdline}")
-
-    details_text = "\n".join(details_lines)
-    logger.warning("检测到已有 OrcaLab 进程: %s", details_text)
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setWindowTitle("检测到正在运行的 OrcaLab 进程")
-    msg_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
-    msg_box.setText("当前系统上已存在正在运行的 OrcaLab 实例。")
-    msg_box.setInformativeText(
-        "OrcaLab 不支持在同一台电脑同时运行多个实例。\n\n"
-        "选择“终止并继续”将尝试结束所有已发现的 OrcaLab 进程后再继续启动。\n"
-        "选择“退出”将直接退出当前启动。"
-    )
-    msg_box.setDetailedText(details_text or "未获取到进程信息")
-
-    kill_button = msg_box.addButton("终止并继续", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
-    exit_button = msg_box.addButton("退出", QtWidgets.QMessageBox.ButtonRole.RejectRole)
-    msg_box.setDefaultButton(kill_button)
-    msg_box.exec()
-
-    if msg_box.clickedButton() == exit_button:
-        logger.info("用户选择退出，以避免多个 OrcaLab 实例同时运行")
-        sys.exit(0)
-
-    failed = []
-    for proc in existing:
-        try:
-            logger.info("尝试终止 OrcaLab 进程 PID=%s", proc.pid)
-            proc.terminate()
-            proc.wait(timeout=5)
-        except psutil.NoSuchProcess:
-            logger.info("进程 PID=%s 已结束", proc.pid)
-        except (psutil.TimeoutExpired, psutil.AccessDenied) as exc:
-            logger.warning("终止进程 PID=%s 失败: %s", proc.pid, exc)
-            failed.append(proc.pid)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("终止进程 PID=%s 时出现异常: %s", proc.pid, exc)
-            failed.append(proc.pid)
-
-    if failed:
-        error_box = QtWidgets.QMessageBox()
-        error_box.setWindowTitle("无法终止所有 OrcaLab 进程")
-        error_box.setIcon(QtWidgets.QMessageBox.Icon.Critical)
-        error_box.setText("部分 OrcaLab 进程无法自动终止。")
-        error_box.setInformativeText(
-            "请手动结束以下进程后重新启动 OrcaLab:\n"
-            + ", ".join(str(pid) for pid in failed)
-        )
-        error_box.exec()
-        logger.error("仍有进程未终止，放弃启动: %s", failed)
-        sys.exit(1)
-
-    logger.info("所有现有 OrcaLab 进程已终止，继续启动")
 
 
 async def main_async(q_app):
@@ -254,7 +139,7 @@ def main():
     q_app = QtWidgets.QApplication(sys.argv)
 
     # 确保不会同时运行多个 OrcaLab 实例
-    _ensure_single_instance()
+    ensure_single_instance()
     
     # 同步订阅的资产包（带UI）
     run_asset_sync_ui(config_service)
@@ -270,8 +155,23 @@ def main():
     levels = config_service.levels() if hasattr(config_service, 'levels') else []
     current = config_service.level() if hasattr(config_service, 'level') else None
     if levels:
-        selected, ok = SceneSelectDialog.get_level(levels, current)
+        initial_layout_mode = config_service.layout_mode()
+        selected, layout_mode, ok = SceneSelectDialog.get_level(
+            levels, current, layout_mode=initial_layout_mode
+        )
         if ok and selected:
+            layout_mode = layout_mode if layout_mode in {"default", "blank"} else "default"
+            config_service.set_layout_mode(layout_mode)
+
+            default_layout_file = None
+            if layout_mode == "default":
+                default_layout_file = prepare_default_layout(selected)
+                if default_layout_file:
+                    logger.info("已生成默认布局: %s", default_layout_file)
+                else:
+                    logger.warning("生成默认布局失败，将使用空白布局。")
+            config_service.set_default_layout_file(default_layout_file)
+
             config_service.set_current_level(selected)
             logger.info("用户选择了场景: %s", selected.get("name"))
         else:
