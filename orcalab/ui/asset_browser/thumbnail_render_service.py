@@ -51,7 +51,10 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
         await SceneEditNotificationBus().get_actor_asset_aabb(Path(f"/{actor.name}"), output=aabb)
         if not aabb:
             print(f"failed to get {asset_path} aabb")
-        transform = self._get_camera_position(aabb)
+            return 
+        new_aabb, scale = self._get_actor_position_scale(aabb)
+        await SceneEditRequestBus().set_transform(actor, Transform(position=np.array([0, 0, -aabb[2] * scale]), rotation=self.quat, scale=scale), local=True, undo=False, source="create_panorama_apng")
+        transform = self._get_camera_position(new_aabb)
 
         await SceneEditRequestBus().set_transform(actor_camera1080, transform, local=True, undo=False, source="create_panorama_apng")
         await SceneEditRequestBus().set_transform(actor_camera256, transform, local=True, undo=False, source="create_panorama_apng")
@@ -64,7 +67,7 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
         png_files, png_512_files = [], []
         for rotation_z in range(0, 360, 24):
             quat = Rotation.from_euler("xyz", [0, 0, rotation_z], degrees=True).as_quat()[[3, 0, 1, 2]]
-            await SceneEditRequestBus().set_transform(actor, Transform(position=np.array([0, 0, 0]), rotation=quat, scale=1.0), local=True, undo=False, source="create_panorama_apng")
+            await SceneEditRequestBus().set_transform(actor, Transform(position=np.array([0, 0, -aabb[2] * scale]), rotation=quat, scale=scale), local=True, undo=False, source="create_panorama_apng")
             png_filename = f"{os.path.basename(tmp_path)}_256_{rotation_z}.png"
             if rotation_z % 72 == 0:
                 png_512_filename = f"{os.path.basename(tmp_path)}_{rotation_z}_512.png"
@@ -136,6 +139,14 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
         z = (aabb[2] + aabb[5])/2 + r * self.sin_15 / self.tan_33_5
         position = [x, y, z]
         return Transform(position=np.array(position), rotation=self.quat, scale=1.0)
+
+    def _get_actor_position_scale(self, aabb: list[float]):
+        max_dim = max(aabb[3]-aabb[0], aabb[4]-aabb[1], aabb[5]-aabb[2])
+        scale = 1 / max_dim
+        new_aabb = [scale * value for value in aabb]
+        new_aabb[5] -= new_aabb[2]
+        new_aabb[2] = 0
+        return new_aabb, scale
 
     async def _add_camera(self, camera_name: str) -> AssetActor:
         actor = []

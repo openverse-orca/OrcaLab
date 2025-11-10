@@ -174,6 +174,7 @@ class AssetBrowser(QtWidgets.QWidget):
             lambda: asyncio.create_task(self._on_upload_thumbnail_finished())
         )
     async def set_assets(self, assets: List[str]):
+        self.create_panorama_apng_button.setDisabled(True)
         infos = []
         thumbnail_cache_path = get_cache_folder() / "thumbnail"
         exclude_assets = ['prefabs/mujococamera1080', 'prefabs/mujococamera256', 'prefabs/mujococamera512']
@@ -236,6 +237,8 @@ class AssetBrowser(QtWidgets.QWidget):
                             info.apng_player = player
         
         self._model.set_assets(infos)
+        self.create_panorama_apng_button.setText("渲染缩略图")
+        self.create_panorama_apng_button.setDisabled(False)
 
     def _on_include_filter_changed(self, text: str):
         self._model.include_filter = text
@@ -276,6 +279,8 @@ class AssetBrowser(QtWidgets.QWidget):
 
     async def _on_create_panorama_apng_clicked(self):
         """创建APNG全景图"""
+        self.create_panorama_apng_button.setDisabled(True)
+        self.create_panorama_apng_button.setText("渲染中...")
         assets = self._model.get_all_assets()
         asset_paths = []
         cache_thumbnail_path = get_cache_folder() / "thumbnail"
@@ -292,6 +297,8 @@ class AssetBrowser(QtWidgets.QWidget):
         asset_map = self._metadata_service.get_asset_map()
         if asset_map is None:
             return
+        self.create_panorama_apng_button.setText("加载中...")
+        self.create_panorama_apng_button.setDisabled(True)
         tmp_path = os.path.join(os.path.expanduser("~"), ".orcalab", "tmp")
         
         # 并行上传缩略图
@@ -351,7 +358,11 @@ class AssetBrowser(QtWidgets.QWidget):
             if asset.metadata is None:
                 if not os.path.exists(cache_thumbnail_path):
                     os.makedirs(os.path.dirname(cache_thumbnail_path), exist_ok=True)
-                    shutil.copy(tmp_thumbnail_path, cache_thumbnail_path)
+                    try:
+                        shutil.copy(tmp_thumbnail_path, cache_thumbnail_path)
+                    except Exception as e:
+                        print(f"failed to copy {tmp_thumbnail_path} to {cache_thumbnail_path}: {e}")
+                        continue
                     player = ApngPlayer(str(cache_thumbnail_path))
                     if player.is_valid():
                         player.set_scaled_size(QtCore.QSize(96, 96))
