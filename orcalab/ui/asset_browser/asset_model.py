@@ -16,6 +16,7 @@ class AssetModel(ThumbnailModel):
         self._filtered_assets: List[AssetInfo] = []
         self.include_filter = ""
         self.exclude_filter = ""
+        self.category_filter : str = ""
 
     @override
     def size(self) -> int:
@@ -49,21 +50,36 @@ class AssetModel(ThumbnailModel):
         self.apply_filters()
 
     def apply_filters(self):
-        list1 = self._apply_include_filter(self._all_assets)
-        list2 = self._apply_exclude_filter(list1)
-        self._filtered_assets = list2
+        list1 = self._apply_category_filter(self._all_assets)
+        list2 = self._apply_include_filter(list1)
+        list3 = self._apply_exclude_filter(list2)
+        self._filtered_assets = list3
         self.data_updated.emit()
 
     def get_all_assets(self) -> List[AssetInfo]:
         return self._all_assets
     
+    def _apply_category_filter(self, input: List[AssetInfo]):
+        if self.category_filter == "":
+            return input
+
+        result: List[AssetInfo] = []
+        for asset in input:
+            if asset.metadata is not None:
+                if asset.metadata['categoryPath'].startswith(self.category_filter):
+                    result.append(asset)
+            else:
+                if self.category_filter == "/other":
+                    result.append(asset)
+        return result
+
     def _apply_include_filter(self, input: List[AssetInfo]):
         if not self.include_filter:
             return input
 
         result: List[AssetInfo] = []
         include_lower = self.include_filter.lower()
-        for asset in self._all_assets:
+        for asset in input:
             if include_lower in asset.name.lower():
                 result.append(asset)
 

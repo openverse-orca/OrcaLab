@@ -12,6 +12,7 @@ from orcalab.ui.asset_browser.asset_info import AssetInfo
 from orcalab.ui.asset_browser.asset_view import AssetView
 from orcalab.ui.asset_browser.asset_model import AssetModel
 from orcalab.ui.asset_browser.asset_info_view import AssetInfoView
+from orcalab.ui.asset_browser.asset_tree_view import AssetTreeView
 from orcalab.ui.asset_browser.apng_player import ApngPlayer
 from orcalab.metadata_service import MetadataService
 from orcalab.ui.asset_browser.thumbnail_render_bus import ThumbnailRenderRequestBus
@@ -125,6 +126,8 @@ class AssetBrowser(QtWidgets.QWidget):
         """
         )
 
+        self._tree_view = AssetTreeView()
+        
         self._view = AssetView()
         self._model = AssetModel()
         self._view.set_model(self._model)
@@ -146,19 +149,21 @@ class AssetBrowser(QtWidgets.QWidget):
         tool_bar_layout.addSpacing(5)
         tool_bar_layout.addWidget(self.status_label)
 
-        left_layout = QtWidgets.QVBoxLayout()
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(0)
-        left_layout.addLayout(tool_bar_layout)
-        left_layout.addWidget(self._view, 1)
+        center_layout = QtWidgets.QVBoxLayout()
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(0)
+        center_layout.addLayout(tool_bar_layout)
+        center_layout.addWidget(self._view, 1)
 
         root_layout = QtWidgets.QHBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
-        root_layout.addLayout(left_layout)
+        root_layout.addWidget(self._tree_view)
+        root_layout.addLayout(center_layout)
         root_layout.addWidget(self._info_view)
 
         self._view.selection_changed.connect(self._on_selection_changed)
+        self._tree_view.category_selected.connect(self._on_category_selected)
 
     def _setup_connections(self):
         """设置信号连接"""
@@ -173,6 +178,11 @@ class AssetBrowser(QtWidgets.QWidget):
         self.on_upload_thumbnail_finished.connect(
             lambda: asyncio.create_task(self._on_upload_thumbnail_finished())
         )
+    
+    def _on_category_selected(self, category: str):
+        self._model.category_filter = category
+        self._model.apply_filters()
+        
     async def set_assets(self, assets: List[str]):
         self.create_panorama_apng_button.setDisabled(True)
         infos = []
@@ -237,6 +247,7 @@ class AssetBrowser(QtWidgets.QWidget):
                             info.apng_player = player
         
         self._model.set_assets(infos)
+        self._tree_view.set_assets(infos)
         self.create_panorama_apng_button.setText("渲染缩略图")
         self.create_panorama_apng_button.setDisabled(False)
 
@@ -289,6 +300,8 @@ class AssetBrowser(QtWidgets.QWidget):
             if not os.path.exists(cache_thumbnail_path / (asset_path + "_panorama.apng")):
                 asset_paths.append(asset_path)
         if len(assets) == 0:
+            self.create_panorama_apng_button.setText("渲染缩略图")
+            self.create_panorama_apng_button.setDisabled(False)
             return
         await self._thumbnail_render_service.render_thumbnail(asset_paths)
         self.on_render_thumbnail_finished.emit(asset_paths)
@@ -296,6 +309,8 @@ class AssetBrowser(QtWidgets.QWidget):
     async def _on_render_thumbnail_finished(self, asset_paths: List[str]):
         asset_map = self._metadata_service.get_asset_map()
         if asset_map is None:
+            self.create_panorama_apng_button.setText("渲染缩略图")
+            self.create_panorama_apng_button.setDisabled(False)
             return
         self.create_panorama_apng_button.setText("加载中...")
         self.create_panorama_apng_button.setDisabled(True)
@@ -327,6 +342,8 @@ class AssetBrowser(QtWidgets.QWidget):
         tmp_path = os.path.join(os.path.expanduser("~"), ".orcalab", "tmp")
         subscription_metadata = await self._http_service.get_subscription_metadata()
         if subscription_metadata is None:
+            self.create_panorama_apng_button.setText("渲染缩略图")
+            self.create_panorama_apng_button.setDisabled(False)
             return
         subscription_metadata = json.loads(subscription_metadata)
         with open(os.path.join(get_cache_folder(), "metadata.json"), "w") as f:
@@ -391,7 +408,11 @@ class AssetBrowser(QtWidgets.QWidget):
                         new_assets[asset_idx].apng_player = player
         
         self._model.set_assets(new_assets)
+        self._tree_view.set_assets(new_assets)
 
         if os.path.exists(tmp_path):
             shutil.rmtree(tmp_path)
+
+        self.create_panorama_apng_button.setText("渲染缩略图")
+        self.create_panorama_apng_button.setDisabled(False)
 
