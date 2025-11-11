@@ -26,6 +26,9 @@ import pathlib
 import psutil
 import logging
 
+from orcalab.ui.camera.camera_brief import CameraBrief
+from orcalab.ui.camera.camera_bus import CameraNotificationBus
+
 Success = edit_service_pb2.StatusCode.Success
 Error = edit_service_pb2.StatusCode.Error
 
@@ -101,7 +104,10 @@ class RemoteScene(SceneEditNotification):
                 self.server_process_pid = None
                 return
 
-            logger.info("找到需要清理的 OrcaStudio.GameLauncher 进程，PID %s", self.server_process_pid)
+            logger.info(
+                "找到需要清理的 OrcaStudio.GameLauncher 进程，PID %s",
+                self.server_process_pid,
+            )
 
             # Try graceful termination
             logger.info("发送 TERM 信号至 PID %s", self.server_process_pid)
@@ -113,7 +119,9 @@ class RemoteScene(SceneEditNotification):
 
             # Check if process is still running
             if proc.is_running():
-                logger.warning("进程 PID %s 未退出，执行强制结束", self.server_process_pid)
+                logger.warning(
+                    "进程 PID %s 未退出，执行强制结束", self.server_process_pid
+                )
                 proc.kill()
                 proc.wait(timeout=5)
                 logger.info("已成功强制结束 PID %s", self.server_process_pid)
@@ -404,6 +412,17 @@ class RemoteScene(SceneEditNotification):
             await SceneEditRequestBus().add_actor(
                 actor, Path("/"), source="remote_scene"
             )
+
+        if op == "cameras_changed":
+            cameras = await self.get_cameras()
+            viewport_camera_index = await self.get_active_camera()
+            bus = CameraNotificationBus()
+            bus.on_cameras_changed(cameras, viewport_camera_index)
+
+        if op == "active_camera_changed":
+            viewport_camera_index = await self.get_active_camera()
+            bus = CameraNotificationBus()
+            bus.on_viewport_camera_changed(viewport_camera_index)
 
     @override
     async def on_transform_changed(
@@ -706,7 +725,9 @@ class RemoteScene(SceneEditNotification):
         return response
 
     async def get_actor_asset_aabb(self, actor_path: Path, output: List[float] = None):
-        request = edit_service_pb2.GetActorAssetAabbRequest(actor_path=actor_path.string())
+        request = edit_service_pb2.GetActorAssetAabbRequest(
+            actor_path=actor_path.string()
+        )
         response = await self.edit_stub.GetActorAssetAabb(request)
         self._check_response(response)
         if output is not None:
@@ -745,4 +766,30 @@ class RemoteScene(SceneEditNotification):
             action=action,
         )
         response = await self.edit_stub.QueueKeyEvent(request)
+        self._check_response(response)
+
+    async def get_cameras(self) -> List[CameraBrief]:
+        request = edit_service_pb2.GetCamerasRequest()
+        response = await self.edit_stub.GetCameras(request)
+        self._check_response(response)
+
+        l = []
+        for cam in response.cameras:
+            camera_brief = CameraBrief(
+                index=cam.index,
+                name=cam.name,
+            )
+            l.append(camera_brief)
+
+        return l
+
+    async def get_active_camera(self) -> int:
+        request = edit_service_pb2.GetActiveCameraRequest()
+        response = await self.edit_stub.GetActiveCamera(request)
+        self._check_response(response)
+        return response.index
+
+    async def set_active_camera(self, camera_index: int) -> None:
+        request = edit_service_pb2.SetActiveCameraRequest(index=camera_index)
+        response = await self.edit_stub.SetActiveCamera(request)
         self._check_response(response)

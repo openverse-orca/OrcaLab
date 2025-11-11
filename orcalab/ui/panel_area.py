@@ -42,7 +42,7 @@ class PanelButton(Button):
         else:
             short_name = name
 
-        color = ThemeService().get_color("panel-icon")
+        color = ThemeService().get_color("panel_icon")
         self._icon = make_text_icon(short_name, self.font(), color)
 
     def paintEvent(self, event: QtGui.QPaintEvent):

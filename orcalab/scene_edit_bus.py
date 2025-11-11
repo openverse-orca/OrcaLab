@@ -1,8 +1,7 @@
 from typing import List, Tuple
 
-from matplotlib.transforms import Transform
-
 from orcalab.actor import BaseActor, GroupActor
+from orcalab.math import Transform
 from orcalab.event_bus import create_event_bus
 from orcalab.path import Path
 
@@ -42,9 +41,7 @@ class SceneEditRequest:
         """
         pass
 
-    def record_old_transform(
-        self, actor: BaseActor | Path
-    ):
+    def record_old_transform(self, actor: BaseActor | Path):
         pass
 
     def get_actor_and_path(
@@ -179,21 +176,13 @@ class SceneEditNotification:
         source: str,
     ):
         pass
-    
-    async def get_camera_png(
-        self, 
-        camera_name: str, 
-        png_path: str, 
-        png_name: str
-    ):
+
+    async def get_camera_png(self, camera_name: str, png_path: str, png_name: str):
         pass
 
-    async def get_actor_asset_aabb(
-        self,
-        actor_path: Path,
-        output: List[float] = None
-    ):
+    async def get_actor_asset_aabb(self, actor_path: Path, output: List[float] = None):
         pass
+
 
 SceneEditNotificationBus = create_event_bus(SceneEditNotification)
 

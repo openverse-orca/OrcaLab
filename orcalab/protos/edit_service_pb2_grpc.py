@@ -174,6 +174,21 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.QueueKeyEventRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.QueueKeyEventResponse.FromString,
                 _registered_method=True)
+        self.GetCameras = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetCameras',
+                request_serializer=edit__service__pb2.GetCamerasRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetCamerasResponse.FromString,
+                _registered_method=True)
+        self.GetActiveCamera = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetActiveCamera',
+                request_serializer=edit__service__pb2.GetActiveCameraRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetActiveCameraResponse.FromString,
+                _registered_method=True)
+        self.SetActiveCamera = channel.unary_unary(
+                '/SceneEdit.GrpcService/SetActiveCamera',
+                request_serializer=edit__service__pb2.SetActiveCameraRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.SetActiveCameraResponse.FromString,
+                _registered_method=True)
 
 
 class GrpcServiceServicer(object):
@@ -347,6 +362,24 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetCameras(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetActiveCamera(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetActiveCamera(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GrpcServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -489,6 +522,21 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.QueueKeyEvent,
                     request_deserializer=edit__service__pb2.QueueKeyEventRequest.FromString,
                     response_serializer=edit__service__pb2.QueueKeyEventResponse.SerializeToString,
+            ),
+            'GetCameras': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCameras,
+                    request_deserializer=edit__service__pb2.GetCamerasRequest.FromString,
+                    response_serializer=edit__service__pb2.GetCamerasResponse.SerializeToString,
+            ),
+            'GetActiveCamera': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetActiveCamera,
+                    request_deserializer=edit__service__pb2.GetActiveCameraRequest.FromString,
+                    response_serializer=edit__service__pb2.GetActiveCameraResponse.SerializeToString,
+            ),
+            'SetActiveCamera': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetActiveCamera,
+                    request_deserializer=edit__service__pb2.SetActiveCameraRequest.FromString,
+                    response_serializer=edit__service__pb2.SetActiveCameraResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1247,6 +1295,87 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/QueueKeyEvent',
             edit__service__pb2.QueueKeyEventRequest.SerializeToString,
             edit__service__pb2.QueueKeyEventResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCameras(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetCameras',
+            edit__service__pb2.GetCamerasRequest.SerializeToString,
+            edit__service__pb2.GetCamerasResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetActiveCamera(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetActiveCamera',
+            edit__service__pb2.GetActiveCameraRequest.SerializeToString,
+            edit__service__pb2.GetActiveCameraResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetActiveCamera(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/SetActiveCamera',
+            edit__service__pb2.SetActiveCameraRequest.SerializeToString,
+            edit__service__pb2.SetActiveCameraResponse.FromString,
             options,
             channel_credentials,
             insecure,

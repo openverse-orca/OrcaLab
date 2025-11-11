@@ -28,6 +28,9 @@ from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.asset_browser.asset_browser import AssetBrowser
 from orcalab.ui.asset_browser.thumbnail_render_bus import ThumbnailRenderRequestBus
+from orcalab.ui.camera.camera_brief import CameraBrief
+from orcalab.ui.camera.camera_bus import CameraNotification, CameraRequest, CameraNotificationBus, CameraRequestBus
+from orcalab.ui.camera.camera_selector import CameraSelector
 from orcalab.ui.copilot import CopilotPanel
 from orcalab.ui.image_utils import ImageProcessor
 from orcalab.ui.icon_util import make_icon
@@ -59,7 +62,7 @@ from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
 logger = logging.getLogger(__name__)
 
 
-class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, UserEventRequest):
+class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, UserEventRequest, CameraNotification, CameraRequest):
 
     add_item_by_drag = QtCore.Signal(str, Transform)
     load_scene_layout_sig = QtCore.Signal(str)
@@ -81,14 +84,18 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         ApplicationRequestBus.connect(self)
         AssetServiceNotificationBus.connect(self)
         UserEventRequestBus.connect(self)
-        logger.debug("connect_buses: ApplicationRequestBus=%s AssetServiceNotificationBus=%s UserEventRequestBus=%s", True, True, True)
+        CameraNotificationBus.connect(self)
+        CameraRequestBus.connect(self)
+        logger.debug("connect_buses")
 
     def disconnect_buses(self):
         UserEventRequestBus.disconnect(self)
         AssetServiceNotificationBus.disconnect(self)
         ApplicationRequestBus.disconnect(self)
+        CameraNotificationBus.disconnect(self)
+        CameraRequestBus.disconnect(self)
         super().disconnect_buses()
-        logger.debug("disconnect_buses: 子总线已断开")
+        logger.debug("disconnect_buses")
 
     # def start_viewport_main_loop(self):
     #     self._viewport_widget.start_viewport_main_loop()
@@ -134,30 +141,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         self.show()
 
         self._viewport_widget.start_viewport_main_loop()
-
-        # # 启动前检查GPU环境
-        # await self._pre_init_gpu_check()
-
-        # # 分阶段初始化viewport，添加错误恢复机制
-        # await self._init_viewport_with_retry()
-
-        # 等待viewport完全启动并检查就绪状态
-        # print("等待viewport启动...")
-        # await asyncio.sleep(5)
-
-        # # 等待viewport就绪状态
-        # viewport_ready = await self._wait_for_viewport_ready()
-        # if not viewport_ready:
-        #     print("警告: Viewport可能未完全就绪，但继续初始化...")
-
-        # 检查GPU状态
-        # await self._check_gpu_status()
-
-        # 确保GPU资源稳定后再继续
-        # await self._stabilize_gpu_resources()
-        # print("Viewport启动完成，继续初始化...")
-
-        # print("连接总线...")
 
         connect(self.actor_outline_model.add_item, self.add_item_to_scene)
 
@@ -220,43 +203,10 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         logger.info("启动异步资产加载…")
         asyncio.create_task(self._load_assets_async())
 
-        # print("UI初始化完成")
-        
-        # # 启动GPU健康监控
-        # print("启动GPU健康监控...")
-        # await self._monitor_gpu_health()
-        # print("GPU健康监控启动完成")
-
-    async def _init_viewport_with_retry(self, max_retries=3):
-        """带重试机制的viewport初始化"""
-        for attempt in range(max_retries):
-            try:
-                logger.info("初始化 viewport（尝试 %s/%s）…", attempt + 1, max_retries)
-                
-                # 在重试前清理GPU资源
-                if attempt > 0:
-                    await self._cleanup_gpu_resources()
-                    await asyncio.sleep(3)  # 给GPU更多时间恢复
-                
-                self._viewport_widget = Viewport()
-                self._viewport_widget.init_viewport()
-                self._viewport_widget.start_viewport_main_loop()
-                logger.info("Viewport 初始化成功")
-                return
-            except Exception as e:
-                logger.exception("Viewport 初始化失败（尝试 %s）：%s", attempt + 1, e)
-                
-                # 检查是否是GPU设备丢失错误
-                if "Device lost" in str(e) or "GPU removed" in str(e):
-                    logger.warning("检测到 GPU 设备丢失错误，尝试恢复…")
-                    await self._handle_gpu_device_lost()
-                
-                if attempt < max_retries - 1:
-                    logger.info("等待 %s 秒后重试…", 2 ** attempt)
-                    await asyncio.sleep(2 ** attempt)  # 指数退避
-                else:
-                    logger.error("Viewport 初始化最终失败，准备抛出异常")
-                    raise
+        # Load cameras from remote scene.
+        cameras = await self.remote_scene. get_cameras()
+        viewport_camera_index = await self.remote_scene.get_active_camera()
+        self.on_cameras_changed(cameras, viewport_camera_index)
 
     async def _cleanup_gpu_resources(self):
         """清理GPU资源"""
@@ -317,24 +267,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         except Exception as e:
             logger.exception("重启 NVIDIA 服务失败: %s", e)
 
-    async def _pre_init_gpu_check(self):
-        """启动前GPU环境检查"""
-        try:
-            logger.info("执行启动前 GPU 环境检查…")
-            
-            # 检查NVIDIA驱动
-            await self._check_nvidia_driver()
-            
-            # 检查GPU可用性
-            await self._check_gpu_availability()
-            
-            # 检查显存状态
-            await self._check_vram_status()
-            
-            logger.info("GPU 环境检查完成")
-        except Exception as e:
-            logger.exception("GPU 环境检查失败: %s", e)
-            logger.warning("继续启动，但可能遇到 GPU 问题")
 
     async def _check_nvidia_driver(self):
         """检查NVIDIA驱动状态"""
@@ -394,25 +326,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         except Exception as e:
             logger.exception("检查显存状态失败: %s", e)
 
-    async def _check_gpu_status(self):
-        """检查GPU状态，确保viewport正常运行"""
-        try:
-            # 检查viewport是否正常响应
-            if hasattr(self._viewport_widget, '_viewport') and self._viewport_widget._viewport:
-                logger.info("检查 GPU 状态…")
-                
-                # 给GPU一些时间来稳定
-                await asyncio.sleep(2)
-                
-                # 检查系统GPU状态
-                await self._check_system_gpu_status()
-                
-                logger.info("GPU 状态检查完成")
-            else:
-                logger.warning("Viewport 对象未正确初始化")
-        except Exception as e:
-            logger.exception("GPU 状态检查失败: %s", e)
-            logger.warning("继续初始化，但 GPU 状态可能不稳定")
 
     async def _check_system_gpu_status(self):
         """检查系统GPU状态"""
@@ -456,56 +369,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
                 
         except Exception as e:
             logger.exception("系统 GPU 状态检查失败: %s", e)
-
-    async def _wait_for_viewport_ready(self, timeout=10):
-        """等待viewport就绪状态"""
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            try:
-                # 检查viewport是否就绪
-                if hasattr(self._viewport_widget, '_viewport_running') and self._viewport_widget._viewport_running:
-                    logger.info("Viewport 已就绪")
-                    return True
-                await asyncio.sleep(0.1)
-            except Exception as e:
-                logger.exception("检查 viewport 就绪状态时出错: %s", e)
-                await asyncio.sleep(0.1)
-        
-        logger.warning("Viewport 就绪状态检查超时")
-        return False
-
-    async def _stabilize_gpu_resources(self):
-        """稳定GPU资源，避免资源竞争"""
-        try:
-            logger.info("稳定 GPU 资源…")
-            
-            # 给GPU一些额外时间来稳定
-            await asyncio.sleep(2)
-            
-            # 可以在这里添加GPU资源预热操作
-            # 例如进行一次简单的渲染操作来确保GPU上下文稳定
-            if hasattr(self._viewport_widget, '_viewport') and self._viewport_widget._viewport:
-                # 尝试触发一次简单的GPU操作
-                try:
-                    # 这里可以调用viewport的某个方法来预热GPU
-                    logger.info("GPU 资源预热完成")
-                except Exception as e:
-                    logger.exception("GPU 资源预热失败: %s", e)
-            
-            logger.info("GPU 资源稳定化完成")
-        except Exception as e:
-            logger.exception("GPU 资源稳定化过程中出错: %s", e)
-
-    async def _monitor_gpu_health(self):
-        """监控GPU健康状态"""
-        try:
-            # 这里可以添加GPU健康状态监控
-            # 例如检查GPU温度、显存使用情况等
-            logger.info("GPU 健康状态监控已启动")
-            # 立即返回，不阻塞主流程
-            return
-        except Exception as e:
-            logger.exception("GPU 健康状态监控启动失败: %s", e)
 
     def stop_viewport_main_loop(self):
         """停止viewport主循环"""
@@ -647,6 +510,10 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         panel = Panel("Terminal", self.terminal_widget)
         panel.panel_icon = make_icon(":/icons/window_console", panel_icon_color)
         self.add_panel(panel, "bottom")
+
+        self.camera_selector_widget = CameraSelector()
+        panel = Panel("CamerasSelector", self.camera_selector_widget)
+        self.add_panel(panel, "left")
 
         self.menu_bar = QtWidgets.QMenuBar()
         layout = QtWidgets.QVBoxLayout(self._menu_bar_area)
@@ -1411,6 +1278,24 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
     def queue_key_event(self, key, action):
         # print(f"Key event, key: {key}, action: {action}")
         asyncio.create_task(self.remote_scene.queue_key_event(key.value, action.value))
+
+    #
+    # CameraRequestBus overrides
+    #
+    @override
+    async def set_viewport_camera(self, camera_index: int) -> None:
+        await self.remote_scene.set_active_camera(camera_index)
+        CameraNotificationBus().on_viewport_camera_changed(camera_index)
+
+        
+
+    #
+    # CameraNotificationBus overrides
+    #
+    @override
+    def on_cameras_changed(self, cameras: List[CameraBrief], viewport_camera_index: int) -> None:
+        self.camera_selector_widget.set_cameras(cameras, viewport_camera_index)
+        
 
     def _mark_layout_clean(self):
         self._layout_modified = False

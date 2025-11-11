@@ -280,6 +280,36 @@ message QueueKeyEventResponse {
     string error_message = 2;
 }
 
+
+message CameraBrief {
+    string name = 1;
+    int32 index = 2;
+    string source = 3;
+}
+message GetCamerasRequest {
+}
+message GetCamerasResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    repeated CameraBrief cameras = 3;
+}
+
+message GetActiveCameraRequest {
+}
+message GetActiveCameraResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    int32 index = 3;
+}
+
+message SetActiveCameraRequest {
+    int32 index = 1;
+}
+message SetActiveCameraResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
 service GrpcService {
     rpc Aloha(AlohaRequest) returns (AlohaResponse);
     
@@ -321,4 +351,7 @@ service GrpcService {
     rpc QueueMouseWheelEvent(QueueMouseWheelEventRequest) returns (QueueMouseWheelEventResponse);
     rpc QueueKeyEvent(QueueKeyEventRequest) returns (QueueKeyEventResponse);
 
+    rpc GetCameras(GetCamerasRequest) returns (GetCamerasResponse);
+    rpc GetActiveCamera(GetActiveCameraRequest) returns (GetActiveCameraResponse);
+    rpc SetActiveCamera(SetActiveCameraRequest) returns (SetActiveCameraResponse);
 }
