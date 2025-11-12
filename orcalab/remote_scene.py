@@ -779,6 +779,7 @@ class RemoteScene(SceneEditNotification):
                 index=cam.index,
                 name=cam.name,
             )
+            camera_brief.source = cam.source
             l.append(camera_brief)
 
         return l

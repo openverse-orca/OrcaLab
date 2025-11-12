@@ -25,6 +25,7 @@ class ThemeService:
         self.set_color("bg", "#181818")
         self.set_color("bg_hover", "#444444")
         self.set_color("text", "#FFFFFF")
+        self.set_color("text_disable", "#888888")
         self.set_color("split_line", "#2b2b2b")
         self.set_color("button_bg", "#181818")
         self.set_color("button_bg_hover", "#444444")

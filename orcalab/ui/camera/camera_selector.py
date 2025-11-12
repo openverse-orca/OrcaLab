@@ -1,4 +1,5 @@
 import asyncio
+from tkinter import font
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from typing import Any, List, override
@@ -10,6 +11,49 @@ from orcalab.ui.camera.camera_bus import (
     CameraNotificationBus,
     CameraRequestBus,
 )
+from orcalab.ui.theme_service import ThemeService
+
+
+class _CameraSelectorDelegate(QtWidgets.QStyledItemDelegate):
+
+    def __init__(self, /, parent=...):
+        super().__init__(parent)
+
+        theme = ThemeService()
+        self.source_color = theme.get_color("text_disable")
+
+    @override
+    def paint(
+        self,
+        painter: QtGui.QPainter,
+        option: QtWidgets.QStyleOptionViewItem,
+        index: QtCore.QModelIndex | QtCore.QPersistentModelIndex,
+    ) -> None:
+        super().paint(painter, option, index)
+
+        # Draw source on the right side.
+
+        model = index.model()
+        assert isinstance(model, CameraBriefModel)
+        camera_brief = model.get_camera_brief(index.row())
+
+        camera_brief.source
+
+        rect: QtCore.QRect = option.rect
+        rect.setRight(rect.right() - 5)
+
+        font = painter.font()
+        font.setItalic(True)
+
+        align = (
+            QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight
+        )
+
+        painter.save()
+        painter.setPen(self.source_color)
+        painter.setFont(font)
+        painter.drawText(rect, align, camera_brief.source)
+        painter.restore()
 
 
 class CameraSelector(QtWidgets.QListView, CameraNotification):
@@ -20,6 +64,7 @@ class CameraSelector(QtWidgets.QListView, CameraNotification):
 
         self._model = CameraBriefModel()
         self.setModel(self._model)
+        self.setItemDelegate(_CameraSelectorDelegate(self))
 
         self.selectionModel().selectionChanged.connect(self._on_selection_changed)
 
