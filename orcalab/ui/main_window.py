@@ -1026,6 +1026,8 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         self._infer_scene_and_layout_names()
         self._mark_layout_clean()
         self._update_title()
+        self.undo_service.command_history = []
+        self.undo_service.command_history_index = -1
 
     async def clear_scene_layout(self, actor):
         if isinstance(actor, GroupActor):
