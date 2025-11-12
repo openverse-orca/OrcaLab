@@ -1,3 +1,9 @@
+
+# Patch PySide6 first. Before any other PySide6 imports.
+from orcalab.patch_pyside6 import patch_pyside6
+
+patch_pyside6()
+
 import argparse
 import asyncio
 import sys
