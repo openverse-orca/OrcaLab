@@ -21,9 +21,6 @@ OrcaLab 是 OrcaGym 的前端界面，提供场景组装和仿真的用户界面
 	```
 2. 克隆此仓库并以可编辑模式安装 OrcaLab：
 	```bash
-	# pyside 需要
-	sudo apt install libxcb-cursor0
-
 	git clone https://github.com/openverse-orca/OrcaLab.git
 	cd OrcaLab
 	pip install -e .
@@ -104,8 +101,7 @@ some_signal.connect(bloc_task)
 
 ## 常见问题
 
-### Linux 上出现 version `GLIBCXX_3.4.30' not found
-    conda update -c conda-forge libstdcxx-ng
+TODO
 
 ## 许可证
 
