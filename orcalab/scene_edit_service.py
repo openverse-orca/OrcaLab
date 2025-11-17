@@ -1,6 +1,7 @@
 from copy import deepcopy
-from typing import List, override
+from typing import Any, List, override
 from orcalab.actor import BaseActor, GroupActor, AssetActor
+from orcalab.actor_property import ActorPropertyKey
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.scene_edit_bus import (
@@ -14,6 +15,7 @@ from orcalab.undo_service.command import (
     CreateGroupCommand,
     CreateActorCommand,
     DeleteActorCommand,
+    PropertyChangeCommand,
     RenameActorCommand,
     ReparentActorCommand,
     SelectionCommand,
@@ -28,6 +30,10 @@ class SceneEditService(SceneEditRequest):
     def __init__(self, local_scene: LocalScene):
         self.local_scene = local_scene
         self.old_transform = None
+
+        # For property change tracking
+        self.property_key: ActorPropertyKey | None = None
+        self.old_property_value: Any = None
 
     def connect_bus(self):
         SceneEditRequestBus.connect(self)
@@ -108,9 +114,7 @@ class SceneEditService(SceneEditRequest):
         if not ok:
             raise Exception(err)
 
-        parent_actor, parent_actor_path = self.local_scene.get_actor_and_path(
-            parent_actor
-        )
+        _, parent_actor_path = self.local_scene.get_actor_and_path(parent_actor)
 
         bus = SceneEditNotificationBus()
 
@@ -122,13 +126,10 @@ class SceneEditService(SceneEditRequest):
 
         if undo:
             if isinstance(actor, AssetActor):
-                command = CreateActorCommand()
-                command.actor = actor
-                command.path = parent_actor_path / actor.name
+                command = CreateActorCommand(actor, parent_actor_path / actor.name, -1)
                 UndoRequestBus().add_command(command)
             else:
-                command = CreateGroupCommand()
-                command.path = parent_actor_path / actor.name
+                command = CreateGroupCommand(parent_actor_path / actor.name)
                 UndoRequestBus().add_command(command)
 
     @override
@@ -148,10 +149,7 @@ class SceneEditService(SceneEditRequest):
         index = parent_actor.children.index(actor)
         assert index != -1
 
-        command = DeleteActorCommand()
-        command.actor = actor
-        command.path = actor_path
-        command.row = index
+        command = DeleteActorCommand(actor, actor_path, index)
 
         bus = SceneEditNotificationBus()
 
@@ -164,6 +162,7 @@ class SceneEditService(SceneEditRequest):
         if undo:
             UndoRequestBus().add_command(command)
 
+    @override
     async def rename_actor(
         self,
         actor: BaseActor,
@@ -213,6 +212,7 @@ class SceneEditService(SceneEditRequest):
         if undo:
             UndoRequestBus().add_command(command_group)
 
+    @override
     async def reparent_actor(
         self,
         actor: BaseActor | Path,
@@ -251,3 +251,41 @@ class SceneEditService(SceneEditRequest):
             command.new_row = row
 
             UndoRequestBus().add_command(command)
+
+    @override
+    async def set_property(
+        self,
+        property_key: ActorPropertyKey,
+        value: Any,
+        undo: bool = True,
+        source: str = "",
+    ):
+        bus = SceneEditNotificationBus()
+
+        await bus.on_property_changed(property_key, value, source)
+
+        if undo:
+            actor, group, prop = self.local_scene.parse_property_key(property_key)
+            if self.old_property_value is None:
+                old_value = prop.value()
+            else:
+                old_value = self.old_property_value
+
+            command = PropertyChangeCommand(property_key, old_value, value)
+            UndoRequestBus().add_command(command)
+
+    @override
+    def start_change_property(self, property_key: ActorPropertyKey):
+        assert self.old_property_value is None and self.property_key is None
+
+        actor, group, prop = self.local_scene.parse_property_key(property_key)
+        self.old_property_value = prop.value()
+        print("save value:", self.old_property_value)
+        self.property_key = property_key
+
+    @override
+    def end_change_property(self, property_key: ActorPropertyKey):
+        assert self.old_property_value is not None and self.property_key == property_key
+
+        self.old_property_value = None
+        self.property_key = None

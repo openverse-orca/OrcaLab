@@ -7,7 +7,12 @@ class Button(QtWidgets.QWidget):
     mouse_released = QtCore.Signal()
     mouse_pressed = QtCore.Signal()
 
-    def __init__(self, text: str = "", icon: QtGui.QIcon = None, parent=None):
+    def __init__(
+        self,
+        text: str = "",
+        icon: QtGui.QIcon | None = None,
+        parent: QtWidgets.QWidget | None = None,
+    ):
         super().__init__(parent)
         self._icon = icon
         self._text = text
@@ -97,10 +102,12 @@ class Button(QtWidgets.QWidget):
             bg_color = self.bg_color
 
         painter.setBrush(QtGui.QBrush(bg_color))
-        painter.setPen(QtCore.Qt.NoPen)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
         painter.drawRoundedRect(rect, self.border_radius, self.border_radius)
 
     def _draw_icon(self, painter: QtGui.QPainter, rect: QtCore.QRect):
+        if not self._icon:
+            return
         self._icon.paint(painter, rect)
 
     def _draw_text(self, painter: QtGui.QPainter, rect: QtCore.QRect):
@@ -111,7 +118,7 @@ class Button(QtWidgets.QWidget):
         else:
             painter.setPen(self.text_color)
 
-        painter.drawText(rect, QtCore.Qt.AlignCenter, self._text)
+        painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, self._text)
 
     def sizeHint(self):
         w = self.padding_left + self.padding_right

@@ -1,6 +1,9 @@
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 from orcalab.actor import BaseActor, GroupActor
+from orcalab.actor_property import ActorPropertyGroup, ActorPropertyKey
+from orcalab.application_bus import get_local_scene
+from orcalab.local_scene import LocalScene
 from orcalab.math import Transform
 from orcalab.event_bus import create_event_bus
 from orcalab.path import Path
@@ -44,16 +47,6 @@ class SceneEditRequest:
     def record_old_transform(self, actor: BaseActor | Path):
         pass
 
-    def get_actor_and_path(
-        self, out: List[Tuple[BaseActor, Path]], actor: BaseActor | Path
-    ):
-        pass
-
-    def can_rename_actor(
-        self, out: List[Tuple[bool, str]], actor: BaseActor | Path, new_name: str
-    ):
-        pass
-
     async def add_actor(
         self,
         actor: BaseActor,
@@ -88,6 +81,37 @@ class SceneEditRequest:
         undo: bool = True,
         source: str = "",
     ):
+        pass
+
+    # Property Editing
+    #
+    # --- Non-Drag Pattern:
+    #
+    # set_property(undo=True)
+    #
+    # --- Drag Pattern:
+    #
+    # start_change_property()
+    # set_property(undo=False)
+    # ...
+    # set_property(undo=False)
+    # set_property(undo=True)
+    # end_change_property()
+    #
+
+    async def set_property(
+        self,
+        property_key: ActorPropertyKey,
+        value: Any,
+        undo: bool,
+        source: str = "",
+    ):
+        pass
+
+    def start_change_property(self, property_key: ActorPropertyKey):
+        pass
+
+    def end_change_property(self, property_key: ActorPropertyKey):
         pass
 
 
@@ -177,6 +201,14 @@ class SceneEditNotification:
     ):
         pass
 
+    async def on_property_changed(
+        self,
+        property_key: ActorPropertyKey,
+        value: Any,
+        source: str,
+    ):
+        pass
+
     async def get_camera_png(self, camera_name: str, png_path: str, png_name: str):
         pass
 
@@ -187,29 +219,13 @@ class SceneEditNotification:
 SceneEditNotificationBus = create_event_bus(SceneEditNotification)
 
 
-def get_actor_and_path(actor: BaseActor | Path) -> Tuple[BaseActor, Path]:
-    result = []
-    SceneEditRequestBus().get_actor_and_path(result, actor)
-    if result:
-        return result[0]
-
-    raise Exception("Actor not found")
-
-
-def can_rename_actor(actor: BaseActor | Path, new_name: str) -> Tuple[bool, str]:
-    result = []
-    SceneEditRequestBus().can_rename_actor(result, actor, new_name)
-    if result:
-        return result[0]
-    return False, "No bus handler"
-
-
 def make_unique_name(base_name: str, parent: BaseActor | Path) -> str:
-    parent, _ = get_actor_and_path(parent)
-    if not isinstance(parent, GroupActor):
+    local_scene = get_local_scene()
+    parent_actor, _ = local_scene.get_actor_and_path(parent)
+    if not isinstance(parent_actor, GroupActor):
         raise Exception("Parent must be a GroupActor")
 
-    existing_names = {child.name for child in parent.children}
+    existing_names = {child.name for child in parent_actor.children}
 
     counter = 1
     # base_name 可能是一个路径，因此以最后一个 / 之后作为名字

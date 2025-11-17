@@ -189,6 +189,21 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.SetActiveCameraRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetActiveCameraResponse.FromString,
                 _registered_method=True)
+        self.GetPropertyGroups = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetPropertyGroups',
+                request_serializer=edit__service__pb2.GetPropertyGroupsRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetPropertyGroupsResponse.FromString,
+                _registered_method=True)
+        self.GetProperties = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetProperties',
+                request_serializer=edit__service__pb2.GetPropertiesRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetPropertiesResponse.FromString,
+                _registered_method=True)
+        self.SetProperties = channel.unary_unary(
+                '/SceneEdit.GrpcService/SetProperties',
+                request_serializer=edit__service__pb2.SetPropertiesRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.SetPropertiesResponse.FromString,
+                _registered_method=True)
 
 
 class GrpcServiceServicer(object):
@@ -380,6 +395,24 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetPropertyGroups(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetProperties(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetProperties(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GrpcServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -537,6 +570,21 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.SetActiveCamera,
                     request_deserializer=edit__service__pb2.SetActiveCameraRequest.FromString,
                     response_serializer=edit__service__pb2.SetActiveCameraResponse.SerializeToString,
+            ),
+            'GetPropertyGroups': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetPropertyGroups,
+                    request_deserializer=edit__service__pb2.GetPropertyGroupsRequest.FromString,
+                    response_serializer=edit__service__pb2.GetPropertyGroupsResponse.SerializeToString,
+            ),
+            'GetProperties': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetProperties,
+                    request_deserializer=edit__service__pb2.GetPropertiesRequest.FromString,
+                    response_serializer=edit__service__pb2.GetPropertiesResponse.SerializeToString,
+            ),
+            'SetProperties': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetProperties,
+                    request_deserializer=edit__service__pb2.SetPropertiesRequest.FromString,
+                    response_serializer=edit__service__pb2.SetPropertiesResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1376,6 +1424,87 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/SetActiveCamera',
             edit__service__pb2.SetActiveCameraRequest.SerializeToString,
             edit__service__pb2.SetActiveCameraResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetPropertyGroups(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetPropertyGroups',
+            edit__service__pb2.GetPropertyGroupsRequest.SerializeToString,
+            edit__service__pb2.GetPropertyGroupsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetProperties(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetProperties',
+            edit__service__pb2.GetPropertiesRequest.SerializeToString,
+            edit__service__pb2.GetPropertiesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetProperties(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/SetProperties',
+            edit__service__pb2.SetPropertiesRequest.SerializeToString,
+            edit__service__pb2.SetPropertiesResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -214,7 +214,7 @@ class PanelManager(QtWidgets.QWidget, PanelRequest):
         panel_area.hide()
 
     def restore_default_layout(self):
-        self._splitter_h.setSizes([200, 800, 200])
+        self._splitter_h.setSizes([400, 1200, 400])
         self._splitter_v.setSizes([600, 200])
 
         for panel_area in self.iterate_panel_areas():

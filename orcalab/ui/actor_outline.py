@@ -3,6 +3,7 @@ from typing import Tuple, override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.actor import BaseActor, GroupActor
+from orcalab.application_bus import get_local_scene
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.pyside_util import connect
@@ -10,9 +11,7 @@ from orcalab.scene_edit_bus import (
     SceneEditRequestBus,
     SceneEditNotification,
     SceneEditNotificationBus,
-    get_actor_and_path,
     make_unique_name,
-    can_rename_actor,
 )
 
 from orcalab.ui.actor_outline_model import ActorOutlineModel
@@ -118,7 +117,9 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         actors = []
 
         for actor_path in new_selection:
-            actor, actor_path = get_actor_and_path(actor_path)
+            local_scene = get_local_scene()
+            actor = local_scene.find_actor_by_path(actor_path)
+            assert actor is not None
             actors.append(actor)
 
         self.set_actor_selection(actors)
@@ -204,6 +205,12 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         )
 
     def _open_rename_dialog(self):
+
+        local_scene = get_local_scene()
+
+        def can_rename_actor(actor_path: Path, name: str):
+            return local_scene.can_rename_actor(actor_path, name)
+
         dialog = RenameDialog(self._current_actor_path, can_rename_actor, self)
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             asyncio.create_task(

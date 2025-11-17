@@ -310,6 +310,80 @@ message SetActiveCameraResponse {
     string error_message = 2;
 }
 
+// Actor Property related messages.
+
+enum PropertyType {
+    Unknown = 0;
+    Bool = 1;
+    Int = 2;
+    Float = 3;
+    String = 4;
+}
+
+message PropertyValue {
+    oneof value_oneof {
+        bool value_bool = 3;
+        int32 value_int = 4;
+        float value_float = 5;
+        string value_string = 6;
+    }
+}
+
+message PropertyValueList {
+    repeated PropertyValue items = 1;
+}
+
+message Property {
+    PropertyType type = 1;
+    string name = 2;
+    string display_name = 3;
+}
+
+message PropertyGroup {
+    string prefix = 1;
+    string name = 2;
+    string hint = 3;
+    repeated Property properties = 4;
+}
+
+message PropertyKey {
+    string actor_path = 1;
+    string group_prefix = 2;
+    string property_name = 3;
+    PropertyType property_type = 4;
+}
+
+message PropertyKeyList {
+    repeated PropertyKey items = 1;
+}
+
+message GetPropertyGroupsRequest {
+    string actor_path = 1;
+}
+message GetPropertyGroupsResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    repeated PropertyGroup property_groups = 3;
+}
+
+message GetPropertiesRequest {
+    PropertyKeyList keys = 1;
+}
+message GetPropertiesResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    PropertyValueList values = 3;
+}
+
+message SetPropertiesRequest {
+    PropertyKeyList keys = 1;
+    PropertyValueList values = 2;
+}
+message SetPropertiesResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
 service GrpcService {
     rpc Aloha(AlohaRequest) returns (AlohaResponse);
     
@@ -354,4 +428,8 @@ service GrpcService {
     rpc GetCameras(GetCamerasRequest) returns (GetCamerasResponse);
     rpc GetActiveCamera(GetActiveCameraRequest) returns (GetActiveCameraResponse);
     rpc SetActiveCamera(SetActiveCameraRequest) returns (SetActiveCameraResponse);
+
+    rpc GetPropertyGroups(GetPropertyGroupsRequest) returns (GetPropertyGroupsResponse);
+    rpc GetProperties(GetPropertiesRequest) returns (GetPropertiesResponse);
+    rpc SetProperties(SetPropertiesRequest) returns (SetPropertiesResponse);
 }

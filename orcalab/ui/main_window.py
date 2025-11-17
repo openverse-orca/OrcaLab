@@ -79,6 +79,9 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         self._cleanup_in_progress = False
         self._cleanup_completed = False
 
+        # Let empty area can steal focus.
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
+
     def connect_buses(self):
         super().connect_buses()
         ApplicationRequestBus.connect(self)
@@ -136,7 +139,10 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         await self._init_ui()
         logger.info("UI 初始化完成")
 
-        self.resize(1200, 800)
+        rect = QtCore.QRect(0, 0, 2000, 1200)
+        self.resize(rect.width(), rect.height())
+        center=self.windowHandle().screen().availableGeometry().center()
+        self.move(center-rect.center())
         self.restore_default_layout()
         self.show()
 
@@ -208,167 +214,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         viewport_camera_index = await self.remote_scene.get_active_camera()
         self.on_cameras_changed(cameras, viewport_camera_index)
 
-    async def _cleanup_gpu_resources(self):
-        """清理GPU资源"""
-        try:
-            logger.info("清理 GPU 资源…")
-            # 清理viewport对象
-            if hasattr(self, '_viewport_widget') and self._viewport_widget:
-                del self._viewport_widget
-                self._viewport_widget = None
-            
-            # 强制垃圾回收
-            import gc
-            gc.collect()
-            
-            # 等待GPU资源释放
-            await asyncio.sleep(2)
-            logger.info("GPU 资源清理完成")
-        except Exception as e:
-            logger.exception("清理 GPU 资源失败: %s", e)
-
-    async def _handle_gpu_device_lost(self):
-        """处理GPU设备丢失"""
-        try:
-            logger.info("处理 GPU 设备丢失…")
-            
-            # 检查并重启NVIDIA驱动服务
-            await self._restart_nvidia_services()
-            
-            # 等待GPU恢复
-            await asyncio.sleep(5)
-            
-            logger.info("GPU 设备丢失处理完成")
-        except Exception as e:
-            logger.exception("处理 GPU 设备丢失失败: %s", e)
-
-    async def _restart_nvidia_services(self):
-        """重启NVIDIA相关服务"""
-        try:
-            logger.info("尝试重启 NVIDIA 服务…")
-            import subprocess
-            
-            # 重启NVIDIA持久化守护进程
-            try:
-                subprocess.run(['sudo', 'systemctl', 'restart', 'nvidia-persistenced'], 
-                             timeout=10, capture_output=True)
-                logger.info("NVIDIA 持久化守护进程已重启")
-            except Exception as e:
-                logger.exception("重启 NVIDIA 持久化守护进程失败: %s", e)
-            
-            # 重置NVIDIA GPU
-            try:
-                subprocess.run(['sudo', 'nvidia-smi', '--gpu-reset'], 
-                             timeout=10, capture_output=True)
-                logger.info("NVIDIA GPU 已重置")
-            except Exception as e:
-                logger.exception("重置 NVIDIA GPU 失败: %s", e)
-                
-        except Exception as e:
-            logger.exception("重启 NVIDIA 服务失败: %s", e)
-
-
-    async def _check_nvidia_driver(self):
-        """检查NVIDIA驱动状态"""
-        try:
-            import subprocess
-            result = subprocess.run(['nvidia-smi'], capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                logger.info("NVIDIA 驱动正常")
-                # 解析驱动版本
-                lines = result.stdout.split('\n')
-                for line in lines:
-                    if 'Driver Version:' in line:
-                        logger.info("驱动版本: %s", line.strip())
-                        break
-            else:
-                logger.warning("NVIDIA 驱动可能有问题")
-        except Exception as e:
-            logger.exception("检查 NVIDIA 驱动失败: %s", e)
-
-    async def _check_gpu_availability(self):
-        """检查GPU可用性"""
-        try:
-            import subprocess
-            result = subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader'], 
-                                  capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                gpu_info = result.stdout.strip().split('\n')[0]
-                logger.info("GPU 信息: %s", gpu_info)
-            else:
-                logger.warning("无法获取 GPU 信息")
-        except Exception as e:
-            logger.exception("检查 GPU 可用性失败: %s", e)
-
-    async def _check_vram_status(self):
-        """检查显存状态"""
-        try:
-            import subprocess
-            result = subprocess.run(['nvidia-smi', '--query-gpu=memory.used,memory.total', '--format=csv,noheader,nounits'], 
-                                  capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                memory_info = result.stdout.strip().split('\n')[0]
-                used, total = memory_info.split(', ')
-                used_mb = int(used)
-                total_mb = int(total)
-                free_mb = total_mb - used_mb
-                usage_percent = (used_mb / total_mb) * 100
-                
-                logger.info("显存状态: %sMB/%sMB 使用中 (%.1f%%)", used_mb, total_mb, usage_percent)
-                logger.info("可用显存: %sMB", free_mb)
-                
-                if free_mb < 1024:  # 少于1GB可用显存
-                    logger.warning("可用显存不足，可能导致 GPU 设备丢失")
-                elif usage_percent > 80:
-                    logger.warning("显存使用率过高")
-            else:
-                logger.warning("无法获取显存状态")
-        except Exception as e:
-            logger.exception("检查显存状态失败: %s", e)
-
-
-    async def _check_system_gpu_status(self):
-        """检查系统GPU状态"""
-        try:
-            import subprocess
-            import re
-            
-            # 检查NVIDIA GPU状态
-            try:
-                result = subprocess.run(['nvidia-smi', '--query-gpu=name,memory.used,memory.total,temperature.gpu', '--format=csv,noheader,nounits'], 
-                                      capture_output=True, text=True, timeout=5)
-                if result.returncode == 0:
-                    gpu_info = result.stdout.strip().split('\n')[0]
-                    logger.info("NVIDIA GPU 状态: %s", gpu_info)
-                    
-                    # 检查显存使用情况
-                    memory_match = re.search(r'(\d+)/(\d+)', gpu_info)
-                    if memory_match:
-                        used_mem = int(memory_match.group(1))
-                        total_mem = int(memory_match.group(2))
-                        usage_percent = (used_mem / total_mem) * 100
-                        logger.info("显存使用率: %.1f%%", usage_percent)
-                        
-                        if usage_percent > 90:
-                            logger.warning("显存使用率过高，可能导致设备丢失")
-                else:
-                    logger.warning("无法获取 NVIDIA GPU 状态")
-            except Exception as e:
-                logger.exception("检查 NVIDIA GPU 状态失败: %s", e)
-            
-            # 检查是否有其他进程占用GPU
-            try:
-                result = subprocess.run(['nvidia-smi', '--query-compute-apps=pid,process_name,used_memory', '--format=csv,noheader,nounits'], 
-                                      capture_output=True, text=True, timeout=5)
-                if result.returncode == 0 and result.stdout.strip():
-                    logger.info("当前 GPU 进程:\n%s", result.stdout.strip())
-                else:
-                    logger.info("当前无其他进程占用 GPU")
-            except Exception as e:
-                logger.exception("检查 GPU 进程失败: %s", e)
-                
-        except Exception as e:
-            logger.exception("系统 GPU 状态检查失败: %s", e)
 
     def stop_viewport_main_loop(self):
         """停止viewport主循环"""
@@ -672,7 +517,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
     async def _before_sim_startup(self):
         # 清除选择状态
         if self.local_scene.selection:
-            self.actor_editor_widget.actor = None
+            self.actor_editor_widget.set_actor(None)
             self.local_scene.selection = []
             await self.remote_scene.set_selection([])
         
@@ -813,7 +658,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         self.disanble_control.emit()
         self._update_button_states()
         if self.local_scene.selection:
-            self.actor_editor_widget.actor = None
+            self.actor_editor_widget.set_actor(None)
             self.local_scene.selection = []
             await self.remote_scene.set_selection([])
         await self.remote_scene.change_sim_state(self.sim_process_running)
@@ -886,10 +731,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         frequency = 0.5  # Hz
         await asyncio.sleep(1 / frequency)
         asyncio.create_task(self._sim_process_check_loop())
-
-    @override
-    def get_cache_folder(self, output: list[str]) -> None:
-        output.append(self.cache_folder)
 
     @override
     async def on_asset_downloaded(self, file):
@@ -1261,6 +1102,14 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         asyncio.create_task(cleanup_and_close())
         # cleanup will reset the flag; ensure we don't re-enter before task completes
         # event remains ignored; QApplication.quit will drive shutdown
+
+    #
+    # ApplicationRequestBus overrides
+    #
+
+    @override
+    def get_local_scene(self, output: List[LocalScene]):
+        output.append(self.local_scene)
 
     #
     # UserEventRequestBus overrides

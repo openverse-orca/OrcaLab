@@ -1,5 +1,6 @@
 from PySide6 import QtCore, QtWidgets, QtGui, QtSvg
 
+import orcalab.assets.rc_assets
 
 def make_color_svg(svg_file: str, color: QtGui.QColor) -> QtGui.QPixmap:
     # Load the SVG file
@@ -7,14 +8,16 @@ def make_color_svg(svg_file: str, color: QtGui.QColor) -> QtGui.QPixmap:
 
     # Create a QPixmap to render the SVG onto
     pixmap = QtGui.QPixmap(64, 64)
-    pixmap.fill(QtCore.Qt.transparent)
+    pixmap.fill(QtCore.Qt.GlobalColor.transparent)
 
     # Render the SVG onto the QPixmap
     painter = QtGui.QPainter(pixmap)
     svg_renderer.render(painter)
 
     # Use svg as a mask to apply the color
-    painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
+    painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
     painter.fillRect(pixmap.rect(), color)
 
     painter.end()
@@ -34,7 +37,7 @@ def make_text_icon(
     text_color: QtGui.QColor = QtGui.QColor("black"),
 ) -> QtGui.QIcon:
     pixmap = QtGui.QPixmap(64, 64)
-    pixmap.fill(QtCore.Qt.transparent)
+    pixmap.fill(QtCore.Qt.GlobalColor.transparent)
 
     rect = pixmap.rect()
     fm = QtGui.QFontMetrics(font)
@@ -45,7 +48,7 @@ def make_text_icon(
     painter.translate(rect.center())
     painter.scale(scale, scale)
     painter.translate(-rect.center())
-    painter.drawText(pixmap.rect(), QtCore.Qt.AlignCenter, text)
+    painter.drawText(pixmap.rect(), QtCore.Qt.AlignmentFlag.AlignCenter, text)
 
     painter.end()
 

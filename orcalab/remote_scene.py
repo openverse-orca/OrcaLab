@@ -1,4 +1,10 @@
 import asyncio
+from orcalab.actor_property import (
+    ActorProperty,
+    ActorPropertyGroup,
+    ActorPropertyKey,
+    ActorPropertyType,
+)
 from orcalab.config_service import ConfigService
 from orcalab.math import Transform
 import orcalab.protos.edit_service_pb2_grpc as edit_service_pb2_grpc
@@ -19,7 +25,7 @@ from orcalab.scene_edit_bus import (
 import os
 import grpc
 import numpy as np
-from typing import List, Tuple, override
+from typing import Any, List, Tuple, override
 import subprocess
 import time
 import pathlib
@@ -47,6 +53,9 @@ class RemoteScene(SceneEditNotification):
         self.server_process_pid = None  # Track the actual process PID
         self.executable_path = self.config_service.executable()
         self.sim_grpc_addr = f"localhost:{self.config_service.sim_port()}"
+
+        self.in_query = False
+        self.shutdown = False
 
         self.actor_in_editing: Path | None = None
         self.current_transform: Transform | None = None
@@ -135,15 +144,6 @@ class RemoteScene(SceneEditNotification):
         finally:
             # Clear the tracked PID
             self.server_process_pid = None
-
-    def __del__(self):
-        """Destructor to ensure server process is cleaned up"""
-        try:
-            logger.debug("析构时清理服务器进程…")
-            # Use the new cleanup mechanism
-            self._cleanup_orca_processes(timeout=1)
-        except Exception as e:
-            logger.exception("析构时清理服务器进程失败: %s", e)
 
     async def init_grpc(self):
         options = [
@@ -236,6 +236,11 @@ class RemoteScene(SceneEditNotification):
         self.server_process_pid = None  # No process to track in attach mode
 
     async def destroy_grpc(self):
+        self.shutdown = True
+        while self.in_query:
+            print("Waiting for pending operation query to finish...")
+            await asyncio.sleep(0.1)
+
         if self.edit_channel:
             await self.edit_channel.close()
         self.edit_stub = None
@@ -257,15 +262,21 @@ class RemoteScene(SceneEditNotification):
                 logger.exception("清理 server_process 对象失败: %s", e)
 
     async def _query_pending_operation_loop(self):
+        if self.shutdown:
+            return
+
+        self.in_query = True
+
         operations = await self.query_pending_operation_loop()
-        # TODO: stop the loop when sim_process_running is True
-        # if not self.sim_process_running:
-        for op in operations:
+        optimized_operations = self._optimize_operation(operations)
+        for op in optimized_operations:
             await self._process_pending_operation(op)
 
-        # frequency = 30  # Hz
-        # await asyncio.sleep(1 / frequency)
-        asyncio.create_task(self._query_pending_operation_loop())
+        self.in_query = False
+
+        await asyncio.sleep(0.01)
+        if not self.shutdown:
+            asyncio.create_task(self._query_pending_operation_loop())
 
     async def _process_pending_operation(self, op: str):
         # print(op)
@@ -424,6 +435,30 @@ class RemoteScene(SceneEditNotification):
             bus = CameraNotificationBus()
             bus.on_viewport_camera_changed(viewport_camera_index)
 
+    def _optimize_operation(self, operations: List[str]) -> List[str]:
+        result = []
+
+        size = len(operations)
+
+        def _is_transform_change(op: str) -> bool:
+            return op.startswith("local_transform_change:") or op.startswith(
+                "world_transform_change:"
+            )
+
+        for i in range(size):
+            op = operations[i]
+
+            if _is_transform_change(op):
+                # Skip intermediate transform changes.
+                if i + 1 < size:
+                    next_op = operations[i + 1]
+                    if _is_transform_change(next_op):
+                        continue
+
+            result.append(op)
+
+        return result
+
     @override
     async def on_transform_changed(
         self,
@@ -451,6 +486,9 @@ class RemoteScene(SceneEditNotification):
         source: str,
     ):
         await self.add_actor(actor, parent_actor_path)
+        actor_path = parent_actor_path.append(actor.name)
+        if isinstance(actor, AssetActor):
+            await self._fetch_actor_proprerties(actor, actor_path)
 
     @override
     async def on_actor_deleted(
@@ -478,6 +516,33 @@ class RemoteScene(SceneEditNotification):
         source: str,
     ):
         await self.reparent_actor(actor_path, new_parent_path)
+
+    @override
+    async def on_property_changed(
+        self, property_key: ActorPropertyKey, value: Any, source: str
+    ):
+        await self.set_properties([property_key], [value])
+
+    async def _fetch_actor_proprerties(self, actor: AssetActor, actor_path: Path):
+        property_groups = await self.get_property_groups(actor_path)
+        actor.property_groups = property_groups
+
+        keys: List[ActorPropertyKey] = []
+        props: List[ActorProperty] = []
+        for group in property_groups:
+            for prop in group.properties:
+                key = ActorPropertyKey(
+                    actor_path,
+                    group.prefix,
+                    prop.name(),
+                    prop.value_type(),
+                )
+                keys.append(key)
+                props.append(prop)
+
+        values = await self.get_properties(keys)
+        for prop, value in zip(props, values):
+            prop.set_value(value)
 
     ############################################################
     #
@@ -793,4 +858,136 @@ class RemoteScene(SceneEditNotification):
     async def set_active_camera(self, camera_index: int) -> None:
         request = edit_service_pb2.SetActiveCameraRequest(index=camera_index)
         response = await self.edit_stub.SetActiveCamera(request)
+        self._check_response(response)
+
+    async def get_property_groups(self, actor_path: Path) -> List[ActorPropertyGroup]:
+        request = edit_service_pb2.GetPropertyGroupsRequest()
+        request.actor_path = actor_path.string()
+        response = await self.edit_stub.GetPropertyGroups(request)
+        self._check_response(response)
+
+        property_groups: List[ActorPropertyGroup] = []
+
+        for pg_msg in response.property_groups:
+            pg = ActorPropertyGroup(
+                prefix=pg_msg.prefix, name=pg_msg.name, hint=pg_msg.hint
+            )
+
+            for prop_msg in pg_msg.properties:
+                match prop_msg.type:
+                    case edit_service_pb2.PropertyType.Unknown:
+                        break
+                    case edit_service_pb2.PropertyType.Bool:
+                        prop = ActorProperty(
+                            name=prop_msg.name,
+                            display_name=prop_msg.display_name,
+                            type=ActorPropertyType.BOOL,
+                            value=False,
+                        )
+                        pg.properties.append(prop)
+                    case edit_service_pb2.PropertyType.Int:
+                        prop = ActorProperty(
+                            name=prop_msg.name,
+                            display_name=prop_msg.display_name,
+                            type=ActorPropertyType.INTEGER,
+                            value=0,
+                        )
+                        pg.properties.append(prop)
+                    case edit_service_pb2.PropertyType.Float:
+                        prop = ActorProperty(
+                            name=prop_msg.name,
+                            display_name=prop_msg.display_name,
+                            type=ActorPropertyType.FLOAT,
+                            value=0.0,
+                        )
+                        pg.properties.append(prop)
+                    case edit_service_pb2.PropertyType.String:
+                        prop = ActorProperty(
+                            name=prop_msg.name,
+                            display_name=prop_msg.display_name,
+                            type=ActorPropertyType.STRING,
+                            value="",
+                        )
+                        pg.properties.append(prop)
+
+            property_groups.append(pg)
+
+        return property_groups
+
+    def _create_property_key_message(self, key: ActorPropertyKey):
+        key_msg = edit_service_pb2.PropertyKey()
+        key_msg.actor_path = key.actor_path.string()
+        key_msg.group_prefix = key.group_prefix
+        key_msg.property_name = key.property_name
+        key_msg.property_type = key.property_type.value
+        return key_msg
+
+    def _create_property_value_message(self, key: ActorPropertyKey, value: Any):
+        value_msg = edit_service_pb2.PropertyValue()
+
+        match key.property_type:
+            case ActorPropertyType.BOOL:
+                if not isinstance(value, bool):
+                    raise ValueError("Value must be a boolean.")
+                value_msg.value_bool = value
+            case ActorPropertyType.INTEGER:
+                if not isinstance(value, int):
+                    raise ValueError("Value must be an integer.")
+                value_msg.value_int = value
+            case ActorPropertyType.FLOAT:
+                if not isinstance(value, float):
+                    raise ValueError("Value must be a float.")
+                value_msg.value_float = value
+            case ActorPropertyType.STRING:
+                if not isinstance(value, str):
+                    raise ValueError("Value must be a string.")
+                value_msg.value_string = value
+            case _:
+                raise ValueError("Unsupported property type.")
+
+        return value_msg
+
+    def _get_property_value_message_value(self, value_msg) -> Any:
+        t = value_msg.WhichOneof("value_oneof")
+        match t:
+            case "value_bool":
+                return value_msg.value_bool
+            case "value_int":
+                return value_msg.value_int
+            case "value_float":
+                return value_msg.value_float
+            case "value_string":
+                return value_msg.value_string
+            case _:
+                return None
+
+    async def get_properties(self, keys: List[ActorPropertyKey]) -> List[Any]:
+        request = edit_service_pb2.GetPropertiesRequest()
+        for key in keys:
+            key_msg = self._create_property_key_message(key)
+            request.keys.items.append(key_msg)
+
+        response = await self.edit_stub.GetProperties(request)
+        self._check_response(response)
+
+        values: List[Any] = []
+        for value_msg in response.values.items:
+            v = self._get_property_value_message_value(value_msg)
+            values.append(v)
+
+        return values
+
+    async def set_properties(self, keys: List[ActorPropertyKey], values: List[Any]):
+        if len(keys) != len(values):
+            raise ValueError("Keys and values must have the same length.")
+
+        request = edit_service_pb2.SetPropertiesRequest()
+        for key, value in zip(keys, values):
+            key_msg = self._create_property_key_message(key)
+            request.keys.items.append(key_msg)
+
+            value_msg = self._create_property_value_message(key, value)
+            request.values.items.append(value_msg)
+
+        response = await self.edit_stub.SetProperties(request)
         self._check_response(response)
