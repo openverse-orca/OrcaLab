@@ -280,7 +280,6 @@ class SceneEditService(SceneEditRequest):
 
         actor, group, prop = self.local_scene.parse_property_key(property_key)
         self.old_property_value = prop.value()
-        print("save value:", self.old_property_value)
         self.property_key = property_key
 
     @override

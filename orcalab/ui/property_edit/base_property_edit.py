@@ -84,7 +84,6 @@ class BasePropertyEdit[T](StyledWidget):
         )
 
     def _do_set_value(self, value: T, undo: bool):
-        print("Set value:", value, "undo:", undo)
         asyncio.create_task(self._do_set_value_async(value, undo))
 
     def _on_start_drag(self):
