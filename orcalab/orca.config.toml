@@ -3,7 +3,7 @@
 # 运行时用户配置会覆盖默认配置
 [orcalab]
 
-version = "25.11.3"
+version = "25.11.5"
 
 # 场景编辑服务的端口。
 edit_port = 50151
@@ -38,7 +38,7 @@ paks = [
 
 # [系统配置] 当前版本配套的默认pak包的下载地址。
 pak_urls = [
-    "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/orcalab_linux.25.11.1.pak",
+    "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/orcalab_linux.25.11.5.pak",
 ]
 
 # [个人配置] Python项目的根目录。这个用于配置 orcalab-pyside 包
@@ -46,7 +46,7 @@ pak_urls = [
 python_project_path = ""
 
 # [系统配置] Python项目的下载地址。
-python_project_url = "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/python-project.25.11.3.tar.xz"
+python_project_url = "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/python-project.25.11.5.tar.xz"
 
 
 [orcalab.dev]

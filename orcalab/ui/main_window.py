@@ -72,7 +72,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
     def __init__(self):
         super().__init__()
         self.cwd = os.getcwd()
-        self._base_title = "orcalab 25.11.2"
+        self._base_title = "orcalab 25.11.5"
         self.config_service = ConfigService()
         self.default_layout_path: str | None = None
         self.current_layout_path: str | None = None

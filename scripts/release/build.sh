@@ -41,6 +41,21 @@ rsync -a \
 # Keep the same package name (orca-lab) for TestPyPI build
 # This allows for complete installation testing with the same package name
 
+# Replace production URLs with test URLs in config file
+CONFIG_FILE="$TMP_DIR/orcalab/orca.config.toml"
+if [ -f "$CONFIG_FILE" ]; then
+    echo "Replacing URLs for TestPyPI environment..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        sed -i '' 's|https://simassets.orca3d.cn/api|http://47.100.47.219/api|g' "$CONFIG_FILE"
+        sed -i '' 's|https://simassets.orca3d.cn/|http://47.100.47.219/|g' "$CONFIG_FILE"
+    else
+        # Linux
+        sed -i 's|https://simassets.orca3d.cn/api|http://47.100.47.219/api|g' "$CONFIG_FILE"
+        sed -i 's|https://simassets.orca3d.cn/|http://47.100.47.219/|g' "$CONFIG_FILE"
+    fi
+fi
+
 # Build the test package with same name
 mkdir -p "$TEST_OUTDIR"
 (cd "$TMP_DIR" && python -m build --outdir "$TEST_OUTDIR")
