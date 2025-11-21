@@ -50,6 +50,19 @@ pip install -e "[dev]"
 - **正式包**: `orca-lab` - 发布到 PyPI
 - **测试包**: `orca-lab` - 发布到 TestPyPI (使用相同包名以便完整测试)
 
+## 环境配置差异
+
+构建脚本会自动处理不同环境的配置：
+
+| 环境 | 目录 | 配置URL |
+|------|------|---------|
+| **生产环境** (PyPI) | `dist/` | `https://simassets.orca3d.cn/` |
+| **测试环境** (TestPyPI) | `dist-test/` | `http://47.100.47.219/` |
+
+测试包在构建时会自动替换 `orca.config.toml` 中的以下配置：
+- `[datalink].base_url`: `https://simassets.orca3d.cn/api` → `http://47.100.47.219/api`
+- `[datalink].web_server_url`: `https://simassets.orca3d.cn/` → `http://47.100.47.219/`
+
 ## 🚀 快速开始
 
 ### 1. 首次发布到 TestPyPI
@@ -117,6 +130,8 @@ make bump-version VERSION=25.9.1
 ### 核心脚本
 
 - **`build.sh`**: 构建正式包和测试包
+  - 正式包（dist/）: 使用生产环境配置
+  - 测试包（dist-test/）: 自动将配置中的 `https://simassets.orca3d.cn/` 替换为 `http://47.100.47.219/`
 - **`upload_test.sh`**: 上传到 TestPyPI
 - **`upload_prod.sh`**: 上传到 PyPI
 - **`release.sh`**: 完整的发布流程
