@@ -36,6 +36,9 @@ rsync -a \
     --exclude 'dist-test' \
     --exclude 'build' \
     --exclude '*.egg-info' \
+    --exclude '.idea' \
+    --exclude '.vscode' \
+    --exclude '.history' \
     "$PROJECT_ROOT/" "$TMP_DIR/"
 
 # Keep the same package name (orca-lab) for TestPyPI build
