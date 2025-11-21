@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "orca-lab"
-version = "25.11.3"
+version = "25.11.5"
 description = "OrcaLab - Cloud-native robotics simulation platform with advanced UI and asset management"
 readme = "README.md"
 requires-python = ">=3.12"

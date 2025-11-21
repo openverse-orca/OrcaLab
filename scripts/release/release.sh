@@ -32,7 +32,11 @@ echo ""
 
 # Step 2: Build
 echo "Step 2/4: Building..."
-bash "$SCRIPT_DIR/build.sh"
+if [ "$TARGET" = "test" ]; then
+    bash "$SCRIPT_DIR/build.sh" test
+else
+    bash "$SCRIPT_DIR/build.sh"
+fi
 echo ""
 
 # Step 3: Check
