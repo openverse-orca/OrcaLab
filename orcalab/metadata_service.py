@@ -24,7 +24,7 @@ class MetadataService(MetadataServiceRequest):
 
         if not self._metadata_path.exists():
             return
-        with open(self._metadata_path, 'r') as f:
+        with open(self._metadata_path, 'r', encoding='utf-8') as f:
             self._metadata = json.load(f)
         self._build_asset_map()
 
@@ -63,5 +63,5 @@ class MetadataService(MetadataServiceRequest):
                 new_metadata[pkg_id] = {}
                 new_metadata[pkg_id]['children'] = [asset_info]
         self._metadata = new_metadata
-        with open(self._metadata_path, 'w') as f:
+        with open(self._metadata_path, 'w', encoding='utf-8') as f:
             json.dump(self._metadata, f, ensure_ascii=False, indent=2)
