@@ -12,12 +12,12 @@ def make_color_svg(svg_file: str, color: QtGui.QColor) -> QtGui.QPixmap:
 
     # Render the SVG onto the QPixmap
     painter = QtGui.QPainter(pixmap)
+    painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
     svg_renderer.render(painter)
 
     # Use svg as a mask to apply the color
     painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_SourceIn)
     painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_SourceIn)
-    painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
     painter.fillRect(pixmap.rect(), color)
 
     painter.end()

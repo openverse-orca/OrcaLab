@@ -15,6 +15,7 @@ class BooleanPropertyEdit(BasePropertyEdit[bool]):
         super().__init__(parent, context)
         root_layout = QtWidgets.QHBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(4)
 
         label = self._create_label(label_width)
 

@@ -18,6 +18,8 @@ class ActorEditor(QtWidgets.QWidget, SceneEditNotification):
         super().__init__(parent)
 
         self._layout = QtWidgets.QVBoxLayout()
+        self._layout.setContentsMargins(4, 4, 4, 4)
+        self._layout.setSpacing(4)
         self.setLayout(self._layout)
         self.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Preferred,
@@ -80,25 +82,14 @@ class ActorEditor(QtWidgets.QWidget, SceneEditNotification):
             return
 
         label = QtWidgets.QLabel(f"Actor: {self._actor.name}")
+        label.setContentsMargins(4, 4, 4, 4)
         self._layout.addWidget(label)
-
-        line = QtWidgets.QFrame()
-        line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
-        line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
-        self._layout.addWidget(line)
 
         label_width = 120
 
-        self._transform_edit =  TransformEdit(self, self._actor, label_width)
+        self._transform_edit = TransformEdit(self, self._actor, label_width)
         self._transform_edit.connect_buses()
         self._layout.addWidget(self._transform_edit)
-
-        self._layout.addSpacing(10)
-
-        line = QtWidgets.QFrame()
-        line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
-        line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
-        self._layout.addWidget(line)
 
         if isinstance(self._actor, AssetActor):
             for property_group in self._actor.property_groups:

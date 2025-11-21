@@ -20,10 +20,10 @@
     <file alias="checkbox_checked">icons/ic_fluent_checkbox_checked_20_regular.svg</file>
     <file alias="checkbox_unchecked">icons/ic_fluent_checkbox_unchecked_20_regular.svg</file>
 
-    <file alias="chevron_down">icons/ic_fluent_chevron_down_20_regular.svg</file>
-    <file alias="chevron_up">icons/ic_fluent_chevron_up_20_regular.svg</file>
-    <file alias="chevron_left">icons/ic_fluent_chevron_left_20_regular.svg</file>
-    <file alias="chevron_right">icons/ic_fluent_chevron_right_20_regular.svg</file>
+    <file alias="chevron_down">icons/ic_fluent_chevron_down_20_filled.svg</file>
+    <file alias="chevron_up">icons/ic_fluent_chevron_up_20_filled.svg</file>
+    <file alias="chevron_left">icons/ic_fluent_chevron_left_20_filled.svg</file>
+    <file alias="chevron_right">icons/ic_fluent_chevron_right_20_filled.svg</file>
 
 </qresource>
 </RCC>

@@ -372,12 +372,9 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
                 background-color: #3c3c3c;
                 color: #ffffff;
                 border-bottom: 1px solid #404040;
-                padding: 2px;
             }
             QMenuBar::item {
                 background-color: transparent;
-                padding: 4px 8px;
-                border-radius: 3px;
             }
             QMenuBar::item:selected {
                 background-color: #4a4a4a;

@@ -30,15 +30,15 @@ class TransformEditTitle(QtWidgets.QWidget):
     def __init__(self, parent):
         super().__init__(parent)
         root_layout = QtWidgets.QHBoxLayout(self)
-        root_layout.setContentsMargins(8, 0, 8, 0)
+        root_layout.setContentsMargins(4, 0, 4, 0)
         root_layout.setSpacing(4)
 
         self.l_indicator = Icon()
-        self.l_indicator.set_icon_size(20)
+        self.l_indicator.set_icon_size(16)
 
         l_name = QtWidgets.QLabel("Transform")
 
-        root_layout.addWidget(self.l_indicator)
+        root_layout.addWidget(self.l_indicator, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
         root_layout.addWidget(l_name)
         root_layout.addStretch()
 
@@ -89,7 +89,7 @@ class TransformEdit(StyledWidget, SceneEditNotification):
         self._collapse_icon = make_color_svg(":/icons/chevron_right", text_color)
 
         root_layout = QtWidgets.QVBoxLayout(self)
-        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setContentsMargins(4, 4, 4, 4)
         root_layout.setSpacing(4)
 
         self._label_width = label_width
@@ -104,6 +104,8 @@ class TransformEdit(StyledWidget, SceneEditNotification):
         root_layout.addWidget(self._content_area)
 
         self._content_layout = QtWidgets.QVBoxLayout(self._content_area)
+        self._content_layout.setContentsMargins(0, 0, 0, 0)
+        self._content_layout.setSpacing(4)
 
         self._pos_x = self._add_line("Position  X", FloatEdit())
         self._pos_y = self._add_line("Y", FloatEdit())
@@ -121,6 +123,8 @@ class TransformEdit(StyledWidget, SceneEditNotification):
 
     def _add_line(self, label, widget):
         layout = QtWidgets.QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
         self._content_layout.addLayout(layout)
 
         label_widget = QtWidgets.QLabel(label)

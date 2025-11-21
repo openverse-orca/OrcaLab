@@ -35,8 +35,8 @@ class PropertyGroupEditTitle(QtWidgets.QWidget):
     def __init__(self, parent, name: str, hint: str):
         super().__init__(parent)
         root_layout = QtWidgets.QHBoxLayout(self)
-        root_layout.setContentsMargins(8, 0, 8, 0)
-        root_layout.setSpacing(4)
+        root_layout.setContentsMargins(4, 4, 4, 4)
+        root_layout.setSpacing(0)
 
         self.l_indicator = Icon()
         self.l_indicator.set_icon_size(20)
@@ -66,8 +66,8 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
     ):
         super().__init__(parent)
         root_layout = QtWidgets.QVBoxLayout(self)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(4)
+        root_layout.setContentsMargins(4, 4, 4, 4)
+        root_layout.setSpacing(0)
 
         self._actor = actor
         self._group = group
@@ -88,6 +88,8 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         root_layout.addWidget(content_area)
 
         content_layout = QtWidgets.QVBoxLayout(content_area)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(4)
 
         for prop in group.properties:
             editor = self._create_property_edit(prop, label_width)
