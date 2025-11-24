@@ -8,7 +8,7 @@ from orcalab.actor_property import (
     ActorPropertyKey,
     ActorPropertyType,
 )
-from orcalab.application_bus import get_local_scene
+from orcalab.application_util import get_local_scene
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
     SceneEditNotificationBus,

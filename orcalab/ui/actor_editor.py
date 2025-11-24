@@ -2,7 +2,7 @@ from typing import override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.actor import BaseActor, GroupActor, AssetActor
-from orcalab.application_bus import get_local_scene
+from orcalab.application_util import get_local_scene
 from orcalab.ui.property_edit.property_group_edit import PropertyGroupEdit
 from orcalab.ui.property_edit.transform_edit import TransformEdit
 

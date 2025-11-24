@@ -2,7 +2,7 @@ from copy import deepcopy
 from typing import override, List
 import logging
 from orcalab.actor import BaseActor, GroupActor, AssetActor
-from orcalab.application_bus import get_local_scene
+from orcalab.application_util import get_local_scene
 from orcalab.path import Path
 
 from orcalab.undo_service.command import (

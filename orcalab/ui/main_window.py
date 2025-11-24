@@ -1,51 +1,53 @@
 import asyncio
-from copy import deepcopy
-import random
 
-import sys
-from typing import Dict, List, Tuple, override
+from typing import Any, Dict, List, Tuple, override
 import numpy as np
 import logging
 
-from scipy.spatial.transform import Rotation
-import subprocess
 import json
 import ast
 import os
-import time
-import platform
 from pathlib import Path as SystemPath
 from PySide6 import QtCore, QtWidgets, QtGui
-from PIL import Image
 
 from orcalab.actor import AssetActor, BaseActor, GroupActor
+from orcalab.actor_util import make_unique_name
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.pyside_util import connect
 from orcalab.remote_scene import RemoteScene
+from orcalab.simulation.simulation_bus import (
+    SimulationRequestBus,
+    SimulationNotification,
+    SimulationNotificationBus,
+)
+from orcalab.simulation.simulation_service import SimulationService
 from orcalab.ui.actor_editor import ActorEditor
 from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.asset_browser.asset_browser import AssetBrowser
 from orcalab.ui.asset_browser.thumbnail_render_bus import ThumbnailRenderRequestBus
 from orcalab.ui.camera.camera_brief import CameraBrief
-from orcalab.ui.camera.camera_bus import CameraNotification, CameraRequest, CameraNotificationBus, CameraRequestBus
+from orcalab.ui.camera.camera_bus import (
+    CameraNotification,
+    CameraRequest,
+    CameraNotificationBus,
+    CameraRequestBus,
+)
 from orcalab.ui.camera.camera_selector import CameraSelector
 from orcalab.ui.copilot import CopilotPanel
-from orcalab.ui.image_utils import ImageProcessor
 from orcalab.ui.icon_util import make_icon
 from orcalab.ui.theme_service import ThemeService
 from orcalab.ui.tool_bar import ToolBar
-from orcalab.ui.launch_dialog import LaunchDialog
 from orcalab.ui.terminal_widget import TerminalWidget
 from orcalab.ui.viewport import Viewport
 from orcalab.ui.panel_manager import PanelManager
 from orcalab.ui.panel import Panel
 from orcalab.math import Transform
 from orcalab.config_service import ConfigService
-from orcalab.undo_service.undo_service import SelectionCommand, UndoService
+from orcalab.undo_service.undo_service import UndoService
 from orcalab.scene_edit_service import SceneEditService
-from orcalab.scene_edit_bus import SceneEditRequestBus, make_unique_name
+from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.undo_service.undo_service_bus import can_redo, can_undo
 from orcalab.url_service.url_service import UrlServiceServer
 from orcalab.asset_service import AssetService
@@ -54,7 +56,6 @@ from orcalab.asset_service_bus import (
     AssetServiceNotificationBus,
 )
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
-from orcalab.http_service.http_service import HttpService
 
 from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
 
@@ -62,12 +63,18 @@ from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
 logger = logging.getLogger(__name__)
 
 
-class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, UserEventRequest, CameraNotification, CameraRequest):
+class MainWindow(
+    PanelManager,
+    ApplicationRequest,
+    AssetServiceNotification,
+    UserEventRequest,
+    CameraNotification,
+    CameraRequest,
+    SimulationNotification,
+):
 
     add_item_by_drag = QtCore.Signal(str, Transform)
     load_scene_layout_sig = QtCore.Signal(str)
-    enable_control = QtCore.Signal()
-    disanble_control = QtCore.Signal()
 
     def __init__(self):
         super().__init__()
@@ -89,9 +96,11 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         UserEventRequestBus.connect(self)
         CameraNotificationBus.connect(self)
         CameraRequestBus.connect(self)
+        SimulationNotificationBus.connect(self)
         logger.debug("connect_buses")
 
     def disconnect_buses(self):
+        SimulationNotificationBus.disconnect(self)
         UserEventRequestBus.disconnect(self)
         AssetServiceNotificationBus.disconnect(self)
         ApplicationRequestBus.disconnect(self)
@@ -107,13 +116,9 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         self.local_scene = LocalScene()
         self.remote_scene = RemoteScene(self.config_service)
 
-        self._sim_process_check_lock = asyncio.Lock()
-        self.sim_process_running = False
-
         self.asset_service = AssetService()
-
         self.url_server = UrlServiceServer()
-
+        self.simulation_service = SimulationService()
         self.undo_service = UndoService()
 
         original_add_command = self.undo_service.add_command
@@ -161,8 +166,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         connect(self.add_item_by_drag, self.add_item_drag)
         connect(self.load_scene_layout_sig, self.load_scene_layout)
 
-        connect(self.enable_control, self.enable_widgets)
-        connect(self.disanble_control, self.disable_widgets)
         connect(self._viewport_widget.assetDropped, self.get_transform_and_add_item)
 
         self.actor_outline_widget.connect_bus()
@@ -172,9 +175,9 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         self.undo_service.connect_bus()
         self.scene_edit_service.connect_bus()
         self.remote_scene.connect_bus()
+        self.simulation_service.connect_bus()
 
         self.connect_buses()
-
 
         await self.remote_scene.init_grpc()
         await self.remote_scene.set_sync_from_mujoco_to_scene(False)
@@ -214,7 +217,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         viewport_camera_index = await self.remote_scene.get_active_camera()
         self.on_cameras_changed(cameras, viewport_camera_index)
 
-
     def stop_viewport_main_loop(self):
         """停止viewport主循环"""
         try:
@@ -229,25 +231,25 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         """清理viewport相关资源"""
         try:
             logger.info("清理 viewport 资源…")
-            
+
             # 停止viewport主循环
             self.stop_viewport_main_loop()
-            
+
             # 等待viewport完全停止
             await asyncio.sleep(1)
-            
+
             # 清理viewport对象
             if hasattr(self, '_viewport_widget') and self._viewport_widget:
                 # 确保主循环已停止
                 self._viewport_widget.stop_viewport_main_loop()
-                
+
                 # 等待一下让循环自然结束
                 await asyncio.sleep(0.5)
-                
+
                 # 清理viewport对象
                 del self._viewport_widget
                 self._viewport_widget = None
-            
+
             logger.info("Viewport 资源清理完成")
         except Exception as e:
             logger.exception("清理 viewport 资源失败: %s", e)
@@ -258,7 +260,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
             logger.info("开始异步加载资产…")
             # 等待一下让服务器完全准备好
             await asyncio.sleep(2)
-            
+
             # 尝试获取资产，带超时
             assets = await asyncio.wait_for(
                 self.remote_scene.get_actor_assets(), 
@@ -302,7 +304,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
                 background-color: #2a2a2a;
             }
         """)
-        connect(self.tool_bar.action_start.triggered, self.show_launch_dialog)
+        connect(self.tool_bar.action_start.triggered, self.start_sim)
         connect(self.tool_bar.action_stop.triggered, self.stop_sim)
 
         logger.info("设置主内容区域…")
@@ -365,7 +367,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.menu_bar)
-        
+
         # 为菜单栏添加样式
         self.menu_bar.setStyleSheet("""
             QMenuBar {
@@ -427,11 +429,10 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
                 color: #ffffff;
             }
         """)
-        
-        # 初始化按钮状态
-        logger.info("初始化按钮状态…")
-        self._update_button_states()
 
+        # 初始化按钮状态
+        self.tool_bar.action_start.setEnabled(True)
+        self.tool_bar.action_stop.setEnabled(False)
 
         # Window actions.
 
@@ -447,294 +448,45 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
 
         self.addActions([action_undo, action_redo])
 
-    def show_launch_dialog(self):
-        """显示启动对话框（同步版本）"""
-        if self.sim_process_running:
-            return
-        
-        dialog = LaunchDialog(self)
-        
-        # 连接信号直接到异步处理方法
-        dialog.program_selected.connect(self._handle_program_selected_signal)
-        dialog.no_external_program.connect(self._handle_no_external_program_signal)
-        
+    async def start_sim(self):
+        await SimulationRequestBus().start_simulation()
 
-        # 直接在主线程中执行对话框
-        return dialog.exec()
-    
-    def _handle_program_selected_signal(self, program_name: str):
-        """处理程序选择信号的包装函数"""
-        asyncio.create_task(self._on_external_program_selected_async(program_name))
-    
-    def _handle_no_external_program_signal(self):
-        """处理无外部程序信号的包装函数"""
-        asyncio.create_task(self._on_no_external_program_async())
-    
-    async def _on_external_program_selected_async(self, program_name: str):
-        """外部程序选择处理（异步版本）"""
-        program_config = self.config_service.get_external_program_config(program_name)
-        
-        if not program_config:
-            logger.error("未找到程序配置: %s", program_name)
-            return
+        t = QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents
+        self.actor_outline_widget.setEnabled(False)
+        self.actor_outline_widget.setAttribute(t, True)
+        self.actor_editor_widget.setEnabled(False)
+        self.actor_editor_widget.setAttribute(t, True)
+        self.asset_browser_widget.setEnabled(False)
+        self.asset_browser_widget.setAttribute(t, True)
+        self.copilot_widget.setEnabled(False)
+        self.copilot_widget.setAttribute(t, True)
+        self.menu_edit.setEnabled(False)
 
-        await self._before_sim_startup()
-        await asyncio.sleep(1)
-        
-        # 启动外部程序 - 改为在主线程直接启动
-        command = program_config.get('command', 'python')
-        args = []
-        for arg in program_config.get('args', []):
-            args.append(arg)
-        
-        success = await self._start_external_process_in_main_thread_async(command, args)
-        
-        if success:
-            self.sim_process_running = True
-            self.disanble_control.emit()
-            self._update_button_states()
-            
-            # 添加缺失的同步操作（从 run_sim 函数中复制）
-            await self._complete_sim_startup()
-            
-            logger.info("外部程序 %s 启动成功", program_name)
-        else:
-            logger.error("外部程序 %s 启动失败", program_name)
-            self.terminal_widget._append_output(f"外部程序 {program_name} 启动失败，请检查命令配置或日志输出。\n")
-            try:
-                await self.remote_scene.restore_body_transform()
-                await self.remote_scene.change_sim_state(False)
-            except Exception as e:
-                logger.exception("回滚模拟状态时发生错误: %s", e)
-            finally:
-                self.sim_process_running = False
-                self.enable_control.emit()
-                self._update_button_states()
-    
-    async def _before_sim_startup(self):
-        # 清除选择状态
-        if self.local_scene.selection:
-            self.actor_editor_widget.set_actor(None)
-            self.local_scene.selection = []
-            await self.remote_scene.set_selection([])
-        
-        # 改变模拟状态
-        await self.remote_scene.change_sim_state(True)
-
-        """完成模拟启动的异步操作（从 run_sim 函数中复制的缺失部分）"""
-        await self.remote_scene.publish_scene()
-        await asyncio.sleep(.1)
-        await self.remote_scene.save_body_transform()
-
-    async def _start_external_process_in_main_thread_async(self, command: str, args: list):
-        """在主线程中启动外部进程，并将输出重定向到terminal_widget（异步版本）"""
-        try:
-            # 构建完整的命令
-            resolved_command = command
-            if command in ("python", "python3"):
-                resolved_command = sys.executable or command
-            cmd = [resolved_command] + args
-            
-            # 启动进程，将输出重定向到terminal_widget
-            self.sim_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
-                bufsize=1,
-                env=os.environ.copy()
-            )
-            
-            # 在terminal_widget中显示启动信息
-            self.terminal_widget._append_output(f"启动进程: {' '.join(cmd)}\n")
-            self.terminal_widget._append_output(f"工作目录: {os.getcwd()}\n")
-            self.terminal_widget._append_output("-" * 50 + "\n")
-            logger.info("启动外部程序: %s", " ".join(cmd))
-            
-            # 启动输出读取线程
-            self._start_output_redirect_thread()
-            
-            return True
-            
-        except Exception as e:
-            logger.exception("启动外部程序失败: %s", e)
-            self.terminal_widget._append_output(f"启动进程失败: {str(e)}\n")
-            return False
-    
-    def _start_output_redirect_thread(self):
-        """启动输出重定向线程"""
-        import threading
-        
-        def read_output():
-            """在后台线程中读取进程输出并重定向到terminal_widget"""
-            try:
-                while self.sim_process and self.sim_process.poll() is None:
-                    line = self.sim_process.stdout.readline()
-                    if line:
-                        # 使用信号槽机制确保在主线程中更新UI
-                        QtCore.QMetaObject.invokeMethod(
-                            self.terminal_widget, "_append_output_safe",
-                            QtCore.Qt.ConnectionType.QueuedConnection,
-                            QtCore.Q_ARG(str, line)
-                        )
-                    else:
-                        break
-                
-                # 读取剩余输出
-                if self.sim_process:
-                    remaining_output = self.sim_process.stdout.read()
-                    if remaining_output:
-                        QtCore.QMetaObject.invokeMethod(
-                            self.terminal_widget, "_append_output_safe",
-                            QtCore.Qt.ConnectionType.QueuedConnection,
-                            QtCore.Q_ARG(str, remaining_output)
-                        )
-                    
-                    # 检查进程退出码
-                    return_code = self.sim_process.poll()
-                    if return_code is not None:
-                        QtCore.QMetaObject.invokeMethod(
-                            self.terminal_widget, "_append_output_safe",
-                            QtCore.Qt.ConnectionType.QueuedConnection,
-                            QtCore.Q_ARG(str, f"\n进程退出，返回码: {return_code}\n")
-                        )
-                        
-            except Exception as e:
-                QtCore.QMetaObject.invokeMethod(
-                    self.terminal_widget, "_append_output_safe",
-                    QtCore.Qt.ConnectionType.QueuedConnection,
-                    QtCore.Q_ARG(str, f"读取输出时出错: {str(e)}\n")
-                )
-        
-        # 启动输出读取线程
-        self.output_thread = threading.Thread(target=read_output, daemon=True)
-        self.output_thread.start()
-
-    async def _complete_sim_startup(self):
-        """完成模拟启动的异步操作（从 run_sim 函数中复制的缺失部分）"""        
-        # 启动检查循环
-        asyncio.create_task(self._sim_process_check_loop())
-        
-        # 设置同步状态
-        await self.remote_scene.set_sync_from_mujoco_to_scene(True)
-    
-    async def _on_no_external_program_async(self):
-        """无外部程序处理（异步版本）"""
-
-        await self._before_sim_startup()
-        await asyncio.sleep(1)
-
-        # 启动一个虚拟的等待进程，保持终端活跃状态
-        # 使用 sleep 命令创建一个长期运行的进程，这样 _sim_process_check_loop 就不会立即退出
-        success = await self._start_external_process_in_main_thread_async(sys.executable, ["-c", "import time; time.sleep(99999999)"])
-        
-        if success:
-            # 设置运行状态
-            self.sim_process_running = True
-            self.disanble_control.emit()
-            self._update_button_states()
-            
-            # 添加缺失的同步操作（从 run_sim 函数中复制）
-            await self._complete_sim_startup()
-            
-            # 在终端显示提示信息
-            self.terminal_widget._append_output("已切换到运行模式，等待外部程序连接...\n")
-            self.terminal_widget._append_output("模拟地址: localhost:50051\n")
-            self.terminal_widget._append_output("请手动启动外部程序并连接到上述地址\n")
-            self.terminal_widget._append_output("注意：当前运行的是虚拟等待进程，可以手动停止\n")
-            logger.info("无外部程序模式已启动")
-        else:
-            logger.error("无外部程序模式启动失败")
-
-    async def run_sim(self):
-        """保留原有的run_sim方法以兼容性"""
-        if self.sim_process_running:
-            return
-
-        self.sim_process_running = True
-        self.disanble_control.emit()
-        self._update_button_states()
-        if self.local_scene.selection:
-            self.actor_editor_widget.set_actor(None)
-            self.local_scene.selection = []
-            await self.remote_scene.set_selection([])
-        await self.remote_scene.change_sim_state(self.sim_process_running)
-        await self.remote_scene.publish_scene()
-        await asyncio.sleep(.1)
-        await self.remote_scene.save_body_transform()
-
-        cmd = [
-            "python",
-            "-m",
-            "orcalab.sim_process",
-            "--sim_addr",
-            self.remote_scene.sim_grpc_addr,
-        ]
-        self.sim_process = subprocess.Popen(cmd)
-        asyncio.create_task(self._sim_process_check_loop())
-
-        # await asyncio.sleep(2)
-        await self.remote_scene.set_sync_from_mujoco_to_scene(True)
+        self.tool_bar.action_start.setEnabled(False)
+        self.tool_bar.action_stop.setEnabled(True)
 
     async def stop_sim(self):
-        if not self.sim_process_running:
-            return
+        await SimulationRequestBus().stop_simulation()
 
-        async with self._sim_process_check_lock:
-            await self.remote_scene.publish_scene()
-            await self.remote_scene.restore_body_transform()
-            await self.remote_scene.set_sync_from_mujoco_to_scene(False)
-            self.sim_process_running = False
-            self._update_button_states()
-            
-            # 停止主线程启动的sim_process
-            if hasattr(self, 'sim_process') and self.sim_process is not None:
-                self.terminal_widget._append_output("\n" + "-" * 50 + "\n")
-                self.terminal_widget._append_output("正在停止进程...\n")
-                
-                self.sim_process.terminate()
-                try:
-                    self.sim_process.wait(timeout=5)
-                    self.terminal_widget._append_output("进程已正常终止\n")
-                except subprocess.TimeoutExpired:
-                    self.sim_process.kill()
-                    self.sim_process.wait()
-                    self.terminal_widget._append_output("进程已强制终止\n")
-                
-                self.sim_process = None
-            
-            # await asyncio.sleep(0.5)
-            await self.remote_scene.restore_body_transform()
-            self.enable_control.emit()
-            await self.remote_scene.change_sim_state(self.sim_process_running)
+        t = QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents
+        self.actor_outline_widget.setEnabled(True)
+        self.actor_outline_widget.setAttribute(t, False)
+        self.actor_editor_widget.setEnabled(True)
+        self.actor_editor_widget.setAttribute(t, False)
+        self.asset_browser_widget.setEnabled(True)
+        self.asset_browser_widget.setAttribute(t, False)
+        self.copilot_widget.setEnabled(True)
+        self.copilot_widget.setAttribute(t, False)
+        self.menu_edit.setEnabled(True)
 
-    async def _sim_process_check_loop(self):
-        async with self._sim_process_check_lock:
-            if not self.sim_process_running:
-                return
-
-            # 检查主线程启动的sim_process
-            if hasattr(self, 'sim_process') and self.sim_process is not None:
-                code = self.sim_process.poll()
-                if code is not None:
-                    logger.info("外部进程已退出，返回码 %s", code)
-                    self.sim_process_running = False
-                    self._update_button_states()
-                    await self.remote_scene.set_sync_from_mujoco_to_scene(False)
-                    await self.remote_scene.change_sim_state(self.sim_process_running)
-                    self.enable_control.emit()
-                    return
-
-        frequency = 0.5  # Hz
-        await asyncio.sleep(1 / frequency)
-        asyncio.create_task(self._sim_process_check_loop())
+        self.tool_bar.action_start.setEnabled(True)
+        self.tool_bar.action_stop.setEnabled(False)
 
     @override
     async def on_asset_downloaded(self, file):
-       await self.remote_scene.load_package(file)
-       assets = await self.remote_scene.get_actor_assets()
-       self.asset_browser_widget.set_assets(assets)
-
+        await self.remote_scene.load_package(file)
+        assets = await self.remote_scene.get_actor_assets()
+        self.asset_browser_widget.set_assets(assets)
 
     def prepare_file_menu(self):
         self.menu_file.clear()
@@ -824,7 +576,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         if isinstance(actor, AssetActor):
             data["type"] = "AssetActor"
             data["asset_path"] = actor._asset_path
-            
+
         if isinstance(actor, GroupActor):
             data["type"] = "GroupActor"
             data["children"] = [self.actor_to_dict(child) for child in actor.children]
@@ -873,7 +625,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
                 await self.clear_scene_layout(child_actor)
         if actor != self.local_scene.root_actor:
             await SceneEditRequestBus().delete_actor(actor)
-    
+
     async def create_actor_from_scene_layout(self, actor_data, parent: GroupActor = None):
         name = actor_data["name"]
         actor_type = actor_data.get("type", "BaseActor")
@@ -889,7 +641,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         scale = transform_data.get("scale", 1.0)
         transform = Transform(position, rotation, scale)
         actor.transform = transform
-        
+
         if name == "root":
             actor = self.local_scene.root_actor
         else:
@@ -908,7 +660,7 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         action_undo = self.menu_edit.addAction("Undo")
         action_undo.setEnabled(can_undo())
         connect(action_undo.triggered, self.undo)
-        
+
         action_redo = self.menu_edit.addAction("Redo")
         action_redo.setEnabled(can_redo())
         connect(action_redo.triggered, self.redo)
@@ -975,47 +727,6 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
     async def render_thumbnail(self, asset_paths: list[str]):
         await ThumbnailRenderRequestBus().render_thumbnail(asset_paths)
 
-
-    def enable_widgets(self):
-        self.actor_outline_widget.setEnabled(True)
-        self.actor_outline_widget.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
-        self.actor_editor_widget.setEnabled(True)
-        self.actor_editor_widget.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
-        self.asset_browser_widget.setEnabled(True)
-        self.asset_browser_widget.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
-        self.copilot_widget.setEnabled(True)
-        self.copilot_widget.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
-        # self.terminal_widget.setEnabled(True)
-        # self.terminal_widget.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
-        self.menu_edit.setEnabled(True)
-        self._update_button_states()
-
-    def disable_widgets(self):
-        self.actor_outline_widget.setEnabled(False)
-        self.actor_outline_widget.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-        self.actor_editor_widget.setEnabled(False)
-        self.actor_editor_widget.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-        self.asset_browser_widget.setEnabled(False)
-        self.asset_browser_widget.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-        self.copilot_widget.setEnabled(False)
-        self.copilot_widget.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-        # Terminal widget should remain interactive during simulation
-        # self.terminal.setEnabled(False)
-        # self.terminal.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-        self.menu_edit.setEnabled(False)
-        self._update_button_states()
-    
-    def _update_button_states(self):
-        """更新run和stop按钮的状态"""
-        if self.sim_process_running:
-            # 运行状态：禁用run按钮，启用stop按钮
-            self.tool_bar.action_start.setEnabled(False)
-            self.tool_bar.action_stop.setEnabled(True)
-        else:
-            # 停止状态：启用run按钮，禁用stop按钮
-            self.tool_bar.action_start.setEnabled(True)
-            self.tool_bar.action_stop.setEnabled(False)
-    
     async def cleanup(self):
         if self._cleanup_completed:
             logger.info("cleanup: 已完成，直接返回")
@@ -1025,28 +736,27 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         try:
             # 1. 首先停止viewport主循环，避免事件循环问题
             await self.cleanup_viewport_resources()
-            
+
             # 2. 停止仿真进程
-            if self.sim_process_running:
-                await self.stop_sim()
-            
+            await self.stop_sim()
+
             # 3. 断开总线连接
             self.disconnect_buses()
-            
+
             # 4. 清理远程场景（这会终止服务器进程）
             if hasattr(self, 'remote_scene'):
                 logger.info("cleanup: 调用 remote_scene.destroy_grpc()…")
                 await self.remote_scene.destroy_grpc()
                 logger.info("cleanup: remote_scene.destroy_grpc() 完成")
-            
+
             # 5. 停止URL服务器
             if hasattr(self, 'url_server'):
                 await self.url_server.stop()
-            
+
             # 6. 强制垃圾回收
             import gc
             gc.collect()
-            
+
             logger.info("cleanup: 主窗口清理完成")
             self._cleanup_completed = True
         except Exception as e:
@@ -1077,10 +787,10 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
 
         # Mark cleanup as in progress
         self._cleanup_in_progress = True
-        
+
         # Ignore the close event initially
         event.ignore()
-        
+
         # Schedule cleanup to run in the event loop and wait for it
         async def cleanup_and_close():
             try:
@@ -1108,6 +818,17 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
     def get_local_scene(self, output: List[LocalScene]):
         output.append(self.local_scene)
 
+    @override
+    def get_remote_scene(self, output: List[RemoteScene]):
+        output.append(self.remote_scene)
+
+    @override
+    def get_widget(self, name: str, output: List[Any]):
+        if name == "terminal":
+            output.append(self.terminal_widget)
+
+        return
+
     #
     # UserEventRequestBus overrides
     #
@@ -1116,12 +837,12 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
     def queue_mouse_event(self, x, y, button, action):
         # print(f"Mouse event at ({x}, {y}), button: {button}, action: {action}")
         asyncio.create_task(self.remote_scene.queue_mouse_event(x, y, button.value, action.value))
-    
+
     @override
     def queue_mouse_wheel_event(self, delta):
         # print(f"Mouse wheel event, delta: {delta}")
         asyncio.create_task(self.remote_scene.queue_mouse_wheel_event(delta))
-    
+
     @override
     def queue_key_event(self, key, action):
         # print(f"Key event, key: {key}, action: {action}")
@@ -1135,15 +856,12 @@ class MainWindow(PanelManager, ApplicationRequest, AssetServiceNotification, Use
         await self.remote_scene.set_active_camera(camera_index)
         CameraNotificationBus().on_viewport_camera_changed(camera_index)
 
-        
-
     #
     # CameraNotificationBus overrides
     #
     @override
     def on_cameras_changed(self, cameras: List[CameraBrief], viewport_camera_index: int) -> None:
         self.camera_selector_widget.set_cameras(cameras, viewport_camera_index)
-        
 
     def _mark_layout_clean(self):
         self._layout_modified = False

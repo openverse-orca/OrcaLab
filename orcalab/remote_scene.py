@@ -5,6 +5,7 @@ from orcalab.actor_property import (
     ActorPropertyKey,
     ActorPropertyType,
 )
+from orcalab.actor_util import make_unique_name
 from orcalab.config_service import ConfigService
 from orcalab.math import Transform
 import orcalab.protos.edit_service_pb2_grpc as edit_service_pb2_grpc
@@ -19,7 +20,6 @@ from orcalab.scene_edit_bus import (
     SceneEditNotificationBus,
     SceneEditNotification,
     SceneEditRequestBus,
-    make_unique_name,
 )
 
 import os

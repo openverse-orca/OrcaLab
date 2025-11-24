@@ -5,7 +5,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 import numpy as np
 
 from orcalab.actor import BaseActor
-from orcalab.application_bus import get_local_scene
+from orcalab.application_util import get_local_scene
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
     SceneEditNotificationBus,

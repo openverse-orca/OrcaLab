@@ -1,9 +1,12 @@
-from orcalab.actor import AssetActor
 from orcalab.event_bus import create_event_bus
-from typing import List
+from typing import Any, List, TYPE_CHECKING
 
-from orcalab.local_scene import LocalScene
 from orcalab.math import Transform
+from orcalab.actor import AssetActor
+
+if TYPE_CHECKING:
+    from orcalab.local_scene import LocalScene
+    from orcalab.remote_scene import RemoteScene
 
 
 class ApplicationRequest:
@@ -17,7 +20,13 @@ class ApplicationRequest:
     ) -> None:
         pass
 
-    def get_local_scene(self, output: List[LocalScene]):
+    def get_local_scene(self, output: List["LocalScene"]):
+        pass
+
+    def get_remote_scene(self, output: List["RemoteScene"]):
+        pass
+
+    def get_widget(self, name: str, output: List[Any]):
         pass
 
 
@@ -29,13 +38,3 @@ class ApplicationNotification:
 
 
 ApplicationNotificationBus = create_event_bus(ApplicationNotification)
-
-
-def get_local_scene() -> LocalScene:
-    local_scene_list = []
-    ApplicationRequestBus().get_local_scene(local_scene_list)
-
-    if local_scene_list and isinstance(local_scene_list[0], LocalScene):
-        return local_scene_list[0]
-
-    raise RuntimeError("Failed to get LocalScene from ApplicationRequestBus")

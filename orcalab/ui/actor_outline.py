@@ -3,7 +3,8 @@ from typing import Tuple, override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.actor import BaseActor, GroupActor
-from orcalab.application_bus import get_local_scene
+from orcalab.actor_util import make_unique_name
+from orcalab.application_util import get_local_scene
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.pyside_util import connect
@@ -11,7 +12,6 @@ from orcalab.scene_edit_bus import (
     SceneEditRequestBus,
     SceneEditNotification,
     SceneEditNotificationBus,
-    make_unique_name,
 )
 
 from orcalab.ui.actor_outline_model import ActorOutlineModel
