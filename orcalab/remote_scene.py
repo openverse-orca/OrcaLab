@@ -10,8 +10,6 @@ from orcalab.config_service import ConfigService
 from orcalab.math import Transform
 import orcalab.protos.edit_service_pb2_grpc as edit_service_pb2_grpc
 import orcalab.protos.edit_service_pb2 as edit_service_pb2
-import orca_gym.protos.mjc_message_pb2_grpc as mjc_message_pb2_grpc
-import orca_gym.protos.mjc_message_pb2 as mjc_message_pb2
 
 from orcalab.path import Path
 from orcalab.actor import BaseActor, GroupActor, AssetActor
@@ -154,12 +152,7 @@ class RemoteScene(SceneEditNotification):
             self.edit_grpc_addr,
             options=options,
         )
-        self.sim_channel = grpc.aio.insecure_channel(
-            self.sim_grpc_addr,
-            options=options,
-        )
         self.edit_stub = edit_service_pb2_grpc.GrpcServiceStub(self.edit_channel)
-        self.sim_stub = mjc_message_pb2_grpc.GrpcServiceStub(self.sim_channel)
 
         self.timeout = 3
 
@@ -245,11 +238,6 @@ class RemoteScene(SceneEditNotification):
             await self.edit_channel.close()
         self.edit_stub = None
         self.edit_channel = None
-
-        if self.sim_channel:
-            await self.sim_channel.close()
-        self.sim_stub = None
-        self.sim_channel = None
 
         # Clean up OrcaStudio.GameLauncher processes using the new mechanism
         self._cleanup_orca_processes(timeout=1)
@@ -571,6 +559,7 @@ class RemoteScene(SceneEditNotification):
 
     def _check_response(self, response):
         if response.status_code != Success:
+            print(f"[Error] {response.error_message}")
             raise Exception(f"Request failed. {response.error_message}")
 
     async def aloha(self) -> bool:
@@ -643,19 +632,9 @@ class RemoteScene(SceneEditNotification):
         self._check_response(response)
 
     async def publish_scene(self):
-        logger.debug("Publish scene")
-        request = mjc_message_pb2.PublishSceneRequest()
-        response = await self.sim_stub.PublishScene(request)
-        if response.status != mjc_message_pb2.PublishSceneResponse.SUCCESS:
-            logger.error("Publish scene failed: %s", response.error_message)
-            raise Exception("Publish scene failed.")
-        logger.debug("Publish scene completed")
-
-    async def forward_scene(self):
-        logger.debug("Forward scene")
-        request = mjc_message_pb2.MJ_ForwardRequest()
-        response = await self.sim_stub.MJ_Forward(request)
-        logger.debug("Forward scene completed")
+        request = edit_service_pb2.PublishSceneRequest()
+        response = await self.edit_stub.PublishScene(request)
+        self._check_response(response)
 
     async def get_sync_from_mujoco_to_scene(self) -> bool:
         request = edit_service_pb2.GetSyncFromMujocoToSceneRequest()

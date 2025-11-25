@@ -384,6 +384,15 @@ message SetPropertiesResponse {
     string error_message = 2;
 }
 
+
+message PublishSceneRequest {
+}
+message PublishSceneResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+
 service GrpcService {
     rpc Aloha(AlohaRequest) returns (AlohaResponse);
     
@@ -432,4 +441,6 @@ service GrpcService {
     rpc GetPropertyGroups(GetPropertyGroupsRequest) returns (GetPropertyGroupsResponse);
     rpc GetProperties(GetPropertiesRequest) returns (GetPropertiesResponse);
     rpc SetProperties(SetPropertiesRequest) returns (SetPropertiesResponse);
+
+    rpc PublishScene(PublishSceneRequest) returns (PublishSceneResponse);
 }
