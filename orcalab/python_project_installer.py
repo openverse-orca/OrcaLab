@@ -160,10 +160,20 @@ def _download_archive(url: str, target_file: Path) -> None:
     target_file.parent.mkdir(parents=True, exist_ok=True)
     with requests.get(url, stream=True, timeout=60) as r:
         r.raise_for_status()
+        total_size = int(r.headers.get('content-length', 0))
+        downloaded = 0
+        
         with open(target_file, "wb") as f:
             for chunk in r.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
+                    downloaded += len(chunk)
+                    if total_size > 0:
+                        percent = (downloaded / total_size) * 100
+                        print(f"\r下载进度: {downloaded / 1024 / 1024:.1f}MB / {total_size / 1024 / 1024:.1f}MB ({percent:.1f}%)", end='', flush=True)
+                    else:
+                        print(f"\r已下载: {downloaded / 1024 / 1024:.1f}MB", end='', flush=True)
+        print()  # 换行
 
 
 def _extract_tar_xz(archive_path: Path, dest_dir: Path) -> None:
