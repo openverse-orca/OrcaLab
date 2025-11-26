@@ -338,7 +338,7 @@ class ConfigService:
     
     def web_server_url(self) -> str:
         """获取资产库服务器地址（用于认证后跳转）"""
-        return self.config.get("web_server_url", "https://simassets.orca3d.cn/")
+        return self.config.get("datalink", {}).get("web_server_url", "https://simassets.orca3d.cn/")
 
     def layout_mode(self) -> str:
         return self.config.setdefault("orcalab", {}).get("layout_mode", "default")
