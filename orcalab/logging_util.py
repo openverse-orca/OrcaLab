@@ -73,7 +73,7 @@ def setup_logging(
     logger.addHandler(file_handler)
 
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.NOTSET)
+    console_handler.setLevel(resolved_console_level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
