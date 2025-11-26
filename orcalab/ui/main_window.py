@@ -79,8 +79,8 @@ class MainWindow(
     def __init__(self):
         super().__init__()
         self.cwd = os.getcwd()
-        self._base_title = "orcalab 25.11.5"
         self.config_service = ConfigService()
+        self._base_title = self.config_service._get_package_version()
         self.default_layout_path: str | None = None
         self.current_layout_path: str | None = None
         self._cleanup_in_progress = False
