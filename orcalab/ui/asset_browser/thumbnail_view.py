@@ -168,12 +168,12 @@ class ThumbnailView(QtWidgets.QWidget):
     # After dragging ends, make sure to call `_drag_ended`` to clean up.
 
     def _drag_started(self):
-        print("Drag started")
+        # print("Drag started")
 
         self._drag_ended()
 
     def _drag_ended(self):
-        print("Drag ended")
+        # print("Drag ended")
 
         self._dragging = False
         self._left_mouse_pressed_pos = None

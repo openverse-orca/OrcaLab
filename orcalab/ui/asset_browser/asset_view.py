@@ -13,7 +13,7 @@ class AssetView(ThumbnailView):
     @override
     def _drag_started(self):
 
-        print("Drag started.")
+        # print("Drag started.")
 
         model = self._model
         assert isinstance(model, AssetModel)
