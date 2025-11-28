@@ -230,6 +230,14 @@ message ChangeSimStateResponse {
     string error_message = 2;
 }
 
+message ChangeManipulatorTypeRequest {
+    int32 manipulator_type = 1;
+}
+message ChangeManipulatorTypeResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
 message GetCameraPNGRequest {
     string camera_name = 1;
     string png_path = 2;
@@ -426,6 +434,7 @@ service GrpcService {
     rpc GetCacheFolder(GetCacheFolderRequest) returns (GetCacheFolderResponse);
     rpc LoadPackage(LoadPackageRequest) returns (LoadPackageResponse);
     rpc ChangeSimState(ChangeSimStateRequest) returns (ChangeSimStateResponse);
+    rpc ChangeManipulatorType(ChangeManipulatorTypeRequest) returns (ChangeManipulatorTypeResponse);
 
     rpc GetCameraPNG(GetCameraPNGRequest) returns (GetCameraPNGResponse);
     rpc GetActorAssetAabb(GetActorAssetAabbRequest) returns (GetActorAssetAabbResponse);

@@ -25,5 +25,9 @@
     <file alias="chevron_left">icons/ic_fluent_chevron_left_20_filled.svg</file>
     <file alias="chevron_right">icons/ic_fluent_chevron_right_20_filled.svg</file>
 
+    <file alias="move">icons/ic_fluent_arrow_move_20_filled.svg</file>
+    <file alias="rotate">icons/ic_fluent_cube_rotate_20_filled.svg</file>
+    <file alias="scale">icons/ic_fluent_scale_fill_20_filled.svg</file>
+
 </qresource>
 </RCC>

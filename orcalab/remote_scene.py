@@ -750,6 +750,15 @@ class RemoteScene(SceneEditNotification):
         response = await self.edit_stub.ChangeSimState(request)
         self._check_response(response)
         return response
+    
+    async def change_manipulator_type(self, manipulator_type: int) -> bool:
+        logger.debug("manipulator_type -> %d", manipulator_type)
+        request = edit_service_pb2.ChangeManipulatorTypeRequest(
+            manipulator_type=manipulator_type
+        )
+        response = await self.edit_stub.ChangeManipulatorType(request)
+        self._check_response(response)
+        return response
 
     async def get_camera_png(self, camera_name: str, png_path: str, png_name: str):
         request = edit_service_pb2.GetCameraPNGRequest(

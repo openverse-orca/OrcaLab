@@ -35,15 +35,18 @@ class PanelManager(QtWidgets.QWidget, PanelRequest):
         window_layout.addWidget(make_horizontal_line())
         window_layout.addWidget(window_bottom_area)
 
-        # Window top area = Menu bar + Tool bar
+        # Window top area = Menu bar + Manipulator bar + Tool bar
 
         menu_bar = QtWidgets.QWidget()
         tool_bar = QtWidgets.QWidget()
+        manipulator_bar = QtWidgets.QWidget()
 
         window_top_area_layout = QtWidgets.QHBoxLayout(window_top_area)
         window_top_area_layout.setContentsMargins(0, 0, 0, 0)
         window_top_area_layout.setSpacing(0)
         window_top_area_layout.addWidget(menu_bar)
+        window_top_area_layout.addStretch(1)
+        window_top_area_layout.addWidget(manipulator_bar)
         window_top_area_layout.addStretch(1)
         window_top_area_layout.addWidget(tool_bar)
 
@@ -107,6 +110,7 @@ class PanelManager(QtWidgets.QWidget, PanelRequest):
 
         self._menu_bar_area = menu_bar
         self._tool_bar_area = tool_bar
+        self._manipulator_bar_area = manipulator_bar
         self._left_panel_area = left_panel_area
         self._right_panel_area = right_panel_area
         self._bottom_panel_area = bottom_panel_area

@@ -39,6 +39,7 @@ from orcalab.ui.copilot import CopilotPanel
 from orcalab.ui.icon_util import make_icon
 from orcalab.ui.theme_service import ThemeService
 from orcalab.ui.tool_bar import ToolBar
+from orcalab.ui.manipulator_bar import ManipulatorBar
 from orcalab.ui.terminal_widget import TerminalWidget
 from orcalab.ui.viewport import Viewport
 from orcalab.ui.panel_manager import PanelManager
@@ -307,6 +308,39 @@ class MainWindow(
         connect(self.tool_bar.action_start.triggered, self.start_sim)
         connect(self.tool_bar.action_stop.triggered, self.stop_sim)
 
+        self.manipulator_bar = ManipulatorBar()
+        layout = QtWidgets.QVBoxLayout(self._manipulator_bar_area)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.manipulator_bar)
+
+        # 为工具栏添加样式
+        self.manipulator_bar.setStyleSheet("""
+            QTreeWidget {
+                background-color: #3c3c3c;
+                border-bottom: 1px solid #404040;
+            }
+            QToolButton {
+                color: #cccccc;
+                background-color: #4a4a4a;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                padding: 4px;
+                margin: 2px;
+            }
+            QToolButton:hover {
+                background-color: #5a5a5a;
+                border-color: #666666;
+            }
+            QToolButton:pressed {
+                background-color: #2a2a2a;
+            }
+        """)
+
+        connect(self.manipulator_bar.move_button.triggered, self.manipulator_move)
+        connect(self.manipulator_bar.rotate_button.triggered, self.manipulator_rotate)
+        connect(self.manipulator_bar.scale_button.triggered, self.manipulator_scale)
+
         logger.info("设置主内容区域…")
         layout = QtWidgets.QVBoxLayout(self._main_content_area)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -464,6 +498,7 @@ class MainWindow(
 
         self.tool_bar.action_start.setEnabled(False)
         self.tool_bar.action_stop.setEnabled(True)
+        self.manipulator_bar.action_scale.setEnabled(False)
 
     async def stop_sim(self):
         await SimulationRequestBus().stop_simulation()
@@ -481,6 +516,7 @@ class MainWindow(
 
         self.tool_bar.action_start.setEnabled(True)
         self.tool_bar.action_stop.setEnabled(False)
+        self.manipulator_bar.action_scale.setEnabled(True)
 
     @override
     async def on_asset_downloaded(self, file):
@@ -914,3 +950,12 @@ class MainWindow(
         logger.debug("_confirm_discard_changes: 用户选择放弃修改，重置状态")
         self._mark_layout_clean()
         return True
+    
+    async def manipulator_move(self, *args):
+        await self.remote_scene.change_manipulator_type(1)
+
+    async def manipulator_rotate(self, *args):
+        await self.remote_scene.change_manipulator_type(2)
+
+    async def manipulator_scale(self, *args):
+        await self.remote_scene.change_manipulator_type(3)
