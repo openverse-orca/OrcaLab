@@ -129,8 +129,10 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
                     except OSError as e:
                         continue
 
+        await asyncio.sleep(0.5)
         await SceneEditRequestBus().delete_actor(actor, undo=False, source="create_panorama_apng")
 
+    # 相机位置计算公式
     def _get_camera_position(self, aabb: list[float]) -> Transform:
         x = (aabb[0]+aabb[3])/2
         r = sqrt((aabb[3]-aabb[0])**2 + (aabb[4]-aabb[1])**2 + (aabb[5]-aabb[2])**2) / 2 * 1.1
@@ -140,6 +142,7 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
         position = [x, y, z]
         return Transform(position=np.array(position), rotation=self.quat, scale=1.0)
 
+    # 对actor进行缩放
     def _get_actor_position_scale(self, aabb: list[float]):
         max_dim = max(aabb[3]-aabb[0], aabb[4]-aabb[1], aabb[5]-aabb[2])
         scale = 1 / max_dim
