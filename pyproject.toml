@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "orca-lab"
-version = "25.11.6.1"
+version = "25.11.6.3"
 description = "OrcaLab - Cloud-native robotics simulation platform with advanced UI and asset management"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -24,7 +24,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "orca-gym==25.11.1",
+    "orca-gym==25.11.2",
     "pyside6==6.9.2",
     "aiohttp==3.13.1",
     "qasync==0.28.0",
