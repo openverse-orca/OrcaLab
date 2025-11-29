@@ -89,6 +89,7 @@ class MainWindow(
 
         # Let empty area can steal focus.
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
+        self.setWindowTitle(f"{self._base_title}")
 
     def connect_buses(self):
         super().connect_buses()
