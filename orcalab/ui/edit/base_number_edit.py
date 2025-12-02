@@ -62,8 +62,13 @@ class BaseNumberEdit[T: (int, float)](QtWidgets.QLineEdit):
 
         if event.type() == QtCore.QEvent.Type.FocusOut:
             if self._state == BaseNumberEditState.Typing:
+                value = self.value()
+                assert self._original_value is not None
+                self._set_value_only(self._original_value)
+                if self._set_value_only(value):
+                    self.value_changed.emit()
                 self.set_state(BaseNumberEditState.Idle)
-                self._original_value = None
+                self._original_value = self.value()
 
         if event.type() == QtCore.QEvent.Type.MouseButtonPress:
             if self._state == BaseNumberEditState.Idle:
