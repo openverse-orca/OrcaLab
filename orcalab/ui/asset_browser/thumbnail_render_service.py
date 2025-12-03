@@ -1,8 +1,11 @@
 import asyncio
+import logging
 from math import sqrt, cos, sin, tan, pi
 from PIL import Image
 from scipy.spatial.transform import Rotation
 from orcalab.actor import AssetActor
+
+logger = logging.getLogger(__name__)
 from orcalab.scene_edit_bus import SceneEditNotificationBus, SceneEditRequestBus
 from orcalab.ui.asset_browser.thumbnail_render_bus import ThumbnailRenderRequest, ThumbnailRenderRequestBus, ThumbnailRenderNotification, ThumbnailRenderNotificationBus
 from orcalab.application_bus import ApplicationRequestBus
@@ -129,7 +132,6 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
                     except OSError as e:
                         continue
 
-        await asyncio.sleep(0.5)
         await SceneEditRequestBus().delete_actor(actor, undo=False, source="create_panorama_apng")
 
     # 相机位置计算公式

@@ -58,6 +58,8 @@ class RemoteScene(SceneEditNotification):
         self.actor_in_editing: Path | None = None
         self.current_transform: Transform | None = None
 
+        self._grpc_lock = asyncio.Lock()
+
     def connect_bus(self):
         SceneEditNotificationBus.connect(self)
 
@@ -564,8 +566,9 @@ class RemoteScene(SceneEditNotification):
 
     async def aloha(self) -> bool:
         try:
-            request = edit_service_pb2.AlohaRequest(value=1)
-            response = await self.edit_stub.Aloha(request)
+            async with self._grpc_lock:
+                request = edit_service_pb2.AlohaRequest(value=1)
+                response = await self.edit_stub.Aloha(request)
             self._check_response(response)
             if response.value != 2:
                 raise Exception("Invalid response value.")
@@ -574,97 +577,100 @@ class RemoteScene(SceneEditNotification):
             return False
 
     async def query_pending_operation_loop(self) -> List[str]:
-        request = edit_service_pb2.GetPendingOperationsRequest()
-        response = await self.edit_stub.GetPendingOperations(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.GetPendingOperationsRequest()
+            response = await self.edit_stub.GetPendingOperations(request)
         self._check_response(response)
         return response.operations
 
     async def get_pending_actor_transform(self, path: Path, local: bool) -> Transform:
         space = edit_service_pb2.Space.Local if local else edit_service_pb2.Space.World
-
         request = edit_service_pb2.GetPendingActorTransformRequest(
             actor_path=path.string(),
             space=space,
         )
-
-        response = await self.edit_stub.GetPendingActorTransform(request)
+        async with self._grpc_lock:
+            response = await self.edit_stub.GetPendingActorTransform(request)
         self._check_response(response)
-
-        transform = response.transform
-        return self._get_transform_from_message(transform)
+        return self._get_transform_from_message(response.transform)
 
     async def add_actor(self, actor: BaseActor, parent_path: Path):
         transform_msg = self._create_transform_message(actor.transform)
 
-        if isinstance(actor, GroupActor):
-            request = edit_service_pb2.AddGroupRequest(
-                actor_name=actor.name,
-                parent_actor_path=parent_path.string(),
-                transform=transform_msg,
-                space=edit_service_pb2.Space.Local,
-            )
-            response = await self.edit_stub.AddGroup(request)
-        elif isinstance(actor, AssetActor):
-            request = edit_service_pb2.AddActorRequest(
-                actor_name=actor.name,
-                spawnable_name=actor.asset_path,
-                parent_actor_path=parent_path.string(),
-                transform=transform_msg,
-                space=edit_service_pb2.Space.Local,
-            )
-            response = await self.edit_stub.AddActor(request)
-        else:
-            raise Exception(f"Unsupported actor type: {type(actor)}")
+        async with self._grpc_lock:
+            if isinstance(actor, GroupActor):
+                request = edit_service_pb2.AddGroupRequest(
+                    actor_name=actor.name,
+                    parent_actor_path=parent_path.string(),
+                    transform=transform_msg,
+                    space=edit_service_pb2.Space.Local,
+                )
+                response = await self.edit_stub.AddGroup(request)
+            elif isinstance(actor, AssetActor):
+                request = edit_service_pb2.AddActorRequest(
+                    actor_name=actor.name,
+                    spawnable_name=actor.asset_path,
+                    parent_actor_path=parent_path.string(),
+                    transform=transform_msg,
+                    space=edit_service_pb2.Space.Local,
+                )
+                response = await self.edit_stub.AddActor(request)
+            else:
+                raise Exception(f"Unsupported actor type: {type(actor)}")
 
         self._check_response(response)
 
     async def set_actor_transform(self, path: Path, transform: Transform, local: bool):
         transform_msg = self._create_transform_message(transform)
         space = edit_service_pb2.Space.Local if local else edit_service_pb2.Space.World
-
         request = edit_service_pb2.SetActorTransformRequest(
             actor_path=path.string(),
             transform=transform_msg,
             space=space,
         )
-
-        response = await self.edit_stub.SetActorTransform(request, timeout=self.timeout)
+        async with self._grpc_lock:
+            response = await self.edit_stub.SetActorTransform(request, timeout=self.timeout)
         self._check_response(response)
 
     async def publish_scene(self):
-        request = edit_service_pb2.PublishSceneRequest()
-        response = await self.edit_stub.PublishScene(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.PublishSceneRequest()
+            response = await self.edit_stub.PublishScene(request)
         self._check_response(response)
 
     async def get_sync_from_mujoco_to_scene(self) -> bool:
-        request = edit_service_pb2.GetSyncFromMujocoToSceneRequest()
-        response = await self.edit_stub.GetSyncFromMujocoToScene(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.GetSyncFromMujocoToSceneRequest()
+            response = await self.edit_stub.GetSyncFromMujocoToScene(request)
         self._check_response(response)
         return response.value
 
     async def set_sync_from_mujoco_to_scene(self, value: bool):
         logger.debug("Set sync_from_mujoco_to_scene: %s", value)
-        request = edit_service_pb2.SetSyncFromMujocoToSceneRequest(value=value)
-        response = await self.edit_stub.SetSyncFromMujocoToScene(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.SetSyncFromMujocoToSceneRequest(value=value)
+            response = await self.edit_stub.SetSyncFromMujocoToScene(request)
         self._check_response(response)
         logger.debug("Set sync_from_mujoco_to_scene completed")
 
     async def clear_scene(self):
-        request = edit_service_pb2.ClearSceneRequest()
-        response = await self.edit_stub.ClearScene(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.ClearSceneRequest()
+            response = await self.edit_stub.ClearScene(request)
         self._check_response(response)
 
     async def get_pending_selection_change(self) -> list[str]:
-        request = edit_service_pb2.GetPendingSelectionChangeRequest()
-        response = await self.edit_stub.GetPendingSelectionChange(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.GetPendingSelectionChangeRequest()
+            response = await self.edit_stub.GetPendingSelectionChange(request)
         self._check_response(response)
         return response.actor_paths
 
     async def get_pending_add_item(self) -> Tuple[Transform, str]:
-        request = edit_service_pb2.GetPendingAddItemRequest()
-        response = await self.edit_stub.GetPendingAddItem(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.GetPendingAddItemRequest()
+            response = await self.edit_stub.GetPendingAddItem(request)
         self._check_response(response)
-
         transform = self._get_transform_from_message(response.transform)
         return (transform, response.actor_name)
 
@@ -675,29 +681,34 @@ class RemoteScene(SceneEditNotification):
                 raise Exception(f"Invalid path: {p}")
             paths.append(p.string())
 
-        request = edit_service_pb2.SetSelectionRequest(actor_paths=paths)
-        response = await self.edit_stub.SetSelection(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.SetSelectionRequest(actor_paths=paths)
+            response = await self.edit_stub.SetSelection(request)
         self._check_response(response)
 
     async def get_actor_assets(self) -> List[str]:
-        request = edit_service_pb2.GetActorAssetsRequest()
-        response = await self.edit_stub.GetActorAssets(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.GetActorAssetsRequest()
+            response = await self.edit_stub.GetActorAssets(request)
         self._check_response(response)
         return response.actor_asset_names
 
     async def save_body_transform(self):
-        request = edit_service_pb2.SaveBodyTransformRequest()
-        response = await self.edit_stub.SaveBodyTransform(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.SaveBodyTransformRequest()
+            response = await self.edit_stub.SaveBodyTransform(request)
         self._check_response(response)
 
     async def restore_body_transform(self):
-        request = edit_service_pb2.RestoreBodyTransformRequest()
-        response = await self.edit_stub.RestoreBodyTransform(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.RestoreBodyTransformRequest()
+            response = await self.edit_stub.RestoreBodyTransform(request)
         self._check_response(response)
 
     async def delete_actor(self, actor_path: Path):
-        request = edit_service_pb2.DeleteActorRequest(actor_path=actor_path.string())
-        response = await self.edit_stub.DeleteActor(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.DeleteActorRequest(actor_path=actor_path.string())
+            response = await self.edit_stub.DeleteActor(request)
         self._check_response(response)
 
     async def rename_actor(self, actor_path: Path, new_name: str):
@@ -705,7 +716,8 @@ class RemoteScene(SceneEditNotification):
             actor_path=actor_path.string(),
             new_name=new_name,
         )
-        response = await self.edit_stub.RenameActor(request)
+        async with self._grpc_lock:
+            response = await self.edit_stub.RenameActor(request)
         self._check_response(response)
 
     async def reparent_actor(self, actor_path: Path, new_parent_path: Path):
@@ -713,33 +725,35 @@ class RemoteScene(SceneEditNotification):
             actor_path=actor_path.string(),
             new_parent_path=new_parent_path.string(),
         )
-        response = await self.edit_stub.ReParentActor(request)
+        async with self._grpc_lock:
+            response = await self.edit_stub.ReParentActor(request)
         self._check_response(response)
 
     async def get_window_id(self):
-        request = edit_service_pb2.GetWindowIdRequest()
-        response = await self.edit_stub.GetWindowId(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.GetWindowIdRequest()
+            response = await self.edit_stub.GetWindowId(request)
         self._check_response(response)
         return response
 
     async def get_generate_pos(self, posX, posY):
-        request = edit_service_pb2.GetGeneratePosRequest(
-            posX=posX,
-            posY=posY,
-        )
-        response = await self.edit_stub.GetGeneratePos(request)
+        request = edit_service_pb2.GetGeneratePosRequest(posX=posX, posY=posY)
+        async with self._grpc_lock:
+            response = await self.edit_stub.GetGeneratePos(request)
         self._check_response(response)
         return self._get_transform_from_message(response.transform)
 
     async def get_cache_folder(self) -> str:
-        request = edit_service_pb2.GetCacheFolderRequest()
-        response = await self.edit_stub.GetCacheFolder(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.GetCacheFolderRequest()
+            response = await self.edit_stub.GetCacheFolder(request)
         self._check_response(response)
         return response.cache_folder
 
     async def load_package(self, package_path: str) -> None:
-        request = edit_service_pb2.LoadPackageRequest(file_path=package_path)
-        response = await self.edit_stub.LoadPackage(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.LoadPackageRequest(file_path=package_path)
+            response = await self.edit_stub.LoadPackage(request)
         self._check_response(response)
 
     async def change_sim_state(self, sim_process_running: bool) -> bool:
@@ -747,16 +761,18 @@ class RemoteScene(SceneEditNotification):
         request = edit_service_pb2.ChangeSimStateRequest(
             sim_process_running=sim_process_running
         )
-        response = await self.edit_stub.ChangeSimState(request)
+        async with self._grpc_lock:
+            response = await self.edit_stub.ChangeSimState(request)
         self._check_response(response)
         return response
-    
+
     async def change_manipulator_type(self, manipulator_type: int) -> bool:
         logger.debug("manipulator_type -> %d", manipulator_type)
         request = edit_service_pb2.ChangeManipulatorTypeRequest(
             manipulator_type=manipulator_type
         )
-        response = await self.edit_stub.ChangeManipulatorType(request)
+        async with self._grpc_lock:
+            response = await self.edit_stub.ChangeManipulatorType(request)
         self._check_response(response)
         return response
 
@@ -766,92 +782,81 @@ class RemoteScene(SceneEditNotification):
             png_path=png_path,
             png_name=png_name,
         )
-        response = await self.edit_stub.GetCameraPNG(request)
-        if response.status_code != Success:
-            retry = 2
-            while retry > 0:
-                response = await self.edit_stub.GetCameraPNG(request)
-                if response.status_code == Success:
-                    break
-                retry -= 1
-                await asyncio.sleep(0.01)
+        async with self._grpc_lock:
+            response = await self.edit_stub.GetCameraPNG(request)
+            if response.status_code != Success:
+                retry = 2
+                while retry > 0:
+                    response = await self.edit_stub.GetCameraPNG(request)
+                    if response.status_code == Success:
+                        break
+                    retry -= 1
+                    await asyncio.sleep(0.01)
         return response
 
     async def get_actor_asset_aabb(self, actor_path: Path, output: List[float] = None):
         request = edit_service_pb2.GetActorAssetAabbRequest(
             actor_path=actor_path.string()
         )
-        response = await self.edit_stub.GetActorAssetAabb(request)
+        async with self._grpc_lock:
+            response = await self.edit_stub.GetActorAssetAabb(request)
         self._check_response(response)
         if output is not None:
             output.extend(response.min)
             output.extend(response.max)
         return response
 
-    async def queue_mouse_event(
-        self,
-        x: float,
-        y: float,
-        button: int,
-        action: int,
-    ):
+    async def queue_mouse_event(self, x: float, y: float, button: int, action: int):
         request = edit_service_pb2.QueueMouseEventRequest(
-            x=x,
-            y=y,
-            button=button,
-            action=action,
+            x=x, y=y, button=button, action=action
         )
-        response = await self.edit_stub.QueueMouseEvent(request)
+        async with self._grpc_lock:
+            response = await self.edit_stub.QueueMouseEvent(request)
         self._check_response(response)
 
     async def queue_mouse_wheel_event(self, delta: int):
-        request = edit_service_pb2.QueueMouseWheelEventRequest(delta=delta)
-        response = await self.edit_stub.QueueMouseWheelEvent(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.QueueMouseWheelEventRequest(delta=delta)
+            response = await self.edit_stub.QueueMouseWheelEvent(request)
         self._check_response(response)
 
-    async def queue_key_event(
-        self,
-        key: int,
-        action: int,
-    ):
-        request = edit_service_pb2.QueueKeyEventRequest(
-            key=key,
-            action=action,
-        )
-        response = await self.edit_stub.QueueKeyEvent(request)
+    async def queue_key_event(self, key: int, action: int):
+        request = edit_service_pb2.QueueKeyEventRequest(key=key, action=action)
+        async with self._grpc_lock:
+            response = await self.edit_stub.QueueKeyEvent(request)
         self._check_response(response)
 
     async def get_cameras(self) -> List[CameraBrief]:
-        request = edit_service_pb2.GetCamerasRequest()
-        response = await self.edit_stub.GetCameras(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.GetCamerasRequest()
+            response = await self.edit_stub.GetCameras(request)
         self._check_response(response)
 
         l = []
         for cam in response.cameras:
-            camera_brief = CameraBrief(
-                index=cam.index,
-                name=cam.name,
-            )
+            camera_brief = CameraBrief(index=cam.index, name=cam.name)
             camera_brief.source = cam.source
             l.append(camera_brief)
-
         return l
 
     async def get_active_camera(self) -> int:
-        request = edit_service_pb2.GetActiveCameraRequest()
-        response = await self.edit_stub.GetActiveCamera(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.GetActiveCameraRequest()
+            response = await self.edit_stub.GetActiveCamera(request)
         self._check_response(response)
         return response.index
 
     async def set_active_camera(self, camera_index: int) -> None:
-        request = edit_service_pb2.SetActiveCameraRequest(index=camera_index)
-        response = await self.edit_stub.SetActiveCamera(request)
+        async with self._grpc_lock:
+            request = edit_service_pb2.SetActiveCameraRequest(index=camera_index)
+            response = await self.edit_stub.SetActiveCamera(request)
         self._check_response(response)
 
     async def get_property_groups(self, actor_path: Path) -> List[ActorPropertyGroup]:
         request = edit_service_pb2.GetPropertyGroupsRequest()
         request.actor_path = actor_path.string()
-        response = await self.edit_stub.GetPropertyGroups(request)
+        async with self._grpc_lock:
+            response = await self.edit_stub.GetPropertyGroups(request)
         self._check_response(response)
 
         property_groups: List[ActorPropertyGroup] = []
@@ -955,14 +960,14 @@ class RemoteScene(SceneEditNotification):
             key_msg = self._create_property_key_message(key)
             request.keys.items.append(key_msg)
 
-        response = await self.edit_stub.GetProperties(request)
+        async with self._grpc_lock:
+            response = await self.edit_stub.GetProperties(request)
         self._check_response(response)
 
         values: List[Any] = []
         for value_msg in response.values.items:
             v = self._get_property_value_message_value(value_msg)
             values.append(v)
-
         return values
 
     async def set_properties(self, keys: List[ActorPropertyKey], values: List[Any]):
@@ -973,9 +978,9 @@ class RemoteScene(SceneEditNotification):
         for key, value in zip(keys, values):
             key_msg = self._create_property_key_message(key)
             request.keys.items.append(key_msg)
-
             value_msg = self._create_property_value_message(key, value)
             request.values.items.append(value_msg)
 
-        response = await self.edit_stub.SetProperties(request)
+        async with self._grpc_lock:
+            response = await self.edit_stub.SetProperties(request)
         self._check_response(response)
