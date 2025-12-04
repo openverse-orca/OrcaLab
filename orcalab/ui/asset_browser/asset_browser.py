@@ -5,7 +5,7 @@ import shutil
 from typing import List, override
 from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import Qt
-import time
+import logging
 from orcalab.actor import BaseActor, GroupActor
 
 from orcalab.ui.asset_browser.asset_info import AssetInfo
@@ -20,6 +20,7 @@ from orcalab.ui.asset_browser.thumbnail_render_service import ThumbnailRenderSer
 from orcalab.http_service.http_service import HttpService
 from orcalab.project_util import get_cache_folder
 
+logger = logging.getLogger(__name__)
 class AssetBrowser(QtWidgets.QWidget):
 
     add_item = QtCore.Signal(str, BaseActor)
@@ -378,7 +379,7 @@ class AssetBrowser(QtWidgets.QWidget):
                     try:
                         shutil.copy(tmp_thumbnail_path, cache_thumbnail_path)
                     except Exception as e:
-                        print(f"failed to copy {tmp_thumbnail_path} to {cache_thumbnail_path}: {e}")
+                        logger.error(f"failed to copy {tmp_thumbnail_path} to {cache_thumbnail_path}: {e}")
                         continue
                     player = ApngPlayer(str(cache_thumbnail_path))
                     if player.is_valid():
@@ -386,7 +387,11 @@ class AssetBrowser(QtWidgets.QWidget):
                         asset.apng_player = player
             else:
                 if not os.path.exists(cache_thumbnail_path):
-                    pictures_url = asset.metadata['pictures']
+                    try:
+                        pictures_url = asset.metadata['pictures']
+                    except Exception as e:
+                        logger.error(f"failed to get pictures url for {asset.path}: {e}")
+                        continue
                     for picture_url in pictures_url:
                         if picture_url['viewType'] == "dynamic":
                             download_tasks.append(

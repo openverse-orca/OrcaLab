@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 import logging
 
+from PySide6 import QtWidgets
 import requests
 import importlib.metadata
 
@@ -287,13 +288,7 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
     state_update["installed_at"] = str(Path.cwd())  # 记录安装时的环境
     _save_install_state(state_update)
 
-    logger.info("orcalab-pyside installation completed successfully")
-    logger.info("=" * 80)
-    logger.info("🔄 包更新完成，程序自动退出")
-    logger.info("=" * 80)
-    logger.info("✅ orcalab_pyside 包已更新到最新版本")
-    logger.info("   请重新运行 'orcalab' 命令以使用更新后的包")
-    logger.info("=" * 80)
+    QtWidgets.QMessageBox.information(None, "安装完成", "orcalab初始化完成, 请重新运行orcalab")
     
     # 包更新后直接退出程序
     import sys

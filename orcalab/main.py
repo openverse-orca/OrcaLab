@@ -119,6 +119,8 @@ def main():
     project_root = os.path.dirname(current_dir)  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root)
 
+    q_app = QtWidgets.QApplication(sys.argv)
+
     # Ensure the external Python project (orcalab-pyside) is present and installed
     try:
         ensure_python_project_installed(config_service)
@@ -140,9 +142,6 @@ def main():
     if pak_urls:
         logger.info("正在同步pak_urls列表...")
         sync_pak_urls(pak_urls)
-    
-    # 创建 Qt 应用（需要在创建窗口之前）
-    q_app = QtWidgets.QApplication(sys.argv)
 
     # 确保不会同时运行多个 OrcaLab 实例
     ensure_single_instance()
