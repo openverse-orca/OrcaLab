@@ -96,7 +96,7 @@ def main():
     """Main entry point for the orcalab application"""
     args = parse_cli_args()
 
-    console_level = None
+    console_level = logging.INFO
     if getattr(args, "log_level", None):
         try:
             console_level = resolve_log_level(args.log_level)
@@ -180,7 +180,8 @@ def main():
             config_service.set_current_level(selected)
             logger.info("用户选择了场景: %s", selected.get("name"))
         else:
-            logger.info("用户未选择场景，使用默认值")
+            logger.info("用户未选择场景，退出程序")
+            exit(0)
 
     event_loop = QEventLoop(q_app)
     asyncio.set_event_loop(event_loop)
