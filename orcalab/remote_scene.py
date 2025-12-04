@@ -391,6 +391,16 @@ class RemoteScene(SceneEditNotification):
             )
             # Transform on viewport will be updated by on_transform_changed.
 
+        ad = "actor_delete:"
+        if op.startswith(ad):
+            actor_path = Path(op[len(ad) :])
+
+            if self.actor_in_editing is not None:
+                raise Exception(
+                    f"Another actor is being edited: {self.actor_in_editing}"
+                )
+            await SceneEditRequestBus().delete_actor(actor_path, undo=True, source="actor_outline")
+
         selection_change = "selection_change"
         if op.startswith(selection_change):
             actor_paths = await self.get_pending_selection_change()
