@@ -183,6 +183,7 @@ class AssetBrowser(QtWidgets.QWidget):
     def _on_category_selected(self, category: str):
         self._model.category_filter = category
         self._model.apply_filters()
+        self._view._scroll_bar.setValue(0)
         
     async def set_assets(self, assets: List[str]):
         self.create_panorama_apng_button.setDisabled(True)
