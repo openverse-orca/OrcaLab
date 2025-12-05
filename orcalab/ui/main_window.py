@@ -137,6 +137,8 @@ class MainWindow(
 
         self._viewport_widget = Viewport()
         self._viewport_widget.init_viewport()
+        self._viewport_widget.start_viewport_main_loop()
+        await asyncio.sleep(0.5)
 
         self._current_scene_name: str | None = None
         self._current_layout_name: str | None = None
@@ -152,8 +154,6 @@ class MainWindow(
         self.move(center-rect.center())
         self.restore_default_layout()
         self.show()
-
-        self._viewport_widget.start_viewport_main_loop()
 
         connect(self.actor_outline_model.add_item, self.add_item_to_scene)
 
