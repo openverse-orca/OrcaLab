@@ -136,9 +136,6 @@ class MainWindow(
         self.scene_edit_service = SceneEditService(self.local_scene)
 
         self._viewport_widget = Viewport()
-        self._viewport_widget.init_viewport()
-        self._viewport_widget.start_viewport_main_loop()
-        await asyncio.sleep(0.5)
 
         self._current_scene_name: str | None = None
         self._current_layout_name: str | None = None
@@ -150,10 +147,14 @@ class MainWindow(
 
         rect = QtCore.QRect(0, 0, 2000, 1200)
         self.resize(rect.width(), rect.height())
-        center=self.windowHandle().screen().availableGeometry().center()
+        center=self.screen().availableGeometry().center()
         self.move(center-rect.center())
         self.restore_default_layout()
         self.show()
+
+        self._viewport_widget.init_viewport()
+        self._viewport_widget.start_viewport_main_loop()
+        await asyncio.sleep(0.5)
 
         connect(self.actor_outline_model.add_item, self.add_item_to_scene)
 
