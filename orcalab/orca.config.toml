@@ -1,5 +1,5 @@
 [orcalab]
-version = "25.12.1.2"
+version = "25.12.2.1"
 edit_port = 50151
 sim_port = 50051
 init_paks = true
@@ -7,9 +7,9 @@ levels = [ "orcalab_day", "orcalab_night", "previewthumbnail_orcalab",]
 level = "orcalab_day"
 lock_fps = 60
 paks = []
-pak_urls = [ "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/orcalab_linux.25.12.1.2.pak",]
+pak_urls = [ "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/orcalab_linux.25.12.2.1.pak",]
 python_project_path = ""
-python_project_url = "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/python-project.25.12.1.2.tar.xz"
+python_project_url = "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/python-project.25.12.2.1.tar.xz"
 
 [copilot]
 server_url = "http://103.237.28.246:9023"
