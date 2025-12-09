@@ -399,7 +399,9 @@ class RemoteScene(SceneEditNotification):
                 raise Exception(
                     f"Another actor is being edited: {self.actor_in_editing}"
                 )
-            await SceneEditRequestBus().delete_actor(actor_path, undo=True, source="actor_outline")
+            await SceneEditRequestBus().delete_actor(
+                actor_path, undo=True, source="actor_outline"
+            )
 
         selection_change = "selection_change"
         if op.startswith(selection_change):
@@ -638,8 +640,8 @@ class RemoteScene(SceneEditNotification):
             transform=transform_msg,
             space=space,
         )
-        async with self._grpc_lock:
-            response = await self.edit_stub.SetActorTransform(request, timeout=self.timeout)
+
+        response = await self.edit_stub.SetActorTransform(request, timeout=self.timeout)
         self._check_response(response)
 
     async def publish_scene(self):
@@ -717,7 +719,9 @@ class RemoteScene(SceneEditNotification):
 
     async def delete_actor(self, actor_path: Path):
         async with self._grpc_lock:
-            request = edit_service_pb2.DeleteActorRequest(actor_path=actor_path.string())
+            request = edit_service_pb2.DeleteActorRequest(
+                actor_path=actor_path.string()
+            )
             response = await self.edit_stub.DeleteActor(request)
         self._check_response(response)
 
@@ -820,20 +824,18 @@ class RemoteScene(SceneEditNotification):
         request = edit_service_pb2.QueueMouseEventRequest(
             x=x, y=y, button=button, action=action
         )
-        async with self._grpc_lock:
-            response = await self.edit_stub.QueueMouseEvent(request)
+
+        response = await self.edit_stub.QueueMouseEvent(request)
         self._check_response(response)
 
     async def queue_mouse_wheel_event(self, delta: int):
-        async with self._grpc_lock:
-            request = edit_service_pb2.QueueMouseWheelEventRequest(delta=delta)
-            response = await self.edit_stub.QueueMouseWheelEvent(request)
+        request = edit_service_pb2.QueueMouseWheelEventRequest(delta=delta)
+        response = await self.edit_stub.QueueMouseWheelEvent(request)
         self._check_response(response)
 
     async def queue_key_event(self, key: int, action: int):
         request = edit_service_pb2.QueueKeyEventRequest(key=key, action=action)
-        async with self._grpc_lock:
-            response = await self.edit_stub.QueueKeyEvent(request)
+        response = await self.edit_stub.QueueKeyEvent(request)
         self._check_response(response)
 
     async def get_cameras(self) -> List[CameraBrief]:
@@ -865,8 +867,7 @@ class RemoteScene(SceneEditNotification):
     async def get_property_groups(self, actor_path: Path) -> List[ActorPropertyGroup]:
         request = edit_service_pb2.GetPropertyGroupsRequest()
         request.actor_path = actor_path.string()
-        async with self._grpc_lock:
-            response = await self.edit_stub.GetPropertyGroups(request)
+        response = await self.edit_stub.GetPropertyGroups(request)
         self._check_response(response)
 
         property_groups: List[ActorPropertyGroup] = []
@@ -970,8 +971,7 @@ class RemoteScene(SceneEditNotification):
             key_msg = self._create_property_key_message(key)
             request.keys.items.append(key_msg)
 
-        async with self._grpc_lock:
-            response = await self.edit_stub.GetProperties(request)
+        response = await self.edit_stub.GetProperties(request)
         self._check_response(response)
 
         values: List[Any] = []
@@ -991,6 +991,5 @@ class RemoteScene(SceneEditNotification):
             value_msg = self._create_property_value_message(key, value)
             request.values.items.append(value_msg)
 
-        async with self._grpc_lock:
-            response = await self.edit_stub.SetProperties(request)
+        response = await self.edit_stub.SetProperties(request)
         self._check_response(response)
