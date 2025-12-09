@@ -29,13 +29,15 @@ class MetadataService(MetadataServiceRequest):
         self._build_asset_map()
 
     @override
-    def get_asset_info(self, asset_path: str) -> AssetMetadata:
+    def get_asset_info(self, asset_path: str, output: list[AssetMetadata] = None) -> AssetMetadata:
+        if output is not None:
+            output.append(self._asset_map.get(asset_path, None))
         return self._asset_map.get(asset_path, None)
 
     @override
     def get_asset_map(self, output: List[AssetMap] = None) -> AssetMap:
         if output is not None:
-            output.extend(self._asset_map)
+            output.append(self._asset_map)
         return self._asset_map
 
     @override

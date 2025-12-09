@@ -132,6 +132,7 @@ class AssetBrowser(QtWidgets.QWidget):
         self._view = AssetView()
         self._model = AssetModel()
         self._view.set_model(self._model)
+        self._view.set_loading_text("正在加载资产缩略图...")
 
         self._info_view = AssetInfoView()
         self._info_view.setFixedWidth(250)
@@ -248,10 +249,12 @@ class AssetBrowser(QtWidgets.QWidget):
                             player.set_scaled_size(QtCore.QSize(96, 96))
                             info.apng_player = player
         
+        self._view.set_loading_text(None)
         self._model.set_assets(infos)
         self._tree_view.set_assets(infos)
         self.create_panorama_apng_button.setText("渲染缩略图")
         self.create_panorama_apng_button.setDisabled(False)
+        self.status_label.setText(f"{len(infos)} assets")
 
     def _on_include_filter_changed(self, text: str):
         self._model.include_filter = text
