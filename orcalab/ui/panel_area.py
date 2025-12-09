@@ -56,7 +56,7 @@ class PanelButton(Button):
 
         mark_rect = QtCore.QRect(0, 0, mark_size, self.height())
         if self.panel_area.name == "right":
-            mark_rect.moveRight(self.width())
+            mark_rect.moveRight(self.width() - 1)
 
         painter = QtGui.QPainter(self)
         painter.fillRect(mark_rect, self.mark_color)
