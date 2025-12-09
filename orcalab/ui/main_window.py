@@ -668,6 +668,9 @@ class MainWindow(
                 await self.clear_scene_layout(child_actor)
         if actor != self.local_scene.root_actor:
             await SceneEditRequestBus().delete_actor(actor)
+        
+        await SceneEditRequestBus().set_selection([], undo=False)
+
 
     async def create_actor_from_scene_layout(self, actor_data, parent: GroupActor = None):
         name = actor_data["name"]
