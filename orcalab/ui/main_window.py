@@ -165,6 +165,7 @@ class MainWindow(
 
         connect(self.menu_file.aboutToShow, self.prepare_file_menu)
         connect(self.menu_edit.aboutToShow, self.prepare_edit_menu)
+        connect(self.menu_help.aboutToShow, self.prepare_help_menu)
 
         connect(self.add_item_by_drag, self.add_item_drag)
         connect(self.load_scene_layout_sig, self.load_scene_layout)
@@ -436,6 +437,7 @@ class MainWindow(
 
         self.menu_file = self.menu_bar.addMenu("文件")
         self.menu_edit = self.menu_bar.addMenu("编辑")
+        self.menu_help = self.menu_bar.addMenu("帮助")
 
         self.action_open_layout = QtGui.QAction("打开布局…", self)
         self.action_open_layout.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Open))
@@ -457,6 +459,9 @@ class MainWindow(
 
         self.action_exit = QtGui.QAction("退出", self)
         connect(self.action_exit.triggered, self.close)
+
+        self.action_about = QtGui.QAction("关于 OrcaLab", self)
+        connect(self.action_about.triggered, self.show_about_dialog)
 
         # 为主窗体设置背景色
         self.setStyleSheet("""
@@ -702,6 +707,71 @@ class MainWindow(
         action_redo = self.menu_edit.addAction("Redo")
         action_redo.setEnabled(can_redo())
         connect(action_redo.triggered, self.redo)
+
+    def prepare_help_menu(self):
+        self.menu_help.clear()
+        self.menu_help.addAction(self.action_about)
+
+    def show_about_dialog(self):
+        version = self.config_service._get_package_version()
+        
+        about_html = f"""
+        <div style="font-family: Arial, sans-serif;">
+            <h2 style="color: #007acc; margin-bottom: 10px;">OrcaLab</h2>
+            <p style="margin: 5px 0;"><b>版本:</b> {version}</p>
+            <p style="margin: 5px 0;"><b>版权所有:</b> © 2025 松应科技</p>
+            <p style="margin: 5px 0;">
+                <b>公司主页:</b> 
+                <a href="http://www.orca3d.cn" 
+                   style="color: #007acc; text-decoration: none;">
+                   http://www.orca3d.cn
+                </a>
+            </p>
+            <p style="margin: 5px 0;">
+                <b>GitHub 仓库:</b> 
+                <a href="https://github.com/openverse-orca/OrcaLab" 
+                   style="color: #007acc; text-decoration: none;">
+                   https://github.com/openverse-orca/OrcaLab
+                </a>
+            </p>
+            <p style="margin: 15px 0 5px 0; color: #666; font-size: 11px;">
+                云原生机器人仿真平台，提供先进的UI和资产管理功能
+            </p>
+        </div>
+        """
+        
+        msg_box = QtWidgets.QMessageBox(self)
+        msg_box.setWindowTitle("关于 OrcaLab")
+        msg_box.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        msg_box.setText(about_html)
+        msg_box.setIconPixmap(QtGui.QPixmap())
+        msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Ok)
+        
+        msg_box.setStyleSheet("""
+            QMessageBox {
+                background-color: #2b2b2b;
+            }
+            QMessageBox QLabel {
+                color: #ffffff;
+                background-color: #2b2b2b;
+            }
+            QPushButton {
+                background-color: #007acc;
+                color: #ffffff;
+                border: none;
+                border-radius: 3px;
+                padding: 6px 20px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #005a9e;
+            }
+            QPushButton:pressed {
+                background-color: #004578;
+            }
+        """)
+        
+        msg_box.exec()
 
     async def undo(self):
         if can_undo():
