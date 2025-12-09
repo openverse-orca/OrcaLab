@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import shutil
+import webbrowser
 from typing import List, override
 from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import Qt
@@ -19,6 +20,7 @@ from orcalab.ui.asset_browser.thumbnail_render_bus import ThumbnailRenderRequest
 from orcalab.ui.asset_browser.thumbnail_render_service import ThumbnailRenderService
 from orcalab.http_service.http_service import HttpService
 from orcalab.project_util import get_cache_folder
+from orcalab.config_service import ConfigService
 
 logger = logging.getLogger(__name__)
 class AssetBrowser(QtWidgets.QWidget):
@@ -34,6 +36,7 @@ class AssetBrowser(QtWidgets.QWidget):
         self._metadata_service = MetadataService()
         self._thumbnail_render_service = ThumbnailRenderService()
         self._http_service = HttpService()
+        self._config_service = ConfigService()
         self._setup_ui()
         self._setup_connections()
 
@@ -113,6 +116,28 @@ class AssetBrowser(QtWidgets.QWidget):
         """
         )
 
+        self.open_asset_store_button = QtWidgets.QPushButton("打开资产库")
+        self.open_asset_store_button.setToolTip("在浏览器中打开资产库")
+        self.open_asset_store_button.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #28a745;
+                color: #ffffff;
+                border: none;
+                border-radius: 3px;
+                padding: 6px 12px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+            QPushButton:pressed {
+                background-color: #1e7e34;
+            }
+        """
+        )
+
         # 状态标签
         self.status_label = QtWidgets.QLabel("0 assets")
         self.status_label.setStyleSheet(
@@ -147,6 +172,8 @@ class AssetBrowser(QtWidgets.QWidget):
         tool_bar_layout.addWidget(exclude_label)
         tool_bar_layout.addWidget(self.exclude_search_box)
         tool_bar_layout.addStretch()
+        tool_bar_layout.addWidget(self.open_asset_store_button)
+        tool_bar_layout.addSpacing(5)
         tool_bar_layout.addWidget(self.create_panorama_apng_button)
         tool_bar_layout.addSpacing(5)
         tool_bar_layout.addWidget(self.status_label)
@@ -171,6 +198,7 @@ class AssetBrowser(QtWidgets.QWidget):
         """设置信号连接"""
         self.include_search_box.textChanged.connect(self._on_include_filter_changed)
         self.exclude_search_box.textChanged.connect(self._on_exclude_filter_changed)
+        self.open_asset_store_button.clicked.connect(self._on_open_asset_store_clicked)
         self.create_panorama_apng_button.clicked.connect(
             lambda: asyncio.create_task(self._on_create_panorama_apng_clicked())
         )
@@ -263,6 +291,14 @@ class AssetBrowser(QtWidgets.QWidget):
     def _on_exclude_filter_changed(self, text: str):
         self._model.exclude_filter = text
         self._model.apply_filters()
+
+    def _on_open_asset_store_clicked(self):
+        asset_store_url = self._config_service.web_server_url()
+        try:
+            webbrowser.open(asset_store_url)
+            logger.info(f"Opening asset store: {asset_store_url}")
+        except Exception as e:
+            logger.error(f"Failed to open asset store: {e}")
 
     def _on_selection_changed(self):
         index = self._view.selected_index()
