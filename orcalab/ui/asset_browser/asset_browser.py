@@ -30,6 +30,7 @@ class AssetBrowser(QtWidgets.QWidget):
     render_thumbnail = QtCore.Signal(list)
     on_render_thumbnail_finished = QtCore.Signal(list)
     on_upload_thumbnail_finished = QtCore.Signal()
+    request_load_thumbnail = QtCore.Signal(int)
 
     def __init__(self):
         super().__init__()
@@ -37,6 +38,8 @@ class AssetBrowser(QtWidgets.QWidget):
         self._thumbnail_render_service = ThumbnailRenderService()
         self._http_service = HttpService()
         self._config_service = ConfigService()
+        self._loading_thumbnails = set()
+        self._model_connected = False
         self._setup_ui()
         self._setup_connections()
 
@@ -208,6 +211,9 @@ class AssetBrowser(QtWidgets.QWidget):
         self.on_upload_thumbnail_finished.connect(
             lambda: asyncio.create_task(self._on_upload_thumbnail_finished())
         )
+        self.request_load_thumbnail.connect(
+            lambda index: asyncio.create_task(self._load_thumbnail_for_index(index))
+        )
     
     def _on_category_selected(self, category: str):
         self._model.category_filter = category
@@ -220,10 +226,7 @@ class AssetBrowser(QtWidgets.QWidget):
         thumbnail_cache_path = get_cache_folder() / "thumbnail"
         exclude_assets = ['prefabs/mujococamera1080', 'prefabs/mujococamera256', 'prefabs/mujococamera512']
         
-        # 第一步：创建所有 AssetInfo，为本地已有缩略图的设置播放器
-        get_url_tasks = []
-        need_download_infos = []  # 需要下载缩略图的 info
-        
+        # 只检查本地缓存，不从服务器下载
         for asset in assets:
             info = AssetInfo()
             info.name = asset.split("/")[-1]
@@ -232,57 +235,32 @@ class AssetBrowser(QtWidgets.QWidget):
                 continue
             info.metadata = self._metadata_service.get_asset_info(asset)
             
+            # 检查本地缓存，如果已下载则直接加载
             thumbnail_path = thumbnail_cache_path / (asset + "_panorama.apng")
             if thumbnail_path.exists():
                 player = ApngPlayer(str(thumbnail_path))
                 if player.is_valid():
                     player.set_scaled_size(QtCore.QSize(96, 96))
                     info.apng_player = player
-            else:
-                if info.metadata is not None:
-                    get_url_tasks.append(self._http_service.get_image_url(info.metadata['id']))
-                    need_download_infos.append(info)
             
             infos.append(info)
         
-        # 第二步：并行获取所有图片 URL
-        if get_url_tasks:
-            url_results = await asyncio.gather(*get_url_tasks, return_exceptions=True)
-            
-            # 第三步：收集下载任务
-            download_tasks = []
-            download_info_map = []  # (info, thumbnail_path)
-            
-            for info, url_result in zip(need_download_infos, url_results):
-                if url_result is not None and not isinstance(url_result, Exception):
-                    image_url = json.loads(url_result)
-                    for picture_url in image_url['pictures']:
-                        if picture_url['viewType'] == "dynamic":
-                            thumbnail_path = thumbnail_cache_path / (info.path + "_panorama.apng")
-                            download_tasks.append(
-                                self._http_service.get_asset_thumbnail2cache(picture_url['imgUrl'], thumbnail_path)
-                            )
-                            download_info_map.append((info, thumbnail_path))
-                            break
-            
-            # 第四步：并行下载所有缩略图
-            if download_tasks:
-                await asyncio.gather(*download_tasks, return_exceptions=True)
-                
-                # 为下载成功的资产创建播放器
-                for info, thumbnail_path in download_info_map:
-                    if thumbnail_path.exists():
-                        player = ApngPlayer(str(thumbnail_path))
-                        if player.is_valid():
-                            player.set_scaled_size(QtCore.QSize(96, 96))
-                            info.apng_player = player
-        
         self._view.set_loading_text(None)
         self._model.set_assets(infos)
+        
+        # 只在第一次连接信号
+        if not self._model_connected:
+            self._model.request_load_thumbnail.connect(self.request_load_thumbnail.emit)
+            self._model_connected = True
+        
         self._tree_view.set_assets(infos)
         self.create_panorama_apng_button.setText("渲染缩略图")
         self.create_panorama_apng_button.setDisabled(False)
         self.status_label.setText(f"{len(infos)} assets")
+        
+        # 主动触发一次可见项更新，加载初始可见的缩略图
+        await asyncio.sleep(0.05)
+        self._trigger_initial_thumbnail_load()
 
     def _on_include_filter_changed(self, text: str):
         self._model.include_filter = text
@@ -299,6 +277,68 @@ class AssetBrowser(QtWidgets.QWidget):
             logger.info(f"Opening asset store: {asset_store_url}")
         except Exception as e:
             logger.error(f"Failed to open asset store: {e}")
+    
+    def _trigger_initial_thumbnail_load(self):
+        """触发初始可见项的缩略图加载"""
+        for item in self._view.visible_items:
+            info = self._model.info_at(item.index)
+            if info.apng_player is None and info.metadata is not None:
+                if info.path not in self._loading_thumbnails:
+                    self.request_load_thumbnail.emit(item.index)
+    
+    async def _load_thumbnail_for_index(self, index: int):
+        """按需加载指定索引的缩略图"""
+        try:
+            info = self._model.info_at(index)
+            if info.apng_player is not None:
+                return
+            
+            if info.metadata is None:
+                return
+            
+            # 避免重复下载
+            if info.path in self._loading_thumbnails:
+                return
+            
+            thumbnail_cache_path = get_cache_folder() / "thumbnail"
+            thumbnail_path = thumbnail_cache_path / (info.path + "_panorama.apng")
+            
+            if thumbnail_path.exists():
+                player = ApngPlayer(str(thumbnail_path))
+                if player.is_valid():
+                    player.set_scaled_size(QtCore.QSize(96, 96))
+                    info.apng_player = player
+                    self._model.notify_item_updated(index)
+                return
+            
+            # 标记为正在加载
+            self._loading_thumbnails.add(info.path)
+            
+            try:
+                # 从服务器获取 URL 并下载
+                url_result = await self._http_service.get_image_url(info.metadata['id'])
+                if url_result is None or isinstance(url_result, Exception):
+                    return
+                
+                image_url = json.loads(url_result)
+                for picture_url in image_url['pictures']:
+                    if picture_url['viewType'] == "dynamic":
+                        await self._http_service.get_asset_thumbnail2cache(picture_url['imgUrl'], thumbnail_path)
+                        
+                        if thumbnail_path.exists():
+                            player = ApngPlayer(str(thumbnail_path))
+                            if player.is_valid():
+                                player.set_scaled_size(QtCore.QSize(96, 96))
+                                info.apng_player = player
+                                self._model.notify_item_updated(index)
+                        break
+            finally:
+                # 下载完成，移除标记
+                self._loading_thumbnails.discard(info.path)
+                
+        except Exception as e:
+            logger.error(f"Failed to load thumbnail for index {index}: {e}")
+            self._loading_thumbnails.discard(info.path)
 
     def _on_selection_changed(self):
         index = self._view.selected_index()

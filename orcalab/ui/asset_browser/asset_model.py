@@ -8,6 +8,7 @@ from orcalab.ui.asset_browser.apng_player import ApngPlayer
 
 class AssetModel(ThumbnailModel):
     
+    request_load_thumbnail = QtCore.Signal(int)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -35,7 +36,12 @@ class AssetModel(ThumbnailModel):
     def movie_at(self, index: int) -> ApngPlayer | None:
         if index < 0 or index >= len(self._filtered_assets):
             return None
-        return self._filtered_assets[index].apng_player
+        
+        info = self._filtered_assets[index]
+        if info.apng_player is None and info.metadata is not None:
+            self.request_load_thumbnail.emit(index)
+        
+        return info.apng_player
 
 
     @override
@@ -58,6 +64,10 @@ class AssetModel(ThumbnailModel):
 
     def get_all_assets(self) -> List[AssetInfo]:
         return self._all_assets
+    
+    def notify_item_updated(self, index: int) -> None:
+        """通知指定索引的项已更新"""
+        self.item_updated.emit(index)
     
     def _apply_category_filter(self, input: List[AssetInfo]):
         if self.category_filter == "":
