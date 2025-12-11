@@ -12,6 +12,7 @@ from orcalab.simulation.simulation_bus import (
     SimulationNotificationBus,
     SimulationRequest,
     SimulationRequestBus,
+    SimulationState,
 )
 from orcalab.ui.launch_dialog import LaunchDialog
 from orcalab.ui.terminal_widget import TerminalWidget
@@ -25,6 +26,8 @@ class SimulationService(SimulationRequest):
     def __init__(self):
         self._sim_process_check_lock = asyncio.Lock()
         self.sim_process_running = False
+        self.sim_process: subprocess.Popen | None = None
+        self._sim_state = SimulationState.Stopped
 
     def connect_bus(self):
         SimulationRequestBus.connect(self)
@@ -79,14 +82,21 @@ class SimulationService(SimulationRequest):
     async def _on_external_program_selected_async(self, program_name: str):
         """外部程序选择处理（异步版本）"""
 
+        await self._set_simulation_state(SimulationState.Launching)
+
         self.config_service = ConfigService()
         program_config = self.config_service.get_external_program_config(program_name)
 
         if not program_config:
             logger.error("未找到程序配置: %s", program_name)
+            await self._set_simulation_state(SimulationState.Failed)
+            await self._set_simulation_state(SimulationState.Stopped)
             return
 
-        await self._before_sim_startup()
+        await self.remote_scene.change_sim_state(True)
+        await self.remote_scene.publish_scene()
+        await asyncio.sleep(0.1)
+        await self.remote_scene.save_body_transform()
         await asyncio.sleep(1)
 
         # 启动外部程序 - 改为在主线程直接启动
@@ -95,14 +105,14 @@ class SimulationService(SimulationRequest):
         for arg in program_config.get("args", []):
             args.append(arg)
 
-        success = await self._start_external_process_in_main_thread_async(command, args)
+        success = await self._start_external_process(command, args)
 
         if success:
             self.sim_process_running = True
-            await SimulationNotificationBus().on_simulation_start()
 
-            # 添加缺失的同步操作（从 run_sim 函数中复制）
-            await self._complete_sim_startup()
+            asyncio.create_task(self._sim_process_check_loop())
+            await self.remote_scene.set_sync_from_mujoco_to_scene(True)
+            await self._set_simulation_state(SimulationState.Running)
 
             logger.info("外部程序 %s 启动成功", program_name)
         else:
@@ -117,17 +127,45 @@ class SimulationService(SimulationRequest):
                 logger.exception("回滚模拟状态时发生错误: %s", e)
             finally:
                 self.sim_process_running = False
+            
+            await self._set_simulation_state(SimulationState.Failed)
+            await self._set_simulation_state(SimulationState.Stopped)
 
-    async def _before_sim_startup(self):
-        # 改变模拟状态
+    async def _on_no_external_program_async(self):
+        """无外部程序处理（异步版本）"""
+
         await self.remote_scene.change_sim_state(True)
-
-        """完成模拟启动的异步操作（从 run_sim 函数中复制的缺失部分）"""
         await self.remote_scene.publish_scene()
         await asyncio.sleep(0.1)
         await self.remote_scene.save_body_transform()
+        await asyncio.sleep(1)
 
-    async def _start_external_process_in_main_thread_async(
+        # 启动一个虚拟的等待进程，保持终端活跃状态
+        # 使用 sleep 命令创建一个长期运行的进程，这样 _sim_process_check_loop 就不会立即退出
+        success = await self._start_external_process(
+            sys.executable, ["-c", "import time; time.sleep(99999999)"]
+        )
+
+        if success:
+            # 设置运行状态
+            self.sim_process_running = True
+            await self._set_simulation_state(SimulationState.Running)
+            asyncio.create_task(self._sim_process_check_loop())
+            await self.remote_scene.set_sync_from_mujoco_to_scene(True)
+
+            # 在终端显示提示信息
+
+            self.terminal._append_output("已切换到运行模式，等待外部程序连接...\n")
+            self.terminal._append_output("模拟地址: localhost:50051\n")
+            self.terminal._append_output("请手动启动外部程序并连接到上述地址\n")
+            self.terminal._append_output(
+                "注意：当前运行的是虚拟等待进程，可以手动停止\n"
+            )
+            logger.info("无外部程序模式已启动")
+        else:
+            logger.error("无外部程序模式启动失败")
+
+    async def _start_external_process(
         self, command: str, args: list
     ):
         """在主线程中启动外部进程，并将输出重定向到terminal_widget（异步版本）"""
@@ -211,45 +249,6 @@ class SimulationService(SimulationRequest):
         self.output_thread = threading.Thread(target=read_output, daemon=True)
         self.output_thread.start()
 
-    async def _complete_sim_startup(self):
-        """完成模拟启动的异步操作（从 run_sim 函数中复制的缺失部分）"""
-        # 启动检查循环
-        asyncio.create_task(self._sim_process_check_loop())
-
-        # 设置同步状态
-        await self.remote_scene.set_sync_from_mujoco_to_scene(True)
-
-    async def _on_no_external_program_async(self):
-        """无外部程序处理（异步版本）"""
-
-        await self._before_sim_startup()
-        await asyncio.sleep(1)
-
-        # 启动一个虚拟的等待进程，保持终端活跃状态
-        # 使用 sleep 命令创建一个长期运行的进程，这样 _sim_process_check_loop 就不会立即退出
-        success = await self._start_external_process_in_main_thread_async(
-            sys.executable, ["-c", "import time; time.sleep(99999999)"]
-        )
-
-        if success:
-            # 设置运行状态
-            self.sim_process_running = True
-
-            # 添加缺失的同步操作（从 run_sim 函数中复制）
-            await self._complete_sim_startup()
-
-            # 在终端显示提示信息
-
-            self.terminal._append_output("已切换到运行模式，等待外部程序连接...\n")
-            self.terminal._append_output("模拟地址: localhost:50051\n")
-            self.terminal._append_output("请手动启动外部程序并连接到上述地址\n")
-            self.terminal._append_output(
-                "注意：当前运行的是虚拟等待进程，可以手动停止\n"
-            )
-            logger.info("无外部程序模式已启动")
-        else:
-            logger.error("无外部程序模式启动失败")
-
     async def start_simulation(self) -> None:
         await asyncWrap(self.show_launch_dialog)
 
@@ -261,13 +260,13 @@ class SimulationService(SimulationRequest):
             return
 
         async with self._sim_process_check_lock:
-            await self.remote_scene.publish_scene()
-            await self.remote_scene.restore_body_transform()
+            
             await self.remote_scene.set_sync_from_mujoco_to_scene(False)
+            await self.remote_scene.restore_body_transform()
             self.sim_process_running = False
 
             # 停止主线程启动的sim_process
-            if hasattr(self, "sim_process") and self.sim_process is not None:
+            if self.sim_process is not None:
                 self.terminal._append_output("\n" + "-" * 50 + "\n")
                 self.terminal._append_output("正在停止进程...\n")
 
@@ -282,9 +281,11 @@ class SimulationService(SimulationRequest):
 
                 self.sim_process = None
 
-            # await asyncio.sleep(0.5)
-            await self.remote_scene.restore_body_transform()
+            await asyncio.sleep(0.5)
+            await self.remote_scene.publish_scene()
             await self.remote_scene.change_sim_state(self.sim_process_running)
+
+            await self._set_simulation_state(SimulationState.Stopped)
 
     async def _sim_process_check_loop(self):
         async with self._sim_process_check_lock:
@@ -292,15 +293,47 @@ class SimulationService(SimulationRequest):
                 return
 
             # 检查主线程启动的sim_process
-            if hasattr(self, "sim_process") and self.sim_process is not None:
+            if self.sim_process is not None:
                 code = self.sim_process.poll()
                 if code is not None:
                     logger.info("外部进程已退出，返回码 %s", code)
                     self.sim_process_running = False
                     await self.remote_scene.set_sync_from_mujoco_to_scene(False)
                     await self.remote_scene.change_sim_state(self.sim_process_running)
+                    await self._set_simulation_state(SimulationState.Failed)
+                    await self._set_simulation_state(SimulationState.Stopped)
                     return
 
         frequency = 0.5  # Hz
         await asyncio.sleep(1 / frequency)
         asyncio.create_task(self._sim_process_check_loop())
+
+    async def _set_simulation_state(self, new_state: SimulationState):
+        old_state = self._sim_state
+
+        valid_transitions = {
+            SimulationState.Stopped: [
+                SimulationState.Launching,
+            ],
+            SimulationState.Launching: [
+                SimulationState.Running,
+                SimulationState.Failed,
+            ],
+            SimulationState.Running: [
+                SimulationState.Stopped,
+                SimulationState.Failed,
+            ],
+            SimulationState.Failed: [
+                SimulationState.Stopped,
+            ],
+        }
+
+        valid_states = valid_transitions.get(old_state, [])
+        if new_state not in valid_states:
+            raise ValueError(
+                f"Invalid state transition from {old_state} to {new_state}"
+            )
+
+        self._sim_state = new_state
+        bus = SimulationNotificationBus()
+        await bus.on_simulation_state_changed(old_state, new_state)

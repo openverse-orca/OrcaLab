@@ -20,6 +20,7 @@ from orcalab.simulation.simulation_bus import (
     SimulationRequestBus,
     SimulationNotification,
     SimulationNotificationBus,
+    SimulationState,
 )
 from orcalab.simulation.simulation_service import SimulationService
 from orcalab.ui.actor_editor import ActorEditor
@@ -492,6 +493,10 @@ class MainWindow(
     async def start_sim(self):
         await SimulationRequestBus().start_simulation()
 
+    async def stop_sim(self):
+        await SimulationRequestBus().stop_simulation()
+
+    def _disable_edit(self):
         t = QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents
         self.actor_outline_widget.setEnabled(False)
         self.actor_outline_widget.setAttribute(t, True)
@@ -503,13 +508,9 @@ class MainWindow(
         self.copilot_widget.setAttribute(t, True)
         self.menu_edit.setEnabled(False)
 
-        self.tool_bar.action_start.setEnabled(False)
-        self.tool_bar.action_stop.setEnabled(True)
         self.manipulator_bar.action_scale.setEnabled(False)
-
-    async def stop_sim(self):
-        await SimulationRequestBus().stop_simulation()
-
+    
+    def _enable_edit(self):
         t = QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents
         self.actor_outline_widget.setEnabled(True)
         self.actor_outline_widget.setAttribute(t, False)
@@ -521,9 +522,19 @@ class MainWindow(
         self.copilot_widget.setAttribute(t, False)
         self.menu_edit.setEnabled(True)
 
-        self.tool_bar.action_start.setEnabled(True)
-        self.tool_bar.action_stop.setEnabled(False)
         self.manipulator_bar.action_scale.setEnabled(True)
+    
+    @override
+    async def on_simulation_state_changed(self, old_state: SimulationState, new_state: SimulationState) -> None:
+        if new_state == SimulationState.Launching:
+            self._disable_edit()
+            self.tool_bar.action_start.setEnabled(False)
+            self.tool_bar.action_stop.setEnabled(True)
+
+        if new_state == SimulationState.Stopped:
+            self._enable_edit()
+            self.tool_bar.action_start.setEnabled(True)
+            self.tool_bar.action_stop.setEnabled(False)
 
     @override
     async def on_asset_downloaded(self, file):
