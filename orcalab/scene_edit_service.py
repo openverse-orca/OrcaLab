@@ -149,18 +149,30 @@ class SceneEditService(SceneEditRequest):
         index = parent_actor.children.index(actor)
         assert index != -1
 
-        command = DeleteActorCommand(actor, actor_path, index)
-
         bus = SceneEditNotificationBus()
 
         await bus.before_actor_deleted(actor_path, source)
+
+        command_group = CommandGroup()
+        in_selection = actor_path in self.local_scene.selection
+
+        if in_selection:
+            deselect_command = SelectionCommand()
+            deselect_command.old_selection = deepcopy(self.local_scene.selection)
+            deselect_command.new_selection = deepcopy(self.local_scene.selection)
+            deselect_command.new_selection.remove(actor_path)
+
+            command_group.commands.append(deselect_command)
+
+        delete_command = DeleteActorCommand(actor, actor_path, index)
+        command_group.commands.append(delete_command)
 
         self.local_scene.delete_actor(actor)
 
         await bus.on_actor_deleted(actor_path, source)
 
         if undo:
-            UndoRequestBus().add_command(command)
+            UndoRequestBus().add_command(command_group)
 
     @override
     async def rename_actor(
