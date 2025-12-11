@@ -44,7 +44,7 @@ class AssetSyncCallbacks:
         """开始下载"""
         pass
     
-    def on_download_progress(self, asset_id: str, progress: int, speed: float):
+    def on_download_progress(self, asset_id: str, progress: int64, speed: float):
         """
         下载进度
         progress: 0-100
