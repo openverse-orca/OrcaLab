@@ -6,6 +6,7 @@ import numpy as np
 
 from orcalab.actor import BaseActor
 from orcalab.application_util import get_local_scene
+from orcalab.pyside_util import connect
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
     SceneEditNotificationBus,
@@ -38,7 +39,9 @@ class TransformEditTitle(QtWidgets.QWidget):
 
         l_name = QtWidgets.QLabel("Transform")
 
-        root_layout.addWidget(self.l_indicator, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        root_layout.addWidget(
+            self.l_indicator, alignment=QtCore.Qt.AlignmentFlag.AlignCenter
+        )
         root_layout.addWidget(l_name)
         root_layout.addStretch()
 
@@ -121,7 +124,7 @@ class TransformEdit(StyledWidget, SceneEditNotification):
         self.set_transform(actor.transform)
         self._block_signals = False
 
-    def _add_line(self, label, widget):
+    def _add_line(self, label, widget: FloatEdit):
         layout = QtWidgets.QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
@@ -136,9 +139,9 @@ class TransformEdit(StyledWidget, SceneEditNotification):
         layout.addWidget(widget, 1)
 
         widget.setStyleSheet(self._property_style_sheet)
-        widget.value_changed.connect(self._on_value_changed)
-        widget.start_drag.connect(self._on_start_drag)
-        widget.stop_drag.connect(self._on_stop_drag)
+        connect(widget.value_changed, self._on_value_changed)
+        connect(widget.start_drag, self._on_start_drag)
+        connect(widget.stop_drag, self._on_stop_drag)
 
         return widget
 
@@ -152,28 +155,26 @@ class TransformEdit(StyledWidget, SceneEditNotification):
             source="ui",
         )
 
-    def _do_set_transform(self, transform: Transform, undo: bool):
-        asyncio.create_task(self._do_set_transform_async(transform, undo))
-
-    def _on_value_changed(self):
+    async def _on_value_changed(self):
         if self._block_signals:
             return
 
         undo = not self._dragging
-        self._do_set_transform(self.get_transform(), undo)
+        await self._do_set_transform_async(self.get_transform(), undo)
 
     def _on_start_drag(self):
         if self._dragging:
             raise RuntimeError("A dragging is already in progress")
 
         self._dragging = True
-        SceneEditRequestBus().record_old_transform(self._actor)
+        SceneEditRequestBus().start_change_transform(self._actor)
 
-    def _on_stop_drag(self):
+    async def _on_stop_drag(self):
         if not self._dragging:
             raise RuntimeError("No dragging in progress")
 
-        self._do_set_transform(self.get_transform(), undo=True)
+        await self._do_set_transform_async(self.get_transform(), undo=True)
+        SceneEditRequestBus().end_change_transform(self._actor)
         self._dragging = False
 
     def get_transform(self):

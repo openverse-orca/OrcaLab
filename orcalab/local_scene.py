@@ -1,4 +1,5 @@
-from typing import Tuple, Dict
+from typing import List, Tuple, Dict
+
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.actor_property import ActorProperty, ActorPropertyGroup, ActorPropertyKey
 from orcalab.path import Path
@@ -10,7 +11,7 @@ class LocalScene:
         self.root_actor = GroupActor(name="root", parent=None)
         self._actors: Dict[Path, BaseActor] = {}
         self._actors[Path.root_path()] = self.root_actor
-        self._selection: list[Path] = []
+        self._selection: List[Path] = []
 
     def __contains__(self, path: Path) -> bool:
         return path in self._actors
@@ -25,11 +26,11 @@ class LocalScene:
         return self.root_actor
 
     @property
-    def selection(self) -> list[Path]:
+    def selection(self) -> List[Path]:
         return self._selection.copy()
 
     @selection.setter
-    def selection(self, actors: list[Path]):
+    def selection(self, actors: List[Path]):
         paths = []
         for actor in actors:
             actor, path = self.get_actor_and_path(actor)
@@ -129,9 +130,9 @@ class LocalScene:
         self._actors[actor_path] = actor
 
     def can_delete_actor(self, actor: BaseActor | Path) -> Tuple[bool, str]:
-        actor, actor_path = self.get_actor_and_path(actor)
+        _, _actor_path = self.get_actor_and_path(actor)
 
-        if actor_path == actor_path.root_path():
+        if _actor_path == _actor_path.root_path():
             return False, "Cannot delete pseudo root actor."
 
         return True, ""

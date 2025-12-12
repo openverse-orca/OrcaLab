@@ -38,7 +38,6 @@ class RemoteScene(SceneEditNotification):
         self.in_query = False
         self.shutdown = False
 
-        self.actor_in_editing: Path | None = None
         self.current_transform: Transform | None = None
 
         self._grpc_lock = asyncio.Lock()
@@ -89,134 +88,38 @@ class RemoteScene(SceneEditNotification):
         sltc = "start_local_transform_change:"
         if op.startswith(sltc):
             actor_path = Path(op[len(sltc) :])
-
-            if self.actor_in_editing is not None:
-                raise Exception(
-                    f"Another actor is being edited: {self.actor_in_editing}"
-                )
-            SceneEditRequestBus().record_old_transform(actor_path)
-            self.actor_in_editing = actor_path
+            self._start_transform_change(actor_path, local=True)
 
         eltc = "end_local_transform_change:"
         if op.startswith(eltc):
             actor_path = Path(op[len(eltc) :])
-
-            if self.actor_in_editing != actor_path:
-                raise Exception(
-                    f"Actor in editing mismatch: {self.actor_in_editing} vs {actor_path}"
-                )
-
-            # Trigger an undoable transform change.
-            if isinstance(self.current_transform, Transform):
-                await SceneEditRequestBus().set_transform(
-                    actor_path,
-                    self.current_transform,
-                    local=True,
-                    undo=True,
-                    source="remote_scene",
-                )
-
-            # Transform on viewport will be updated by on_transform_changed.
-
-            self.actor_in_editing = None
-            self.current_transform = None
+            await self._end_transform_change(actor_path, local=True)
 
         swtc = "start_world_transform_change:"
         if op.startswith(swtc):
             actor_path = Path(op[len(swtc) :])
-
-            if self.actor_in_editing is not None:
-                raise Exception(
-                    f"Another actor is being edited: {self.actor_in_editing}"
-                )
-            SceneEditRequestBus().record_old_transform(actor_path)
-            self.actor_in_editing = actor_path
+            self._start_transform_change(actor_path, local=False)
 
         ewtc = "end_world_transform_change:"
         if op.startswith(ewtc):
             actor_path = Path(op[len(ewtc) :])
-
-            if self.actor_in_editing != actor_path:
-                raise Exception(
-                    f"Actor in editing mismatch: {self.actor_in_editing} vs {actor_path}"
-                )
-
-            # Trigger an undoable transform change.
-            if isinstance(self.current_transform, Transform):
-                await SceneEditRequestBus().set_transform(
-                    actor_path,
-                    self.current_transform,
-                    local=False,
-                    undo=True,
-                    source="remote_scene",
-                )
-
-            self.actor_in_editing = None
-            self.current_transform = None
+            await self._end_transform_change(actor_path, local=False)
 
         local_transform_change = "local_transform_change:"
         if op.startswith(local_transform_change):
             actor_path = Path(op[len(local_transform_change) :])
-
-            # Currently only support drag from viewport. So actor_in_editing must be set.
-            if self.actor_in_editing is None:
-                raise Exception(
-                    f"No actor is being edited, but got local transform change for {actor_path}"
-                )
-
-            if actor_path != self.actor_in_editing:
-                raise Exception(
-                    f"Actor in editing mismatch: {self.actor_in_editing} vs {actor_path}"
-                )
-
-            self.current_transform = await self.get_pending_actor_transform(
-                actor_path, local=True
-            )
-
-            await SceneEditRequestBus().set_transform(
-                actor_path,
-                self.current_transform,
-                local=True,
-                undo=False,
-                source="remote_scene",
-            )
-
-            # Transform on viewport will be updated by on_transform_changed.
+            await self._fetch_and_set_transform(actor_path, local=True)
 
         world_transform_change = "world_transform_change:"
         if op.startswith(world_transform_change):
             actor_path = Path(op[len(world_transform_change) :])
-
-            if self.actor_in_editing is None:
-                raise Exception(
-                    f"No actor is being edited, but got world transform change for {actor_path}"
-                )
-            if actor_path != self.actor_in_editing:
-                raise Exception(
-                    f"Actor in editing mismatch: {self.actor_in_editing} vs {actor_path}"
-                )
-            self.current_transform = await self.get_pending_actor_transform(
-                actor_path, local=False
-            )
-            await SceneEditRequestBus().set_transform(
-                actor_path,
-                self.current_transform,
-                local=False,
-                undo=False,
-                source="remote_scene",
-            )
-            # Transform on viewport will be updated by on_transform_changed.
+            await self._fetch_and_set_transform(actor_path, local=False)
 
         ad = "actor_delete:"
         if op.startswith(ad):
             actor_path = Path(op[len(ad) :])
-
-            if self.actor_in_editing is not None:
-                raise Exception(
-                    f"Another actor is being edited: {self.actor_in_editing}"
-                )
             await SceneEditRequestBus().delete_actor(
-                actor_path, undo=True, source="actor_outline"
+                actor_path, undo=True, source="remote"
             )
 
         selection_change = "selection_change"
@@ -276,6 +179,38 @@ class RemoteScene(SceneEditNotification):
             result.append(op)
 
         return result
+
+    def _start_transform_change(self, actor_path: Path, local: bool):
+        SceneEditRequestBus().start_change_transform(actor_path)
+
+    async def _end_transform_change(self, actor_path: Path, local: bool):
+        assert isinstance(self.current_transform, Transform)
+        await SceneEditRequestBus().set_transform(
+            actor_path,
+            self.current_transform,
+            local=local,
+            undo=True,
+            source="remote_scene",
+        )
+
+        SceneEditRequestBus().end_change_transform(actor_path)
+
+        self.current_transform = None
+
+    async def _fetch_and_set_transform(self, actor_path: Path, local: bool):
+        self.current_transform = await self.get_pending_actor_transform(
+            actor_path, local=True
+        )
+
+        await SceneEditRequestBus().set_transform(
+            actor_path,
+            self.current_transform,
+            local=True,
+            undo=False,
+            source="remote_scene",
+        )
+
+        # Transform on viewport will be updated by on_transform_changed.
 
     @override
     async def on_transform_changed(
@@ -379,8 +314,7 @@ class RemoteScene(SceneEditNotification):
             return await self._service.query_pending_operation_loop()
 
     async def get_pending_actor_transform(self, path: Path, local: bool) -> Transform:
-        async with self._grpc_lock:
-            return await self._service.get_pending_actor_transform(path, local)
+        return await self._service.get_pending_actor_transform(path, local)
 
     async def add_actor(self, actor: BaseActor, parent_path: Path):
         async with self._grpc_lock:

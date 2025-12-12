@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any, List, Tuple
 
 from orcalab.actor import BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyKey
@@ -23,28 +23,6 @@ class SceneEditRequest:
         """
         pass
 
-    async def set_transform(
-        self,
-        actor: BaseActor | Path,
-        transform: Transform,
-        local: bool,
-        undo: bool = True,
-        source: str = "",
-    ) -> None:
-        """Set the transform of an actor.
-
-        Args:
-            actor (BaseActor | Path): The actor or path of the actor to set the transform for.
-            transform (Transform): The new transform to set.
-            local (bool): Whether the transform is in local space. If False, the transform is in world space.
-            undo (bool): Whether this action should be undoable.
-            source (str): The source of the transform change. Useful for avoiding feedback loops.
-        """
-        pass
-
-    def record_old_transform(self, actor: BaseActor | Path):
-        pass
-
     async def add_actor(
         self,
         actor: BaseActor,
@@ -52,6 +30,9 @@ class SceneEditRequest:
         undo: bool = True,
         source: str = "",
     ):
+        pass
+
+    def can_delete_actor(self, out: List[bool], actor: BaseActor | Path):
         pass
 
     async def delete_actor(
@@ -110,6 +91,25 @@ class SceneEditRequest:
         pass
 
     def end_change_property(self, property_key: ActorPropertyKey):
+        pass
+
+    def start_change_transform(self, actor: BaseActor | Path):
+        pass
+
+    def end_change_transform(self, actor: BaseActor | Path):
+        pass
+
+    async def set_transform(
+        self,
+        actor: BaseActor | Path,
+        transform: Transform,
+        local: bool,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+        pass
+
+    def get_editing_actor_path(self, out: List[Path]):
         pass
 
 
