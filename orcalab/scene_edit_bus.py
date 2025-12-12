@@ -210,7 +210,7 @@ class SceneEditNotification:
     async def get_camera_png(self, camera_name: str, png_path: str, png_name: str):
         pass
 
-    async def get_actor_asset_aabb(self, actor_path: Path, output: List[float] = None):
+    async def get_actor_asset_aabb(self, actor_path: Path, output: List[float]):
         pass
 
 
