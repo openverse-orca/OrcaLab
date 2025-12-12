@@ -294,7 +294,7 @@ class RemoteScene(SceneEditNotification):
         if source == "remote_scene":
             return
 
-        asyncio.create_task(self.set_selection(new_selection))
+        await self.set_selection(new_selection)
 
     @override
     async def on_actor_added(
@@ -410,7 +410,7 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             await self._service.clear_scene()
 
-    async def get_pending_selection_change(self) -> list[str]:
+    async def get_pending_selection_change(self) -> List[str]:
         async with self._grpc_lock:
             return await self._service.get_pending_selection_change()
 
@@ -418,15 +418,9 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             return await self._service.get_pending_add_item()
 
-    async def set_selection(self, actor_paths: list[Path]):
-        paths = []
-        for p in actor_paths:
-            if not isinstance(p, Path):
-                raise Exception(f"Invalid path: {p}")
-            paths.append(p.string())
-
+    async def set_selection(self, actor_paths: List[Path]):
         async with self._grpc_lock:
-            await self._service.set_selection(paths)
+            await self._service.set_selection(actor_paths)
 
     async def get_actor_assets(self) -> List[str]:
         async with self._grpc_lock:

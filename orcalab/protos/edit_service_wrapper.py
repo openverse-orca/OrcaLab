@@ -152,7 +152,7 @@ class EditServiceWrapper:
         response = await self.stub.ClearScene(request)
         self._check_response(response)
 
-    async def get_pending_selection_change(self) -> list[str]:
+    async def get_pending_selection_change(self) -> List[str]:
         request = edit_service_pb2.GetPendingSelectionChangeRequest()
         response = await self.stub.GetPendingSelectionChange(request)
         self._check_response(response)
@@ -165,7 +165,7 @@ class EditServiceWrapper:
         transform = self._get_transform_from_message(response.transform)
         return (transform, response.actor_name)
 
-    async def set_selection(self, actor_paths: list[Path]):
+    async def set_selection(self, actor_paths: List[Path]):
         paths = []
         for p in actor_paths:
             if not isinstance(p, Path):
