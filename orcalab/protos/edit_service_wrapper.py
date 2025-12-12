@@ -128,7 +128,7 @@ class EditServiceWrapper:
             space=space,
         )
 
-        response = await self.stub.SetActorTransform(request, timeout=self.timeout)
+        response = await self.stub.SetActorTransform(request)
         self._check_response(response)
 
     async def publish_scene(self):
