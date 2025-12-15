@@ -1,6 +1,8 @@
-
 from copy import deepcopy
+from typing import Any
 from orcalab.actor import BaseActor, GroupActor
+from orcalab.actor_property import ActorPropertyKey
+from orcalab.math import Transform
 from orcalab.path import Path
 
 
@@ -13,7 +15,7 @@ from orcalab.path import Path
 class BaseCommand:
     def __init__(self):
         raise NotImplementedError
-    
+
 
 class CommandGroup(BaseCommand):
     def __init__(self):
@@ -21,6 +23,7 @@ class CommandGroup(BaseCommand):
 
     def __repr__(self):
         return f"CommandGroup(commands={self.commands})"
+
 
 class SelectionCommand(BaseCommand):
     def __init__(self):
@@ -32,28 +35,28 @@ class SelectionCommand(BaseCommand):
 
 
 class CreateGroupCommand(BaseCommand):
-    def __init__(self):
-        self.path: Path = None
+    def __init__(self, path: Path):
+        self.path = path
 
     def __repr__(self):
         return f"CreateGroupCommand(path={self.path})"
 
 
 class CreateActorCommand(BaseCommand):
-    def __init__(self):
-        self.actor = None
-        self.path: Path = None
-        self.row = -1
+    def __init__(self, actor: BaseActor, path: Path, row: int):
+        self.actor = actor
+        self.path = path
+        self.row = row
 
     def __repr__(self):
         return f"CreteActorCommand(path={self.path})"
 
 
 class DeleteActorCommand(BaseCommand):
-    def __init__(self):
-        self.actor: BaseActor = None
-        self.path: Path = None
-        self.row = -1
+    def __init__(self, actor: BaseActor, path: Path, row: int):
+        self.actor = actor
+        self.path = path
+        self.row = row
 
     def __repr__(self):
         return f"DeleteActorCommand(path={self.path})"
@@ -61,8 +64,8 @@ class DeleteActorCommand(BaseCommand):
 
 class RenameActorCommand(BaseCommand):
     def __init__(self):
-        self.old_path: Path = None
-        self.new_path: Path = None
+        self.old_path: Path = Path()
+        self.new_path: Path = Path()
 
     def __repr__(self):
         return f"RenameActorCommand(old_path={self.old_path}, new_path={self.new_path})"
@@ -70,9 +73,9 @@ class RenameActorCommand(BaseCommand):
 
 class ReparentActorCommand(BaseCommand):
     def __init__(self):
-        self.old_path = None
+        self.old_path = Path()
         self.old_row = -1
-        self.new_path = None
+        self.new_path = Path()
         self.new_row = -1
 
     def __repr__(self):
@@ -81,10 +84,20 @@ class ReparentActorCommand(BaseCommand):
 
 class TransformCommand(BaseCommand):
     def __init__(self):
-        self.actor_path = None
-        self.old_transform = None
-        self.new_transform = None
-        self.local = None
+        self.actor_path: Path = Path()
+        self.old_transform = Transform()
+        self.new_transform = Transform()
+        self.local = True
 
     def __repr__(self):
         return f"TransformCommand(actor_path={self.actor_path})"
+
+
+class PropertyChangeCommand(BaseCommand):
+    def __init__(self, property_key: ActorPropertyKey, old_value: Any, new_value: Any):
+        self.property_key = property_key
+        self.old_value = old_value
+        self.new_value = new_value
+
+    def __repr__(self):
+        return f"PropertyChangeCommand(property_key={self.property_key})"

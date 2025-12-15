@@ -1,6 +1,7 @@
-from typing import Tuple
-from pyparsing import Dict
-from orcalab.actor import BaseActor, GroupActor
+from typing import List, Tuple, Dict
+
+from orcalab.actor import AssetActor, BaseActor, GroupActor
+from orcalab.actor_property import ActorProperty, ActorPropertyGroup, ActorPropertyKey
 from orcalab.path import Path
 
 
@@ -10,7 +11,7 @@ class LocalScene:
         self.root_actor = GroupActor(name="root", parent=None)
         self._actors: Dict[Path, BaseActor] = {}
         self._actors[Path.root_path()] = self.root_actor
-        self._selection: list[Path] = []
+        self._selection: List[Path] = []
 
     def __contains__(self, path: Path) -> bool:
         return path in self._actors
@@ -25,11 +26,11 @@ class LocalScene:
         return self.root_actor
 
     @property
-    def selection(self) -> list[Path]:
+    def selection(self) -> List[Path]:
         return self._selection.copy()
 
     @selection.setter
-    def selection(self, actors: list[Path]):
+    def selection(self, actors: List[Path]):
         paths = []
         for actor in actors:
             actor, path = self.get_actor_and_path(actor)
@@ -53,15 +54,17 @@ class LocalScene:
             if actor_path is None:
                 raise Exception("Invalid actor.")
 
+            return actor, actor_path
+
         elif isinstance(actor, Path):
             actor_path = actor
-            actor = self.find_actor_by_path(actor)
-            if actor is None:
+            _actor = self.find_actor_by_path(actor)
+            if _actor is None:
                 raise Exception("Actor does not exist.")
+
+            return _actor, actor_path
         else:
             raise Exception("Invalid actor.")
-
-        return actor, actor_path
 
     def get_actor_and_path_list(
         self, actors: list[BaseActor | Path]
@@ -118,7 +121,7 @@ class LocalScene:
             raise Exception(err)
 
         parent_actor, parent_path = self.get_actor_and_path(parent_path)
-        parent_actor: GroupActor = parent_actor  # for type hinting
+        assert isinstance(parent_actor, GroupActor)
 
         # TODO: add group actor.
 
@@ -127,9 +130,9 @@ class LocalScene:
         self._actors[actor_path] = actor
 
     def can_delete_actor(self, actor: BaseActor | Path) -> Tuple[bool, str]:
-        actor, actor_path = self.get_actor_and_path(actor)
+        _, _actor_path = self.get_actor_and_path(actor)
 
-        if actor_path == actor_path.root_path():
+        if _actor_path == _actor_path.root_path():
             return False, "Cannot delete pseudo root actor."
 
         return True, ""
@@ -168,7 +171,7 @@ class LocalScene:
 
         return True, ""
 
-    def rename_actor(self, actor: BaseActor | Path, new_name) -> bool:
+    def rename_actor(self, actor: BaseActor | Path, new_name):
         ok, err = self.can_rename_actor(actor, new_name)
         if not ok:
             raise Exception(err)
@@ -212,12 +215,30 @@ class LocalScene:
             raise Exception(err)
 
         actor, actor_path = self.get_actor_and_path(actor)
-        new_parent, new_parent_path = self.get_actor_and_path(new_parent)
-        new_parent: GroupActor = new_parent  # for type hinting
+        _new_parent, _new_parent_path = self.get_actor_and_path(new_parent)
+        assert isinstance(_new_parent, GroupActor)
 
         actor.parent = None
-        new_parent.insert_child(insert_index, actor)
+        _new_parent.insert_child(insert_index, actor)
 
-        new_actor_path = new_parent_path / actor.name
+        new_actor_path = _new_parent_path / actor.name
 
         self._replace_path(actor_path, new_actor_path)
+
+    def parse_property_key(
+        self, property_key: ActorPropertyKey
+    ) -> Tuple[BaseActor, ActorPropertyGroup, ActorProperty]:
+        actor = self.find_actor_by_path(property_key.actor_path)
+
+        if actor is None:
+            raise Exception("Actor does not exist.")
+
+        assert isinstance(actor, AssetActor), "Only asset actor has properties."
+
+        for group in actor.property_groups:
+            if group.prefix == property_key.group_prefix:
+                for prop in group.properties:
+                    if prop.name() == property_key.property_name:
+                        return actor, group, prop
+
+        raise Exception("Property not found.")

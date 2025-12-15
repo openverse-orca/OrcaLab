@@ -1,3 +1,9 @@
+
+# Patch PySide6 first. Before any other PySide6 imports.
+from orcalab.patch_pyside6 import patch_pyside6
+
+patch_pyside6()
+
 import argparse
 import asyncio
 import sys
@@ -10,6 +16,8 @@ from orcalab.asset_sync_ui import run_asset_sync_ui
 from orcalab.url_service.url_util import register_protocol
 from orcalab.ui.main_window import MainWindow
 from orcalab.logging_util import setup_logging, resolve_log_level
+from orcalab.default_layout import prepare_default_layout
+from orcalab.process_guard import ensure_single_instance
 
 import os
 
@@ -88,7 +96,7 @@ def main():
     """Main entry point for the orcalab application"""
     args = parse_cli_args()
 
-    console_level = None
+    console_level = logging.INFO
     if getattr(args, "log_level", None):
         try:
             console_level = resolve_log_level(args.log_level)
@@ -111,6 +119,8 @@ def main():
     project_root = os.path.dirname(current_dir)  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root)
 
+    q_app = QtWidgets.QApplication(sys.argv)
+
     # Ensure the external Python project (orcalab-pyside) is present and installed
     try:
         ensure_python_project_installed(config_service)
@@ -132,24 +142,46 @@ def main():
     if pak_urls:
         logger.info("正在同步pak_urls列表...")
         sync_pak_urls(pak_urls)
-    
-    # 创建 Qt 应用（需要在创建窗口之前）
-    q_app = QtWidgets.QApplication(sys.argv)
+
+    # 确保不会同时运行多个 OrcaLab 实例
+    ensure_single_instance()
     
     # 同步订阅的资产包（带UI）
     run_asset_sync_ui(config_service)
+
+    from orcalab.level_discovery import discover_levels_from_cache
+
+    discovered_levels = discover_levels_from_cache()
+    if discovered_levels:
+        config_service.merge_levels(discovered_levels)
 
     # 场景选择
     from orcalab.ui.scene_select_dialog import SceneSelectDialog
     levels = config_service.levels() if hasattr(config_service, 'levels') else []
     current = config_service.level() if hasattr(config_service, 'level') else None
     if levels:
-        selected, ok = SceneSelectDialog.get_level(levels, current)
+        initial_layout_mode = config_service.layout_mode()
+        selected, layout_mode, ok = SceneSelectDialog.get_level(
+            levels, current, layout_mode=initial_layout_mode
+        )
         if ok and selected:
-            config_service.config["orcalab"]["level"] = selected
-            logger.info("用户选择了场景: %s", selected)
+            layout_mode = layout_mode if layout_mode in {"default", "blank"} else "default"
+            config_service.set_layout_mode(layout_mode)
+
+            default_layout_file = None
+            if layout_mode == "default":
+                default_layout_file = prepare_default_layout(selected)
+                if default_layout_file:
+                    logger.info("已生成默认布局: %s", default_layout_file)
+                else:
+                    logger.warning("生成默认布局失败，将使用空白布局。")
+            config_service.set_default_layout_file(default_layout_file)
+
+            config_service.set_current_level(selected)
+            logger.info("用户选择了场景: %s", selected.get("name"))
         else:
-            logger.info("用户未选择场景，使用默认值")
+            logger.info("用户未选择场景，退出程序")
+            exit(0)
 
     event_loop = QEventLoop(q_app)
     asyncio.set_event_loop(event_loop)

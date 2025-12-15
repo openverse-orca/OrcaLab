@@ -1,119 +1,51 @@
-# 这是模块的默认配置文件，包含所有默认配置项
-# 个人相关的配置可以写在 orca.config.user.toml 中（参考 orca.config.user.toml.example ），orca.config.user.toml文件不要提交到Git中
-# 运行时用户配置会覆盖默认配置
 [orcalab]
-
-version = "25.11.2"
-
-# 场景编辑服务的端口。
+version = "25.12.3"
 edit_port = 50151
-
-# 仿真服务的端口。
 sim_port = 50051
-
-# [个人配置] 启动时是否初始化pak包。如果为true，会删除目标目录下的所有文件，并以指定的源pak为准。
-# 如果为false，启动时什么也不做。默认值为true。
 init_paks = true
-
-# [个人配置] 启动关卡，在启动OrcaLab前需要选择一个启动关卡，如果切换启动关卡需要重启OrcaLab
-# 默认包带两个关卡，orcalab_day和orcalab_night，对于已订阅的关卡，在启动过程中从服务器获取关卡列表，并显示在UI中
-# 对于开发人员：在 orca.config.user.toml 中可以添加额外的调试关卡
-levels = [
-    "orcalab_day",
-    "orcalab_night",
-    "previewthumbnail_orcalab",
-]
-
+levels = [ "orcalab_day", "orcalab_night", "previewthumbnail_orcalab",]
 level = "orcalab_day"
-
-# [个人配置] 锁帧
 lock_fps = 60
-
-# [个人配置] 用到的pak包的绝对路径。默认为空，程序会去OSS下载对应的文件。
-# 对于开发人员：可以在 orca.config.user.toml 中覆盖这个配置，此时系统会跳过OSS下载，使用这个路径下的文件。启动时脚本会把它们放到正确的位置。
-paks = [
-    # "/xxx/engine_linux.pak",
-    # "/xxx/test_level_linux.pak",
-]
-
-# [系统配置] 当前版本配套的默认pak包的下载地址。
-pak_urls = [
-    "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/orcalab_linux.25.11.1.pak",
-]
-
-# [个人配置] Python项目的根目录。这个用于配置 orcalab-pyside 包
-# 对于开发人员：通过在 orca.config.user.toml 中配置这个路径，可以跳过OSS下载，使用本地Python项目。
+paks = []
+pak_urls = [ "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/orcalab_linux.25.12.3.pak",]
 python_project_path = ""
+python_project_url = "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/python-project.25.12.3.tar.xz"
 
-# [系统配置] Python项目的下载地址。
-python_project_url = "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/python-project.25.11.1.1.tar.xz"
-
-
-[orcalab.dev]
-
-# 是否在开发环境。[orcalab.dev]中的配置只在开发环境中起作用。
-development = false
-
-# 是否连接Builder。
-connect_builder_hub = false
-
-# 测试项目目录
-project_path = ""
-
-
-# Copilot 服务器配置
 [copilot]
-# 服务器地址
 server_url = "http://103.237.28.246:9023"
-# 请求超时时间（秒）
 timeout = 180
 
-# DataLink 资产同步配置
 [datalink]
-# 后端API地址（根据实际环境修改）
-# 本地开发环境使用 HTTP
-# base_url = "http://localhost:8080/api"
-# 生产环境使用 HTTPS
 base_url = "https://simassets.orca3d.cn/api"
-
-
-# 资产库服务器地址
-# 生产环境使用 HTTPS
 web_server_url = "https://simassets.orca3d.cn/"
-# 本地开发环境使用 HTTP
-# web_server_url = "http://127.0.0.1:34511"
-
-# 认证服务器地址（统一使用生产环境认证服务器）
 auth_server_url = "https://datalink.orca3d.cn:8081"
-
-# 是否启用资产同步
 enable_sync = true
-# 请求超时时间（秒）
 timeout = 60
 
-# 仿真程序配置
 [external_programs]
-# 默认程序配置
 default = "run_sim_loop"
-
-# 仿真程序列表
 [[external_programs.programs]]
 name = "run_sim_loop"
 display_name = "Empty Loop Simulation"
 command = "python"
-args = ["-m", "orca_gym.scripts.run_sim_loop",]
+args = [ "-m", "orca_gym.scripts.run_sim_loop",]
 description = "启动物理仿真循环"
 
 [[external_programs.programs]]
 name = "run_wheeled_chassis"
 display_name = "Wheeled Chassis Example"
 command = "python"
-args = ["-m", "examples.wheeled_chassis.run_wheeled_chassis", "--orcagym_addr", "localhost:50051", "--agent_name", "openloong_gripper_2f85_mobile_base_usda_1", "--env_name", "WheeledChassis"]
+args = [ "-m", "examples.wheeled_chassis.run_wheeled_chassis", "--orcagym_addr", "localhost:50051", "--agent_name", "openloong_gripper_2f85_mobile_base_usda_1", "--env_name", "WheeledChassis",]
 description = "启动轮式底盘物理仿真示例"
 
 [[external_programs.programs]]
 name = "run_character"
 display_name = "Character Example"
 command = "python"
-args = ["-m", "examples.character.run_character", "--orcagym_addr", "localhost:50051", "--agent_name", "remy_1", "--env_name", "Character"]
+args = [ "-m", "examples.character.run_character", "--orcagym_addr", "localhost:50051", "--agent_name", "remy_1", "--env_name", "Character",]
 description = "启动角色动画物理仿真示例"
+
+[orcalab.dev]
+development = false
+connect_builder_hub = false
+project_path = ""

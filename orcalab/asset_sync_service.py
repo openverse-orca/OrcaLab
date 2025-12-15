@@ -9,6 +9,7 @@ OrcaLab 资产同步服务
 """
 
 import json
+from numpy import int64
 import requests
 import pathlib
 from typing import List, Dict, Optional, Callable
@@ -43,7 +44,7 @@ class AssetSyncCallbacks:
         """开始下载"""
         pass
     
-    def on_download_progress(self, asset_id: str, progress: int, speed: float):
+    def on_download_progress(self, asset_id: str, progress: int64, speed: float):
         """
         下载进度
         progress: 0-100
@@ -57,6 +58,15 @@ class AssetSyncCallbacks:
     
     def on_delete(self, file_name: str):
         """删除文件"""
+        pass
+    
+    def on_metadata_sync(self, status: str, count: int = 0, total: int = 0):
+        """
+        元数据同步状态
+        status: 'start' (开始), 'progress' (进度), 'complete' (完成)
+        count: 当前已处理数量
+        total: 总数量
+        """
         pass
     
     def on_complete(self, success: bool, message: str = ""):
@@ -240,6 +250,8 @@ class AssetSyncService:
                 json.dump({}, f)
         with open(metadata_path, 'r') as f:
             metadata = json.load(f)
+        
+        # 清理已删除的元数据
         for to_delete_pak in to_delete:
             pak_id = to_delete_pak.removesuffix('.pak')
             if pak_id in metadata.keys():
@@ -257,7 +269,11 @@ class AssetSyncService:
         to_update_metadata_json = {}
         for package_id in to_update_metadata:
             to_update_metadata_json[package_id] = {}
+        
         if len(to_update_metadata) > 0:
+            # 开始同步元数据
+            self.callbacks.on_metadata_sync('start', 0, len(to_update_metadata))
+            
             response = requests.get(f"{self.base_url}/meta/?isPublished=true", headers=self.get_headers(), timeout=self.timeout)
             if response.status_code != 200:
                 self.log(f"❌ 获取metadata失败: HTTP {response.status_code}")
@@ -271,6 +287,7 @@ class AssetSyncService:
             remote_metadata_unpublished = response.json()
             remote_metadata = remote_metadata_published + remote_metadata_unpublished
 
+            updated_count = 0
             for sub_metadata in remote_metadata:
                 if sub_metadata['id'] in to_update_metadata:
                     for key, value in sub_metadata.items():
@@ -278,16 +295,25 @@ class AssetSyncService:
                             metadata[sub_metadata['id']] = {}
                             metadata[sub_metadata['id']]['children'] = []
                         metadata[sub_metadata['id']][key] = value
+                    updated_count += 1
+                    # 更新进度
+                    self.callbacks.on_metadata_sync('progress', updated_count, len(to_update_metadata))
+                    
                 if 'parentPackageId' in sub_metadata and sub_metadata['parentPackageId'] in to_update_metadata:
                     if sub_metadata['parentPackageId'] not in metadata.keys():
                         metadata[sub_metadata['parentPackageId']] = {}
                         metadata[sub_metadata['parentPackageId']]['children'] = []
                     metadata[sub_metadata['parentPackageId']]['children'].append(sub_metadata)
+                    
                     asset_id = sub_metadata['id']
                     image_url = self.get_image_url(asset_id)
                     if image_url is not None:
                         image_url = json.loads(image_url)
                         sub_metadata['pictures'] = image_url['pictures']
+            
+            # 完成同步
+            self.callbacks.on_metadata_sync('complete', updated_count, len(to_update_metadata))
+            
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, ensure_ascii=False, indent=2)
 
@@ -307,7 +333,7 @@ class AssetSyncService:
                 self.callbacks.on_download_complete(package_id, False, f"HTTP {response.status_code}")
                 return False
             
-            total_size = int(response.headers.get('content-length', 0))
+            total_size = int64(response.headers.get('content-length', 0))
             downloaded_size = 0
             start_time = time.time()
             last_update_time = start_time
@@ -321,7 +347,7 @@ class AssetSyncService:
                         # 更新进度（每0.1秒更新一次）
                         current_time = time.time()
                         if total_size > 0 and current_time - last_update_time >= 0.1:
-                            progress = int((downloaded_size / total_size) * 100)
+                            progress = int64((downloaded_size / total_size) * 100)
                             elapsed = current_time - start_time
                             speed = (downloaded_size / (1024 * 1024)) / elapsed if elapsed > 0 else 0
                             self.callbacks.on_download_progress(package_id, progress, speed)

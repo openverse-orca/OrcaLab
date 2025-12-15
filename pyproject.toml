@@ -1,39 +1,22 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = [ "setuptools>=42", "wheel",]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "orca-lab"
-version = "25.11.2"
+version = "25.12.3"
 description = "OrcaLab - Cloud-native robotics simulation platform with advanced UI and asset management"
 readme = "README.md"
 requires-python = ">=3.12"
-license = {text = "MIT"}
-authors = [
-    {name = "松应科技", email = "huangwei@orca3d.cn"}
-]
-keywords = ["robotics", "simulation", "ui", "asset-management", "orca", "pyside"]
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Software Development :: User Interfaces",
-]
+keywords = [ "robotics", "simulation", "ui", "asset-management", "orca", "pyside",]
+classifiers = [ "Development Status :: 4 - Beta", "Intended Audience :: Science/Research", "License :: OSI Approved :: MIT License", "Programming Language :: Python :: 3", "Programming Language :: Python :: 3.12", "Topic :: Scientific/Engineering :: Artificial Intelligence", "Topic :: Software Development :: User Interfaces",]
+dependencies = [ "orca-gym==25.12.3", "pyside6==6.9.2", "aiohttp==3.13.1", "qasync==0.28.0", "psutil==7.1.2", "requests==2.32.5", "pillow==12.0.0", "pyparsing==3.2.5", "matplotlib==3.10.7",]
+[[project.authors]]
+name = "松应科技"
+email = "huangwei@orca3d.cn"
 
-dependencies = [
-    "orca-gym==25.11.1",
-    "pyside6==6.9.2",
-    "aiohttp==3.13.1",
-    "qasync==0.28.0",
-    "psutil==7.1.2",
-    "requests==2.32.5",
-    "pillow==12.0.0",
-    "pyparsing==3.2.5",
-    "matplotlib==3.10.7"
-]
+[project.license]
+text = "MIT"
 
 [project.urls]
 Homepage = "https://github.com/openverse-orca/OrcaLab"
@@ -45,23 +28,15 @@ Repository = "https://github.com/openverse-orca/OrcaLab"
 orcalab = "orcalab.main:main"
 orcalab-post-install = "orcalab.python_project_installer:cli"
 
-# 可选依赖，可用于开发调试、测试、格式化代码等用途
 [project.optional-dependencies]
-dev = [
-    "pytest",     # 单元测试工具
-    "pytest-cov", # 测试覆盖率工具
-    "flake8",     # 代码风格检查工具
-    "black",      # 代码格式化工具
-    "mypy",       # 静态类型检查工具
-]
+dev = [ "pytest", "pytest-cov", "flake8", "black", "mypy",]
 
 [tool.setuptools]
 license-files = []
 
-[tool.setuptools.packages.find]
-# Only include orcalab package, exclude examples, test, doc
-include = ["orcalab*"]
-exclude = ["test*", "examples*", "doc*", "scripts*"]
-
 [tool.setuptools.package-data]
-orcalab = ["*.proto", "*.qrc", "*.toml", "assets/*", "assets/icons/*"]
+orcalab = [ "*.proto", "*.qrc", "*.toml", "assets/*", "assets/icons/*",]
+
+[tool.setuptools.packages.find]
+include = [ "orcalab*",]
+exclude = [ "test*", "examples*", "doc*", "scripts*",]

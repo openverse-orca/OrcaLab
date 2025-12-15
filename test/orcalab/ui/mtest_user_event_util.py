@@ -11,21 +11,33 @@ class TestWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
 
-    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
-        if event.isAutoRepeat():
-            return
+    # def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+    #     if event.isAutoRepeat():
+    #         return
 
-        qt_key = QtCore.Qt.Key(event.key())
+    #     qt_key = QtCore.Qt.Key(event.key())
 
-        try:
-            our_key = convert_key_code(event)
-            print(f"Key Pressed: {qt_key.name} => {our_key}")
-        except ValueError:
-            print(f"Unsupported key: {qt_key.name}")
-            return
+    #     try:
+    #         our_key = convert_key_code(event)
+    #         print(f"Key Pressed: {qt_key.name} => {our_key}")
+    #     except ValueError:
+    #         print(f"Unsupported key: {qt_key.name}")
+    #         return
 
     def mousePressEvent(self, event):
         return super().mousePressEvent(event)
+
+    def event(self, event: QtCore.QEvent) -> bool:
+        if isinstance(event, QtGui.QKeyEvent):
+            if event.isAutoRepeat():
+                return super().event(event)
+            
+            if event.type() == QtCore.QEvent.Type.ShortcutOverride:
+                return super().event(event)
+            print(f"Key Event: {event.type().name} {QtCore.Qt.Key(event.key()).name}")
+        else:
+            print(f"Event: {event.type().name}")
+        return super().event(event)
 
 
 async def main(q_app: QtWidgets.QApplication):

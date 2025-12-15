@@ -103,6 +103,7 @@ class ConfigService:
         self.config["orca_project_folder"] = str(get_project_dir())
 
         self.root_folder = root_folder
+        self.discovered_levels = []
         
         # 智能查找配置文件路径
         self.config_path = self._find_config_file("orca.config.toml", root_folder)
@@ -128,7 +129,33 @@ class ConfigService:
         self.config = deep_merge(self.config, shared_config)
         self.config = deep_merge(self.config, user_config)
 
+        self._normalize_levels()
+
         logger.debug("加载的配置: %s", self.config)
+    
+    def _normalize_levels(self):
+        """确保 levels 配置为包含 name/path 的列表，并移除重复项"""
+        orcalab_cfg = self.config.setdefault("orcalab", {})
+        levels = orcalab_cfg.get("levels", [])
+
+        normalized_levels = []
+        for item in levels:
+            level_data = self._normalize_level_item(item)
+            if level_data:
+                normalized_levels.append(level_data)
+
+        orcalab_cfg["levels"] = self._deduplicate_levels(normalized_levels)
+
+    def _deduplicate_levels(self, levels):
+        seen_paths = set()
+        deduped = []
+        for item in levels:
+            path = item["path"]
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+            deduped.append(item)
+        return deduped
 
     def edit_port(self) -> int:
         return self.config["orcalab"]["edit_port"]
@@ -169,10 +196,69 @@ class ConfigService:
         return self.config["orcalab"].get("pak_urls", [])
     
     def level(self) -> str:
-        return self.config["orcalab"].get("level", "Default_level")
+        level_value = self.config["orcalab"].get("level")
+        if isinstance(level_value, dict):
+            return level_value.get("path") or level_value.get("name") or "Default_level"
+        return level_value or "Default_level"
     
     def levels(self) -> list:
         return self.config["orcalab"].get("levels", [])
+
+    def merge_levels(self, additional_levels: list):
+        """合并额外场景，避免重复"""
+        if not additional_levels:
+            return
+
+        normalized = []
+        for item in additional_levels:
+            level_data = self._normalize_level_item(item)
+            if level_data:
+                normalized.append(level_data)
+
+        if not normalized:
+            return
+
+        merged = self._deduplicate_levels(normalized + self.levels())
+        self.config["orcalab"]["levels"] = merged
+
+    def set_current_level(self, level_info: dict):
+        level_data = self._normalize_level_item(level_info)
+        if not level_data:
+            return
+
+        # 确保场景在列表中
+        self.merge_levels([level_data])
+
+        self.config.setdefault("orcalab", {})["level"] = level_data
+    
+    def _normalize_level_item(self, item):
+        if isinstance(item, str):
+            name = self._to_spawnable_path(item)
+            return {"name": name, "path": name}
+
+        if isinstance(item, dict):
+            path = item.get("path") or item.get("name")
+            path = self._to_spawnable_path(path)
+            if not path:
+                logger.warning("忽略无效的场景配置: %s", item)
+                return None
+            name = item.get("name") or path
+            normalized = {"name": name, "path": path}
+            for key, value in item.items():
+                if key not in {"name", "path"}:
+                    normalized[key] = value
+            return normalized
+
+        logger.warning("无法识别的场景配置类型: %s", item)
+        return None
+
+    @staticmethod
+    def _to_spawnable_path(path):
+        if not path:
+            return None
+        if path.lower().endswith(".prefab"):
+            return path[:-7] + ".spawnable"
+        return path
     
     def orca_project_folder(self) -> str:
         return self.config["orca_project_folder"]
@@ -252,4 +338,30 @@ class ConfigService:
     
     def web_server_url(self) -> str:
         """获取资产库服务器地址（用于认证后跳转）"""
-        return self.config.get("web_server_url", "https://simassets.orca3d.cn/")
+        return self.config.get("datalink", {}).get("web_server_url", "https://simassets.orca3d.cn/")
+
+    def layout_mode(self) -> str:
+        return self.config.setdefault("orcalab", {}).get("layout_mode", "default")
+
+    def set_layout_mode(self, mode: str):
+        self.config.setdefault("orcalab", {})["layout_mode"] = mode
+
+    def default_layout_file(self) -> str | None:
+        path = self.config.setdefault("orcalab", {}).get("default_layout_file")
+        if not path:
+            return None
+        return path
+
+    def set_default_layout_file(self, path: str | None):
+        if path:
+            self.config.setdefault("orcalab", {})["default_layout_file"] = path
+        else:
+            self.config.setdefault("orcalab", {}).pop("default_layout_file", None)
+
+    def current_level_info(self) -> dict | None:
+        level_value = self.config["orcalab"].get("level")
+        if isinstance(level_value, dict):
+            return level_value
+        if isinstance(level_value, str):
+            return {"name": level_value, "path": level_value}
+        return None

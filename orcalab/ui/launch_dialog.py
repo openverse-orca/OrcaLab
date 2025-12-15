@@ -22,6 +22,10 @@ class LaunchDialog(QtWidgets.QDialog):
         
         # 设置样式
         self.setStyleSheet("""
+            QWidget {
+                background-color: #181818;
+                color: #ffffff;
+            }
             QDialog {
                 background-color: #2b2b2b;
                 color: #ffffff;
@@ -45,7 +49,6 @@ class LaunchDialog(QtWidgets.QDialog):
                 background-color: #0078d4;
             }
             QRadioButton::indicator:checked::after {
-                content: '';
                 width: 8px;
                 height: 8px;
                 border-radius: 4px;

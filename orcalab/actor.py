@@ -1,5 +1,6 @@
 from typing import List, override
 
+from orcalab.actor_property import ActorPropertyGroup
 from orcalab.path import Path
 from orcalab.math import Transform
 
@@ -128,9 +129,10 @@ class GroupActor(BaseActor):
 
 
 class AssetActor(BaseActor):
-    def __init__(self, name: str, asset_path: str, parent: GroupActor = None):
+    def __init__(self, name: str, asset_path: str, parent: GroupActor | None = None):
         super().__init__(name, parent)
         self._asset_path = asset_path
+        self.property_groups: List[ActorPropertyGroup] = []
 
     def __repr__(self):
         return f"AssetActor(name={self.name})"

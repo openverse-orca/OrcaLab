@@ -1,6 +1,3 @@
-import os
-import tomllib
-
 from PySide6 import QtCore, QtWidgets, QtGui
 from typing import Dict
 
@@ -25,6 +22,7 @@ class ThemeService:
         self.set_color("bg", "#181818")
         self.set_color("bg_hover", "#444444")
         self.set_color("text", "#FFFFFF")
+        self.set_color("text_disable", "#888888")
         self.set_color("split_line", "#2b2b2b")
         self.set_color("button_bg", "#181818")
         self.set_color("button_bg_hover", "#444444")
@@ -35,6 +33,11 @@ class ThemeService:
         self.set_color("panel_icon", "#C2C2C2")
 
         self.set_color("brand", "#F02C6D")
+
+        self.set_color("property_group_bg", "#676767")
+        self.set_color("property_edit_bg", "#8F8E8E")
+        self.set_color("property_edit_bg_hover", "#9D9D9D")
+        self.set_color("property_edit_bg_editing", "#181818")
 
     def set_color(self, name: str, color: str):
         self._colors[name] = QtGui.QColor(color)

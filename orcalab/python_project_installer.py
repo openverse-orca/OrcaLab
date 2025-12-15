@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 import logging
 
+from PySide6 import QtWidgets
 import requests
 import importlib.metadata
 
@@ -160,10 +161,20 @@ def _download_archive(url: str, target_file: Path) -> None:
     target_file.parent.mkdir(parents=True, exist_ok=True)
     with requests.get(url, stream=True, timeout=60) as r:
         r.raise_for_status()
+        total_size = int(r.headers.get('content-length', 0))
+        downloaded = 0
+        
         with open(target_file, "wb") as f:
             for chunk in r.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
+                    downloaded += len(chunk)
+                    if total_size > 0:
+                        percent = (downloaded / total_size) * 100
+                        print(f"\r下载进度: {downloaded / 1024 / 1024:.1f}MB / {total_size / 1024 / 1024:.1f}MB ({percent:.1f}%)", end='', flush=True)
+                    else:
+                        print(f"\r已下载: {downloaded / 1024 / 1024:.1f}MB", end='', flush=True)
+        print()  # 换行
 
 
 def _extract_tar_xz(archive_path: Path, dest_dir: Path) -> None:
@@ -277,13 +288,7 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
     state_update["installed_at"] = str(Path.cwd())  # 记录安装时的环境
     _save_install_state(state_update)
 
-    logger.info("orcalab-pyside installation completed successfully")
-    logger.info("=" * 80)
-    logger.info("🔄 包更新完成，程序自动退出")
-    logger.info("=" * 80)
-    logger.info("✅ orcalab_pyside 包已更新到最新版本")
-    logger.info("   请重新运行 'orcalab' 命令以使用更新后的包")
-    logger.info("=" * 80)
+    QtWidgets.QMessageBox.information(None, "安装完成", "orcalab初始化完成, 请重新运行orcalab")
     
     # 包更新后直接退出程序
     import sys

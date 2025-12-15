@@ -1,8 +1,12 @@
 #!/bin/bash
 # Build distribution packages
-# Usage: ./scripts/release/build.sh
+# Usage: 
+#   ./scripts/release/build.sh       - Build production package only
+#   ./scripts/release/build.sh test  - Build both production and TestPyPI packages
 
 set -e
+
+BUILD_MODE="${1:-prod}"
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
@@ -21,38 +25,61 @@ fi
 echo "Building with Python: $(which python)"
 python -m build
 
-echo ""
-echo "📦 Building TestPyPI package (orca-lab)..."
+if [ "$BUILD_MODE" = "test" ]; then
+    echo ""
+    echo "📦 Building TestPyPI package (orca-lab)..."
 
-# Prepare temp workspace for test package build
-TEST_OUTDIR="$PROJECT_ROOT/dist-test"
-TMP_DIR=$(mktemp -d -t orcalab-testbuild-XXXX)
+    # Prepare temp workspace for test package build
+    TEST_OUTDIR="$PROJECT_ROOT/dist-test"
+    TMP_DIR=$(mktemp -d -t orcalab-testbuild-XXXX)
 
-# Copy source excluding build artifacts and VCS files
-rsync -a \
-    --exclude '.git' \
-    --exclude '.gitignore' \
-    --exclude 'dist' \
-    --exclude 'dist-test' \
-    --exclude 'build' \
-    --exclude '*.egg-info' \
-    "$PROJECT_ROOT/" "$TMP_DIR/"
+    # Copy source excluding build artifacts and VCS files
+    rsync -a \
+        --exclude '.git' \
+        --exclude '.gitignore' \
+        --exclude 'dist' \
+        --exclude 'dist-test' \
+        --exclude 'build' \
+        --exclude '*.egg-info' \
+        --exclude '.idea' \
+        --exclude '.vscode' \
+        --exclude '.history' \
+        "$PROJECT_ROOT/" "$TMP_DIR/"
 
-# Keep the same package name (orca-lab) for TestPyPI build
-# This allows for complete installation testing with the same package name
+    # Keep the same package name (orca-lab) for TestPyPI build
+    # This allows for complete installation testing with the same package name
 
-# Build the test package with same name
-mkdir -p "$TEST_OUTDIR"
-(cd "$TMP_DIR" && python -m build --outdir "$TEST_OUTDIR")
+    # Replace production URLs with test URLs in config file
+    CONFIG_FILE="$TMP_DIR/orcalab/orca.config.toml"
+    if [ -f "$CONFIG_FILE" ]; then
+        echo "Replacing URLs for TestPyPI environment..."
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            sed -i '' 's|https://simassets.orca3d.cn/api|http://47.100.47.219/api|g' "$CONFIG_FILE"
+            sed -i '' 's|https://simassets.orca3d.cn/|http://47.100.47.219/|g' "$CONFIG_FILE"
+        else
+            # Linux
+            sed -i 's|https://simassets.orca3d.cn/api|http://47.100.47.219/api|g' "$CONFIG_FILE"
+            sed -i 's|https://simassets.orca3d.cn/|http://47.100.47.219/|g' "$CONFIG_FILE"
+        fi
+    fi
 
-# Cleanup temp directory
-rm -rf "$TMP_DIR"
+    # Build the test package with same name
+    mkdir -p "$TEST_OUTDIR"
+    (cd "$TMP_DIR" && python -m build --outdir "$TEST_OUTDIR")
+
+    # Cleanup temp directory
+    rm -rf "$TMP_DIR"
+fi
 
 echo ""
 echo "✅ Build completed!"
 echo ""
 echo "Generated files (dist/):"
 ls -lh dist/ || true
-echo ""
-echo "Generated files for TestPyPI (dist-test/):"
-ls -lh "$TEST_OUTDIR" || true
+
+if [ "$BUILD_MODE" = "test" ]; then
+    echo ""
+    echo "Generated files for TestPyPI (dist-test/):"
+    ls -lh dist-test/ || true
+fi

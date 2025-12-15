@@ -65,12 +65,18 @@ class ThumbnailView(QtWidgets.QWidget):
         self._dragging = False
         
         self._movies: Dict[int, QtGui.QMovie] = {}
+        
+        self._loading_text: str | None = None
 
     def set_model(self, model: ThumbnailModel):
         self._model = model
         self._on_model_updated()
         self._model.data_updated.connect(self._on_model_updated)
         self._model.item_updated.connect(self._on_item_updated)
+    
+    def set_loading_text(self, text: str | None):
+        self._loading_text = text
+        self.update()
 
     def item_count(self) -> int:
         return self._model.size() if self._model else 0
@@ -96,6 +102,14 @@ class ThumbnailView(QtWidgets.QWidget):
         painter.setPen(self.text_color)
 
         self._draw_background(painter, self.rect())
+        
+        if self._loading_text:
+            font = painter.font()
+            font.setPointSize(14)
+            painter.setFont(font)
+            painter.setPen(QtGui.QColor(255, 255, 255))
+            painter.drawText(self.rect(), QtCore.Qt.AlignmentFlag.AlignCenter, self._loading_text)
+            return
 
         for item in self.visible_items:
             self._draw_cell(painter, item)
@@ -168,12 +182,12 @@ class ThumbnailView(QtWidgets.QWidget):
     # After dragging ends, make sure to call `_drag_ended`` to clean up.
 
     def _drag_started(self):
-        print("Drag started")
+        # print("Drag started")
 
         self._drag_ended()
 
     def _drag_ended(self):
-        print("Drag ended")
+        # print("Drag ended")
 
         self._dragging = False
         self._left_mouse_pressed_pos = None

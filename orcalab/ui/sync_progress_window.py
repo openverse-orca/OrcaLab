@@ -11,6 +11,8 @@ from PySide6 import QtWidgets, QtCore, QtGui
 from typing import Dict, List, Optional
 import time
 
+from numpy import int64
+
 
 class AssetItemWidget(QtWidgets.QWidget):
     """资产包条目组件"""
@@ -105,7 +107,7 @@ class AssetItemWidget(QtWidgets.QWidget):
             self.status_text.setText("下载失败")
             self.status_text.setStyleSheet("color: red;")
     
-    def set_progress(self, progress: int, speed: float = 0):
+    def set_progress(self, progress: int64, speed: float = 0):
         """
         设置下载进度
         
@@ -135,9 +137,9 @@ class SyncProgressWindow(QtWidgets.QDialog):
     sync_failed = QtCore.Signal(str)
     
     # 内部信号（线程安全）
-    _add_asset_signal = QtCore.Signal(str, str, str, int, str)  # id, name, file, size, status
+    _add_asset_signal = QtCore.Signal(str, str, str, int64, str)  # id, name, file, size, status
     _set_status_signal = QtCore.Signal(str, str)  # asset_id, status
-    _set_progress_signal = QtCore.Signal(str, int, float)  # asset_id, progress, speed
+    _set_progress_signal = QtCore.Signal(str, int64, float)  # asset_id, progress, speed
     _set_message_signal = QtCore.Signal(str)  # message
     _complete_signal = QtCore.Signal(bool, str)  # success, message
     _start_signal = QtCore.Signal()
@@ -229,11 +231,11 @@ class SyncProgressWindow(QtWidgets.QDialog):
         # 用户选择结果（用于区分退出还是离线启动）
         self.user_choice = None  # None: 未选择, 'exit': 退出, 'offline': 离线启动, 'close': 正常关闭
     
-    def add_asset(self, asset_id: str, asset_name: str, file_name: str, size: int, status: str):
+    def add_asset(self, asset_id: str, asset_name: str, file_name: str, size: int64, status: str):
         """线程安全：添加资产包到列表"""
         self._add_asset_signal.emit(asset_id, asset_name, file_name, size, status)
     
-    def _add_asset_impl(self, asset_id: str, asset_name: str, file_name: str, size: int, status: str):
+    def _add_asset_impl(self, asset_id: str, asset_name: str, file_name: str, size: int64, status: str):
         """内部实现：添加资产包"""
         widget = AssetItemWidget(asset_name, file_name, size, status)
         self.asset_widgets[asset_id] = widget
@@ -272,11 +274,11 @@ class SyncProgressWindow(QtWidgets.QDialog):
             self.asset_widgets[asset_id].set_status(status)
             self.update_stats()
     
-    def set_asset_progress(self, asset_id: str, progress: int, speed: float = 0):
+    def set_asset_progress(self, asset_id: str, progress: int64, speed: float = 0):
         """线程安全：设置资产包下载进度"""
         self._set_progress_signal.emit(asset_id, progress, speed)
     
-    def _set_progress_impl(self, asset_id: str, progress: int, speed: float):
+    def _set_progress_impl(self, asset_id: str, progress: int64, speed: float):
         """内部实现：设置资产包下载进度"""
         if asset_id in self.asset_widgets:
             self.asset_widgets[asset_id].set_progress(progress, speed)

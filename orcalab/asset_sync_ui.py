@@ -8,6 +8,7 @@ import threading
 from typing import Optional
 import logging
 from PySide6 import QtWidgets
+from numpy import int64
 
 from orcalab.asset_sync_service import sync_assets, AssetSyncCallbacks
 from orcalab.ui.sync_progress_window import SyncProgressWindow
@@ -37,7 +38,7 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
         self.window.set_asset_status(asset_id, 'downloading')
         self.window.set_status(f"正在下载: {asset_name}")
     
-    def on_download_progress(self, asset_id: str, progress: int, speed: float):
+    def on_download_progress(self, asset_id: str, progress: int64, speed: float):
         self.window.set_asset_progress(asset_id, progress, speed)
     
     def on_download_complete(self, asset_id: str, success: bool, error: str = ""):
@@ -48,6 +49,14 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
     
     def on_delete(self, file_name: str):
         pass
+    
+    def on_metadata_sync(self, status: str, count: int = 0, total: int = 0):
+        if status == 'start':
+            self.window.set_status(f"正在同步元数据... (0/{total})")
+        elif status == 'progress':
+            self.window.set_status(f"正在同步元数据... ({count}/{total})")
+        elif status == 'complete':
+            self.window.set_status(f"元数据同步完成 ({count}/{total})")
     
     def on_complete(self, success: bool, message: str = ""):
         self.window.complete_sync(success, message)

@@ -2,6 +2,7 @@ from copy import deepcopy
 from typing import override, List
 import logging
 from orcalab.actor import BaseActor, GroupActor, AssetActor
+from orcalab.application_util import get_local_scene
 from orcalab.path import Path
 
 from orcalab.undo_service.command import (
@@ -10,6 +11,7 @@ from orcalab.undo_service.command import (
     CreateActorCommand,
     CreateGroupCommand,
     DeleteActorCommand,
+    PropertyChangeCommand,
     RenameActorCommand,
     ReparentActorCommand,
     SelectionCommand,
@@ -17,7 +19,7 @@ from orcalab.undo_service.command import (
 )
 
 from orcalab.undo_service.undo_service_bus import UndoRequest, UndoRequestBus
-from orcalab.scene_edit_bus import SceneEditRequestBus, get_actor_and_path
+from orcalab.scene_edit_bus import SceneEditRequestBus
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +88,12 @@ class UndoService(UndoRequest):
 
         self._in_undo_redo = False
 
+    def _get_actor(self, actor_path: Path) -> BaseActor:
+        local_scene = get_local_scene()
+        actor = local_scene.find_actor_by_path(actor_path)
+        assert actor is not None
+        return actor
+
     async def _undo_command(self, command):
         match command:
             case CommandGroup():
@@ -104,12 +112,12 @@ class UndoService(UndoRequest):
                 parent_path = command.path.parent()
                 await self.undo_delete_recursive(actor, parent_path)
             case RenameActorCommand():
-                actor, _ = get_actor_and_path(command.new_path)
+                actor = self._get_actor(command.new_path)
                 await SceneEditRequestBus().rename_actor(
                     actor, command.old_path.name(), undo=False
                 )
             case ReparentActorCommand():
-                actor, _ = get_actor_and_path(command.new_path)
+                actor = self._get_actor(command.new_path)
                 old_parent_path = command.old_path.parent()
                 await SceneEditRequestBus().reparent_actor(
                     actor, old_parent_path, command.old_row, undo=False
@@ -117,6 +125,10 @@ class UndoService(UndoRequest):
             case TransformCommand():
                 await SceneEditRequestBus().set_transform(
                     command.actor_path, command.old_transform, command.local, undo=False
+                )
+            case PropertyChangeCommand():
+                await SceneEditRequestBus().set_property(
+                    command.property_key, command.old_value, undo=False
                 )
             case _:
                 raise Exception("Unknown command type.")
@@ -142,11 +154,11 @@ class UndoService(UndoRequest):
             case DeleteActorCommand():
                 await SceneEditRequestBus().delete_actor(command.path, undo=False)
             case RenameActorCommand():
-                actor, _ = get_actor_and_path(command.old_path)
+                actor = self._get_actor(command.old_path)
                 name = command.new_path.name()
                 await SceneEditRequestBus().rename_actor(actor, name, undo=False)
             case ReparentActorCommand():
-                actor, _ = get_actor_and_path(command.old_path)
+                actor = self._get_actor(command.old_path)
                 new_parent_path = command.new_path.parent()
                 await SceneEditRequestBus().reparent_actor(
                     actor, new_parent_path, command.new_row, undo=False
@@ -154,6 +166,10 @@ class UndoService(UndoRequest):
             case TransformCommand():
                 await SceneEditRequestBus().set_transform(
                     command.actor_path, command.new_transform, command.local, undo=False
+                )
+            case PropertyChangeCommand():
+                await SceneEditRequestBus().set_property(
+                    command.property_key, command.new_value, undo=False
                 )
             case _:
                 raise Exception("Unknown command type.")

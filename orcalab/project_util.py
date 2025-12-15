@@ -70,6 +70,20 @@ def get_user_log_folder() -> pathlib.Path:
     return get_user_folder() / "log"
 
 
+def get_user_scene_layout_folder() -> pathlib.Path:
+    """获取缓存的场景布局目录"""
+    folder = get_user_folder() / "scene_layouts"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def get_user_tmp_folder() -> pathlib.Path:
+    """获取用户临时目录"""
+    folder = get_user_folder() / "tmp"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
 def get_orcalab_cache_folder():
     """
     获取orcalab子目录的缓存文件夹路径
