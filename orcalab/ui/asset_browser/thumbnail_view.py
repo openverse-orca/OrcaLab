@@ -242,6 +242,7 @@ class ThumbnailView(QtWidgets.QWidget):
             self._scroll_bar.valueChanged.connect(self._on_scrollbar_value_changed)
         else:
             self._scroll_bar.setVisible(False)
+            self._scroll_bar.setValue(0)
 
     def _update_visible_items(self):
         self.visible_items.clear()

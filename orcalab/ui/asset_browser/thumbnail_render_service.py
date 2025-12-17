@@ -6,6 +6,8 @@ from scipy.spatial.transform import Rotation
 from orcalab.actor import AssetActor
 
 logger = logging.getLogger(__name__)
+from orcalab.http_service.http_bus import HttpServiceRequestBus
+from orcalab.metadata_service_bus import MetadataServiceRequestBus
 from orcalab.scene_edit_bus import SceneEditNotificationBus, SceneEditRequestBus
 from orcalab.ui.asset_browser.thumbnail_render_bus import ThumbnailRenderRequest, ThumbnailRenderRequestBus, ThumbnailRenderNotification, ThumbnailRenderNotificationBus
 from orcalab.application_bus import ApplicationRequestBus
@@ -46,14 +48,14 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
         actor_out = []
         await ApplicationRequestBus().add_item_to_scene(asset_path, output=actor_out)
         if not actor_out:
-            print(f"failed to add {asset_path} to scene")
+            logger.error(f"failed to add {asset_path} to scene")
             return
         actor = actor_out[0]
 
         aabb = []
         await SceneEditNotificationBus().get_actor_asset_aabb(Path(f"/{actor.name}"), output=aabb)
         if not aabb:
-            print(f"failed to get {asset_path} aabb")
+            logger.error(f"failed to get {asset_path} aabb")
             return 
         new_aabb, scale = self._get_actor_position_scale(aabb)
         await SceneEditRequestBus().set_transform(actor, Transform(position=np.array([0, 0, -aabb[2] * scale]), rotation=self.quat, scale=scale), local=True, undo=False, source="create_panorama_apng")
@@ -78,7 +80,6 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
                 png_512_path = os.path.join(dir_path, png_512_filename)
                 png_512_files.append(png_512_path)
             await SceneEditNotificationBus().get_camera_png("mujococamera256", dir_path, png_filename)
-            
             png_files.append(os.path.join(dir_path, png_filename))
 
         await asyncio.sleep(0.01)
@@ -131,9 +132,20 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
                         os.remove(png_file)
                     except OSError as e:
                         continue
-
         await SceneEditRequestBus().delete_actor(actor, undo=False, source="create_panorama_apng")
 
+        logger.info(f"uploading {asset_path} thumbnail to server")
+        asset_metadata = []
+        MetadataServiceRequestBus().get_asset_info(asset_path, output=asset_metadata)
+        if not asset_metadata or asset_metadata[0] is None:
+            logger.info(f"{asset_path} not in metadata")
+            return 
+        asset_info = asset_metadata[0]
+        if 'pictures' not in asset_info.keys() or len(asset_info['pictures']) <= 5:
+            png_1080_path = os.path.join(dir_path, f"{os.path.basename(tmp_path)}_1080.png")
+            files = [png_1080_path, apng_path] + png_512_files
+            await HttpServiceRequestBus().post_asset_thumbnail(asset_info['id'], files)
+            
     # 相机位置计算公式
     def _get_camera_position(self, aabb: list[float]) -> Transform:
         x = (aabb[0]+aabb[3])/2

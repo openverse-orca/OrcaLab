@@ -47,7 +47,7 @@ class MetadataService(MetadataServiceRequest):
     def _build_asset_map(self) -> AssetMap:
         for pak_metadata in self._metadata.values():
             for asset_metadata in pak_metadata['children']:
-                asset_path = asset_metadata['assetPath'].removesuffix('.spawnable')
+                asset_path = asset_metadata['assetPath'].removesuffix('.spawnable').lower()
                 self._asset_map[asset_path] = asset_metadata
 
     def _save_metadata(self) -> None:
