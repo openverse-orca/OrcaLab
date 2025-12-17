@@ -1,5 +1,5 @@
 [orcalab]
-version = "25.12.3"
+version = "25.12.3.3"
 edit_port = 50151
 sim_port = 50051
 init_paks = true
@@ -7,17 +7,17 @@ levels = [ "orcalab_day", "orcalab_night", "previewthumbnail_orcalab",]
 level = "orcalab_day"
 lock_fps = 60
 paks = []
-pak_urls = [ "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/orcalab_linux.25.12.3.pak",]
+pak_urls = [ "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/orcalab_linux.25.12.3.3.pak",]
 python_project_path = ""
-python_project_url = "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/python-project.25.12.3.tar.xz"
+python_project_url = "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/python-project.25.12.3.3.tar.xz"
 
 [copilot]
 server_url = "http://103.237.28.246:9023"
 timeout = 180
 
 [datalink]
-base_url = "https://simassets.orca3d.cn/api"
-web_server_url = "https://simassets.orca3d.cn/"
+base_url = "http://47.100.47.219/api"
+web_server_url = "http://47.100.47.219/"
 auth_server_url = "https://datalink.orca3d.cn:8081"
 enable_sync = true
 timeout = 60
