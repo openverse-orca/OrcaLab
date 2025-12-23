@@ -1,7 +1,7 @@
 import os
 import tomllib
 import sys
-from pathlib import Path
+import pathlib
 import importlib.metadata
 import logging
 
@@ -47,13 +47,13 @@ class ConfigService:
         config_path = os.path.join(root_folder, filename)
         if os.path.exists(config_path):
             return config_path
-        
+
         # 2. 在 orcalab 包目录中查找（模块默认配置）
         package_dir = os.path.dirname(__file__)
         config_path = os.path.join(package_dir, filename)
         if os.path.exists(config_path):
             return config_path
-        
+
         # 3. 如果都找不到，返回默认路径（用于错误提示）
         return os.path.join(root_folder, filename)
 
@@ -67,7 +67,10 @@ class ConfigService:
             # 如果包未安装，尝试从 pyproject.toml 读取
             try:
                 import tomllib
-                pyproject_path = os.path.join(os.path.dirname(__file__), "..", "pyproject.toml")
+
+                pyproject_path = os.path.join(
+                    os.path.dirname(__file__), "..", "pyproject.toml"
+                )
                 with open(pyproject_path, "rb") as f:
                     data = tomllib.load(f)
                     return data["project"]["version"]
@@ -81,33 +84,43 @@ class ConfigService:
         try:
             config_version = config_data.get("orcalab", {}).get("version", "")
             package_version = self._get_package_version()
-            
+
             if not config_version:
                 logger.warning("配置文件中未找到版本号")
                 return False
-                
+
             if config_version != package_version:
-                logger.error("配置文件版本不匹配! 配置文件版本: %s, 当前包版本: %s", config_version, package_version)
+                logger.error(
+                    "配置文件版本不匹配! 配置文件版本: %s, 当前包版本: %s",
+                    config_version,
+                    package_version,
+                )
                 logger.error("请更新配置文件或重新安装匹配版本的 orca-lab 包")
                 return False
-                
+
             logger.info("配置文件版本校验通过: %s", config_version)
             return True
-            
+
         except Exception as e:
             logger.exception("版本校验时发生错误: %s", e)
             return False
 
-    def init_config(self, root_folder: str):
+    def init_config(self, root_folder: pathlib.Path, workspace: pathlib.Path):
         self.config = {}
         self.config["orca_project_folder"] = str(get_project_dir())
 
+        self._workspace = workspace
+
         self.root_folder = root_folder
         self.discovered_levels = []
-        
+
         # 智能查找配置文件路径
-        self.config_path = self._find_config_file("orca.config.toml", root_folder)
-        self.user_config_path = self._find_config_file("orca.config.user.toml", root_folder)
+        self.config_path = self._find_config_file(
+            "orca.config.toml", root_folder.as_posix()
+        )
+        self.old_user_config_path = self._find_config_file(
+            "orca.config.user.toml", root_folder.as_posix()
+        )
 
         with open(self.config_path, "rb") as file:
             shared_config = tomllib.load(file)
@@ -117,22 +130,26 @@ class ConfigService:
             logger.error("版本校验失败，程序将退出")
             sys.exit(1)
 
+        # Deperacated
         # 加载用户配置（如果存在）
-        user_config = {}
-        if os.path.exists(self.user_config_path):
-            with open(self.user_config_path, "rb") as file:
-                user_config = tomllib.load(file)
-        else:
-            logger.warning("用户配置文件不存在: %s", self.user_config_path)
-            logger.info("将使用默认配置。如需自定义配置，请创建该文件或参考 orca.config.user.toml.example")
+        old_user_config = {}
+        if os.path.exists(self.old_user_config_path):
+            with open(self.old_user_config_path, "rb") as file:
+                old_user_config = tomllib.load(file)
+
+        workspace_config = {}
+        if os.path.exists(self.workspace_config_file()):
+            with open(self.workspace_config_file(), "rb") as file:
+                workspace_config = tomllib.load(file)
 
         self.config = deep_merge(self.config, shared_config)
-        self.config = deep_merge(self.config, user_config)
+        self.config = deep_merge(self.config, old_user_config)
+        self.config = deep_merge(self.config, workspace_config)
 
         self._normalize_levels()
 
         logger.debug("加载的配置: %s", self.config)
-    
+
     def _normalize_levels(self):
         """确保 levels 配置为包含 name/path 的列表，并移除重复项"""
         orcalab_cfg = self.config.setdefault("orcalab", {})
@@ -157,6 +174,15 @@ class ConfigService:
             deduped.append(item)
         return deduped
 
+    def workspace(self) -> pathlib.Path:
+        return self._workspace
+
+    def workspace_data_folder(self) -> pathlib.Path:
+        return self._workspace / ".orcalab"
+
+    def workspace_config_file(self) -> pathlib.Path:
+        return self.workspace_data_folder() / "config.toml"
+
     def edit_port(self) -> int:
         return self.config["orcalab"]["edit_port"]
 
@@ -174,33 +200,33 @@ class ConfigService:
     def is_development(self) -> bool:
         value = self.config["orcalab"]["dev"]["development"]
         return bool(value)
-    
+
     def connect_builder_hub(self) -> bool:
         if not self.is_development():
             return False
-        
+
         value = self.config["orcalab"]["dev"]["connect_builder_hub"]
         return bool(value)
-    
+
     def dev_project_path(self) -> str:
         if not self.is_development():
             return ""
-        
+
         value = self.config["orcalab"]["dev"]["project_path"]
         return str(value)
 
     def paks(self) -> list:
         return self.config["orcalab"].get("paks", [])
-    
+
     def pak_urls(self) -> list:
         return self.config["orcalab"].get("pak_urls", [])
-    
+
     def level(self) -> str:
         level_value = self.config["orcalab"].get("level")
         if isinstance(level_value, dict):
             return level_value.get("path") or level_value.get("name") or "Default_level"
         return level_value or "Default_level"
-    
+
     def levels(self) -> list:
         return self.config["orcalab"].get("levels", [])
 
@@ -230,7 +256,7 @@ class ConfigService:
         self.merge_levels([level_data])
 
         self.config.setdefault("orcalab", {})["level"] = level_data
-    
+
     def _normalize_level_item(self, item):
         if isinstance(item, str):
             name = self._to_spawnable_path(item)
@@ -259,10 +285,10 @@ class ConfigService:
         if path.lower().endswith(".prefab"):
             return path[:-7] + ".spawnable"
         return path
-    
+
     def orca_project_folder(self) -> str:
         return self.config["orca_project_folder"]
-    
+
     def init_paks(self) -> bool:
         return self.config["orcalab"].get("init_paks", True)
 
@@ -273,21 +299,23 @@ class ConfigService:
             return "--lockFps60"
         else:
             return ""
-    
+
     def copilot_server_url(self) -> str:
-        return self.config.get("copilot", {}).get("server_url", "http://103.237.28.246:9023")
-    
+        return self.config.get("copilot", {}).get(
+            "server_url", "http://103.237.28.246:9023"
+        )
+
     def copilot_timeout(self) -> int:
         return self.config.get("copilot", {}).get("timeout", 180)
-    
+
     def external_programs(self) -> list:
         """获取仿真程序配置列表"""
         return self.config.get("external_programs", {}).get("programs", [])
-    
+
     def default_external_program(self) -> str:
         """获取默认仿真程序名称"""
         return self.config.get("external_programs", {}).get("default", "sim_process")
-    
+
     def get_external_program_config(self, program_name: str) -> dict:
         """根据程序名称获取程序配置"""
         programs = self.external_programs()
@@ -295,50 +323,56 @@ class ConfigService:
             if program.get("name") == program_name:
                 return program
         return {}
-    
+
     def datalink_base_url(self) -> str:
         """获取 DataLink 后端 API 地址"""
-        return self.config.get("datalink", {}).get("base_url", "http://localhost:8080/api")
-    
+        return self.config.get("datalink", {}).get(
+            "base_url", "http://localhost:8080/api"
+        )
+
     def datalink_username(self) -> str:
         """获取 DataLink 用户名（优先从本地存储读取）"""
         from orcalab.token_storage import TokenStorage
-        
+
         # 优先从本地存储读取
         token_data = TokenStorage.load_token()
-        if token_data and token_data.get('username'):
-            return token_data['username']
-        
+        if token_data and token_data.get("username"):
+            return token_data["username"]
+
         # 否则从配置文件读取（兼容旧配置）
         return self.config.get("datalink", {}).get("username", "")
-    
+
     def datalink_token(self) -> str:
         """获取 DataLink 访问令牌（优先从本地存储读取）"""
         from orcalab.token_storage import TokenStorage
-        
+
         # 优先从本地存储读取
         token_data = TokenStorage.load_token()
-        if token_data and token_data.get('access_token'):
-            return token_data['access_token']
-        
+        if token_data and token_data.get("access_token"):
+            return token_data["access_token"]
+
         # 否则从配置文件读取（兼容旧配置）
         return self.config.get("datalink", {}).get("token", "")
-    
+
     def datalink_enable_sync(self) -> bool:
         """是否启用 DataLink 资产同步"""
         return self.config.get("datalink", {}).get("enable_sync", True)
-    
+
     def datalink_timeout(self) -> int:
         """获取 DataLink 请求超时时间"""
         return self.config.get("datalink", {}).get("timeout", 60)
-    
+
     def datalink_auth_server_url(self) -> str:
         """获取 DataLink 认证服务器地址"""
-        return self.config.get("datalink", {}).get("auth_server_url", "https://datalink.orca3d.cn:8081")
-    
+        return self.config.get("datalink", {}).get(
+            "auth_server_url", "https://datalink.orca3d.cn:8081"
+        )
+
     def web_server_url(self) -> str:
         """获取资产库服务器地址（用于认证后跳转）"""
-        return self.config.get("datalink", {}).get("web_server_url", "https://simassets.orca3d.cn/")
+        return self.config.get("datalink", {}).get(
+            "web_server_url", "https://simassets.orca3d.cn/"
+        )
 
     def layout_mode(self) -> str:
         return self.config.setdefault("orcalab", {}).get("layout_mode", "default")

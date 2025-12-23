@@ -224,3 +224,5 @@ MUJOCO_LOG.TXT
 
 color.mp4
 *.json
+
+.orcalab/

@@ -44,6 +44,27 @@ pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/si
 orcalab
 ```
 
+### 工作目录
+OrcaLab启动时可以指定工作目录。
+```bash
+orcalab ~/my_workspace
+```
+
+如果不指定，当前目录就是工作目录。一下两条命令效果是一样的。
+```bash
+orcalab
+orcalab .
+```
+
+OrcaLab会加载工作目录下`.orcalab/config.toml`中的配置。
+
+
+也可以使用OrcaLab在工作目录生成一份基本配置。
+```bash
+orcalab --init-config
+```
+
+
 ## 常见问题
 
 用户和开发者常见的问题及解决方案：

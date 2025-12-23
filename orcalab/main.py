@@ -1,5 +1,5 @@
-
 # Patch PySide6 first. Before any other PySide6 imports.
+import pathlib
 from orcalab.patch_pyside6 import patch_pyside6
 
 patch_pyside6()
@@ -36,10 +36,9 @@ logger = logging.getLogger(__name__)
 def parse_cli_args():
     parser = argparse.ArgumentParser(
         prog="orcalab",
-        description=(
-            "OrcaLab 启动器\n\n"
-        ),
+        description=("OrcaLab 启动器\n\n"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False
     )
     parser.add_argument(
         "-l",
@@ -47,6 +46,14 @@ def parse_cli_args():
         dest="log_level",
         metavar="LEVEL",
         help="控制台日志等级（支持 DEBUG/INFO/WARNING/ERROR/CRITICAL），默认输出 WARNING 及以上，日志文件会记录 INFO 及以上的全部日志。",
+    )
+
+    parser.add_argument(
+        "workspace", nargs="?", default=".", help="工作目录，默认为当前目录"
+    )
+
+    parser.add_argument(
+        "--init-config", action="store_true", help="初始化配置文件并退出"
     )
 
     args, remaining = parser.parse_known_args()
@@ -106,18 +113,33 @@ def main():
 
     setup_logging(console_level=console_level)
 
+    workspace = pathlib.Path(args.workspace).resolve()
+    logger.info("工作目录: %s", workspace)
+
+    config_service = ConfigService()
+    # 配置文件在项目根目录，需要向上查找
+    current_dir = pathlib.Path(__file__).parent.resolve()
+    project_root = current_dir.parent  # 从 orcalab/ 目录回到项目根目录
+    config_service.init_config(project_root, workspace)
+
+    if args.init_config:
+        import shutil
+
+        this_dir = pathlib.Path(__file__).parent.resolve()
+        template_config = this_dir / "orca.config.template.toml"
+        if not template_config.exists():
+            logger.error("找不到模板配置文件: %s", template_config)
+            sys.exit(1)
+        config_service.workspace_data_folder().mkdir(parents=True, exist_ok=True)
+        shutil.copy(template_config, config_service.workspace_config_file())
+        exit(0)
+
     check_project_folder()
 
     register_protocol()
 
     # Register signal handlers for graceful shutdown
     register_signal_handlers()
-
-    config_service = ConfigService()
-    # 配置文件在项目根目录，需要向上查找
-    current_dir = os.path.dirname(__file__)
-    project_root = os.path.dirname(current_dir)  # 从 orcalab/ 目录回到项目根目录
-    config_service.init_config(project_root)
 
     q_app = QtWidgets.QApplication(sys.argv)
 
@@ -136,7 +158,7 @@ def main():
             # 如果paks有内容，则复制本地文件
             logger.info("使用本地pak文件...")
             copy_packages(paks)
-    
+
     # 处理pak_urls（独立于paks和订阅列表，下载到orcalab子目录）
     pak_urls = config_service.pak_urls()
     if pak_urls:
@@ -157,15 +179,18 @@ def main():
 
     # 场景选择
     from orcalab.ui.scene_select_dialog import SceneSelectDialog
-    levels = config_service.levels() if hasattr(config_service, 'levels') else []
-    current = config_service.level() if hasattr(config_service, 'level') else None
+
+    levels = config_service.levels() if hasattr(config_service, "levels") else []
+    current = config_service.level() if hasattr(config_service, "level") else None
     if levels:
         initial_layout_mode = config_service.layout_mode()
         selected, layout_mode, ok = SceneSelectDialog.get_level(
             levels, current, layout_mode=initial_layout_mode
         )
         if ok and selected:
-            layout_mode = layout_mode if layout_mode in {"default", "blank"} else "default"
+            layout_mode = (
+                layout_mode if layout_mode in {"default", "blank"} else "default"
+            )
             config_service.set_layout_mode(layout_mode)
 
             default_layout_file = None
