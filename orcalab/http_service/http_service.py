@@ -160,7 +160,7 @@ class HttpService(HttpServiceRequest):
         
         try:
             headers = self._get_headers(include_content_type=False)
-            response = requests.post(post_asset_thumbnail_url, files=files, headers=headers, timeout=30)
+            response = requests.post(post_asset_thumbnail_url, files=files, headers=headers)
             if response.status_code in [200, 201, 204]:
                 logger.info("Upload thumbnail success: %s, files: %s", response.status_code, thumbnail_path)
             else:
@@ -171,18 +171,15 @@ class HttpService(HttpServiceRequest):
     @require_online
     @override
     async def get_asset_thumbnail2cache(self, asset_url: str, asset_save_path: str) -> None:
-        future = self._executor.submit(self._get_asset_thumbnail2cache, asset_url, asset_save_path)
-        future.result()
-
-    def _get_asset_thumbnail2cache(self, asset_url: str, asset_save_path: str) -> None:
-        response = requests.get(asset_url, timeout=30)
-        if response.status_code != 200:
-            return None
-        data = response.content
-        if not os.path.exists(os.path.dirname(asset_save_path)):
-            os.makedirs(os.path.dirname(asset_save_path), exist_ok=True)
-        with open(asset_save_path, 'wb') as f:
-            f.write(data)   
+        async with aiohttp.ClientSession() as session:
+            async with session.get(asset_url) as response:
+                if response.status != 200:
+                    return None
+                data = await response.read()
+                if not os.path.exists(os.path.dirname(asset_save_path)):
+                    os.makedirs(os.path.dirname(asset_save_path), exist_ok=True)
+                with open(asset_save_path, 'wb') as f:
+                    f.write(data) 
 
     @require_online
     @override
