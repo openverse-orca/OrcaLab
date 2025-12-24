@@ -103,6 +103,8 @@ class CameraSelector(QtWidgets.QListView, CameraNotification):
                 )
                 self._block = False
                 return
+            
+        self.selectionModel().clearSelection()
 
         self._block = False
 

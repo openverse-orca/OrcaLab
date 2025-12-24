@@ -18,8 +18,6 @@ recursive-include orcalab/assets *.jpeg
 recursive-include orcalab *.toml
 recursive-include orcalab *.yaml
 recursive-include orcalab *.yml
-# Exclude example files (for developers only, not needed in pip packages)
-recursive-exclude orcalab *.example
 
 # Include type hints
 recursive-include orcalab *.pyi

@@ -309,7 +309,10 @@ class EditServiceWrapper:
     async def get_active_camera(self) -> int:
         request = edit_service_pb2.GetActiveCameraRequest()
         response = await self.stub.GetActiveCamera(request)
-        self._check_response(response)
+        
+        if response.status_code != Success:
+            return -1
+
         return response.index
 
     async def set_active_camera(self, camera_index: int) -> None:

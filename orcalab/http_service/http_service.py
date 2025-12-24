@@ -5,10 +5,13 @@ from typing import List, Dict, Optional, Callable, Any, override
 from orcalab.token_storage import TokenStorage
 from orcalab.project_util import get_cache_folder
 from orcalab.config_service import ConfigService
+from concurrent.futures import ThreadPoolExecutor
 import aiohttp
 import asyncio
 import functools
 import json
+import requests
+
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,8 @@ class HttpService(HttpServiceRequest):
             self.username = None
         self.cache_folder = get_cache_folder()
         self.base_url = ConfigService().datalink_base_url()
+        self._executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="http_service")
+        self._upload_futures = []
 
     @require_online
     @override
@@ -123,40 +128,45 @@ class HttpService(HttpServiceRequest):
 
     @require_online
     @override
-    async def post_asset_thumbnail(self, asset_id: str, thumbnail_path: List[str]) -> bool:
+    async def post_asset_thumbnail(self, asset_id: str, thumbnail_path: List[str]) -> None:
+        future = self._executor.submit(self._post_asset_thumbnail, asset_id, thumbnail_path)
+        self._upload_futures.append(future)
+
+    def wait_for_upload_finished(self) -> None:
+        for future in self._upload_futures:
+            future.result()
+        self._upload_futures.clear()
+
+    def _post_asset_thumbnail(self, asset_id: str, thumbnail_path: List[str]) -> None:
         post_asset_thumbnail_url = f"{self.base_url}/assets/{asset_id}/render/"
         
-        async with aiohttp.ClientSession() as session:
-            data = aiohttp.FormData()
-            
-            for file_path in thumbnail_path:
-                try:
-                    with open(file_path, 'rb') as f:
-                        filename = file_path.split('/')[-1]
-                        content_type = self._get_image_content_type(file_path)
-                        file_content = f.read()
-
-                        data.add_field('files',
-                                      file_content,
-                                      filename=filename,
-                                      content_type=content_type)
-                except FileNotFoundError:
+        files = []
+        for file_path in thumbnail_path:
+            try:
+                if not os.path.exists(file_path):
                     logger.error("Thumbnail file not found: %s", file_path)
-                    return False
-                except Exception as e:
-                    logger.exception("Error reading thumbnail file %s: %s", file_path, e)
-                    return False
-            
-            # 不包含Content-Type，让aiohttp自动设置multipart/form-data
+                    continue
+                filename = os.path.basename(file_path)
+                content_type = self._get_image_content_type(file_path)
+                with open(file_path, 'rb') as f:
+                    files.append(('files', (filename, f.read(), content_type)))
+            except Exception as e:
+                logger.exception("Error reading thumbnail file %s: %s", file_path, e)
+                continue
+        
+        if not files:
+            logger.error("No valid thumbnail files to upload for asset %s", asset_id)
+            return
+        
+        try:
             headers = self._get_headers(include_content_type=False)
-            async with session.post(post_asset_thumbnail_url, 
-                                   data=data, 
-                                   headers=headers) as response:
-                if response.status in [200, 201, 204]:
-                    logger.info("Upload thumbnail success: %s, files: %s", response.status, thumbnail_path)
-                    return True
-                logger.error("Upload thumbnail failed: %s, files: %s", response.status, thumbnail_path)
-                return False
+            response = requests.post(post_asset_thumbnail_url, files=files, headers=headers)
+            if response.status_code in [200, 201, 204]:
+                logger.info("Upload thumbnail success: %s, files: %s", response.status_code, thumbnail_path)
+            else:
+                logger.error("Upload thumbnail failed: %s, files: %s", response.status_code, thumbnail_path)
+        except Exception as e:
+            logger.exception("Error uploading thumbnail for asset %s: %s", asset_id, e)
 
     @require_online
     @override
@@ -169,7 +179,7 @@ class HttpService(HttpServiceRequest):
                 if not os.path.exists(os.path.dirname(asset_save_path)):
                     os.makedirs(os.path.dirname(asset_save_path), exist_ok=True)
                 with open(asset_save_path, 'wb') as f:
-                    f.write(data)
+                    f.write(data) 
 
     @require_online
     @override

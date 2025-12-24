@@ -134,6 +134,9 @@ class SimulationService(SimulationRequest):
     async def _on_no_external_program_async(self):
         """无外部程序处理（异步版本）"""
 
+        await self._set_simulation_state(SimulationState.Launching)
+
+
         await self.remote_scene.change_sim_state(True)
         await self.remote_scene.publish_scene()
         await asyncio.sleep(0.1)

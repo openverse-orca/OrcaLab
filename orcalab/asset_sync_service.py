@@ -258,14 +258,21 @@ class AssetSyncService:
                 del metadata[pak_id]
         
         to_update_metadata = set()
-        for package in packages:
-            package_id = package['id']
+        package_ids = [package['id'] for package in packages]
+        for package_id in package_ids:
             if package_id not in metadata.keys():
                 to_update_metadata.add(package_id)
 
         for to_missing_pak in to_missing:
             to_update_metadata.add(to_missing_pak['id'])
+            if to_missing_pak['id'] in metadata.keys():
+                del metadata[to_missing_pak['id']]
         
+        keys = list(metadata.keys())
+        for key in keys:
+            if key not in package_ids and key not in to_update_metadata:
+                del metadata[key]
+
         to_update_metadata_json = {}
         for package_id in to_update_metadata:
             to_update_metadata_json[package_id] = {}

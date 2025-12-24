@@ -1,0 +1,22 @@
+
+# OrcaGym启动配置
+[external_programs]
+
+# 默认启动程序，可选值见下方programs列表
+default = "run_sim_loop"
+
+# 可选启动程序列表
+[[external_programs.programs]]
+name = "run_sim_loop"
+display_name = "Empty Loop Simulation"
+command = "python"
+args = [ "-m", "orca_gym.scripts.run_sim_loop",]
+description = "启动物理仿真循环"
+
+
+# [[external_programs.programs]]
+# name = "another_program"
+# display_name = "Another Program"
+# command = "python"
+# args = [ "-m", "orca_gym.scripts.run_sim_loop",]
+# description = "启动物理仿真循环"

@@ -395,28 +395,8 @@ class AssetBrowser(QtWidgets.QWidget):
             return
         self.create_panorama_apng_button.setText("加载中...")
         self.create_panorama_apng_button.setDisabled(True)
-        tmp_path = os.path.join(os.path.expanduser("~"), ".orcalab", "tmp")
-        
-        # 并行上传缩略图
-        upload_tasks = []
-        for asset_path in asset_paths:
-            asset_metadata = asset_map.get(asset_path, None)
-            if asset_metadata:
-                if ('pictures' not in asset_metadata.keys() 
-                    or len(asset_metadata['pictures']) <= 5):
-                    # apng和512_png共6张
-                    apng_path = os.path.join(tmp_path, f"{asset_path}_panorama.apng").__str__()
-                    png_path = os.path.join(tmp_path, f"{asset_path}_1080.png").__str__()
-                    files = [apng_path, png_path]
-                    for rotation_z in range(0, 360, 72):
-                        png_512_path = os.path.join(tmp_path, f"{asset_path}_{rotation_z}_512.png").__str__()
-                        if os.path.exists(png_512_path):
-                            files.append(png_512_path)
+        self._http_service.wait_for_upload_finished()
 
-                    upload_tasks.append(self._http_service.post_asset_thumbnail(asset_metadata['id'], files))
-        
-        if upload_tasks:
-            await asyncio.gather(*upload_tasks, return_exceptions=True)
         self.on_upload_thumbnail_finished.emit()
 
     async def _on_upload_thumbnail_finished(self):
