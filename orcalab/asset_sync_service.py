@@ -9,12 +9,16 @@ OrcaLab 资产同步服务
 """
 
 import json
+import sys
 from numpy import int64
 import requests
 import pathlib
-from typing import List, Dict, Optional, Callable
+from typing import List, Dict, Optional, Callable, Tuple
 import time
 import logging
+
+from orcalab.config_service import ConfigService
+from orcalab.exception import TokenExpiredException
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +140,7 @@ class AssetSyncService:
             'Content-Type': 'application/json'
         }
     
-    def query_subscribed_packages(self) -> Optional[List[Dict]]:
+    def query_subscribed_packages(self, app_version: str) -> Tuple[List[Dict], List[Dict]]:
         """
         查询用户订阅的资产包列表
         
@@ -145,32 +149,40 @@ class AssetSyncService:
         """
         self.callbacks.on_query_start()
         self.log("查询订阅列表...")
+
+        if sys.platform == "win32":
+            platform = "pc"
+        else:
+            platform = "linux"
+
+        params = f"?version={app_version}&platform={platform}"
         
         try:
-            url = f"{self.base_url}/orcalab/subscribed_packages/"
+            url = f"{self.base_url}/orcalab/subscribed_packages/{params}"
             response = requests.get(url, headers=self.get_headers(), timeout=self.timeout)
             
             if response.status_code == 401:
                 self.log("❌ 认证失败（Token 可能已过期）")
-                return 'TOKEN_EXPIRED'  # 特殊标记
+                raise TokenExpiredException("Token 已过期")
             
             if response.status_code != 200:
                 self.log(f"❌ 查询失败: HTTP {response.status_code}")
-                return None
+                return [],[]
             
             data = response.json()
             packages = data.get('packages', [])
+            incompatible_packages = data.get('incompatiblePackages', [])
             
             self.callbacks.on_query_complete(packages)
-            self.log(f"✓ 查询成功: {len(packages)} 个资产包")
+            self.log(f"✓ 查询成功: {len(packages) + len(incompatible_packages)} 个资产包")
             
-            return packages
+            return packages, incompatible_packages
             
         except Exception as e:
             self.log(f"❌ 查询失败: {e}")
-            return None
+            return [],[]
     
-    def check_local_packages(self, packages: List[Dict]) -> tuple[List[Dict], List[str]]:
+    def check_local_packages(self, packages: List[Dict], incompatible_packages: List[Dict]) -> tuple[List[Dict], List[str]]:
         """
         检查本地资产包
         
@@ -199,6 +211,13 @@ class AssetSyncService:
                 self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
                 missing_packages.append(pkg)
                 self.log(f"⬇ {file_name} 需要下载")
+
+        for pkg in incompatible_packages:
+            file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
+            pkg_id = pkg['id']
+            pkg_name = pkg['name']
+            self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, 0, 'incompatible')
+            self.log(f"⬇ {file_name} 没有与当前版本兼容的资产")
         
         # 检查需要删除的文件
         subscribed_file_names = set()
@@ -401,18 +420,18 @@ class AssetSyncService:
             同步是否成功，如果返回 'TOKEN_EXPIRED' 表示 token 过期
         """
         self.callbacks.on_start()
+
+        # 根据版本号获取对应的资产ID
+        config_service = ConfigService()
+        app_version = config_service.app_version()
         
         # 1. 查询订阅列表
-        packages = self.query_subscribed_packages()
-        
-        if packages == 'TOKEN_EXPIRED':
+
+        try:
+            packages, incompatible_packages = self.query_subscribed_packages("25.12.5")
+        except TokenExpiredException:
             self.log("⚠️  Token 已过期，保留现有资产包，以离线模式启动")
             self.callbacks.on_complete(False, "Token 已过期")
-            return 'TOKEN_EXPIRED'
-        
-        if packages is None:
-            self.log("⚠️  查询订阅列表失败，保留现有资产包，以离线模式启动")
-            self.callbacks.on_complete(False, "查询订阅列表失败")
             return False
         
         # 收集订阅列表中的文件名
@@ -437,13 +456,8 @@ class AssetSyncService:
                 clear_cache_packages()
                 self.log("已清除所有pak文件（没有任何需要保留的包）")
         
-        if not packages:
-            self.log("没有订阅的资产包")
-            self.callbacks.on_complete(True, "没有订阅的资产包")
-            return True
-        
         # 2. 检查本地文件
-        missing_packages, to_delete = self.check_local_packages(packages)
+        missing_packages, to_delete = self.check_local_packages(packages, incompatible_packages)
         
         # 3. 下载缺失的资产包
         success_count = 0

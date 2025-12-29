@@ -122,13 +122,22 @@ class ConfigService:
             "orca.config.user.toml", root_folder.as_posix()
         )
 
+        if sys.platform == "win32":
+            platform_config_name = "orca.config.platform_windows.toml"
+        else:
+            platform_config_name = "orca.config.platform_linux.toml"
+
+        self.platform_config_path = self._find_config_file(
+            platform_config_name, root_folder.as_posix()
+        )
+
         with open(self.config_path, "rb") as file:
             shared_config = tomllib.load(file)
 
-        # 进行版本校验
-        if not self._validate_config_version(shared_config):
-            logger.error("版本校验失败，程序将退出")
-            sys.exit(1)
+        platform_config = {}
+        if os.path.exists(self.platform_config_path):
+            with open(self.platform_config_path, "rb") as file:
+                platform_config = tomllib.load(file)
 
         # Deperacated
         # 加载用户配置（如果存在）
@@ -143,12 +152,18 @@ class ConfigService:
                 workspace_config = tomllib.load(file)
 
         self.config = deep_merge(self.config, shared_config)
+        self.config = deep_merge(self.config, platform_config)
         self.config = deep_merge(self.config, old_user_config)
         self.config = deep_merge(self.config, workspace_config)
 
         self._normalize_levels()
 
         logger.debug("加载的配置: %s", self.config)
+
+        # 进行版本校验
+        if not self._validate_config_version(shared_config):
+            logger.error("版本校验失败，程序将退出")
+            sys.exit(1)
 
     def _normalize_levels(self):
         """确保 levels 配置为包含 name/path 的列表，并移除重复项"""
@@ -173,6 +188,9 @@ class ConfigService:
             seen_paths.add(path)
             deduped.append(item)
         return deduped
+
+    def app_version(self) -> str:
+        return self._get_package_version()
 
     def workspace(self) -> pathlib.Path:
         return self._workspace
