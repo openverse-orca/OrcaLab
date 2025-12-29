@@ -1,0 +1,4 @@
+[orcalab]
+
+pak_urls = [ "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/orcalab_linux.25.12.4.pak",]
+python_project_url = "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/python-project.25.12.4.tar.xz"

@@ -7,9 +7,9 @@ levels = [ "orcalab_day", "orcalab_night", "previewthumbnail_orcalab",]
 level = "orcalab_day"
 lock_fps = 60
 paks = []
-pak_urls = [ "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/orcalab_linux.25.12.4.pak",]
+pak_urls = []
 python_project_path = ""
-python_project_url = "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/python-project.25.12.4.tar.xz"
+python_project_url = ""
 
 [copilot]
 server_url = "http://103.237.28.246:9023"

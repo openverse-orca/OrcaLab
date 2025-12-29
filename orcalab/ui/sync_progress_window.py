@@ -21,7 +21,7 @@ class AssetItemWidget(QtWidgets.QWidget):
         super().__init__(parent)
         self.asset_name = asset_name
         self.file_name = file_name
-        self.size = size
+        self._size = size
         self.status = status  # 'download', 'delete', 'ok', 'downloading'
         
         self.setup_ui()
@@ -49,7 +49,7 @@ class AssetItemWidget(QtWidgets.QWidget):
         layout.addStretch()
         
         # 大小
-        size_mb = self.size / (1024 * 1024)
+        size_mb = self._size / (1024 * 1024)
         self.size_label = QtWidgets.QLabel(f"{size_mb:.2f} MB")
         self.size_label.setMinimumWidth(80)
         self.size_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -85,6 +85,8 @@ class AssetItemWidget(QtWidgets.QWidget):
         elif self.status == 'failed':
             self.status_label.setText("✗")
             self.status_label.setStyleSheet("color: red; font-size: 20px;")
+        elif self.status == 'incompatible':
+            self.status_label.setText("⚠️")
     
     def update_status_text(self):
         """更新状态文本"""
@@ -106,6 +108,9 @@ class AssetItemWidget(QtWidgets.QWidget):
         elif self.status == 'failed':
             self.status_text.setText("下载失败")
             self.status_text.setStyleSheet("color: red;")
+        elif self.status == 'incompatible':
+            self.status_text.setText("不兼容")
+            self.status_text.setStyleSheet("color: orange;")
     
     def set_progress(self, progress: int64, speed: float = 0):
         """
