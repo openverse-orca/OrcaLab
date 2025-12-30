@@ -56,54 +56,6 @@ class Panel(QtWidgets.QWidget):
         self.root_layout.addWidget(make_horizontal_line(), 0)
         self.root_layout.addWidget(content_area, 1)
 
-        theme = ThemeService()
-
-        bg_color = theme.get_color_hex("button_bg")
-        text_color = theme.get_color_hex("text")
-
-        self.setObjectName(f"panel_{panel_name.lower().replace(' ', '_')}")
-
-        self.setStyleSheet(
-            f"""
-            QWidget#{self.objectName()} {{
-                background-color: {bg_color};
-            }}
-        """
-        )
-
-        title_area.setStyleSheet(
-            f"""
-            QLabel {{
-                color: {text_color};
-            }}
-        """
-        )
-
-        content_area.setStyleSheet(
-            """
-            QTreeView, QListView, QWidget {
-                background-color: #2b2b2b;
-                color: #ffffff;
-                border: none;
-                selection-background-color: #404040;
-                alternate-background-color: #333333;
-            }
-            QTreeView::item:selected, QListView::item:selected {
-                background-color: #404040;
-                color: #ffffff;
-            }
-            QTreeView::item:hover, QListView::item:hover {
-                background-color: #353535;
-            }
-            QHeaderView::section {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                border: 1px solid #404040;
-                padding: 4px;
-            }
-        """
-        )
-
     def __lt__(self, other):
         return self.panel_order < other.panel_order
 

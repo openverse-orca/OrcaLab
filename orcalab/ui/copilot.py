@@ -36,7 +36,7 @@ class CopilotPanel(QtWidgets.QWidget):
         
         # Text input for asset generation prompt (multi-line)
         self.input_field = QtWidgets.QTextEdit()
-        self.input_field.setPlaceholderText("Enter a description of the asset you want to generate...\nExample: 'a red sports car' or 'a wooden dining table'\nUse Ctrl+Enter to submit")
+        self.input_field.setPlaceholderText("描述你需要的资产\n例如: “一辆红色跑车” 或 “一张木制餐桌”\n使用 Ctrl+Enter 发送")
         self.input_field.setMaximumHeight(80)  # Limit height but allow multiple lines
         self.input_field.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.input_field.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -60,7 +60,7 @@ class CopilotPanel(QtWidgets.QWidget):
         button_layout = QtWidgets.QHBoxLayout()
         
         # Submit button
-        self.submit_button = QtWidgets.QPushButton("Submit")
+        self.submit_button = QtWidgets.QPushButton("发送")
         self.submit_button.setFixedWidth(80)
         self.submit_button.setStyleSheet("""
             QPushButton {
@@ -92,16 +92,16 @@ class CopilotPanel(QtWidgets.QWidget):
         layout.addLayout(input_layout)
         
         # Log output section
-        log_label = QtWidgets.QLabel("Execution Log:")
-        log_label.setStyleSheet("""
-            QLabel {
-                color: #ffffff;
-                font-weight: bold;
-                font-size: 12px;
-                margin-bottom: 4px;
-            }
-        """)
-        layout.addWidget(log_label)
+        # log_label = QtWidgets.QLabel("Execution Log:")
+        # log_label.setStyleSheet("""
+        #     QLabel {
+        #         color: #ffffff;
+        #         font-weight: bold;
+        #         font-size: 12px;
+        #         margin-bottom: 4px;
+        #     }
+        # """)
+        # layout.addWidget(log_label)
         
         # Scrollable text area for logs
         self.log_text = QtWidgets.QTextEdit()

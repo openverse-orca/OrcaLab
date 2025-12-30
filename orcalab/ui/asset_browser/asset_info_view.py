@@ -18,46 +18,6 @@ class AssetInfoView(QtWidgets.QWidget):
                 border: none;
                 background-color: transparent;
             }
-            QScrollBar:vertical {
-                background-color: #2a2a2a;
-                width: 12px;
-                border: none;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #555555;
-                border-radius: 6px;
-                min-height: 20px;
-                margin: 2px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background-color: #666666;
-            }
-            QScrollBar::handle:vertical:pressed {
-                background-color: #777777;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-            QScrollBar:horizontal {
-                background-color: #2a2a2a;
-                height: 12px;
-                border: none;
-            }
-            QScrollBar::handle:horizontal {
-                background-color: #555555;
-                border-radius: 6px;
-                min-width: 20px;
-                margin: 2px;
-            }
-            QScrollBar::handle:horizontal:hover {
-                background-color: #666666;
-            }
-            QScrollBar::handle:horizontal:pressed {
-                background-color: #777777;
-            }
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-                width: 0px;
-            }
         """)
 
         content_widget = QtWidgets.QWidget()

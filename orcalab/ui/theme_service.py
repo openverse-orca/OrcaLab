@@ -20,7 +20,8 @@ class ThemeService:
         self._colors: Dict[str, QtGui.QColor] = {}
 
         self.set_color("bg", "#181818")
-        self.set_color("bg_hover", "#444444")
+        self.set_color("bg_hover", "#323232")
+        self.set_color("bg_selection", "#505050")
         self.set_color("text", "#FFFFFF")
         self.set_color("text_disable", "#888888")
         self.set_color("split_line", "#2b2b2b")
@@ -38,6 +39,10 @@ class ThemeService:
         self.set_color("property_edit_bg", "#8F8E8E")
         self.set_color("property_edit_bg_hover", "#9D9D9D")
         self.set_color("property_edit_bg_editing", "#181818")
+
+        self.set_color("scrollbar_handle_bg", "#676767")
+        self.set_color("scrollbar_handle_bg_hover", "#9D9D9D")
+
 
     def set_color(self, name: str, color: str):
         self._colors[name] = QtGui.QColor(color)

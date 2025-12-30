@@ -33,7 +33,7 @@ class PanelManager(QtWidgets.QWidget, PanelRequest):
         window_layout.addWidget(make_horizontal_line())
         window_layout.addWidget(window_central_area, 1)
         window_layout.addWidget(make_horizontal_line())
-        window_layout.addWidget(window_bottom_area)
+        # window_layout.addWidget(window_bottom_area)
 
         # Window top area = Menu bar + Manipulator bar + Tool bar
 

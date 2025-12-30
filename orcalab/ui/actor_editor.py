@@ -73,7 +73,7 @@ class ActorEditor(QtWidgets.QWidget, SceneEditNotification):
         self._clear_layout()
 
         if self._actor is None:
-            label = QtWidgets.QLabel("No actor selected")
+            label = QtWidgets.QLabel("没有选中任何Actor")
             label.setAlignment(
                 QtCore.Qt.AlignmentFlag.AlignCenter
                 | QtCore.Qt.AlignmentFlag.AlignVCenter
