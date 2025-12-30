@@ -93,10 +93,11 @@ class SimulationService(SimulationRequest):
             await self._set_simulation_state(SimulationState.Stopped)
             return
 
+        await self.remote_scene.publish_scene()
+        await asyncio.sleep(0.5)
         await self.remote_scene.save_body_transform()
         await self.remote_scene.change_sim_state(True)
-        await self.remote_scene.publish_scene()
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.5)
 
         # 启动外部程序 - 改为在主线程直接启动
         command = program_config.get("command", "python")
@@ -135,9 +136,9 @@ class SimulationService(SimulationRequest):
         await self._set_simulation_state(SimulationState.Launching)
 
 
+        await self.remote_scene.publish_scene()
         await self.remote_scene.save_body_transform()
         await self.remote_scene.change_sim_state(True)
-        await self.remote_scene.publish_scene()
         await asyncio.sleep(1)
 
         # 启动一个虚拟的等待进程，保持终端活跃状态
@@ -281,8 +282,8 @@ class SimulationService(SimulationRequest):
                 self.sim_process = None
 
             await asyncio.sleep(0.5)
-            await self.remote_scene.publish_scene()
             await self.remote_scene.restore_body_transform()
+            await self.remote_scene.publish_scene()
             await self.remote_scene.change_sim_state(self.sim_process_running)
 
             await self._set_simulation_state(SimulationState.Stopped)
