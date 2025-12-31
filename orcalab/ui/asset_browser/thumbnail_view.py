@@ -25,7 +25,7 @@ class ThumbnailView(QtWidgets.QWidget):
 
         self._scroll_bar = QtWidgets.QScrollBar(self)
         self._scroll_bar.setOrientation(QtCore.Qt.Orientation.Vertical)
-        self.scrollbar_width = 16
+        self.scrollbar_width = 8
 
         self._model: ThumbnailModel | None = None
 

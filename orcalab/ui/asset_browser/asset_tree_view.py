@@ -13,7 +13,7 @@ class AssetTreeView(QtWidgets.QTreeWidget):
         self.setMaximumWidth(300)
         
         self._assets: List[AssetInfo] = []
-        self._setup_style()
+        # self._setup_style()
         
         self.itemClicked.connect(self._on_item_clicked)
 

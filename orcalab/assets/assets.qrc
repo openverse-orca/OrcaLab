@@ -29,5 +29,7 @@
     <file alias="rotate">icons/ic_fluent_cube_rotate_20_filled.svg</file>
     <file alias="scale">icons/ic_fluent_scale_fill_20_filled.svg</file>
 
+    <file alias="camera">icons/ic_fluent_camera_20_regular.svg</file>
+
 </qresource>
 </RCC>

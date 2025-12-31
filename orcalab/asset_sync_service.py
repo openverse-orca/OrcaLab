@@ -265,9 +265,9 @@ class AssetSyncService:
     def check_metadata(self, packages: List[Dict], to_delete: List[str], to_missing: List[Dict]):
         metadata_path = self.cache_folder / "metadata.json"
         if not metadata_path.exists():
-            with open(metadata_path, 'w') as f:
+            with open(metadata_path, 'w', encoding='utf-8') as f:
                 json.dump({}, f)
-        with open(metadata_path, 'r') as f:
+        with open(metadata_path, 'r', encoding='utf-8') as f:
             metadata = json.load(f)
         
         # 清理已删除的元数据
@@ -364,7 +364,7 @@ class AssetSyncService:
             start_time = time.time()
             last_update_time = start_time
             
-            with open(temp_path, 'wb') as f:
+            with open(temp_path, 'wb', encoding='utf-8') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)

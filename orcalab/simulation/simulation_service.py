@@ -93,11 +93,11 @@ class SimulationService(SimulationRequest):
             await self._set_simulation_state(SimulationState.Stopped)
             return
 
-        await self.remote_scene.change_sim_state(True)
         await self.remote_scene.publish_scene()
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.5)
         await self.remote_scene.save_body_transform()
-        await asyncio.sleep(1)
+        await self.remote_scene.change_sim_state(True)
+        await asyncio.sleep(0.5)
 
         # 启动外部程序 - 改为在主线程直接启动
         command = program_config.get("command", "python")
@@ -121,7 +121,6 @@ class SimulationService(SimulationRequest):
                 f"外部程序 {program_name} 启动失败，请检查命令配置或日志输出。\n"
             )
             try:
-                await self.remote_scene.restore_body_transform()
                 await self.remote_scene.change_sim_state(False)
             except Exception as e:
                 logger.exception("回滚模拟状态时发生错误: %s", e)
@@ -137,10 +136,9 @@ class SimulationService(SimulationRequest):
         await self._set_simulation_state(SimulationState.Launching)
 
 
-        await self.remote_scene.change_sim_state(True)
         await self.remote_scene.publish_scene()
-        await asyncio.sleep(0.1)
         await self.remote_scene.save_body_transform()
+        await self.remote_scene.change_sim_state(True)
         await asyncio.sleep(1)
 
         # 启动一个虚拟的等待进程，保持终端活跃状态
@@ -265,7 +263,6 @@ class SimulationService(SimulationRequest):
         async with self._sim_process_check_lock:
             
             await self.remote_scene.set_sync_from_mujoco_to_scene(False)
-            await self.remote_scene.restore_body_transform()
             self.sim_process_running = False
 
             # 停止主线程启动的sim_process
@@ -285,6 +282,7 @@ class SimulationService(SimulationRequest):
                 self.sim_process = None
 
             await asyncio.sleep(0.5)
+            await self.remote_scene.restore_body_transform()
             await self.remote_scene.publish_scene()
             await self.remote_scene.change_sim_state(self.sim_process_running)
 

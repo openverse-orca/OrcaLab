@@ -29,6 +29,8 @@ class Viewport(QtWidgets.QWidget):
             self._viewport = None
 
         _layout = QtWidgets.QVBoxLayout(self)
+        _layout.setContentsMargins(1, 1, 1, 1)
+        _layout.setSpacing(0)
         self.setLayout(_layout)
 
         if self._viewport:

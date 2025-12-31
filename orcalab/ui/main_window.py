@@ -362,19 +362,19 @@ class MainWindow(
 
         panel_icon_color = theme_service.get_color("panel_icon")
 
-        panel = Panel("Scene Hierarchy", self.actor_outline_widget)
+        panel = Panel("大纲", self.actor_outline_widget)
         panel.panel_icon = make_icon(":/icons/text_bullet_list_tree", panel_icon_color)
         self.add_panel(panel, "left")
 
         logger.info("创建属性编辑器…")
         self.actor_editor_widget = ActorEditor()
-        panel = Panel("Properties", self.actor_editor_widget)
+        panel = Panel("编辑", self.actor_editor_widget)
         panel.panel_icon = make_icon(":/icons/circle_edit", panel_icon_color)
         self.add_panel(panel, "right")
 
         logger.info("创建资产浏览器…")
         self.asset_browser_widget = AssetBrowser()
-        panel = Panel("Assets", self.asset_browser_widget)
+        panel = Panel("资产", self.asset_browser_widget)
         panel.panel_icon = make_icon(":/icons/box", panel_icon_color)
         self.add_panel(panel, "bottom")
 
@@ -385,19 +385,20 @@ class MainWindow(
             self.config_service.copilot_server_url(),
             self.config_service.copilot_timeout()
         )
-        panel = Panel("Copilot", self.copilot_widget)
+        panel = Panel("小O", self.copilot_widget)
         panel.panel_icon = make_icon(":/icons/chat_sparkle", panel_icon_color)
         self.add_panel(panel, "right")
 
         logger.info("创建终端组件…")
         # 添加终端组件
         self.terminal_widget = TerminalWidget()
-        panel = Panel("Terminal", self.terminal_widget)
+        panel = Panel("终端", self.terminal_widget)
         panel.panel_icon = make_icon(":/icons/window_console", panel_icon_color)
         self.add_panel(panel, "bottom")
 
         self.camera_selector_widget = CameraSelector()
-        panel = Panel("CamerasSelector", self.camera_selector_widget)
+        panel = Panel("相机", self.camera_selector_widget)
+        panel.panel_icon = make_icon(":/icons/camera", panel_icon_color)
         self.add_panel(panel, "left")
 
         self.menu_bar = QtWidgets.QMenuBar()
@@ -465,11 +466,100 @@ class MainWindow(
         connect(self.action_about.triggered, self.show_about_dialog)
 
         # 为主窗体设置背景色
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #181818;
+
+        theme = ThemeService()
+        bg_color = theme.get_color_hex("bg")
+        bg_hover_color = theme.get_color_hex("bg_hover")
+        bg_select_color = theme.get_color_hex("button_bg_pressed")
+        text_color = theme.get_color_hex("text")
+        scrollbar_handle_bg = theme.get_color_hex("scrollbar_handle_bg")
+        scrollbar_handle_bg_hover = theme.get_color_hex("scrollbar_handle_bg_hover")
+        split_line_color = theme.get_color_hex("split_line")
+
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {bg_color};
+                color: {text_color};
+            }}
+
+
+
+            QTreeView, QListView {{
+                outline: none;
+                selection-background-color: #404040;
+                alternate-background-color: #333333;
+            }}
+            QTreeView::item, QListView::item {{
+                border: none;
+                show-decoration-selected: 1;
+            }}
+            QTreeView::item:selected, QListView::item:selected {{
+                background-color: {bg_select_color};
+            }}
+            QTreeView::item:hover, QListView::item:hover {{
+                background-color: {bg_hover_color};
+            }}
+            QHeaderView::section {{
                 color: #ffffff;
-            }
+                padding: 4px;
+            }}
+
+
+
+            QScrollBar {{
+                background: transparent;
+                margin: 0;
+                width: 8px;
+                width: 8px;
+                border: none;
+            }}
+            QScrollBar::handle {{
+                border: 1px solid transparent;
+                border-radius: 2px;
+                margin: 1px;
+            }}
+            QScrollBar::handle:vertical {{
+                min-width: 4px;
+                min-height: 20px;
+                background: {scrollbar_handle_bg};
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {scrollbar_handle_bg_hover};
+            }}
+
+            QScrollBar::handle:horizontal {{
+                min-width: 20px;
+                min-height: 4px;
+                background: {scrollbar_handle_bg};
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background: {scrollbar_handle_bg_hover};
+            }}
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical,
+            QScrollBar::add-page:horizontal,
+            QScrollBar::sub-page:horizontal {{
+            background: transparent;
+            }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical,
+            QScrollBar::add-line:horizontal,
+            QScrollBar::sub-line:horizontal {{
+            height: 0;
+            width: 0;
+            }}
+
+            
+
+            QSplitter::handle {{
+                background-color: {split_line_color};
+            }}
+            QSplitter::handle:horizontal {{
+                width: 2px;
+            }}
+            QSplitter::handle:vertical {{
+                height: 2px;
+            }}
         """)
 
         # 初始化按钮状态
@@ -478,12 +568,12 @@ class MainWindow(
 
         # Window actions.
 
-        action_undo = QtGui.QAction("Undo", self)
+        action_undo = QtGui.QAction("撤销", self)
         action_undo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
         action_undo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
         connect(action_undo.triggered, self.undo)
 
-        action_redo = QtGui.QAction("Redo", self)
+        action_redo = QtGui.QAction("重做", self)
         action_redo.setShortcut(QtGui.QKeySequence("Ctrl+Shift+Z"))
         action_redo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
         connect(action_redo.triggered, self.redo)
