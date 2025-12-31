@@ -1,5 +1,5 @@
 [orcalab]
-version = "25.12.4"
+version = "25.12.5.4"
 edit_port = 50151
 sim_port = 50051
 init_paks = true
