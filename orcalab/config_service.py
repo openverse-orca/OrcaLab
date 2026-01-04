@@ -123,7 +123,7 @@ class ConfigService:
         )
 
         if sys.platform == "win32":
-            platform_config_name = "orca.config.platform_windows.toml"
+            platform_config_name = "orca.config.platform_win32.toml"
         else:
             platform_config_name = "orca.config.platform_linux.toml"
 

@@ -52,6 +52,8 @@ def check_project_folder():
         with open(config_path, "w") as f:
             json.dump(data, f, indent=4)
 
+    get_cache_folder().mkdir(parents=True, exist_ok=True)
+
 
 def get_cache_folder():
     if sys.platform == "win32":
