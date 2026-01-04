@@ -428,7 +428,7 @@ class AssetSyncService:
         # 1. 查询订阅列表
 
         try:
-            packages, incompatible_packages = self.query_subscribed_packages("25.12.5")
+            packages, incompatible_packages = self.query_subscribed_packages(app_version)
         except TokenExpiredException:
             self.log("⚠️  Token 已过期，保留现有资产包，以离线模式启动")
             self.callbacks.on_complete(False, "Token 已过期")
