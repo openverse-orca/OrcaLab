@@ -47,7 +47,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
     def __init__(self):
         super().__init__()
         self.setHeaderHidden(True)
-        self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
         self.setItemDelegate(ActorOutlineDelegate(self))
 
@@ -77,6 +77,12 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         self.setModel(model)
         self.selectionModel().selectionChanged.connect(self._on_selection_changed)
         connect(model.request_reparent, self._on_request_reparent)
+
+    def actor_model(self) -> ActorOutlineModel:
+        model = self.model()
+        if not isinstance(model, ActorOutlineModel):
+            raise Exception("Invalid actor model.")
+        return model
 
     async def _on_request_reparent(
         self, actor_path: Path, new_parent_path: Path, index: int
@@ -133,7 +139,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         selection_model = self.selectionModel()
         selection_model.clearSelection()
 
-        model: ActorOutlineModel = self.model()
+        model = self.actor_model()
         for actor in actors:
             index = model.get_index_from_actor(actor)
             if not index.isValid():
@@ -150,7 +156,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
     def show_context_menu(self, position):
         self._current_index = self.indexAt(position)
 
-        actor_outline_model: ActorOutlineModel = self.model()
+        actor_outline_model = self.actor_model()
         local_scene: LocalScene = actor_outline_model.local_scene
 
         is_root = False
@@ -186,6 +192,10 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
     async def _add_group(self):
         parent_actor = self._current_actor
         parent_actor_path = self._current_actor_path
+
+        assert parent_actor is not None
+        assert parent_actor_path is not None
+
         if not isinstance(parent_actor, GroupActor):
             parent_actor = parent_actor.parent
             parent_actor_path = parent_actor_path.parent()
@@ -200,6 +210,9 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         )
 
     async def _delete_actor(self):
+        if self._current_actor is None:
+            return
+
         await SceneEditRequestBus().delete_actor(
             self._current_actor, undo=True, source="actor_outline"
         )
@@ -207,11 +220,16 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
     def _open_rename_dialog(self):
 
         local_scene = get_local_scene()
+        assert self._current_actor_path is not None
+        assert self._current_actor is not None
 
         def can_rename_actor(actor_path: Path, name: str):
             return local_scene.can_rename_actor(actor_path, name)
 
         dialog = RenameDialog(self._current_actor_path, can_rename_actor, self)
+
+        assert dialog.new_name is not None
+
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             asyncio.create_task(
                 SceneEditRequestBus().rename_actor(
@@ -224,7 +242,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
     def _get_actor_at_pos(self, pos) -> Tuple[BaseActor, Path]:
         index = self.indexAt(pos)
-        actor_outline_model: ActorOutlineModel = self.model()
+        actor_outline_model = self.actor_model()
         actor = actor_outline_model.get_actor(index)
         if actor is None:
             raise Exception("Invalid actor.")
@@ -232,16 +250,16 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         return actor_outline_model.local_scene.get_actor_and_path(actor)
 
     def mousePressEvent(self, event: QtGui.QMouseEvent):
-        if event.button() == QtCore.Qt.LeftButton:
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
             self._left_mouse_pressed = True
             actor, actor_path = self._get_actor_at_pos(event.pos())
             self._current_actor = actor
             self._current_actor_path = actor_path
 
-            self.startDrag(QtCore.Qt.DropActions(QtCore.Qt.DropAction.CopyAction))
+            self.startDrag(QtCore.Qt.DropAction.CopyAction)
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent):
-        if event.button() == QtCore.Qt.LeftButton:
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
             if not self._left_mouse_pressed:
                 return
 
@@ -269,13 +287,16 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                     self.set_actor_selection([actor])
                     asyncio.create_task(
                         SceneEditRequestBus().set_selection(
-                            [actor], undo=True, source="actor_outline"
+                            [actor_path], undo=True, source="actor_outline"
                         )
                     )
 
     def mouseMoveEvent(self, event):
         if self._left_mouse_pressed:
             self._left_mouse_pressed = False
+
+            if self._current_actor_path is None or self._current_actor_path.is_root():
+                return
 
             data = self._current_actor_path.string().encode("utf-8")
 
@@ -285,6 +306,31 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             drag = QtGui.QDrag(self)
             drag.setMimeData(mime_data)
             drag.exec(QtCore.Qt.DropAction.CopyAction)
+
+    def _get_selection_actor_path(self) -> Path | None:
+        indexes = self.selectedIndexes()
+        if not indexes:
+            return None
+
+        actor_outline_model = self.actor_model()
+        actor = actor_outline_model.get_actor(indexes[0])
+        if actor is None:
+            return None
+
+        local_scene: LocalScene = actor_outline_model.local_scene
+        actor_path = local_scene.get_actor_path(actor)
+        return actor_path
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+        if event.key() == QtCore.Qt.Key.Key_Delete:
+            actor_path = self._get_selection_actor_path()
+            if actor_path is not None:
+                asyncio.create_task(
+                    SceneEditRequestBus().delete_actor(
+                        actor_path, undo=True, source="actor_outline"
+                    )
+                )
+        return super().keyPressEvent(event)
 
     def paintEvent(self, event):
         self._brach_areas = {}

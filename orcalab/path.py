@@ -99,3 +99,6 @@ class Path:
     @classmethod
     def root_path(cls):
         return Path("/")
+    
+    def is_root(self) -> bool:
+        return self._p == "/"

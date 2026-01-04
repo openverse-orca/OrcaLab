@@ -44,10 +44,6 @@ class Viewport(QtWidgets.QWidget):
 
         self.command_line = [
             "pseudo.exe",
-            # TODO: remove datalink host and port. Auth on C++ side is removed.
-            "--datalink_host=54.223.63.47",
-            "--datalink_port=7000",
-            # '--rhi-device-validation="enable"'
             "--LoadLevel",
             config_service.level(),
             config_service.lock_fps(),

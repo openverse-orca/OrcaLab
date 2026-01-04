@@ -364,7 +364,7 @@ class AssetSyncService:
             start_time = time.time()
             last_update_time = start_time
             
-            with open(temp_path, 'wb', encoding='utf-8') as f:
+            with open(temp_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)

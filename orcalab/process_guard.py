@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import psutil
 from typing import List
 
@@ -39,6 +40,10 @@ def find_other_orcalab_processes() -> List[psutil.Process]:
             if proc.pid == current_pid:
                 continue
 
+            if sys.platform == "win32":
+                if proc.exe().endswith("Scripts\\orcalab.exe"):
+                    continue
+
             info = proc.info
             name = (info.get("name") or "").lower()
             exe = (info.get("exe") or "").lower()
@@ -69,7 +74,7 @@ def ensure_single_instance():
         details_lines.append(f"PID: {proc.pid} | CMD: {cmdline}")
 
     details_text = "\n".join(details_lines)
-    logger.warning("检测到已有 OrcaLab 进程: %s", details_text)
+    logger.warning("检测到已有 OrcaLab 进程: %s, this pid %s", details_text, os.getpid())
 
     msg_box = QtWidgets.QMessageBox()
     msg_box.setWindowTitle("检测到正在运行的 OrcaLab 进程")
