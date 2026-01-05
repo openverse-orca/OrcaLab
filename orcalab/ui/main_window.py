@@ -9,6 +9,7 @@ import ast
 import os
 from pathlib import Path as SystemPath
 from PySide6 import QtCore, QtWidgets, QtGui
+from qasync import asyncWrap
 
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.actor_util import make_unique_name
@@ -16,6 +17,7 @@ from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.pyside_util import connect
 from orcalab.remote_scene import RemoteScene
+from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
 from orcalab.simulation.simulation_bus import (
     SimulationRequestBus,
     SimulationNotification,
@@ -441,6 +443,12 @@ class MainWindow(
         self.menu_edit = self.menu_bar.addMenu("编辑")
         self.menu_help = self.menu_bar.addMenu("帮助")
 
+        self.action_create_layout = QtGui.QAction("新建布局…", self)
+        self.action_create_layout.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.New))
+        self.action_create_layout.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
+        connect(self.action_create_layout.triggered, self.create_scene_layout)
+        self.addAction(self.action_create_layout)
+
         self.action_open_layout = QtGui.QAction("打开布局…", self)
         self.action_open_layout.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Open))
         self.action_open_layout.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
@@ -635,9 +643,9 @@ class MainWindow(
     def prepare_file_menu(self):
         self.menu_file.clear()
         self.menu_file.addAction(self.action_open_layout)
-        self.menu_file.addSeparator()
         self.menu_file.addAction(self.action_save_layout)
         self.menu_file.addAction(self.action_save_layout_as)
+        self.menu_file.addAction(self.action_create_layout)
         self.menu_file.addSeparator()
         self.menu_file.addAction(self.action_exit)
 
@@ -726,8 +734,40 @@ class MainWindow(
             data["children"] = [self.actor_to_dict(child) for child in actor.children]
 
         return data
+    
+    async def create_scene_layout(self):
+        def select_file():
+            filename, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "新建场景布局",
+            self.cwd,
+            "布局文件 (*.json);;所有文件 (*)"
+            )
+            return filename
 
-    def open_scene_layout(self, filename: str = None):
+        filename =await asyncWrap(select_file)
+        
+        if not filename:
+            return
+        
+        if not await asyncWrap(self._confirm_discard_changes):
+            return
+        
+        helper = SceneLayoutHelper(self.local_scene)
+        helper.create_empty_layout(filename)
+
+        await helper.clear_layout()
+
+        self.cwd = os.path.dirname(filename)
+        self.current_layout_path = filename
+        self._infer_scene_and_layout_names()
+        self._mark_layout_clean()
+        self._update_title()
+        logger.debug("create_scene_layout: 用户新建布局 path=%s", filename)
+        self.undo_service.command_history = []
+        self.undo_service.command_history_index = -1
+
+    def open_scene_layout(self):
         filename, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
             "打开场景布局",
@@ -823,7 +863,7 @@ class MainWindow(
         <div style="font-family: Arial, sans-serif;">
             <h2 style="color: #007acc; margin-bottom: 10px;">OrcaLab</h2>
             <p style="margin: 5px 0;"><b>版本:</b> {version}</p>
-            <p style="margin: 5px 0;"><b>版权所有:</b> © 2025 松应科技</p>
+            <p style="margin: 5px 0;"><b>版权所有:</b> © 2026 松应科技</p>
             <p style="margin: 5px 0;">
                 <b>公司主页:</b> 
                 <a href="http://www.orca3d.cn" 
