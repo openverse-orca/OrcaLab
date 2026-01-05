@@ -19,5 +19,8 @@ class HttpServiceRequest:
     
     async def get_image_url(self, asset_id: str) -> str:
         pass
+    
+    def is_admin(self) -> bool:
+        pass
 
 HttpServiceRequestBus = create_event_bus(HttpServiceRequest)

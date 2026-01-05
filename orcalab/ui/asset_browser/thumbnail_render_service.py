@@ -141,10 +141,10 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
             logger.info(f"{asset_path} not in metadata")
             return 
         asset_info = asset_metadata[0]
-        if 'pictures' not in asset_info.keys() or len(asset_info['pictures']) <= 5:
-            png_1080_path = os.path.join(dir_path, f"{os.path.basename(tmp_path)}_1080.png")
-            files = [png_1080_path, apng_path] + png_512_files
-            await HttpServiceRequestBus().post_asset_thumbnail(asset_info['id'], files)
+        
+        png_1080_path = os.path.join(dir_path, f"{os.path.basename(tmp_path)}_1080.png")
+        files = [png_1080_path, apng_path] + png_512_files
+        await HttpServiceRequestBus().post_asset_thumbnail(asset_info['id'], files)
             
     # 相机位置计算公式
     def _get_camera_position(self, aabb: list[float]) -> Transform:

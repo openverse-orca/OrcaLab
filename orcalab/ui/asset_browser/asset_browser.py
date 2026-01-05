@@ -40,8 +40,10 @@ class AssetBrowser(QtWidgets.QWidget):
         self._config_service = ConfigService()
         self._loading_thumbnails = set()
         self._model_connected = False
+        self.is_admin =  self._http_service.is_admin()
         self._setup_ui()
         self._setup_connections()
+
 
     def _setup_ui(self):
 
@@ -93,31 +95,32 @@ class AssetBrowser(QtWidgets.QWidget):
         """
         )
 
-        self.create_panorama_apng_button = QtWidgets.QPushButton("渲染缩略图")
-        self.create_panorama_apng_button.setToolTip("渲染资产缩略图")
-        self.create_panorama_apng_button.setStyleSheet(
+        if self.is_admin:
+            self.create_panorama_apng_button = QtWidgets.QPushButton("渲染缩略图")
+            self.create_panorama_apng_button.setToolTip("渲染资产缩略图")
+            self.create_panorama_apng_button.setStyleSheet(
+                """
+                QPushButton {
+                    background-color: #007acc;
+                    color: #ffffff;
+                    border: none;
+                    border-radius: 3px;
+                    padding: 6px 12px;
+                    font-weight: bold;
+                    font-size: 12px;
+                }
+                QPushButton:hover {
+                    background-color: #005a9e;
+                }
+                QPushButton:pressed {
+                    background-color: #004578;
+                }
+                QPushButton:disabled {
+                    background-color: #555555;
+                    color: #999999;
+                }
             """
-            QPushButton {
-                background-color: #007acc;
-                color: #ffffff;
-                border: none;
-                border-radius: 3px;
-                padding: 6px 12px;
-                font-weight: bold;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #005a9e;
-            }
-            QPushButton:pressed {
-                background-color: #004578;
-            }
-            QPushButton:disabled {
-                background-color: #555555;
-                color: #999999;
-            }
-        """
-        )
+            )
 
         self.open_asset_store_button = QtWidgets.QPushButton("打开资产库")
         self.open_asset_store_button.setToolTip("在浏览器中打开资产库")
@@ -177,8 +180,9 @@ class AssetBrowser(QtWidgets.QWidget):
         tool_bar_layout.addStretch()
         tool_bar_layout.addWidget(self.open_asset_store_button)
         tool_bar_layout.addSpacing(5)
-        tool_bar_layout.addWidget(self.create_panorama_apng_button)
-        tool_bar_layout.addSpacing(5)
+        if self.is_admin:
+            tool_bar_layout.addWidget(self.create_panorama_apng_button)
+            tool_bar_layout.addSpacing(5)
         tool_bar_layout.addWidget(self.status_label)
 
         center_layout = QtWidgets.QVBoxLayout()
@@ -202,15 +206,16 @@ class AssetBrowser(QtWidgets.QWidget):
         self.include_search_box.textChanged.connect(self._on_include_filter_changed)
         self.exclude_search_box.textChanged.connect(self._on_exclude_filter_changed)
         self.open_asset_store_button.clicked.connect(self._on_open_asset_store_clicked)
-        self.create_panorama_apng_button.clicked.connect(
-            lambda: asyncio.create_task(self._on_create_panorama_apng_clicked())
-        )
-        self.on_render_thumbnail_finished.connect(
-            lambda asset_paths: asyncio.create_task(self._on_render_thumbnail_finished(asset_paths))
-        )
-        self.on_upload_thumbnail_finished.connect(
-            lambda: asyncio.create_task(self._on_upload_thumbnail_finished())
-        )
+        if self.is_admin:
+            self.create_panorama_apng_button.clicked.connect(
+                lambda: asyncio.create_task(self._on_create_panorama_apng_clicked())
+            )
+            self.on_render_thumbnail_finished.connect(
+                lambda asset_paths: asyncio.create_task(self._on_render_thumbnail_finished(asset_paths))
+            )
+            self.on_upload_thumbnail_finished.connect(
+                lambda: asyncio.create_task(self._on_upload_thumbnail_finished())
+            )
         self.request_load_thumbnail.connect(
             lambda index: asyncio.create_task(self._load_thumbnail_for_index(index))
         )
@@ -221,7 +226,8 @@ class AssetBrowser(QtWidgets.QWidget):
         self._view._scroll_bar.setValue(0)
         
     async def set_assets(self, assets: List[str]):
-        self.create_panorama_apng_button.setDisabled(True)
+        if self.is_admin:
+            self.create_panorama_apng_button.setDisabled(True)
         infos = []
         thumbnail_cache_path = get_cache_folder() / "thumbnail"
         exclude_assets = ['prefabs/mujococamera1080', 'prefabs/mujococamera256', 'prefabs/mujococamera512']
@@ -254,8 +260,9 @@ class AssetBrowser(QtWidgets.QWidget):
             self._model_connected = True
         
         self._tree_view.set_assets(infos)
-        self.create_panorama_apng_button.setText("渲染缩略图")
-        self.create_panorama_apng_button.setDisabled(False)
+        if self.is_admin:
+            self.create_panorama_apng_button.setText("渲染缩略图")
+            self.create_panorama_apng_button.setDisabled(False)
         self.status_label.setText(f"{len(infos)} assets")
         
         # 主动触发一次可见项更新，加载初始可见的缩略图
@@ -378,8 +385,7 @@ class AssetBrowser(QtWidgets.QWidget):
         cache_thumbnail_path = get_cache_folder() / "thumbnail"
         for asset in assets:
             asset_path = asset.path.removesuffix('.spawnable')
-            if not os.path.exists(cache_thumbnail_path / (asset_path + "_panorama.apng")):
-                asset_paths.append(asset_path)
+            asset_paths.append(asset_path)
         if len(assets) == 0:
             self.create_panorama_apng_button.setText("渲染缩略图")
             self.create_panorama_apng_button.setDisabled(False)

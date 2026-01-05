@@ -192,6 +192,26 @@ class HttpService(HttpServiceRequest):
                 asset_metadata = await response.json()
                 return json.dumps(asset_metadata, ensure_ascii=False, indent=2)
 
+    @override
+    def is_admin(self) -> bool:
+        if not self.check_online():
+            logger.warning("is_admin: 用户离线")
+            return False
+        
+        is_admin_url = f"{self.base_url}/is_admin/"
+        try:
+            with requests.Session() as session:
+                response = session.get(is_admin_url, headers=self._get_headers())
+                if response.status_code != 200:
+                    logger.warning("is_admin: 请求失败，状态码: %s", response.status_code)
+                    return False
+                is_admin = response.json()
+                return is_admin['isAdmin']
+        except Exception as e:
+            logger.exception("is_admin: 请求异常: %s", e)
+            return False
+
+
     def _get_headers(self, include_content_type: bool = True) -> Dict[str, str]:
 
         headers = {
@@ -214,6 +234,8 @@ class HttpService(HttpServiceRequest):
             'webp': 'image/webp',
         }
         return content_types.get(ext, 'image/png')
+
+
 
     def check_online(self) -> bool:
         return self.is_online
