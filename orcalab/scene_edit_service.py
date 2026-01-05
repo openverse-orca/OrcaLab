@@ -169,6 +169,9 @@ class SceneEditService(SceneEditRequest):
         ok, err = self.local_scene.can_rename_actor(actor, new_name)
         if not ok:
             raise Exception(err)
+        
+        if new_name == actor.name:
+            return
 
         actor, actor_path = self.local_scene.get_actor_and_path(actor)
 

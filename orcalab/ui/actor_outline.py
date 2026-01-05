@@ -229,9 +229,8 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
         dialog = RenameDialog(self._current_actor_path, can_rename_actor, self)
 
-        assert dialog.new_name is not None
-
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            assert dialog.new_name is not None
             asyncio.create_task(
                 SceneEditRequestBus().rename_actor(
                     self._current_actor,
