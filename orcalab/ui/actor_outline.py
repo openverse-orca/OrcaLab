@@ -64,6 +64,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
         self._brach_areas = {}
         self._left_mouse_pressed = False
+        self._left_mouse_pressed_position: QtCore.QPoint | None = None
 
         self.reparent_mime = "application/x-orca-actor-reparent"
 
@@ -252,11 +253,10 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
     def mousePressEvent(self, event: QtGui.QMouseEvent):
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
             self._left_mouse_pressed = True
+            self._left_mouse_pressed_position = event.pos()
             actor, actor_path = self._get_actor_at_pos(event.pos())
             self._current_actor = actor
             self._current_actor_path = actor_path
-
-            self.startDrag(QtCore.Qt.DropAction.CopyAction)
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent):
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
@@ -291,21 +291,32 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                         )
                     )
 
-    def mouseMoveEvent(self, event):
-        if self._left_mouse_pressed:
-            self._left_mouse_pressed = False
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent):
+        if not self._left_mouse_pressed or self._left_mouse_pressed_position is None:
+            return
 
-            if self._current_actor_path is None or self._current_actor_path.is_root():
-                return
+        if self._current_actor_path is None or self._current_actor_path.is_root():
+            return
 
-            data = self._current_actor_path.string().encode("utf-8")
+        distance = (event.pos() - self._left_mouse_pressed_position).manhattanLength()
+        if distance < QtWidgets.QApplication.startDragDistance():
+            return
+        
+        # important: must set before startDrag
+        self._left_mouse_pressed = False
 
-            mime_data = QtCore.QMimeData()
-            mime_data.setData("application/x-orca-actor-reparent", data)
+        self.startDrag(QtCore.Qt.DropAction.CopyAction)
+        data = self._current_actor_path.string().encode("utf-8")
 
-            drag = QtGui.QDrag(self)
-            drag.setMimeData(mime_data)
-            drag.exec(QtCore.Qt.DropAction.CopyAction)
+        mime_data = QtCore.QMimeData()
+        mime_data.setData("application/x-orca-actor-reparent", data)
+
+        drag = QtGui.QDrag(self)
+        drag.setMimeData(mime_data)
+        drag.exec(QtCore.Qt.DropAction.CopyAction)
+
+        self._current_actor_path = None
+        self._current_actor = None
 
     def _get_selection_actor_path(self) -> Path | None:
         indexes = self.selectedIndexes()
