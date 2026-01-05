@@ -823,7 +823,7 @@ class MainWindow(
         <div style="font-family: Arial, sans-serif;">
             <h2 style="color: #007acc; margin-bottom: 10px;">OrcaLab</h2>
             <p style="margin: 5px 0;"><b>版本:</b> {version}</p>
-            <p style="margin: 5px 0;"><b>版权所有:</b> © 2025 松应科技</p>
+            <p style="margin: 5px 0;"><b>版权所有:</b> © 2026 松应科技</p>
             <p style="margin: 5px 0;">
                 <b>公司主页:</b> 
                 <a href="http://www.orca3d.cn" 
