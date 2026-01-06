@@ -749,6 +749,8 @@ class MainWindow(
         
         if not filename:
             return
+        if not filename.lower().endswith(".json"):
+            filename += ".json"
         
         if not await asyncWrap(self._confirm_discard_changes):
             return
