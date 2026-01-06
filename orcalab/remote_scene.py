@@ -75,7 +75,11 @@ class RemoteScene(SceneEditNotification):
         operations = await self.query_pending_operation_loop()
         optimized_operations = self._optimize_operation(operations)
         for op in optimized_operations:
-            await self._process_pending_operation(op)
+            try:
+                await self._process_pending_operation(op)
+            except Exception as e:
+                logger.error(f"Failed to process pending operation '{op}': {e}")
+                continue
 
         self.in_query = False
 
