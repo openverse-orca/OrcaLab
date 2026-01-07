@@ -1,5 +1,6 @@
 # Patch PySide6 first. Before any other PySide6 imports.
 import pathlib
+from orcalab.cli_options import create_argparser
 from orcalab.patch_pyside6 import patch_pyside6
 
 patch_pyside6()
@@ -31,35 +32,6 @@ from orcalab.python_project_installer import ensure_python_project_installed
 _main_window = None
 
 logger = logging.getLogger(__name__)
-
-
-def parse_cli_args():
-    parser = argparse.ArgumentParser(
-        prog="orcalab",
-        description=("OrcaLab 启动器\n\n"),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False
-    )
-    parser.add_argument(
-        "-l",
-        "--log-level",
-        dest="log_level",
-        metavar="LEVEL",
-        help="控制台日志等级（支持 DEBUG/INFO/WARNING/ERROR/CRITICAL），默认输出 WARNING 及以上，日志文件会记录 INFO 及以上的全部日志。",
-    )
-
-    parser.add_argument(
-        "workspace", nargs="?", default=".", help="工作目录，默认为当前目录"
-    )
-
-    parser.add_argument(
-        "--init-config", action="store_true", help="初始化配置文件并退出"
-    )
-
-    args, remaining = parser.parse_known_args()
-    sys.argv = [sys.argv[0]] + remaining
-    return args
-
 
 def signal_handler(signum, frame):
     """Handle system signals to ensure cleanup"""
@@ -101,7 +73,8 @@ async def main_async(q_app):
 
 def main():
     """Main entry point for the orcalab application"""
-    args = parse_cli_args()
+    parser = create_argparser()
+    args, unknown = parser.parse_known_args()
 
     console_level = logging.INFO
     if getattr(args, "log_level", None):
@@ -121,18 +94,6 @@ def main():
     current_dir = pathlib.Path(__file__).parent.resolve()
     project_root = current_dir.parent  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root, workspace)
-
-    if args.init_config:
-        import shutil
-
-        this_dir = pathlib.Path(__file__).parent.resolve()
-        template_config = this_dir / "orca.config.template.toml"
-        if not template_config.exists():
-            logger.error("找不到模板配置文件: %s", template_config)
-            sys.exit(1)
-        config_service.workspace_data_folder().mkdir(parents=True, exist_ok=True)
-        shutil.copy(template_config, config_service.workspace_config_file())
-        exit(0)
 
     check_project_folder()
 

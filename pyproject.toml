@@ -25,7 +25,7 @@ Repository = "https://github.com/openverse-orca/OrcaLab"
 "Bug Tracker" = "https://github.com/openverse-orca/OrcaLab/issues"
 
 [project.scripts]
-orcalab = "orcalab.main:main"
+orcalab = "orcalab.launcher:main"
 orcalab-post-install = "orcalab.python_project_installer:cli"
 
 [project.optional-dependencies]
