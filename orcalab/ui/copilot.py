@@ -36,7 +36,7 @@ class CopilotPanel(QtWidgets.QWidget):
         
         # Text input for asset generation prompt (multi-line)
         self.input_field = QtWidgets.QTextEdit()
-        self.input_field.setPlaceholderText("描述你需要的资产\n例如: “一辆红色跑车” 或 “一张木制餐桌”\n使用 Ctrl+Enter 发送")
+        self.input_field.setPlaceholderText("描述你需要的场景\n例如: “一个卧室有一个白色的床和一个沙发”\n使用 Ctrl+Enter 发送")
         self.input_field.setMaximumHeight(80)  # Limit height but allow multiple lines
         self.input_field.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.input_field.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
