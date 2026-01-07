@@ -154,6 +154,9 @@ class BaseNumberEdit[T: (int, float)](QtWidgets.QLineEdit):
 
         value = self._text_to_value(text)
 
+        if value is None:
+            return
+
         if self._set_value_only(value) and self._real_time_type:
             self.value_changed.emit()
 
@@ -197,7 +200,7 @@ class BaseNumberEdit[T: (int, float)](QtWidgets.QLineEdit):
     def set_value(self, value: T):
         self._set_value_and_text(value)
 
-    def _set_value_only(self, value) -> bool:
+    def _set_value_only(self, value: T) -> bool:
         raise NotImplementedError()
 
     def step(self) -> T:

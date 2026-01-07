@@ -137,9 +137,10 @@ class SimulationService(SimulationRequest):
 
 
         await self.remote_scene.publish_scene()
+        await asyncio.sleep(0.5)
         await self.remote_scene.save_body_transform()
         await self.remote_scene.change_sim_state(True)
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.5)
 
         # 启动一个虚拟的等待进程，保持终端活跃状态
         # 使用 sleep 命令创建一个长期运行的进程，这样 _sim_process_check_loop 就不会立即退出

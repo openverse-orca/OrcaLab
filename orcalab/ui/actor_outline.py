@@ -331,17 +331,6 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         actor_path = local_scene.get_actor_path(actor)
         return actor_path
 
-    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
-        if event.key() == QtCore.Qt.Key.Key_Delete:
-            actor_path = self._get_selection_actor_path()
-            if actor_path is not None:
-                asyncio.create_task(
-                    SceneEditRequestBus().delete_actor(
-                        actor_path, undo=True, source="actor_outline"
-                    )
-                )
-        return super().keyPressEvent(event)
-
     def paintEvent(self, event):
         self._brach_areas = {}
         return super().paintEvent(event)

@@ -749,6 +749,8 @@ class MainWindow(
         
         if not filename:
             return
+        if not filename.lower().endswith(".json"):
+            filename += ".json"
         
         if not await asyncWrap(self._confirm_discard_changes):
             return
@@ -844,11 +846,11 @@ class MainWindow(
     def prepare_edit_menu(self):
         self.menu_edit.clear()
 
-        action_undo = self.menu_edit.addAction("Undo")
+        action_undo = self.menu_edit.addAction("撤销")
         action_undo.setEnabled(can_undo())
         connect(action_undo.triggered, self.undo)
 
-        action_redo = self.menu_edit.addAction("Redo")
+        action_redo = self.menu_edit.addAction("重做")
         action_redo.setEnabled(can_redo())
         connect(action_redo.triggered, self.redo)
 
