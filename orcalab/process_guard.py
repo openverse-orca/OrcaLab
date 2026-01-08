@@ -21,10 +21,10 @@ def looks_like_orcalab_process(name: str, exe: str, cmdline: str) -> bool:
     python_markers = ("python", "python3", "pypy")
     module_markers = ("-m orcalab", "orcalab/main", "orcalab/__main__", "orcalab.py")
 
-    if any(marker in cmdline for marker in python_markers):
-        return True
-
-    if any(marker in cmdline for marker in module_markers):
+    is_python = any(marker in cmdline for marker in python_markers)
+    is_orcalab = any(marker in cmdline for marker in module_markers)
+    
+    if is_python and is_orcalab:
         return True
 
     return False
@@ -33,15 +33,21 @@ def looks_like_orcalab_process(name: str, exe: str, cmdline: str) -> bool:
 def find_other_orcalab_processes() -> List[psutil.Process]:
     """查找当前之外仍在运行的 OrcaLab 进程"""
     current_pid = os.getpid()
+    parent_pid = psutil.Process(current_pid).ppid()
     processes: List[psutil.Process] = []
 
     for proc in psutil.process_iter(["pid", "name", "cmdline", "exe"]):
         try:
             if proc.pid == current_pid:
                 continue
+            if proc.pid == parent_pid:
+                continue
 
             if sys.platform == "win32":
                 if proc.exe().endswith("Scripts\\orcalab.exe"):
+                    continue
+            else:
+                if proc.exe().endswith("bin/orcalab"):
                     continue
 
             info = proc.info
