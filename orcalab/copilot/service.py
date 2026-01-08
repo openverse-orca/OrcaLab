@@ -28,7 +28,7 @@ class CopilotService:
         self.server_url = server_url.rstrip('/')
         self.timeout = timeout
         
-    async def generate_asset_from_prompt(self, prompt: str, progress_callback=None) -> tuple[Optional[str], Dict[str, Any]]:
+    async def generate_asset_from_prompt(self, prompt: str, progress_callback=None):
         """
         Generate an asset from a text prompt by sending a request to the server.
         
@@ -48,25 +48,11 @@ class CopilotService:
             # Step 1: Generate scene from prompt
             generation_data = await self._generate_scene(prompt, progress_callback)
             
-            # Step 2: Parse the generated scene to get asset information
-            if progress_callback:
-                progress_callback("Parsing generated scene...")
-            scene_data = await self._parse_scene()
             
-            # Add generation info to scene data
-            scene_data['generation_info'] = {
-                'selected_agent': generation_data.get('selected_agent'),
-                'scene_path': generation_data.get('scene_path'),
-                'message': generation_data.get('message')
-            }
+            if generation_data.get('status', 'failed') != 'success':
+                raise Exception(f"Scene generation failed: {generation_data.get('message', 'Unknown error')}")
             
-            # Step 3: Extract the first asset's spawnable name
-            asset_path = None
-            if scene_data.get('assets') and len(scene_data['assets']) > 0:
-                first_asset = scene_data['assets'][0]
-                asset_path = first_asset.get('name', '')
-            
-            return asset_path, scene_data
+            return generation_data
             
         except Exception as e:
             raise Exception(f"Failed to generate asset from prompt: {str(e)}")
@@ -112,8 +98,11 @@ class CopilotService:
                 raise Exception(f"Server error: {response.status_code} - {response.text}")
             
             generation_data = response.json()
-            
-            if not generation_data.get('success', False):
+
+            # Debug: print full response for troubleshooting
+            print(f"Server response: {generation_data}")
+
+            if generation_data.get('status', 'failed') == 'failed':
                 raise Exception(f"Scene generation failed: {generation_data.get('message', 'Unknown error')}")
             
             return generation_data
@@ -143,7 +132,7 @@ class CopilotService:
         """
         return requests.post(
             f"{self.server_url}/api/generate",
-            json={"prompt": prompt},
+            json={"query": prompt},
             timeout=self.timeout
         )
     
@@ -292,165 +281,191 @@ class CopilotService:
         
         return assets
     
-    def create_corner_lights_for_orcalab(self, scene_data: Dict[str, Any], light_height: float = 300.0) -> List[Dict[str, Any]]:
+    def create_corner_lights_for_orcalab(self, scene_data: Dict[str, Any], light_height: float = 3.0) -> List[Dict[str, Any]]:
         """
         Create corner light assets for OrcaLab based on scene bounding box.
         
         Args:
             scene_data: The scene data from the server containing bounding box info
-            light_height: Height of lights above the scene in centimeters (USD coordinate system)
+            light_height: Height of lights above the scene in meters
             
         Returns:
-            List[Dict[str, Any]]: List of light asset information in USD coordinate system
+            List[Dict[str, Any]]: List of light asset information in meters
         """
         lights = []
         
-        # Get bounding box information
-        if not scene_data.get('bounding_box'):
-            print("Warning: No bounding box info available, cannot add corner lights")
+        # 计算包围盒
+        bbox = self.calculate_bounding_box(scene_data)
+        if not bbox:
+            print("Warning: Cannot calculate bounding box, cannot add corner lights")
             return lights
             
-        bbox = scene_data['bounding_box']
         min_point = tuple(bbox['min'])
         max_point = tuple(bbox['max'])
         center_point = tuple(bbox['center'])
         
-        # Calculate half dimensions in USD coordinate system (centimeters)
-        half_width = (max_point[0] - min_point[0]) / 2.0  # Half width in cm
-        half_length = (max_point[2] - min_point[2]) / 2.0  # Half length in cm (USD Z-axis)
-        
-        # Calculate corner positions (3/4 distance from center to corner) in USD coordinates
-        # USD coordinate system: Y-up, so we use (X, Y, Z) where Y is height
-        corner_positions = [
-            # Corner 1: +width, +length (northeast)
-            (half_width * 3/4, half_length * 3/4),
-            # Corner 2: +width, -length (southeast) 
-            (half_width * 3/4, -half_length * 3/4),
-            # Corner 3: -width, +length (northwest)
-            (-half_width * 3/4, half_length * 3/4),
-            # Corner 4: -width, -length (southwest)
-            (-half_width * 3/4, -half_length * 3/4)
-        ]
-        
-        corner_names = ["northeast_light", "southeast_light", "northwest_light", "southwest_light"]
-        
-        for i, (corner_x, corner_z) in enumerate(corner_positions):
-            light_name = corner_names[i]
             
-            # Create light position in USD coordinate system (centimeters)
-            # USD: (X, Y, Z) where Y is up
-            light_position = {
-                'x': center_point[0] + corner_x,  # X position relative to center
-                'y': light_height,                # Y is height in USD coordinate system
-                'z': center_point[2] + corner_z   # Z position relative to center
-            }
+        light_position = [center_point[0], center_point[1], max_point[2]]
+        light_rotation = [0, 0, -180]
             
-            # Light rotation: point downward (180 degrees around X-axis)
-            light_rotation = {
-                'x': 180.0,  # 180 degrees around X-axis to point downward
-                'y': 0.0,
-                'z': 0.0
-            }
-            
-            light_info = {
-                'asset_path': 'spotlight',
-                'name': light_name,
+        light_info = {
+                'asset_path': 'prefabs/light',
+                'name': "light",
                 'position': light_position,
                 'rotation': light_rotation,
-                'scale': {'x': 1.0, 'y': 1.0, 'z': 1.0},
-                'uuid': f'light_{i+1}'  # Simple UUID for lights
+                'scale': 1.0,
             }
-            lights.append(light_info)
+        lights.append(light_info)
             
-            print(f"Created {light_name} at USD position ({light_position['x']:.1f}, {light_position['y']:.1f}, {light_position['z']:.1f})cm")
         
-        print(f"Created {len(lights)} corner lights successfully in USD coordinate system.")
+        print(f"Created {len(lights)} corner lights successfully.")
         return lights
+    
+    def calculate_bounding_box(self, scene_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        根据 rooms 和 walls 数据计算场景包围盒
+        
+        Args:
+            scene_data: 包含 rooms 和 walls 信息的场景数据
+            
+        Returns:
+            包含 min, max, center 的包围盒字典，单位为米
+        """
+        if not scene_data.get('rooms'):
+            return None
+            
+        rooms = scene_data['rooms']
+        walls_data = scene_data.get('walls', [])
+        
+        # 从所有房间的 vertices 计算 XZ 平面的边界
+        all_x = []
+        all_z = []
+        for room in rooms:
+            vertices = room.get('vertices', [])
+            for vertex in vertices:
+                all_x.append(vertex[0])
+                all_z.append(vertex[1])
+        
+        if not all_x or not all_z:
+            return None
+        
+        # 计算 XZ 平面的边界
+        min_x = min(all_x)
+        max_x = max(all_x)
+        min_z = min(all_z)
+        max_z = max(all_z)
+        
+        # 计算 Y 轴边界（高度）
+        min_y = 0.0  # 地面
+        if walls_data:
+            max_height = max(wall.get('height', 0.0) for wall in walls_data)
+            max_y = max_height
+        else:
+            max_y = 2.5  # 默认高度
+        
+        # 计算中心点
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        center_z = (min_z + max_z) / 2.0
+        
+        
+
+        bbox = {
+            'min': [min_x, -max_z, min_y],
+            'max': [max_x, -min_z, max_y],
+            'center': [center_x, -center_z, center_y]
+        }
+        
+        print(f"Calculated bounding box: min={bbox['min']}, max={bbox['max']}, center={bbox['center']}")
+        return bbox
     
     def create_walls_for_orcalab(self, scene_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Create wall assets for OrcaLab based on scene bounding box.
+        根据场景包围盒创建墙体资产
         
         Args:
-            scene_data: The scene data from the server containing bounding box info
-            wall_height: Height of walls in centimeters (USD coordinate system)
+            scene_data: 包含 rooms 和 walls 信息的场景数据
             
         Returns:
-            List[Dict[str, Any]]: List of wall asset information in USD coordinate system
+            墙体资产列表，单位为米
         """
         walls = []
         
-        # Get bounding box information
-        if not scene_data.get('bounding_box'):
-            print("Warning: No bounding box info available, cannot add walls")
+        # 计算包围盒
+        bbox = self.calculate_bounding_box(scene_data)
+        if not bbox:
+            print("Warning: Cannot calculate bounding box, cannot add walls")
             return walls
-            
-        bbox = scene_data['bounding_box']
+        
         min_point = tuple(bbox['min'])
         max_point = tuple(bbox['max'])
         center_point = tuple(bbox['center'])
         
-        # Calculate half dimensions in USD coordinate system (centimeters)
-        half_width = (max_point[0] - min_point[0]) / 2.0  # Half width in cm
-        half_length = (max_point[2] - min_point[2]) / 2.0  # Half length in cm (USD Z-axis)
+        # 计算房间尺寸
+        room_width = max_point[0] - min_point[0]    # X方向
+        room_length = max_point[2] - min_point[2]   # Z方向
+        room_height = max_point[1] - min_point[1]   # Y方向
         
-        # Wall positions: North, South, East, West
-        # Each wall faces toward the center
-        # USD coordinate system: Y-up, so we use (X, Y, Z) where Y is height
-        wall_positions = [
-            # North wall (facing south toward center)
+        half_width = room_width / 2.0
+        half_length = room_length / 2.0
+        wall_y = center_point[1]
+        
+
+        
+        # Wall positions, rotations, scales
+        wall_configs = [
             {
-                'x': center_point[0],
-                'y': -200,
-                'z': center_point[2] + half_length
+                'position': [min_point[0], center_point[1], center_point[2]],
+                'rotation': [0, 90.0, 0.0],
+                'scale': 1,
+                'name': 'wall_1'
             },
-            # South wall (facing north toward center)  
             {
-                'x': center_point[0],
-                'y': -200,
-                'z': center_point[2] - half_length
+                'position': [center_point[0], min_point[1], center_point[2]],
+                'rotation': [-90, 0.0, 0.0],
+                'scale': 1,
+                'name': 'wall_2'
             },
-            # East wall (facing west toward center)
             {
-                'x': center_point[0] + half_width,
-                'y': -200,
-                'z': center_point[2]
+                'position': [center_point[0], center_point[1], min_point[2] + 0.01],
+                'rotation': [0, 0, 0.0],
+                'scale': 1,
+                'name': 'wall_3'
             },
-            # West wall (facing east toward center)
             {
-                'x': center_point[0] - half_width,
-                'y': -200,
-                'z': center_point[2]
-            }
+                'position': [max_point[0], center_point[1], center_point[2]],
+                'rotation': [0.0, -90.0, 0.0],
+                'scale': 1,
+                'name': 'wall_4'
+            },
+            {
+                'position': [center_point[0], max_point[1], center_point[2]],
+                'rotation': [90, 0, 0],
+                'scale': 1,
+                'name': 'wall_5'
+            },
+            {
+                'position': [center_point[0], center_point[1], max_point[2]],
+                'rotation': [180, 0, 0],
+                'scale': 1,
+                'name': 'wall_6'
+            },
+
         ]
         
-        # Wall rotations: Each wall needs to face the center
-        wall_rotations = [
-            # North wall: rotate 180 degrees around Y to face south
-            {'x': -90.0, 'y': 0.0, 'z': 0.0},
-            # South wall: no rotation needed (already faces north)
-            {'x': 90.0, 'y': 0.0, 'z': 0.0},
-            # East wall: rotate -90 degrees around Y to face west
-            {'x': 0.0, 'y': 0, 'z': 90.0},
-            # West wall: rotate 90 degrees around Y to face east
-            {'x': 0.0, 'y': 0, 'z': -90.0}
-        ]
-        
-        wall_names = ["north_wall", "south_wall", "east_wall", "west_wall"]
-        
-        for i, (position, rotation, name) in enumerate(zip(wall_positions, wall_rotations, wall_names)):
+        for i, config in enumerate(wall_configs):
             wall_info = {
-                'asset_path': 'wall_10x10',
-                'name': name,
-                'position': position,
-                'rotation': rotation,
-                'scale': {'x': 1.0, 'y': 1.0, 'z': 1.0},
-                'uuid': f'wall_{i+1}'  # Simple UUID for walls
+                'asset_path': 'prefabs/wall',
+                'name': config['name'],
+                'position': config['position'],
+                'rotation': config['rotation'],
+                'scale': config['scale'],
+                'uuid': f'wall_{i+1}'
             }
             walls.append(wall_info)
             
-            print(f"Created {name} at USD position ({position['x']:.1f}, {position['y']:.1f}, {position['z']:.1f})cm")
+         
         
-        print(f"Created {len(walls)} walls successfully in USD coordinate system.")
+        print(f"Created {len(walls)} walls successfully.")
         return walls
     
