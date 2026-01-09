@@ -1,3 +1,4 @@
+import asyncio
 from copy import deepcopy
 from typing import override, List
 import logging
@@ -29,6 +30,7 @@ class UndoService(UndoRequest):
         self.command_history = []
         self.command_history_index = -1
         self._in_undo_redo = False
+        self._lock = asyncio.Lock()
 
     def connect_bus(self):
         UndoRequestBus.connect(self)
@@ -62,31 +64,33 @@ class UndoService(UndoRequest):
 
     @override
     async def undo(self):
-        if self.command_history_index < 0:
-            return
+        async with self._lock:
+            if self.command_history_index < 0:
+                return
 
-        command = self.command_history[self.command_history_index]
-        self.command_history_index -= 1
+            command = self.command_history[self.command_history_index]
+            self.command_history_index -= 1
 
-        self._in_undo_redo = True
+            self._in_undo_redo = True
 
-        await self._undo_command(command)
+            await self._undo_command(command)
 
-        self._in_undo_redo = False
+            self._in_undo_redo = False
 
     @override
     async def redo(self):
-        if self.command_history_index + 1 >= len(self.command_history):
-            return
+        async with self._lock:
+            if self.command_history_index + 1 >= len(self.command_history):
+                return
 
-        command = self.command_history[self.command_history_index + 1]
-        self.command_history_index += 1
+            command = self.command_history[self.command_history_index + 1]
+            self.command_history_index += 1
 
-        self._in_undo_redo = True
+            self._in_undo_redo = True
 
-        await self._redo_command(command)
+            await self._redo_command(command)
 
-        self._in_undo_redo = False
+            self._in_undo_redo = False
 
     def _get_actor(self, actor_path: Path) -> BaseActor:
         local_scene = get_local_scene()
