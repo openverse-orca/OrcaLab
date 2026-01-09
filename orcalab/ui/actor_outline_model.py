@@ -201,7 +201,9 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
     def canDropMimeData(self, data, action, row, column, parent):
         if data.hasFormat("application/x-orca-asset"):
             parent_actor = self.get_actor(parent)
-            return parent_actor is not None
+            if not isinstance(parent_actor, GroupActor):
+                return False
+            return True
         if data.hasFormat(self.reparent_mime):
             reparent_data = ReparentData()
             return self.prepare_reparent_data(

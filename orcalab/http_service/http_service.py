@@ -132,9 +132,9 @@ class HttpService(HttpServiceRequest):
         future = self._executor.submit(self._post_asset_thumbnail, asset_id, thumbnail_path)
         self._upload_futures.append(future)
 
-    def wait_for_upload_finished(self) -> None:
-        for future in self._upload_futures:
-            future.result()
+    async def wait_for_upload_finished(self) -> None:
+        wrapped_futures = [asyncio.wrap_future(f) for f in self._upload_futures]
+        await asyncio.gather(*wrapped_futures)
         self._upload_futures.clear()
 
     def _post_asset_thumbnail(self, asset_id: str, thumbnail_path: List[str]) -> None:

@@ -10,6 +10,7 @@ from orcalab.actor_property import (
     ActorPropertyKey,
 )
 from orcalab.actor_util import make_unique_name
+from orcalab.application_util import get_local_scene
 from orcalab.config_service import ConfigService
 from orcalab.math import Transform
 from orcalab.path import Path
@@ -186,6 +187,15 @@ class RemoteScene(SceneEditNotification):
 
     def _start_transform_change(self, actor_path: Path, local: bool):
         SceneEditRequestBus().start_change_transform(actor_path)
+        
+        local_scene = get_local_scene()
+        actor = local_scene.find_actor_by_path(actor_path)
+        assert actor is not None
+
+        if local:
+            self.current_transform = actor.transform
+        else:
+            self.current_transform = actor.world_transform
 
     async def _end_transform_change(self, actor_path: Path, local: bool):
         assert isinstance(self.current_transform, Transform)

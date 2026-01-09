@@ -146,6 +146,7 @@ class SceneEditService(SceneEditRequest):
             deselect_command.new_selection = deepcopy(self.local_scene.selection)
             deselect_command.new_selection.remove(_actor_path)
 
+            await self.set_selection(deselect_command.new_selection, undo=False, source=source)
             command_group.commands.append(deselect_command)
 
         delete_command = DeleteActorCommand(_actor, _actor_path, index)

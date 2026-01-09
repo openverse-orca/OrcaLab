@@ -95,26 +95,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
     @QtCore.Slot()
     def _on_selection_changed(self):
-        if self._change_from_outside:
-            return
-
-        self._change_from_inside = True
-
-        actors = []
-        indexes = self.selectedIndexes()
-        for index in indexes:
-            actor = index.internalPointer()
-            if not isinstance(actor, BaseActor):
-                raise Exception("Invalid actor.")
-            actors.append(actor)
-
-        asyncio.create_task(
-            SceneEditRequestBus().set_selection(
-                actors, undo=True, source="actor_outline"
-            )
-        )
-
-        self._change_from_inside = False
+        pass
 
     @override
     async def on_selection_changed(self, old_selection, new_selection, source=""):

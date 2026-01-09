@@ -11,6 +11,8 @@ from orcalab.path import Path
 from orcalab.copilot import CopilotService
 from orcalab.math import Transform
 import orca_gym.utils.rotations as rotations
+from orcalab.metadata_service_bus import MetadataServiceRequestBus, MetadataServiceRequest
+from orcalab.scene_edit_bus import SceneEditRequestBus
 
 class CopilotPanel(QtWidgets.QWidget):
     """Copilot panel for asset search and actor creation"""
@@ -206,44 +208,6 @@ class CopilotPanel(QtWidgets.QWidget):
         self.copilot_service.set_server_url(server_url)
         self.copilot_service.set_timeout(timeout)
     
-    def _display_scene_info(self, scene_data: dict):
-        """
-        Display detailed scene information in the log output.
-        
-        Args:
-            scene_data: The scene data returned from the server
-        """
-        try:
-            # Display generation info
-            if scene_data.get('generation_info'):
-                gen_info = scene_data['generation_info']
-                self.log_message("🤖 Generation Information:")
-                self.log_message(f"  Selected Agent: {gen_info.get('selected_agent', {}).get('agent', 'Unknown')}")
-                self.log_message(f"  Reasoning: {gen_info.get('selected_agent', {}).get('reasoning', 'N/A')}")
-                self.log_message(f"  Scene Path: {gen_info.get('scene_path', 'N/A')}")
-                self.log_message(f"  Message: {gen_info.get('message', 'N/A')}")
-            
-            # Display scene overview
-            self.log_message("📊 Scene Overview:")
-            self.log_message(f"  Assets: {scene_data.get('asset_count', 0)}")
-            self.log_message(f"  Scene Dimensions: {self._format_dimensions(scene_data.get('scene_dimensions', {}))}")
-            self.log_message(f"  Center Point: {self._format_point(scene_data.get('scene_center', []))}")
-            
-            # Display assets list
-            if scene_data.get('assets'):
-                self.log_message("🎯 Generated Assets:")
-                for i, asset in enumerate(scene_data['assets'][:5]):  # Show first 5 assets
-                    self.log_message(f"  {i+1}. {asset.get('name', 'Unknown')}")
-                    self.log_message(f"     Position: {self._format_point(asset.get('position', {}))}")
-                    self.log_message(f"     Rotation: {self._format_rotation(asset.get('rotation', {}))}")
-                    self.log_message(f"     Scale: {self._format_scale(asset.get('scale', {}))}")
-                
-                if len(scene_data['assets']) > 5:
-                    self.log_message(f"  ... and {len(scene_data['assets']) - 5} more assets")
-            
-        except Exception as e:
-            self.log_error(f"Failed to display scene info: {str(e)}")
-    
     def _format_dimensions(self, dimensions):
         """Format scene dimensions for display."""
         if not dimensions:
@@ -313,48 +277,63 @@ class CopilotPanel(QtWidgets.QWidget):
             
             # Step 2: Generate asset from prompt
             self.log_message("Step 2: Generating asset from prompt...")
-            asset_path, scene_data = await self.copilot_service.generate_asset_from_prompt(
+            scene_data = await self.copilot_service.generate_asset_from_prompt(
                 prompt, 
                 progress_callback=self._update_progress_message
             )
-            
-            if not asset_path:
-                self.log_error("Failed to generate asset from prompt")
-                return
-            
-            self.log_success(f"Generated asset: '{asset_path}'")
-            
-            # Step 2.5: Display detailed asset information
-            self._display_scene_info(scene_data)
-            
+            assets = scene_data.get('assets', [])
+
             # Step 3: Create a unified group for the entire scene
             self.log_message("Step 3: Creating unified group for the scene...")
             import secrets
             group_suffix = secrets.token_hex(4)  # Generate 8 hex characters (4 bytes)
             group_name = f"CopilotScene_{group_suffix}"
             group_path = await self.create_group_for_scene(group_name)
-            
-            # Step 4: Add all scene assets to the group
-            self.log_message("Step 4: Adding scene assets to the group...")
-            assets = self.copilot_service.get_scene_assets_for_orcalab(scene_data)
-            
-            scene_center = scene_data.get('scene_center', [])
-            center_point = {
-                'x': scene_center[0],
-                'y': scene_center[1],
-                'z': scene_center[2]
-            }
-            
-            await self.add_assets_to_group(assets, group_path, center_point)
-            self.log_success(f"All {len(assets)} scene assets added successfully!")
+
+            asset_map = []
+            MetadataServiceRequestBus().get_asset_map(asset_map)
+            if asset_map is None:
+                self.log_error("Failed to get asset map")
+                return
+            asset_map = asset_map[0]
+            name_to_path = {}
+            for asset_path in asset_map.keys():
+                name_to_path[asset_path.split('/')[-1]] = asset_path
+            for asset in assets:
+                filename = asset.get('filename', '')
+                filename = filename.replace('.usdz', '_usda')
+                if filename.startswith(('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')):
+                    filename = 'a_' + filename
+                filename = filename.replace('-', '_')
+                if filename in name_to_path:
+                    asset_path = name_to_path[filename]
+                    translate = np.array(asset['xformOp:translate'])[[0, 2, 1]]
+                    translate[1] = -translate[1]
+                    rotation = np.array(asset['xformOp:rotateXYZ'])[[0, 2, 1]]
+                    rotation[1] = -rotation[1]
+                    rotation[2] = rotation[2] + 180
+                    quaternion = np.array(Rotation.from_euler('xyz', rotation, degrees=True).as_quat(scalar_first=True))
+                    transform = Transform(position=translate, rotation=quaternion, scale=asset['xformOp:scale'][0])
+                    
+                    self.add_item_with_transform.emit(filename, asset_path, group_path, transform)
+                else:
+                    self.log_error(f"Asset {filename} not found in asset map")
             
             # Step 5: Add walls to the same group
             self.log_message("Step 5: Adding walls to the group...")
             walls = self.copilot_service.create_walls_for_orcalab(scene_data)
             
-            if walls:
-                await self.add_assets_to_group(walls, group_path, center_point)
-                self.log_success(f"All {len(walls)} walls added successfully!")
+            if len(walls) > 0:
+                for wall in walls:
+                    actor_path = wall['asset_path']
+                    actor_name = wall['name']
+                    position = np.array(wall['position'])
+                    rotation = np.array(wall['rotation'])
+                    scale = wall['scale']
+                    quaternion = np.array(Rotation.from_euler('xyz', rotation, degrees=True).as_quat(scalar_first=True))
+                    transform = Transform(position=position, rotation=quaternion, scale=scale)
+                    self.add_item_with_transform.emit(actor_name, actor_path, group_path, transform)
+                    self.log_message (f"actor_name: {actor_name}, actor_path: {actor_path}, position: {position}, rotation: {rotation}, scale: {scale}")
             else:
                 self.log_message("No walls added (no bounding box info available)")
             
@@ -362,16 +341,20 @@ class CopilotPanel(QtWidgets.QWidget):
             self.log_message("Step 6: Adding corner lights to the group...")
             lights = self.copilot_service.create_corner_lights_for_orcalab(scene_data, light_height=300.0)
             
-            if lights:
-                await self.add_assets_to_group(lights, group_path, center_point)
-                self.log_success(f"All {len(lights)} corner lights added successfully!")
+            if len(lights) > 0:
+                for light in lights:
+                    actor_path = light['asset_path']
+                    actor_name = light['name']
+                    position = np.array(light['position'])
+                    rotation = np.array(light['rotation'])
+                    scale = light['scale']
+                    quaternion = np.array(Rotation.from_euler('xyz', rotation, degrees=True).as_quat(scalar_first=True))
+                    transform = Transform(position=position, rotation=quaternion, scale=scale)
+                    self.add_item_with_transform.emit(actor_name, actor_path, group_path, transform)
             else:
                 self.log_message("No corner lights added (no bounding box info available)")
-            
-            # Summary
-            total_assets = len(assets) + len(walls) + len(lights) if walls and lights else len(assets) + len(walls) if walls else len(assets) + len(lights) if lights else len(assets)
-            self.log_success(f"Scene group '{group_name}' created with {total_assets} total assets ({len(assets)} scene assets + {len(walls) if walls else 0} walls + {len(lights) if lights else 0} lights)")
-            
+
+
             # Clear input field
             self.clear_input()
             self.log_success("Asset generation and scene display completed successfully!")

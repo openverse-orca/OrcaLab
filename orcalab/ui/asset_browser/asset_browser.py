@@ -401,7 +401,7 @@ class AssetBrowser(QtWidgets.QWidget):
             return
         self.create_panorama_apng_button.setText("加载中...")
         self.create_panorama_apng_button.setDisabled(True)
-        self._http_service.wait_for_upload_finished()
+        await self._http_service.wait_for_upload_finished()
 
         self.on_upload_thumbnail_finished.emit()
 

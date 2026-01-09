@@ -126,6 +126,7 @@ class GroupActor(BaseActor):
             self._children.remove(child)
             child._parent = None
         # Don't raise error if child is not in the list - this can happen during cleanup
+        # TODO: Test this behavior?
 
 
 class AssetActor(BaseActor):
