@@ -28,7 +28,7 @@ def create_config_file(workspace: pathlib.Path):
     shutil.copy(template_config, config_service.workspace_config_file())
 
 
-def launch_orcalab_gui(debug: bool = False):
+def launch_orcalab_gui(verbose: bool = False):
     try:
         envs = os.environ.copy()
         if "LD_LIBRARY_PATH" in envs:
@@ -36,7 +36,7 @@ def launch_orcalab_gui(debug: bool = False):
 
         args = [sys.executable, "-m", "orcalab.main"] + sys.argv[1:]
         
-        if debug:
+        if verbose:
             subprocess.run(args, env=envs)
         else:
             subprocess.run(
@@ -49,17 +49,17 @@ def launch_orcalab_gui(debug: bool = False):
     except KeyboardInterrupt:
         sys.exit(0)
     except Exception as e:
-        if debug:
+        if verbose:
             raise
         sys.exit(1)
 
 
 def main():
-    debug = False
+    verbose = False
     try:
         parser = create_argparser()
         args, unknown = parser.parse_known_args()
-        debug = args.debug
+        verbose = args.verbose
 
         workspace = pathlib.Path(args.workspace).resolve()
 
@@ -71,7 +71,7 @@ def main():
     except KeyboardInterrupt:
         sys.exit(0)
     except Exception:
-        if debug:
+        if verbose:
             raise
         sys.exit(1)
 

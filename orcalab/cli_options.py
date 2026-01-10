@@ -25,7 +25,7 @@ def create_argparser():
     )
 
     parser.add_argument(
-        "--debug", action="store_true", help="调试模式，输出所有信息到终端"
+        "--verbose", action="store_true", help="输出所有信息到终端"
     )
 
     return parser
