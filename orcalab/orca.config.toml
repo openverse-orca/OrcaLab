@@ -1,5 +1,5 @@
 [orcalab]
-version = "26.1.7.1"
+version = "26.1.8.1"
 edit_port = 50151
 sim_port = 50051
 init_paks = true
@@ -12,6 +12,7 @@ python_project_path = ""
 python_project_url = ""
 
 [copilot]
+enable = false
 server_url = "http://103.237.28.246:9023"
 timeout = 180
 

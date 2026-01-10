@@ -325,6 +325,9 @@ class ConfigService:
 
     def copilot_timeout(self) -> int:
         return self.config.get("copilot", {}).get("timeout", 180)
+    
+    def copilot_enable(self) -> bool:
+        return self.config.get("copilot", {}).get("enable", False)
 
     def external_programs(self) -> list:
         """获取仿真程序配置列表"""

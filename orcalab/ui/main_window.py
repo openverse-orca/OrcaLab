@@ -163,8 +163,9 @@ class MainWindow(
 
         connect(self.asset_browser_widget.add_item, self.add_item_to_scene)
 
-        connect(self.copilot_widget.add_item_with_transform, self.add_item_to_scene_with_transform)
-        connect(self.copilot_widget.request_add_group, self.on_copilot_add_group)
+        if self.config_service.copilot_enable():
+            connect(self.copilot_widget.add_item_with_transform, self.add_item_to_scene_with_transform)
+            connect(self.copilot_widget.request_add_group, self.on_copilot_add_group)
 
         connect(self.menu_file.aboutToShow, self.prepare_file_menu)
         connect(self.menu_edit.aboutToShow, self.prepare_edit_menu)
@@ -389,7 +390,9 @@ class MainWindow(
         )
         panel = Panel("小O", self.copilot_widget)
         panel.panel_icon = make_icon(":/icons/chat_sparkle", panel_icon_color)
-        self.add_panel(panel, "right")
+
+        if self.config_service.copilot_enable():
+            self.add_panel(panel, "right")
 
         logger.info("创建终端组件…")
         # 添加终端组件
@@ -602,8 +605,9 @@ class MainWindow(
         self.actor_editor_widget.setAttribute(t, True)
         self.asset_browser_widget.setEnabled(False)
         self.asset_browser_widget.setAttribute(t, True)
-        self.copilot_widget.setEnabled(False)
-        self.copilot_widget.setAttribute(t, True)
+        if self.config_service.copilot_enable():
+            self.copilot_widget.setEnabled(False)
+            self.copilot_widget.setAttribute(t, True)
         self.menu_edit.setEnabled(False)
 
         self.manipulator_bar.action_scale.setEnabled(False)
@@ -616,8 +620,9 @@ class MainWindow(
         self.actor_editor_widget.setAttribute(t, False)
         self.asset_browser_widget.setEnabled(True)
         self.asset_browser_widget.setAttribute(t, False)
-        self.copilot_widget.setEnabled(True)
-        self.copilot_widget.setAttribute(t, False)
+        if self.config_service.copilot_enable():
+            self.copilot_widget.setEnabled(True)
+            self.copilot_widget.setAttribute(t, False)
         self.menu_edit.setEnabled(True)
 
         self.manipulator_bar.action_scale.setEnabled(True)
