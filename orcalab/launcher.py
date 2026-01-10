@@ -67,7 +67,7 @@ def main():
             create_config_file(workspace)
             return
 
-        launch_orcalab_gui(debug=debug)
+        launch_orcalab_gui(verbose=verbose)
     except KeyboardInterrupt:
         sys.exit(0)
     except Exception:
