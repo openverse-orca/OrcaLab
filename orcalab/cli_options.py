@@ -24,4 +24,8 @@ def create_argparser():
         "--init-config", action="store_true", help="初始化配置文件并退出"
     )
 
+    parser.add_argument(
+        "--verbose", action="store_true", help="输出所有信息到终端"
+    )
+
     return parser

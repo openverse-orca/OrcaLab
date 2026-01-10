@@ -28,32 +28,52 @@ def create_config_file(workspace: pathlib.Path):
     shutil.copy(template_config, config_service.workspace_config_file())
 
 
-def launch_orcalab_gui():
+def launch_orcalab_gui(verbose: bool = False):
     try:
         envs = os.environ.copy()
         if "LD_LIBRARY_PATH" in envs:
             del envs["LD_LIBRARY_PATH"]
 
         args = [sys.executable, "-m", "orcalab.main"] + sys.argv[1:]
-        subprocess.run(args, env=envs)
+        
+        if verbose:
+            subprocess.run(args, env=envs)
+        else:
+            subprocess.run(
+                args, 
+                env=envs, 
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.DEVNULL
+            )
+        sys.exit(0)
+    except KeyboardInterrupt:
         sys.exit(0)
     except Exception as e:
-        print(f"启动 OrcaLab GUI 失败: {e}", file=sys.stderr)
+        if verbose:
+            raise
         sys.exit(1)
 
 
 def main():
-    parser = create_argparser()
+    verbose = False
+    try:
+        parser = create_argparser()
+        args, unknown = parser.parse_known_args()
+        verbose = args.verbose
 
-    args, unknown = parser.parse_known_args()
+        workspace = pathlib.Path(args.workspace).resolve()
 
-    workspace = pathlib.Path(args.workspace).resolve()
+        if args.init_config:
+            create_config_file(workspace)
+            return
 
-    if args.init_config:
-        create_config_file(workspace)
-        return
-
-    launch_orcalab_gui()
+        launch_orcalab_gui(verbose=verbose)
+    except KeyboardInterrupt:
+        sys.exit(0)
+    except Exception:
+        if verbose:
+            raise
+        sys.exit(1)
 
 
 if __name__ == "__main__":

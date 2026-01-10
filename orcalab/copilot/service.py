@@ -12,6 +12,7 @@ import tempfile
 import os
 from typing import Optional, Dict, Any, List
 from pathlib import Path
+from orcalab.token_storage import TokenStorage
 
 
 class CopilotService:
@@ -27,6 +28,14 @@ class CopilotService:
         """
         self.server_url = server_url.rstrip('/')
         self.timeout = timeout
+        
+        token = TokenStorage.load_token()
+        if token is not None:
+            self.access_token = token['access_token']
+            self.username = token['username']
+        else:
+            self.access_token = None
+            self.username = None
         
     async def generate_asset_from_prompt(self, prompt: str, progress_callback=None):
         """
@@ -100,7 +109,7 @@ class CopilotService:
             generation_data = response.json()
 
             # Debug: print full response for troubleshooting
-            print(f"Server response: {generation_data}")
+            # print(f"Server response: {generation_data}")
 
             if generation_data.get('status', 'failed') == 'failed':
                 raise Exception(f"Scene generation failed: {generation_data.get('message', 'Unknown error')}")
@@ -133,6 +142,7 @@ class CopilotService:
         return requests.post(
             f"{self.server_url}/api/generate",
             json={"query": prompt},
+            headers=self._get_headers(),
             timeout=self.timeout
         )
     
@@ -201,7 +211,11 @@ class CopilotService:
         Returns:
             The HTTP response
         """
-        return requests.get(f"{self.server_url}/api/health", timeout=5)
+        return requests.get(
+            f"{self.server_url}/api/health",
+            headers=self._get_headers(),
+            timeout=5
+        )
     
     async def _show_progress_dots(self, progress_callback):
         """
@@ -213,13 +227,27 @@ class CopilotService:
         dot_count = 0
         try:
             while True:
-                await asyncio.sleep(2)  # Wait 2 seconds
+                await asyncio.sleep(2)
                 dot_count += 1
-                dots = "." * (dot_count % 4)  # Cycle through 0, 1, 2, 3 dots
+                dots = "." * (dot_count % 4)
                 progress_callback(f"Generating scene{dots}")
         except asyncio.CancelledError:
-            # Task was cancelled, which is expected when generation completes
             pass
+    
+    def _get_headers(self) -> Dict[str, str]:
+        """
+        构造请求头，包含鉴权信息
+        
+        Returns:
+            包含 Content-Type, Authorization, Username 的 headers 字典
+        """
+        headers = {'Content-Type': 'application/json'}
+        
+        if self.access_token and self.username:
+            headers['Authorization'] = f'Bearer {self.access_token}'
+            headers['Username'] = self.username
+        
+        return headers
     
     def set_server_url(self, server_url: str):
         """
@@ -263,11 +291,11 @@ class CopilotService:
                 asset_path = f"asset_{uuid.replace('-', '_')}_usda"
                 
                 # Debug output to show what spawnable names are being used
-                print(f"Asset: {asset.get('name', 'asset')} -> Spawnable: {asset_path} (UUID: {uuid})")
-                print(f"  USD Position (cm): {asset.get('position', {})}")
-                print(f"  USD Rotation (degrees): {asset.get('rotation', {})}")
-                print(f"  Scale: {asset.get('scale', {})}")
-                print(f"  Note: Will be converted from USD to OrcaLab coordinate system")
+                # print(f"Asset: {asset.get('name', 'asset')} -> Spawnable: {asset_path} (UUID: {uuid})")
+                # print(f"  USD Position (cm): {asset.get('position', {})}")
+                # print(f"  USD Rotation (degrees): {asset.get('rotation', {})}")
+                # print(f"  Scale: {asset.get('scale', {})}")
+                # print(f"  Note: Will be converted from USD to OrcaLab coordinate system")
                 
                 asset_info = {
                     'asset_path': asset_path,
@@ -306,7 +334,7 @@ class CopilotService:
         
             
         light_position = [center_point[0], center_point[1], max_point[2]]
-        light_rotation = [0, 0, -180]
+        light_rotation = [0, 180, 0]
             
         light_info = {
                 'asset_path': 'prefabs/light',
@@ -318,7 +346,7 @@ class CopilotService:
         lights.append(light_info)
             
         
-        print(f"Created {len(lights)} corner lights successfully.")
+        # print(f"Created {len(lights)} corner lights successfully.")
         return lights
     
     def calculate_bounding_box(self, scene_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -444,12 +472,12 @@ class CopilotService:
                 'scale': 1,
                 'name': 'wall_5'
             },
-            {
-                'position': [center_point[0], center_point[1], max_point[2]],
-                'rotation': [180, 0, 0],
-                'scale': 1,
-                'name': 'wall_6'
-            },
+            # {
+            #     'position': [center_point[0], center_point[1], max_point[2]],
+            #     'rotation': [180, 0, 0],
+            #     'scale': 1,
+            #     'name': 'wall_6'
+            # },
 
         ]
         
