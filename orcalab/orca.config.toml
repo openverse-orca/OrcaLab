@@ -12,6 +12,7 @@ python_project_path = ""
 python_project_url = ""
 
 [copilot]
+enable = false
 server_url = "http://103.237.28.246:9023"
 timeout = 180
 
