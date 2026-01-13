@@ -6,10 +6,10 @@ import subprocess
 import json
 import re
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 import logging
 
-from PySide6 import QtWidgets
+from PySide6 import QtWidgets, QtCore, QtGui
 import requests
 import importlib.metadata
 
@@ -17,6 +17,100 @@ from orcalab.config_service import ConfigService
 from orcalab.project_util import project_id
 
 logger = logging.getLogger(__name__)
+
+
+class InstallProgressDialog(QtWidgets.QDialog):
+    """安装进度对话框"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("OrcaLab 安装进度")
+        self.setMinimumWidth(500)
+        self.setModal(True)
+        
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # 当前操作标签
+        self.status_label = QtWidgets.QLabel("准备安装...")
+        self.status_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        layout.addWidget(self.status_label)
+        
+        # 详细信息标签
+        self.detail_label = QtWidgets.QLabel("")
+        self.detail_label.setStyleSheet("color: #666666;")
+        layout.addWidget(self.detail_label)
+        
+        # 进度条
+        self.progress_bar = QtWidgets.QProgressBar()
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #cccccc;
+                border-radius: 5px;
+                text-align: center;
+                height: 25px;
+            }
+            QProgressBar::chunk {
+                background-color: #2196F3;
+                border-radius: 3px;
+            }
+        """)
+        layout.addWidget(self.progress_bar)
+        
+        # 日志文本框
+        self.log_text = QtWidgets.QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setMaximumHeight(150)
+        self.log_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #f5f5f5;
+                border: 1px solid #cccccc;
+                border-radius: 3px;
+                font-family: monospace;
+                font-size: 10px;
+            }
+        """)
+        layout.addWidget(self.log_text)
+        
+        layout.addStretch()
+        
+    def set_status(self, status: str):
+        """设置当前状态"""
+        self.status_label.setText(status)
+        self.log(status)
+        QtWidgets.QApplication.processEvents()
+    
+    def set_detail(self, detail: str):
+        """设置详细信息"""
+        self.detail_label.setText(detail)
+        QtWidgets.QApplication.processEvents()
+    
+    def set_progress(self, value: int):
+        """设置进度（0-100）"""
+        self.progress_bar.setValue(value)
+        QtWidgets.QApplication.processEvents()
+    
+    def log(self, message: str):
+        """添加日志"""
+        self.log_text.append(message)
+        scrollbar = self.log_text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+        QtWidgets.QApplication.processEvents()
+    
+    def set_indeterminate(self):
+        """设置为不确定进度模式"""
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(0)
+    
+    def set_determinate(self):
+        """设置为确定进度模式"""
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(100)
 
 
 def _extract_version_from_url(url: str) -> str:
@@ -157,7 +251,14 @@ def _is_installation_needed(config: ConfigService) -> bool:
     return True
 
 
-def _download_archive(url: str, target_file: Path) -> None:
+def _download_archive(url: str, target_file: Path, progress_callback: Optional[Callable[[int, str], None]] = None) -> None:
+    """下载文件
+    
+    Args:
+        url: 下载链接
+        target_file: 保存路径
+        progress_callback: 进度回调函数，接收 (进度百分比, 详细信息) 参数
+    """
     target_file.parent.mkdir(parents=True, exist_ok=True)
     with requests.get(url, stream=True, timeout=60) as r:
         r.raise_for_status()
@@ -170,19 +271,44 @@ def _download_archive(url: str, target_file: Path) -> None:
                     f.write(chunk)
                     downloaded += len(chunk)
                     if total_size > 0:
-                        percent = (downloaded / total_size) * 100
-                        print(f"\r下载进度: {downloaded / 1024 / 1024:.1f}MB / {total_size / 1024 / 1024:.1f}MB ({percent:.1f}%)", end='', flush=True)
+                        percent = int((downloaded / total_size) * 100)
+                        detail = f"{downloaded / 1024 / 1024:.1f}MB / {total_size / 1024 / 1024:.1f}MB"
+                        if progress_callback:
+                            progress_callback(percent, detail)
+                        else:
+                            print(f"\r下载进度: {detail} ({percent}%)", end='', flush=True)
                     else:
-                        print(f"\r已下载: {downloaded / 1024 / 1024:.1f}MB", end='', flush=True)
-        print()  # 换行
+                        detail = f"已下载: {downloaded / 1024 / 1024:.1f}MB"
+                        if progress_callback:
+                            progress_callback(0, detail)
+                        else:
+                            print(f"\r{detail}", end='', flush=True)
+        if not progress_callback:
+            print()  # 换行
 
 
-def _extract_tar_xz(archive_path: Path, dest_dir: Path) -> None:
+def _extract_tar_xz(archive_path: Path, dest_dir: Path, progress_callback: Optional[Callable[[int, str], None]] = None) -> None:
+    """解压 tar.xz 文件
+    
+    Args:
+        archive_path: 压缩包路径
+        dest_dir: 目标目录
+        progress_callback: 进度回调函数，接收 (进度百分比, 详细信息) 参数
+    """
     if dest_dir.exists():
         shutil.rmtree(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
+    
     with tarfile.open(archive_path, mode="r:xz") as tf:
-        tf.extractall(dest_dir)
+        members = tf.getmembers()
+        total_members = len(members)
+        
+        for i, member in enumerate(members):
+            tf.extract(member, dest_dir)
+            if progress_callback and total_members > 0:
+                percent = int((i + 1) / total_members * 100)
+                detail = f"解压: {member.name} ({i + 1}/{total_members})"
+                progress_callback(percent, detail)
 
 
 def _find_editable_root(extracted_dir: Path) -> Optional[Path]:
@@ -213,6 +339,44 @@ def _get_current_orcalab_pyside_path() -> Optional[Path]:
         return None
 
 
+def _download_pak_file(url: str, target_path: Path, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
+    """下载 pak 文件
+    
+    Args:
+        url: 下载链接
+        target_path: 保存路径
+        progress_callback: 进度回调函数，接收 (进度百分比, 详细信息) 参数
+        
+    Returns:
+        bool: 下载是否成功
+    """
+    try:
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with requests.get(url, stream=True, timeout=60) as r:
+            r.raise_for_status()
+            total_size = int(r.headers.get('content-length', 0))
+            downloaded = 0
+            
+            with open(target_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size > 0:
+                            percent = int((downloaded / total_size) * 100)
+                            detail = f"{downloaded / 1024 / 1024:.1f}MB / {total_size / 1024 / 1024:.1f}MB"
+                            if progress_callback:
+                                progress_callback(percent, detail)
+                        else:
+                            detail = f"已下载: {downloaded / 1024 / 1024:.1f}MB"
+                            if progress_callback:
+                                progress_callback(0, detail)
+        return True
+    except Exception as e:
+        logger.error("Failed to download pak file from %s: %s", url, e)
+        return False
+
+
 def _pip_install_editable(package_root: Path) -> None:
     # Use current python's pip to ensure same environment
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", str(package_root)])
@@ -235,60 +399,141 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
 
     logger.info("Installing or updating orcalab-pyside...")
     
-    orcalab_cfg = cfg.config.get("orcalab", {})
-    local_path = str(orcalab_cfg.get("python_project_path", "") or "").strip()
-    download_url = str(orcalab_cfg.get("python_project_url", "") or "").strip()
-
-    # Determine source and install
-    editable_root: Optional[Path] = None
-    state_update = {}
+    # 创建进度对话框
+    app = QtWidgets.QApplication.instance()
+    if app is None:
+        app = QtWidgets.QApplication(sys.argv)
     
-    if local_path:
-        candidate = Path(local_path).expanduser().resolve()
-        if not candidate.exists():
-            raise FileNotFoundError(f"python_project_path not found: {candidate}")
-        editable_root = candidate
-        state_update["installed_path"] = str(candidate)
-        state_update["installed_url"] = None  # 开发者模式不使用URL
-        state_update["url_version"] = None
-    else:
-        if not download_url:
-            raise ValueError("python_project_url is empty in configuration")
-        
-        # 从URL提取版本号
-        url_version = _extract_version_from_url(download_url)
-        logger.info("Extracted version from URL: %s", url_version)
-        
-        # 记录当前URL和版本
-        state_update["installed_url"] = download_url
-        state_update["installed_path"] = None  # 用户模式不使用本地路径
-        state_update["url_version"] = url_version
-        
-        # Download to cache under user folder and extract to version-specific dest
-        dest_root = _get_user_python_project_root(url_version)
-        archive_name = f"python-project-{url_version}.tar.xz"
-        archive_path = dest_root.parent / archive_name
-
-        # 总是重新下载以确保版本同步
-        logger.info("Downloading from %s...", download_url)
-        _download_archive(download_url, archive_path)
-
-        logger.info("Extracting to %s...", dest_root)
-        _extract_tar_xz(archive_path, dest_root)
-        
-        # Try to locate package root (in case archive contains a top-level directory)
-        found = _find_editable_root(dest_root)
-        editable_root = found or dest_root
-
-    # Install editable package into current environment
-    logger.info("Installing editable package from %s...", editable_root)
-    _pip_install_editable(editable_root)
+    progress_dialog = InstallProgressDialog()
+    progress_dialog.show()
+    progress_dialog.set_status("正在准备安装...")
+    progress_dialog.set_progress(0)
     
-    # 保存安装状态
-    state_update["installed_at"] = str(Path.cwd())  # 记录安装时的环境
-    _save_install_state(state_update)
+    try:
+        orcalab_cfg = cfg.config.get("orcalab", {})
+        local_path = str(orcalab_cfg.get("python_project_path", "") or "").strip()
+        download_url = str(orcalab_cfg.get("python_project_url", "") or "").strip()
 
-    QtWidgets.QMessageBox.information(None, "安装完成", "orcalab初始化完成, 请重新运行orcalab")
+        # Determine source and install
+        editable_root: Optional[Path] = None
+        state_update = {}
+        
+        if local_path:
+            progress_dialog.set_status("使用本地开发路径...")
+            progress_dialog.log(f"本地路径: {local_path}")
+            
+            candidate = Path(local_path).expanduser().resolve()
+            if not candidate.exists():
+                raise FileNotFoundError(f"python_project_path not found: {candidate}")
+            editable_root = candidate
+            state_update["installed_path"] = str(candidate)
+            state_update["installed_url"] = None
+            state_update["url_version"] = None
+            progress_dialog.set_progress(50)
+        else:
+            if not download_url:
+                raise ValueError("python_project_url is empty in configuration")
+            
+            # 从URL提取版本号
+            url_version = _extract_version_from_url(download_url)
+            logger.info("Extracted version from URL: %s", url_version)
+            progress_dialog.log(f"检测到版本: {url_version}")
+            
+            # 记录当前URL和版本
+            state_update["installed_url"] = download_url
+            state_update["installed_path"] = None
+            state_update["url_version"] = url_version
+            
+            # Download to cache under user folder and extract to version-specific dest
+            dest_root = _get_user_python_project_root(url_version)
+            archive_name = f"python-project-{url_version}.tar.xz"
+            archive_path = dest_root.parent / archive_name
+
+            # 下载进度回调
+            def download_progress(percent: int, detail: str):
+                progress_dialog.set_status("正在下载 python-project...")
+                progress_dialog.set_detail(detail)
+                progress_dialog.set_progress(percent // 2)  # 0-50%
+            
+            progress_dialog.log(f"开始下载: {download_url}")
+            _download_archive(download_url, archive_path, download_progress)
+            progress_dialog.log(f"下载完成: {archive_path.name}")
+
+            # 解压进度回调
+            def extract_progress(percent: int, detail: str):
+                progress_dialog.set_status("正在解压 python-project...")
+                progress_dialog.set_detail(detail)
+                progress_dialog.set_progress(50 + percent // 2)  # 50-100%
+            
+            progress_dialog.log(f"开始解压到: {dest_root}")
+            _extract_tar_xz(archive_path, dest_root, extract_progress)
+            progress_dialog.log("解压完成")
+            
+            # Try to locate package root (in case archive contains a top-level directory)
+            found = _find_editable_root(dest_root)
+            editable_root = found or dest_root
+
+        # Install editable package into current environment
+        progress_dialog.set_status("正在安装 Python 包...")
+        progress_dialog.set_detail("运行 pip install -e ...")
+        progress_dialog.set_indeterminate()
+        progress_dialog.log(f"安装可编辑包: {editable_root}")
+        
+        logger.info("Installing editable package from %s...", editable_root)
+        _pip_install_editable(editable_root)
+        progress_dialog.log("包安装完成")
+        
+        # 下载 pak 文件（如果配置了）
+        pak_urls = orcalab_cfg.get("pak_urls", [])
+        if pak_urls:
+            progress_dialog.set_determinate()
+            progress_dialog.log(f"检测到 {len(pak_urls)} 个 pak 文件需要下载")
+            
+            from orcalab.project_util import get_cache_folder
+            cache_folder = get_cache_folder()
+            cache_folder.mkdir(parents=True, exist_ok=True)
+            
+            for i, pak_url in enumerate(pak_urls):
+                filename = pak_url.split("/")[-1]
+                target_path = cache_folder / filename
+                
+                # 如果文件已存在，跳过
+                if target_path.exists():
+                    progress_dialog.log(f"pak 文件已存在，跳过: {filename}")
+                    continue
+                
+                def pak_download_progress(percent: int, detail: str):
+                    progress_dialog.set_status(f"正在下载 pak 文件 ({i+1}/{len(pak_urls)})...")
+                    progress_dialog.set_detail(f"{filename}: {detail}")
+                    progress_dialog.set_progress(percent)
+                
+                progress_dialog.log(f"开始下载 pak 文件: {filename}")
+                success = _download_pak_file(pak_url, target_path, pak_download_progress)
+                
+                if success:
+                    progress_dialog.log(f"pak 文件下载完成: {filename}")
+                else:
+                    progress_dialog.log(f"pak 文件下载失败: {filename}")
+        
+        # 保存安装状态
+        state_update["installed_at"] = str(Path.cwd())
+        _save_install_state(state_update)
+        
+        progress_dialog.set_determinate()
+        progress_dialog.set_progress(100)
+        progress_dialog.set_status("安装完成！")
+        progress_dialog.set_detail("请重新运行 OrcaLab")
+        progress_dialog.log("所有安装步骤已完成")
+        
+        QtWidgets.QMessageBox.information(progress_dialog, "安装完成", "orcalab初始化完成, 请重新运行orcalab")
+        
+    except Exception as e:
+        logger.exception("Installation failed: %s", e)
+        progress_dialog.log(f"错误: {str(e)}")
+        QtWidgets.QMessageBox.critical(progress_dialog, "安装失败", f"安装过程中出现错误:\n{str(e)}")
+        raise
+    finally:
+        progress_dialog.close()
     
     # 包更新后直接退出程序
     import sys
