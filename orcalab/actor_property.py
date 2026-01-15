@@ -28,6 +28,8 @@ class ActorProperty:
         self._type = type
         self._value = ValueWrapper(value)
         self._original_value = ValueWrapper(value)
+        self._read_only = False
+        self._editor_hint = ""
 
     def name(self) -> str:
         return self._name
@@ -80,11 +82,24 @@ class ActorProperty:
             case _:
                 raise NotImplementedError("Unsupported property type")
 
+    def is_read_only(self) -> bool:
+        return self._read_only
+
+    def set_read_only(self, read_only: bool):
+        self._read_only = read_only
+
+    def editor_hint(self) -> str:
+        return self._editor_hint
+
+    def set_editor_hint(self, hint: str):
+        self._editor_hint = hint
+
 
 class ActorPropertyGroup:
     def __init__(self, prefix: str, name: str, hint: str):
         self.prefix = prefix
         self.name = name
+        self.display_name = name
         self.hint = hint
         self.properties: List[ActorProperty] = []
 

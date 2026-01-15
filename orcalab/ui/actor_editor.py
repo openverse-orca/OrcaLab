@@ -12,7 +12,7 @@ from orcalab.scene_edit_bus import (
 )
 
 
-class ActorEditor(QtWidgets.QWidget, SceneEditNotification):
+class ActorEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -20,11 +20,15 @@ class ActorEditor(QtWidgets.QWidget, SceneEditNotification):
         self._layout = QtWidgets.QVBoxLayout()
         self._layout.setContentsMargins(4, 4, 4, 4)
         self._layout.setSpacing(4)
-        self.setLayout(self._layout)
-        self.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Preferred,
-            QtWidgets.QSizePolicy.Policy.Preferred,
+        self._widget = QtWidgets.QWidget()
+        self._widget.setLayout(self._layout)
+        self._widget.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
         )
+
+        self.setWidget(self._widget)
+        self.setWidgetResizable(True)
 
         self._actor: BaseActor | None = None
         self._transform_edit: TransformEdit | None = None
@@ -85,7 +89,7 @@ class ActorEditor(QtWidgets.QWidget, SceneEditNotification):
         label.setContentsMargins(4, 4, 4, 4)
         self._layout.addWidget(label)
 
-        label_width = 120
+        label_width = 160
 
         self._transform_edit = TransformEdit(self, self._actor, label_width)
         self._transform_edit.connect_buses()
@@ -98,7 +102,7 @@ class ActorEditor(QtWidgets.QWidget, SceneEditNotification):
                 self._property_edits.append(edit)
                 self._layout.addWidget(edit)
 
-        self._layout.addStretch(1)
+        # self._layout.addStretch(1)
 
     @override
     async def on_selection_changed(self, old_selection, new_selection, source=""):
