@@ -1,7 +1,6 @@
 from typing import List
 from PySide6 import QtCore, QtWidgets, QtGui
 
-
 def split_text_to_lines(
     text: str,
     font: QtGui.QFont,

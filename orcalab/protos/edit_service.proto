@@ -345,13 +345,16 @@ message Property {
     PropertyType type = 1;
     string name = 2;
     string display_name = 3;
+    bool read_only = 4;
+    string editor_hint = 5;
 }
 
 message PropertyGroup {
     string prefix = 1;
     string name = 2;
-    string hint = 3;
-    repeated Property properties = 4;
+    string display_name = 3;
+    string hint = 4;
+    repeated Property properties = 5;
 }
 
 message PropertyKey {

@@ -25,6 +25,7 @@ from orcalab.ui.property_edit.int_property_edit import IntegerPropertyEdit
 from orcalab.ui.property_edit.string_property_edit import StringPropertyEdit
 
 from orcalab.ui.styled_widget import StyledWidget
+from orcalab.ui.text_label import TextLabel
 from orcalab.ui.theme_service import ThemeService
 
 
@@ -42,11 +43,19 @@ class PropertyGroupEditTitle(QtWidgets.QWidget):
         self.l_indicator.set_icon_size(20)
 
         l_name = QtWidgets.QLabel(name)
-        l_hint = QtWidgets.QLabel(hint)
-        l_hint.setStyleSheet("color: gray; font-size: 12px;")
+        l_hint = TextLabel(hint)
+        l_hint.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        l_hint.text_color = QtGui.QColor("gray")
+        font = l_hint.font()
+        font.setPointSize(12)
+        l_hint.setFont(font)
+        l_hint.elide_mode = QtCore.Qt.TextElideMode.ElideLeft
 
         root_layout.addWidget(self.l_indicator)
         root_layout.addWidget(l_name)
+        root_layout.addSpacing(10)
         root_layout.addStretch()
         root_layout.addWidget(l_hint)
 

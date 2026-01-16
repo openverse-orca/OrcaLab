@@ -89,6 +89,10 @@ class MainWindow(
         self.current_layout_path: str | None = None
         self._cleanup_in_progress = False
         self._cleanup_completed = False
+        self._is_runtime_mode = False
+        
+        # 状态指示器（顶部蓝色条）
+        self._status_indicator = None
 
         # Let empty area can steal focus.
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
@@ -284,6 +288,24 @@ class MainWindow(
             await self.asset_browser_widget.set_assets([])
 
     async def _init_ui(self):
+        # 创建运行时状态指示器（顶部蓝色条带文字）
+        self._status_indicator = QtWidgets.QLabel()
+        self._status_indicator.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self._status_indicator.setFixedHeight(0)  # 默认隐藏
+        self._status_indicator.setStyleSheet("""
+            background-color: #2196F3;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+            padding: 4px;
+        """)
+        self._status_indicator.setText("● 运行时模式 (RunTime)")
+        
+        # 将状态指示器插入到窗口布局的最顶部
+        main_layout = self.layout()
+        if main_layout:
+            main_layout.insertWidget(0, self._status_indicator)
+        
         logger.info("创建工具栏…")
         self.tool_bar = ToolBar()
         layout = QtWidgets.QVBoxLayout(self._tool_bar_area)
@@ -493,8 +515,6 @@ class MainWindow(
                 color: {text_color};
             }}
 
-
-
             QTreeView, QListView {{
                 outline: none;
                 selection-background-color: #404040;
@@ -577,6 +597,9 @@ class MainWindow(
         self.tool_bar.action_start.setEnabled(True)
         self.tool_bar.action_stop.setEnabled(False)
 
+        # 初始化状态指示器（Editor模式，隐藏）
+        self._set_window_border_style(is_runtime=False)
+
         # Window actions.
 
         action_undo = QtGui.QAction("撤销", self)
@@ -596,6 +619,17 @@ class MainWindow(
 
     async def stop_sim(self):
         await SimulationRequestBus().stop_simulation()
+    
+    def _set_window_border_style(self, is_runtime: bool):
+        """设置运行时状态指示：运行时显示蓝色指示器，编辑模式隐藏"""
+        # 显示/隐藏顶部蓝色状态指示器
+        if hasattr(self, '_status_indicator') and self._status_indicator:
+            if is_runtime:
+                self._status_indicator.setFixedHeight(28)  # 显示蓝色状态条（含文字）
+                self._status_indicator.setVisible(True)
+            else:
+                self._status_indicator.setFixedHeight(0)  # 隐藏
+                self._status_indicator.setVisible(False)
 
     def _disable_edit(self):
         t = QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents
@@ -633,11 +667,17 @@ class MainWindow(
             self._disable_edit()
             self.tool_bar.action_start.setEnabled(False)
             self.tool_bar.action_stop.setEnabled(True)
+            self._is_runtime_mode = True
+            self._set_window_border_style(is_runtime=True)
+            self._update_title()
 
         if new_state == SimulationState.Stopped:
             self._enable_edit()
             self.tool_bar.action_start.setEnabled(True)
             self.tool_bar.action_stop.setEnabled(False)
+            self._is_runtime_mode = False
+            self._set_window_border_style(is_runtime=False)
+            self._update_title()
 
     @override
     async def on_asset_downloaded(self, file):
@@ -1145,7 +1185,9 @@ class MainWindow(
             layout_label = f"[* {layout_part}]"
         else:
             layout_label = f"[{layout_part}]"
-        self.setWindowTitle(f"{self._base_title}    [{scene_part}]    {layout_label}")
+        
+        mode_label = "RunTime" if self._is_runtime_mode else "Editor"
+        self.setWindowTitle(f"{self._base_title}    [{scene_part}]    {layout_label}    [{mode_label}]")
 
     def _confirm_discard_changes(self) -> bool:
         if not self._layout_modified:

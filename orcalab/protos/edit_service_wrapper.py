@@ -334,9 +334,10 @@ class EditServiceWrapper:
             )
 
             for prop_msg in pg_msg.properties:
+                prop : ActorProperty | None = None
                 match prop_msg.type:
                     case edit_service_pb2.PropertyType.Unknown:
-                        break
+                        continue
                     case edit_service_pb2.PropertyType.Bool:
                         prop = ActorProperty(
                             name=prop_msg.name,
@@ -344,7 +345,6 @@ class EditServiceWrapper:
                             type=ActorPropertyType.BOOL,
                             value=False,
                         )
-                        pg.properties.append(prop)
                     case edit_service_pb2.PropertyType.Int:
                         prop = ActorProperty(
                             name=prop_msg.name,
@@ -352,7 +352,6 @@ class EditServiceWrapper:
                             type=ActorPropertyType.INTEGER,
                             value=0,
                         )
-                        pg.properties.append(prop)
                     case edit_service_pb2.PropertyType.Float:
                         prop = ActorProperty(
                             name=prop_msg.name,
@@ -360,7 +359,6 @@ class EditServiceWrapper:
                             type=ActorPropertyType.FLOAT,
                             value=0.0,
                         )
-                        pg.properties.append(prop)
                     case edit_service_pb2.PropertyType.String:
                         prop = ActorProperty(
                             name=prop_msg.name,
@@ -368,7 +366,10 @@ class EditServiceWrapper:
                             type=ActorPropertyType.STRING,
                             value="",
                         )
-                        pg.properties.append(prop)
+                assert prop is not None
+                prop.set_read_only(prop_msg.read_only)
+                prop.set_editor_hint(prop_msg.editor_hint)
+                pg.properties.append(prop)
 
             property_groups.append(pg)
 
