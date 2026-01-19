@@ -102,6 +102,8 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
 
         for prop in group.properties:
             editor = self._create_property_edit(prop, label_width)
+            if prop.is_read_only():
+                editor.set_read_only(True)
             self._property_edits.append(editor)
             content_layout.addWidget(editor)
 

@@ -7,7 +7,7 @@ from orcalab.ui.theme_service import ThemeService
 class Checkbox(QtWidgets.QWidget):
     value_changed = QtCore.Signal()
 
-    def __init__(self,  parent: QtWidgets.QWidget | None = None):
+    def __init__(self, parent: QtWidgets.QWidget | None = None):
         super().__init__(parent)
         self.setMouseTracking(True)
 
@@ -26,6 +26,7 @@ class Checkbox(QtWidgets.QWidget):
         self.bg_hover_color = theme.get_color("button_bg")
         self.bg_pressed_color = theme.get_color("button_bg")
         self.text_color = theme.get_color("text")
+        self.text_color_disabled = theme.get_color("text_disable")
         self.text_hover_color = theme.get_color("text")
         self.text_pressed_color = theme.get_color("text")
         self.icon_size = 20
@@ -43,6 +44,23 @@ class Checkbox(QtWidgets.QWidget):
         self._pixmap_unchecked = make_color_svg(
             ":/icons/checkbox_unchecked", self.text_color
         )
+
+        self._pixmap_checked_readonly = make_color_svg(
+            ":/icons/checkbox_checked", self.text_color_disabled
+        )
+        self._pixmap_unchecked_readonly = make_color_svg(
+            ":/icons/checkbox_unchecked", self.text_color_disabled
+        )
+
+        self._read_only = False
+
+    def set_read_only(self, read_only: bool):
+        self._read_only = read_only
+        self.setEnabled(not read_only)
+        self.update()
+
+    def get_read_only(self) -> bool:
+        return self._read_only
 
     def checked(self) -> bool:
         return self._checked
@@ -88,22 +106,29 @@ class Checkbox(QtWidgets.QWidget):
         return QtCore.QRect(0, 0, self.icon_size, self.icon_size)
 
     def _draw_background(self, painter: QtGui.QPainter, rect: QtCore.QRect):
-        if self._pressed:
-            bg_color = self.bg_pressed_color
-        elif self._hover:
-            bg_color = self.bg_hover_color
-        else:
-            bg_color = self.bg_color
+        bg_color = self.bg_color
+
+        if not self._read_only:
+            if self._pressed:
+                bg_color = self.bg_pressed_color
+            elif self._hover:
+                bg_color = self.bg_hover_color
 
         painter.setBrush(QtGui.QBrush(bg_color))
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
         painter.drawRoundedRect(rect, self.border_radius, self.border_radius)
 
     def _draw_icon(self, painter: QtGui.QPainter, rect: QtCore.QRect):
-        if self._checked:
-            painter.drawPixmap(rect, self._pixmap_checked)
+        if self._read_only:
+            if self._checked:
+                painter.drawPixmap(rect, self._pixmap_checked_readonly)
+            else:
+                painter.drawPixmap(rect, self._pixmap_unchecked_readonly)
         else:
-            painter.drawPixmap(rect, self._pixmap_unchecked)
+            if self._checked:
+                painter.drawPixmap(rect, self._pixmap_checked)
+            else:
+                painter.drawPixmap(rect, self._pixmap_unchecked)
 
     def sizeHint(self):
         w = self.padding_left + self.padding_right
