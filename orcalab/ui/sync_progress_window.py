@@ -151,6 +151,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setWindowFlag(QtCore.Qt.WindowType.WindowMinMaxButtonsHint, True)
         self.asset_widgets: Dict[str, AssetItemWidget] = {}
         self.start_time = None
         self.countdown_seconds = 0
