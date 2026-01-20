@@ -1,7 +1,7 @@
 from orcalab.actor import BaseActor, GroupActor
 from orcalab.application_util import get_local_scene
 from orcalab.path import Path
-
+from orcalab.metadata_service_bus import MetadataServiceRequestBus
 
 def is_valid_char(c: str) -> bool:
     if c == "_":
@@ -42,6 +42,10 @@ def make_unique_name(base_name: str, parent: BaseActor | Path) -> str:
 
     counter = 1
     # base_name 可能是一个路径，因此以最后一个 / 之后作为名字
+    out_put = []
+    MetadataServiceRequestBus().get_asset_info(base_name, out_put)
+    if len(out_put) > 0 and out_put[0] is not None:
+        base_name = out_put[0].get('englishName', base_name)
     base_name = base_name.split("/")[-1]
     base_name = santitize_name(base_name)
     new_name = f"{base_name}_{counter}"
