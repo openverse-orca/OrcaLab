@@ -95,9 +95,17 @@ class SceneEditService(SceneEditRequest):
 
         await bus.before_actor_added(actor, parent_actor_path, source)
 
+        
         self.local_scene.add_actor(actor, parent_actor_path)
 
-        await bus.on_actor_added(actor, parent_actor_path, source)
+        try:
+            await bus.on_actor_added(actor, parent_actor_path, source)
+        except Exception as e:
+            # on_actor_added failed (e.g. remote scene sync failed)
+            # Need to rollback: delete actor from local scene and notify
+            self.local_scene.delete_actor(actor)
+            await bus.on_actor_added_failed(actor, parent_actor_path, source)
+            raise
 
         if undo:
             if isinstance(actor, AssetActor):

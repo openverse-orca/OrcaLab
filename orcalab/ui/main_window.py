@@ -879,7 +879,12 @@ class MainWindow(
         if name == "root":
             actor = self.local_scene.root_actor
         else:
-            await SceneEditRequestBus().add_actor(actor=actor, parent_actor=parent)
+            try:
+                await SceneEditRequestBus().add_actor(actor=actor, parent_actor=parent)
+            except Exception as e:
+                logger.warning(f"创建 Actor {name} 失败: {e}, actor_path: {actor.asset_path}")
+                self.terminal_widget._append_output(f"创建 Actor {name} 失败: {e}, actor_path: {actor.asset_path}\n")
+                self.terminal_widget._append_output(f"确认是否有未订阅资产包， 资产包是否已更新\n")
 
         if isinstance(actor, GroupActor):
             for child_data in actor_data.get("children", []):
