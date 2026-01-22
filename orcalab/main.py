@@ -97,7 +97,7 @@ def main():
 
     check_project_folder()
 
-    register_protocol()
+    # register_protocol()
 
     # Register signal handlers for graceful shutdown
     register_signal_handlers()

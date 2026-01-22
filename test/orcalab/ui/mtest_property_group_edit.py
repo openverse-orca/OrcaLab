@@ -28,20 +28,44 @@ class TestWindow(TestMainWindow):
             group = ActorPropertyGroup(
                 "/xxx/xxxx/xxx:aaaa", f"Group {i}", "/xxx/xxxx/xxx"
             )
-            group.properties.append(
-                ActorProperty(f"Bool {i}", None, ActorPropertyType.BOOL, True)
+            prop = ActorProperty(f"Bool {i}", None, ActorPropertyType.BOOL, True)
+            group.properties.append(prop)
+
+            prop = ActorProperty(
+                f"ReadOnly Bool {i}", None, ActorPropertyType.BOOL, True
             )
-            group.properties.append(
-                ActorProperty(f"Int {i}", None, ActorPropertyType.INTEGER, 42)
+            prop.set_read_only(True)
+            group.properties.append(prop)
+
+            prop = ActorProperty(f"Int {i}", None, ActorPropertyType.INTEGER, 42)
+            group.properties.append(prop)
+
+            prop = ActorProperty(
+                f"ReadOnly Int {i}", None, ActorPropertyType.INTEGER, 42
             )
-            group.properties.append(
-                ActorProperty(f"Float {i}", None, ActorPropertyType.FLOAT, 3.14)
+            prop.set_read_only(True)
+            group.properties.append(prop)
+
+            prop = ActorProperty(f"Float {i}", None, ActorPropertyType.FLOAT, 3.14)
+            group.properties.append(prop)
+
+            prop = ActorProperty(
+                f"ReadOnly Float {i}", None, ActorPropertyType.FLOAT, 3.14
             )
-            group.properties.append(
-                ActorProperty(
-                    f"String {i}", None, ActorPropertyType.STRING, "Hello World"
-                )
+            prop.set_read_only(True)
+            group.properties.append(prop)
+
+            prop = ActorProperty(
+                f"String {i}", None, ActorPropertyType.STRING, "Hello World"
             )
+            group.properties.append(prop)
+
+            prop = ActorProperty(
+                f"ReadOnly String {i}", None, ActorPropertyType.STRING, "Hello World"
+            )
+            prop.set_read_only(True)
+            group.properties.append(prop)
+
             actor.property_groups.append(group)
 
         e = ActorEditor(self)

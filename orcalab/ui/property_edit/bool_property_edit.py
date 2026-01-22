@@ -11,7 +11,12 @@ from orcalab.ui.theme_service import ThemeService
 
 class BooleanPropertyEdit(BasePropertyEdit[bool]):
 
-    def __init__(self, parent: QtWidgets.QWidget | None, context: PropertyEditContext, label_width: int):
+    def __init__(
+        self,
+        parent: QtWidgets.QWidget | None,
+        context: PropertyEditContext,
+        label_width: int,
+    ):
         super().__init__(parent, context)
         root_layout = QtWidgets.QHBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -56,3 +61,7 @@ class BooleanPropertyEdit(BasePropertyEdit[bool]):
         self._editor.set_checked(value)
 
         self._block_events = False
+
+    @override
+    def set_read_only(self, read_only: bool):
+        self._editor.set_read_only(read_only)

@@ -38,22 +38,29 @@ class PropertyEditContext:
 
 def get_property_edit_style_sheet() -> str:
     theme = ThemeService()
+    property_group_bg_color = theme.get_color_hex("property_group_bg")
     bg_color = theme.get_color_hex("property_edit_bg")
     bg_hover_color = theme.get_color_hex("property_edit_bg_hover")
     bg_focus_color = theme.get_color_hex("property_edit_bg_editing")
     brand_color = theme.get_color_hex("brand")
 
     base_style = f"""
-        QLineEdit {{
+        QLineEdit[readOnly="false"] {{
             background-color: {bg_color};
             border-radius: 2px;
             border-bottom: 1px solid {bg_color};
             padding: 4px 8px;
         }}
-        QLineEdit:hover {{
+        QLineEdit[readOnly="true"] {{
+            background-color: {property_group_bg_color};
+            border-radius: 2px;
+            border: 1px solid {bg_color};
+            padding: 4px 8px;
+        }}
+        QLineEdit[readOnly="false"]:hover {{
             background-color: {bg_hover_color};
         }}
-        QLineEdit:focus {{
+        QLineEdit[readOnly="false"]:focus {{
             background-color: {bg_focus_color};
             border-bottom: 1px solid {brand_color};
         }}
@@ -109,3 +116,6 @@ class BasePropertyEdit[T](StyledWidget):
             QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
         return label
+    
+    def set_read_only(self, read_only: bool):
+        pass

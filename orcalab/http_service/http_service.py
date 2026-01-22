@@ -11,6 +11,7 @@ import asyncio
 import functools
 import json
 import requests
+import sys
 
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ class HttpService(HttpServiceRequest):
     def __init__(self):
         super().__init__()
         HttpServiceRequestBus.connect(self)
-        token = TokenStorage.load_token()
+        token = TokenStorage.load_token()        
         self.is_online = token is not None
         if token is not None:
             self.access_token = token['access_token']
@@ -40,8 +41,10 @@ class HttpService(HttpServiceRequest):
             self.username = None
         self.cache_folder = get_cache_folder()
         self.base_url = ConfigService().datalink_base_url()
+        self.version = ConfigService()._get_package_version()
         self._executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="http_service")
         self._upload_futures = []
+        self.platform = "linux" if sys.platform == "linux" else "pc"
 
     @require_online
     @override
@@ -115,7 +118,7 @@ class HttpService(HttpServiceRequest):
     @require_online
     @override
     async def get_subscriptions(self, output: List[str] = None) -> str:
-        subscriptions_url = f"{self.base_url}/subscriptions/"
+        subscriptions_url = f"{self.base_url}/subscriptions/?version={self.version}&platform={self.platform}"
         async with aiohttp.ClientSession() as session:
             async with session.get(subscriptions_url, headers=self._get_headers()) as response:
                 if response.status != 200:

@@ -46,6 +46,8 @@ class AssetModel(ThumbnailModel):
 
     @override
     def text_at(self, index: int) -> str:
+        if self._filtered_assets[index].metadata is not None:
+            return self._filtered_assets[index].metadata['name']
         return self._filtered_assets[index].name
 
     def info_at(self, index: int) -> AssetInfo:

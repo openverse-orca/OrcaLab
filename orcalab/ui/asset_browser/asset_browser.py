@@ -328,6 +328,7 @@ class AssetBrowser(QtWidgets.QWidget):
                     return
                 
                 image_url = json.loads(url_result)
+                load_result = False
                 for picture_url in image_url['pictures']:
                     if picture_url['viewType'] == "dynamic":
                         await self._http_service.get_asset_thumbnail2cache(picture_url['imgUrl'], thumbnail_path)
@@ -338,7 +339,18 @@ class AssetBrowser(QtWidgets.QWidget):
                                 player.set_scaled_size(QtCore.QSize(96, 96))
                                 info.apng_player = player
                                 self._model.notify_item_updated(index)
+                                load_result = True
                         break
+                if not load_result:
+                    if image_url.get('imgUrl', None) is not None:
+                        await self._http_service.get_asset_thumbnail2cache(image_url['imgUrl'], thumbnail_path)
+                        if thumbnail_path.exists():
+                            player = ApngPlayer(str(thumbnail_path))
+                            if player.is_valid():
+                                player.set_scaled_size(QtCore.QSize(96, 96))
+                                info.apng_player = player
+                                self._model.notify_item_updated(index)
+                                load_result = True
             finally:
                 # 下载完成，移除标记
                 self._loading_thumbnails.discard(info.path)

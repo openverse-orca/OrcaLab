@@ -60,6 +60,7 @@ from orcalab.asset_service_bus import (
     AssetServiceNotificationBus,
 )
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
+from orcalab.token_storage import TokenStorage
 
 from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
 
@@ -467,6 +468,8 @@ class MainWindow(
         self.menu_file = self.menu_bar.addMenu("文件")
         self.menu_edit = self.menu_bar.addMenu("编辑")
         self.menu_help = self.menu_bar.addMenu("帮助")
+        self.menu_user = self.menu_bar.addMenu("用户")
+        connect(self.menu_user.aboutToShow, self.prepare_user_menu)
 
         self.action_create_layout = QtGui.QAction("新建布局…", self)
         self.action_create_layout.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.New))
@@ -879,7 +882,12 @@ class MainWindow(
         if name == "root":
             actor = self.local_scene.root_actor
         else:
-            await SceneEditRequestBus().add_actor(actor=actor, parent_actor=parent)
+            try:
+                await SceneEditRequestBus().add_actor(actor=actor, parent_actor=parent)
+            except Exception as e:
+                logger.warning(f"创建 Actor {name} 失败: {e}, actor_path: {actor.asset_path}")
+                self.terminal_widget._append_output(f"创建 Actor {name} 失败: {e}, actor_path: {actor.asset_path}\n")
+                self.terminal_widget._append_output(f"确认是否有未订阅资产包， 资产包是否已更新\n")
 
         if isinstance(actor, GroupActor):
             for child_data in actor_data.get("children", []):
@@ -902,6 +910,50 @@ class MainWindow(
     def prepare_help_menu(self):
         self.menu_help.clear()
         self.menu_help.addAction(self.action_about)
+
+    def prepare_user_menu(self):
+        self.menu_user.clear()
+        token_data = TokenStorage.load_token()
+        username = token_data.get('username', '未登录') if token_data else '未登录'
+        
+        # Display username (non-clickable)
+        action_username = QtGui.QAction(f"当前用户: {username}", self)
+        action_username.setEnabled(False)
+        self.menu_user.addAction(action_username)
+        
+        self.menu_user.addSeparator()
+        
+        # Logout action
+        action_logout = QtGui.QAction("退出登录", self)
+        connect(action_logout.triggered, self.logout)
+        self.menu_user.addAction(action_logout)
+
+    def logout(self):
+        # Show confirmation dialog
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "退出登录",
+            "确定要退出登录吗？\n退出后需要重新启动应用程序。",
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+            QtWidgets.QMessageBox.StandardButton.No
+        )
+        
+        if reply != QtWidgets.QMessageBox.StandardButton.Yes:
+            return
+        
+        # Clear token
+        TokenStorage.clear_token()
+        logger.info("用户已退出登录")
+        
+        # Show success message and exit
+        QtWidgets.QMessageBox.information(
+            self,
+            "退出登录成功",
+            "已成功退出登录。\n请重新启动应用程序以完成登录。"
+        )
+        
+        # Exit application
+        QtWidgets.QApplication.quit()
 
     def show_about_dialog(self):
         version = self.config_service._get_package_version()

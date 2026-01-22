@@ -151,6 +151,14 @@ class SceneEditNotification:
     ):
         pass
 
+    async def on_actor_added_failed(
+        self,
+        actor: BaseActor,
+        parent_actor_path: Path,
+        source: str,
+    ):
+        pass
+
     async def before_actor_deleted(
         self,
         actor_path: Path,

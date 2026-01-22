@@ -294,6 +294,18 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         self.endInsertRows()
 
     @override
+    async def on_actor_added_failed(
+        self,
+        actor: BaseActor,
+        parent_actor_path: Path,
+        source: str,
+    ):
+        # The insert operation was started but failed
+        # Reset the entire model to ensure view is in sync with actual data
+        self.beginResetModel()
+        self.endResetModel()
+
+    @override
     async def before_actor_deleted(
         self,
         actor_path: Path,

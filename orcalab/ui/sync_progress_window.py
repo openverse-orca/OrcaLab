@@ -151,6 +151,8 @@ class SyncProgressWindow(QtWidgets.QDialog):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setWindowFlag(QtCore.Qt.WindowType.WindowMinMaxButtonsHint, True)
+        self.setWindowFlags(QtCore.Qt.WindowType.Window) # Ubuntu 下修复无法最大化的问题
         self.asset_widgets: Dict[str, AssetItemWidget] = {}
         self.start_time = None
         self.countdown_seconds = 0

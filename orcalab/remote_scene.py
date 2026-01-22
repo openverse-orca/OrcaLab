@@ -61,9 +61,11 @@ class RemoteScene(SceneEditNotification):
 
     async def destroy_grpc(self):
         self.shutdown = True
-        while self.in_query:
+        count = 3
+        while self.in_query and count > 0:
             print("Waiting for pending operation query to finish...")
             await asyncio.sleep(0.1)
+            count -= 1
 
         await self._service.destroy_grpc()
 

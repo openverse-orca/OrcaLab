@@ -54,3 +54,7 @@ class FloatPropertyEdit(BasePropertyEdit[float]):
         self._editor.set_value(value)
 
         self._block_events = False
+
+    @override
+    def set_read_only(self, read_only: bool):
+        self._editor.setReadOnly(read_only)

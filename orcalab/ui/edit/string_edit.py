@@ -49,7 +49,7 @@ class StringEdit(QtWidgets.QLineEdit):
                 self._original_value = None
 
         if event.type() == QtCore.QEvent.Type.MouseButtonPress:
-            if self._state == StringEditState.Idle:
+            if not self.isReadOnly() and self._state == StringEditState.Idle:
                 assert isinstance(event, QtGui.QMouseEvent)
                 self.setFocus()
                 self.set_state(StringEditState.Typing)

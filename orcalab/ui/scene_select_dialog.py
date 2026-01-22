@@ -6,8 +6,9 @@ class SceneSelectDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self.setWindowTitle("选择场景")
         self.setModal(True)
-        self.setMinimumSize(420, 360)
         self.resize(480, 380)
+        self.setWindowFlag(QtCore.Qt.WindowType.WindowMinMaxButtonsHint, True)
+        self.setWindowFlags(QtCore.Qt.WindowType.Window) # Ubuntu 下修复无法最大化的问题
         self.levels = self._normalize_levels(levels)
         self.selected_level = current_level or (
             self.levels[0]["path"] if self.levels else None
