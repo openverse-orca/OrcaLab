@@ -1,4 +1,5 @@
 import asyncio
+import webbrowser
 
 from typing import Any, Dict, List, Tuple, override
 import numpy as np
@@ -941,7 +942,15 @@ class MainWindow(
         if reply != QtWidgets.QMessageBox.StandardButton.Yes:
             return
         
-        # Clear token
+        # Open browser to logout from server
+        logout_url = "https://datalink.orca3d.cn:8081/auth/v1/logout/"
+        try:
+            webbrowser.open(logout_url)
+            logger.info("已打开浏览器进行服务器端登出")
+        except Exception as e:
+            logger.warning("打开浏览器失败: %s", e)
+        
+        # Clear local token
         TokenStorage.clear_token()
         logger.info("用户已退出登录")
         
