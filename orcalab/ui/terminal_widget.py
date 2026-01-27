@@ -6,13 +6,92 @@ import os
 import sys
 
 
+class TerminalTextEdit(QtWidgets.QTextEdit):
+    """支持输入捕获的终端文本编辑器"""
+    
+    input_submitted = QtCore.Signal(str)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._input_buffer = ""
+        # 禁用默认的undo/redo
+        self.setUndoRedoEnabled(False)
+        
+    def keyPressEvent(self, event):
+        key = event.key()
+        modifiers = event.modifiers()
+        
+        # 屏蔽 Ctrl+Z (undo) 和 Ctrl+Y/Ctrl+Shift+Z (redo)
+        if modifiers & QtCore.Qt.KeyboardModifier.ControlModifier:
+            if key in (QtCore.Qt.Key.Key_Z, QtCore.Qt.Key.Key_Y):
+                return
+        
+        # Enter键：发送当前输入缓冲区
+        if key in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
+            text_to_send = self._input_buffer + "\n"
+            self._input_buffer = ""
+            # 显示换行
+            cursor = self.textCursor()
+            cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
+            cursor.insertText("\n")
+            self.setTextCursor(cursor)
+            # 发送输入
+            self.input_submitted.emit(text_to_send)
+            return
+        
+        # Ctrl+C：发送中断信号
+        if key == QtCore.Qt.Key.Key_C and event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
+            self.input_submitted.emit("\x03")  # ETX字符
+            return
+        
+        # Ctrl+D：发送EOF
+        if key == QtCore.Qt.Key.Key_D and event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
+            self.input_submitted.emit("\x04")  # EOT字符
+            return
+        
+        # 退格键：删除输入缓冲区最后一个字符
+        if key == QtCore.Qt.Key.Key_Backspace:
+            if self._input_buffer:
+                self._input_buffer = self._input_buffer[:-1]
+                # 删除显示的字符
+                cursor = self.textCursor()
+                cursor.deletePreviousChar()
+                self.setTextCursor(cursor)
+            return
+        
+        # 普通字符输入
+        text = event.text()
+        if text and text.isprintable():
+            self._input_buffer += text
+            # 显示输入的字符
+            cursor = self.textCursor()
+            cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
+            cursor.insertText(text)
+            self.setTextCursor(cursor)
+            # 滚动到底部
+            scrollbar = self.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+            return
+        
+        # 其他键使用默认处理（如方向键滚动等）
+        super().keyPressEvent(event)
+    
+    def clear_input_buffer(self):
+        """清空输入缓冲区"""
+        self._input_buffer = ""
+
+
 class TerminalWidget(QtWidgets.QWidget):
-    """终端输出显示组件"""
+    """终端输出显示组件，支持输入"""
+    
+    # 进程被中断信号（Ctrl+C）
+    process_interrupted = QtCore.Signal()
     
     def __init__(self, parent=None):
         super().__init__(parent)
         
         self.process = None
+        self._pty_master_fd = None
         self.output_queue = queue.Queue()
         self.output_thread = None
         self.is_running = False
@@ -91,12 +170,12 @@ class TerminalWidget(QtWidgets.QWidget):
         
         layout.addLayout(toolbar_layout)
         
-        # 输出区域
-        self.output_text = QtWidgets.QTextEdit()
-        self.output_text.setReadOnly(True)
+        # 输出区域（支持输入）
+        self.output_text = TerminalTextEdit()
         self.output_text.setLineWrapMode(QtWidgets.QTextEdit.LineWrapMode.WidgetWidth)
         self.output_text.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.output_text.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.output_text.input_submitted.connect(self._send_input)
         
         # 设置滚动条样式
         self.output_text.verticalScrollBar().setStyleSheet("""
@@ -130,9 +209,10 @@ class TerminalWidget(QtWidgets.QWidget):
             # 构建完整的命令
             cmd = [command] + args
             
-            # 启动进程
+            # 启动进程（包含stdin以支持输入）
             self.process = subprocess.Popen(
                 cmd,
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 universal_newlines=True,
@@ -195,6 +275,33 @@ class TerminalWidget(QtWidgets.QWidget):
             
         except Exception as e:
             self._append_output(f"停止进程时出错: {str(e)}\n")
+    
+    def _send_input(self, text):
+        """向进程发送输入"""
+        if not self.is_running or not self.process:
+            return
+        
+        try:
+            # 处理Ctrl+C中断信号
+            if text == "\x03":
+                import signal
+                if sys.platform == "win32":
+                    self.process.send_signal(signal.CTRL_C_EVENT)
+                else:
+                    self.process.send_signal(signal.SIGINT)
+                self._append_output_safe("^C\n")
+                # 发出中断信号，通知外部执行停止流程
+                self.process_interrupted.emit()
+                return
+            
+            # 优先使用PTY主端发送
+            if self._pty_master_fd is not None:
+                os.write(self._pty_master_fd, text.encode('utf-8'))
+            elif self.process.stdin:
+                self.process.stdin.write(text)
+                self.process.stdin.flush()
+        except (BrokenPipeError, OSError):
+            self._append_output_safe(f"\n[输入失败: 进程已关闭]\n")
     
     def _read_output(self):
         """在后台线程中读取进程输出"""
@@ -276,6 +383,37 @@ class TerminalWidget(QtWidgets.QWidget):
                 "运行中 (PID: {})".format(self.process.pid) if self.is_running and self.process else "就绪"
             ))
     
+    def set_external_process(self, process: subprocess.Popen):
+        """设置外部进程引用（用于外部启动的进程，使用PIPE）"""
+        self.process = process
+        self._pty_master_fd = None
+        self.is_running = True
+        self.status_label.setText(f"运行中 (PID: {process.pid})")
+        self.status_label.setStyleSheet("color: #3fb950; font-size: 11px;")
+        self.output_text.clear_input_buffer()
+    
+    def set_pty_process(self, process: subprocess.Popen, master_fd: int):
+        """设置使用PTY的外部进程引用"""
+        self.process = process
+        self._pty_master_fd = master_fd
+        self.is_running = True
+        self.status_label.setText(f"运行中 (PID: {process.pid})")
+        self.status_label.setStyleSheet("color: #3fb950; font-size: 11px;")
+        self.output_text.clear_input_buffer()
+    
+    def clear_external_process(self):
+        """清除外部进程引用"""
+        self.process = None
+        self._pty_master_fd = None
+        self.is_running = False
+        self.status_label.setText("已停止")
+        self.status_label.setStyleSheet("color: #7d8590; font-size: 11px;")
+        self.output_text.clear_input_buffer()
+    
+    def clear_pty_process(self):
+        """清除PTY进程引用"""
+        self.clear_external_process()
+    
     def is_process_running(self):
         """检查进程是否正在运行"""
         return self.is_running and self.process and self.process.poll() is None
@@ -302,7 +440,7 @@ if __name__ == "__main__":
     terminal.show()
     terminal.resize(600, 400)
     
-    # 测试启动一个简单进程
-    terminal.start_process("python", ["-c", "import time; [print(f'Line {i}') or time.sleep(1) for i in range(10)]"])
+    # 测试启动一个需要输入的进程
+    terminal.start_process("python", ["-c", "name=input('请输入你的名字: '); print(f'你好, {name}!')"])
     
     sys.exit(app.exec())

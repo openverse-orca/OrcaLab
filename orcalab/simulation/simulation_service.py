@@ -1,5 +1,6 @@
 import asyncio
 import os
+import pty
 import subprocess
 import sys
 import logging
@@ -28,6 +29,7 @@ class SimulationService(SimulationRequest):
         self.sim_process_running = False
         self.sim_process: subprocess.Popen | None = None
         self._sim_state = SimulationState.Stopped
+        self._pty_master_fd: int | None = None
 
     def connect_bus(self):
         SimulationRequestBus.connect(self)
@@ -45,9 +47,15 @@ class SimulationService(SimulationRequest):
         ApplicationRequestBus().get_widget("terminal", output)
         if output and isinstance(output[0], TerminalWidget):
             self._terminal = output[0]
+            # 连接进程中断信号
+            self._terminal.process_interrupted.connect(self._on_process_interrupted)
             return self._terminal
 
         raise RuntimeError("Failed to get TerminalWidget")
+    
+    def _on_process_interrupted(self):
+        """处理进程被 Ctrl+C 中断"""
+        asyncio.create_task(self.stop_sim())
 
     @property
     def local_scene(self):
@@ -170,7 +178,7 @@ class SimulationService(SimulationRequest):
     async def _start_external_process(
         self, command: str, args: list
     ):
-        """在主线程中启动外部进程，并将输出重定向到terminal_widget（异步版本）"""
+        """在主线程中启动外部进程，使用PTY提供真实终端环境"""
         try:
             # 构建完整的命令
             resolved_command = command
@@ -178,25 +186,34 @@ class SimulationService(SimulationRequest):
                 resolved_command = sys.executable or command
             cmd = [resolved_command] + args
 
-            # 启动进程，将输出重定向到terminal_widget
+            # 创建伪终端，使外部程序获得真实的TTY环境
+            master_fd, slave_fd = pty.openpty()
+            self._pty_master_fd = master_fd
+
+            # 使用PTY的从端作为进程的stdin/stdout/stderr
             self.sim_process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
-                bufsize=1,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
                 env=os.environ.copy(),
+                start_new_session=True,
             )
 
-            # 在terminal_widget中显示启动信息
+            # 关闭从端（子进程已经持有）
+            os.close(slave_fd)
 
+            # 将PTY主端传递给terminal_widget，以支持输入
+            self.terminal.set_pty_process(self.sim_process, master_fd)
+
+            # 在terminal_widget中显示启动信息
             self.terminal._append_output(f"启动进程: {' '.join(cmd)}\n")
             self.terminal._append_output(f"工作目录: {os.getcwd()}\n")
             self.terminal._append_output("-" * 50 + "\n")
             logger.info("启动外部程序: %s", " ".join(cmd))
 
-            # 启动输出读取线程
-            self._start_output_redirect_thread()
+            # 启动PTY输出读取线程
+            self._start_pty_output_thread()
 
             return True
 
@@ -214,30 +231,32 @@ class SimulationService(SimulationRequest):
             QtCore.Q_ARG(str, line),
         )
 
-    def _start_output_redirect_thread(self):
-        """启动输出重定向线程"""
+    def _start_pty_output_thread(self):
+        """启动PTY输出读取线程"""
         import threading
+        import select
 
-        def read_output():
-            """在后台线程中读取进程输出并重定向到terminal_widget"""
+        def read_pty_output():
+            """从PTY主端读取输出"""
             try:
                 while self.sim_process and self.sim_process.poll() is None:
-                    assert self.sim_process.stdout is not None
-                    line = self.sim_process.stdout.readline()
-                    if line:
-                        # 使用信号槽机制确保在主线程中更新UI
-                        self._append_line_to_terminal(line)
-                    else:
+                    if self._pty_master_fd is None:
                         break
+                    # 使用select等待数据可读
+                    rlist, _, _ = select.select([self._pty_master_fd], [], [], 0.1)
+                    if rlist:
+                        try:
+                            data = os.read(self._pty_master_fd, 4096)
+                            if data:
+                                text = data.decode('utf-8', errors='replace')
+                                self._append_line_to_terminal(text)
+                            else:
+                                break
+                        except OSError:
+                            break
 
-                # 读取剩余输出
+                # 检查进程退出码
                 if self.sim_process:
-                    assert self.sim_process.stdout is not None
-                    remaining_output = self.sim_process.stdout.read()
-                    if remaining_output:
-                        self._append_line_to_terminal(remaining_output)
-
-                    # 检查进程退出码
                     return_code = self.sim_process.poll()
                     if return_code is not None:
                         self._append_line_to_terminal(
@@ -247,8 +266,7 @@ class SimulationService(SimulationRequest):
             except Exception as e:
                 self._append_line_to_terminal(f"读取输出时出错: {str(e)}\n")
 
-        # 启动输出读取线程
-        self.output_thread = threading.Thread(target=read_output, daemon=True)
+        self.output_thread = threading.Thread(target=read_pty_output, daemon=True)
         self.output_thread.start()
 
     async def start_simulation(self) -> None:
@@ -280,7 +298,16 @@ class SimulationService(SimulationRequest):
                     self.sim_process.wait()
                     self.terminal._append_output("进程已强制终止\n")
 
+                # 关闭PTY主端
+                if self._pty_master_fd is not None:
+                    try:
+                        os.close(self._pty_master_fd)
+                    except OSError:
+                        pass
+                    self._pty_master_fd = None
+
                 self.sim_process = None
+                self.terminal.clear_pty_process()
 
             await asyncio.sleep(0.5)
             await self.remote_scene.restore_body_transform()
@@ -300,6 +327,15 @@ class SimulationService(SimulationRequest):
                 if code is not None:
                     logger.info("外部进程已退出，返回码 %s", code)
                     self.sim_process_running = False
+                    # 关闭PTY主端
+                    if self._pty_master_fd is not None:
+                        try:
+                            os.close(self._pty_master_fd)
+                        except OSError:
+                            pass
+                        self._pty_master_fd = None
+                    self.sim_process = None
+                    self.terminal.clear_pty_process()
                     await self.remote_scene.set_sync_from_mujoco_to_scene(False)
                     await self.remote_scene.change_sim_state(self.sim_process_running)
                     await self._set_simulation_state(SimulationState.Failed)

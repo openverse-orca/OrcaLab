@@ -62,8 +62,9 @@ from orcalab.asset_service_bus import (
 )
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 from orcalab.token_storage import TokenStorage
-
+from orcalab.mcp_service.mcp_service import OrcaLabMCPServer
 from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
+
 
 
 logger = logging.getLogger(__name__)
@@ -230,6 +231,10 @@ class MainWindow(
         cameras = await self.remote_scene. get_cameras()
         viewport_camera_index = await self.remote_scene.get_active_camera()
         self.on_cameras_changed(cameras, viewport_camera_index)
+
+        self.mcp_service = OrcaLabMCPServer(port=8000)
+        self.mcp_service.add_tools()
+        self.mcp_service._task = asyncio.create_task(self.mcp_service.run())
 
     def stop_viewport_main_loop(self):
         """停止viewport主循环"""
@@ -1113,7 +1118,12 @@ class MainWindow(
             if hasattr(self, 'url_server'):
                 await self.url_server.stop()
 
-            # 6. 强制垃圾回收
+            # 6. 停止MCP服务
+            if hasattr(self, 'mcp_service'):
+                self.mcp_service.stop()
+                logger.info("cleanup: MCP服务已停止")
+
+            # 7. 强制垃圾回收
             import gc
             gc.collect()
 
