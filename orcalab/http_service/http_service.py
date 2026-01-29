@@ -195,6 +195,7 @@ class HttpService(HttpServiceRequest):
                 asset_metadata = await response.json()
                 return json.dumps(asset_metadata, ensure_ascii=False, indent=2)
 
+    @require_online
     @override
     def is_admin(self) -> bool:
         if not self.check_online():

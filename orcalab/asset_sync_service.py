@@ -18,7 +18,7 @@ import time
 import logging
 
 from orcalab.config_service import ConfigService
-from orcalab.exception import TokenExpiredException
+from orcalab.exception import TokenExpiredException, ConnectionFailedException
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +177,13 @@ class AssetSyncService:
             self.log(f"✓ 查询成功: {len(packages) + len(incompatible_packages)} 个资产包")
             
             return packages, incompatible_packages
+
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            self.log(f"❌ 连接资产库失败: {e}")
+            raise ConnectionFailedException("连接资产库失败")
+            
+        except TokenExpiredException:
+            raise
             
         except Exception as e:
             self.log(f"❌ 查询失败: {e}")
@@ -432,6 +439,10 @@ class AssetSyncService:
         except TokenExpiredException:
             self.log("⚠️  Token 已过期，保留现有资产包，以离线模式启动")
             self.callbacks.on_complete(False, "Token 已过期")
+            return False
+        except ConnectionFailedException:
+            self.log("⚠️  连接资产库失败，保留现有资产包，进入离线模式")
+            self.callbacks.on_complete(False, "连接资产库失败，进入离线模式")
             return False
         
         # 收集订阅列表中的文件名

@@ -245,7 +245,7 @@ class AuthService:
                 window.update_status(msg)
             return None
     
-    def verify_token(self, username: str, access_token: str) -> bool:
+    def verify_token(self, username: str, access_token: str) -> bool | None:
         """
         验证 token 是否有效
         
@@ -254,7 +254,9 @@ class AuthService:
             access_token: 访问令牌
         
         Returns:
-            token 是否有效
+            True: token 有效
+            False: token 无效
+            None: 连接失败
         """
         try:
             # 使用 DataLink 的 token 验证接口
@@ -270,6 +272,10 @@ class AuthService:
             )
             
             return response.status_code == 200
+
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            logger.warning("连接认证服务器失败: %s", e)
+            return None
             
         except Exception as e:
             logger.exception("验证 token 失败: %s", e)
