@@ -9,6 +9,7 @@ from orcalab.actor_property import (
     ActorPropertyType,
 )
 from orcalab.application_util import get_local_scene
+from orcalab.path import Path
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
     SceneEditNotificationBus,
@@ -183,6 +184,25 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         for edit in self._property_edits:
             if edit.context.prop.name() == property_key.property_name:
                 edit.set_value(value)
+
+    @override
+    async def on_property_read_only_changed(
+        self,
+        actor_path,
+        group_prefix: str,
+        property_name: str,
+        read_only: bool,
+    ):
+        if actor_path != self._actor_path:
+            return
+
+        if group_prefix != self._group.prefix:
+            return
+
+        for edit in self._property_edits:
+            if edit.context.prop.name() == property_name:
+                edit.set_read_only(read_only)
+                break
 
     def expand(self):
         self._content_area.show()

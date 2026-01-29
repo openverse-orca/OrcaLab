@@ -71,7 +71,7 @@ class BaseNumberEdit[T: (int, float)](QtWidgets.QLineEdit):
                 self._original_value = self.value()
 
         if event.type() == QtCore.QEvent.Type.MouseButtonPress:
-            if self._state == BaseNumberEditState.Idle:
+            if self._state == BaseNumberEditState.Idle and not self.isReadOnly():
                 assert isinstance(event, QtGui.QMouseEvent)
                 self.grabMouse()
                 self.set_state(BaseNumberEditState.MouseDown)
@@ -205,3 +205,10 @@ class BaseNumberEdit[T: (int, float)](QtWidgets.QLineEdit):
 
     def step(self) -> T:
         raise NotImplementedError()
+
+    def setReadOnly(self, ro: bool):
+        super().setReadOnly(ro)
+        if ro:
+            self.setCursor(QtCore.Qt.CursorShape.ArrowCursor)
+        else:
+            self.setCursor(QtCore.Qt.CursorShape.SizeHorCursor)

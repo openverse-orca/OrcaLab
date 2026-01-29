@@ -291,6 +291,40 @@ class RemoteScene(SceneEditNotification):
         self, property_key: ActorPropertyKey, value: Any, source: str
     ):
         await self.set_properties([property_key], [value])
+        await self._sync_property_read_only_state(property_key)
+
+    async def _sync_property_read_only_state(self, property_key: ActorPropertyKey):
+        local_scene = get_local_scene()
+        actor = local_scene.find_actor_by_path(property_key.actor_path)
+        if not isinstance(actor, AssetActor):
+            return
+
+        property_groups = await self.get_property_groups(property_key.actor_path)
+
+        for new_group in property_groups:
+            if new_group.prefix != property_key.group_prefix:
+                continue
+            old_group = next(
+                (g for g in actor.property_groups if g.prefix == new_group.prefix), None
+            )
+            if old_group is None:
+                continue
+
+            for new_prop in new_group.properties:
+                old_prop = next(
+                    (p for p in old_group.properties if p.name() == new_prop.name()), None
+                )
+                if old_prop is None:
+                    continue
+
+                if old_prop.is_read_only() != new_prop.is_read_only():
+                    old_prop.set_read_only(new_prop.is_read_only())
+                    await SceneEditNotificationBus().on_property_read_only_changed(
+                        property_key.actor_path,
+                        new_group.prefix,
+                        new_prop.name(),
+                        new_prop.is_read_only(),
+                    )
 
     async def _fetch_actor_proprerties(self, actor: AssetActor, actor_path: Path):
         property_groups = await self.get_property_groups(actor_path)
