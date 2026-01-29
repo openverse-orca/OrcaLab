@@ -215,6 +215,15 @@ class SceneEditNotification:
     ):
         pass
 
+    async def on_property_read_only_changed(
+        self,
+        actor_path: Path,
+        group_prefix: str,
+        property_name: str,
+        read_only: bool,
+    ):
+        pass
+
     async def get_camera_png(self, camera_name: str, png_path: str, png_name: str):
         pass
 

@@ -173,7 +173,15 @@ def run_asset_sync_ui(config_service) -> bool:
     timeout = config_service.datalink_timeout()
     auth_service = AuthService(base_url, auth_server_url=auth_server_url, timeout=timeout)
     
-    if not auth_service.verify_token(username, token):
+    token_valid = auth_service.verify_token(username, token)
+    
+    if token_valid is None:
+        # 连接认证服务器失败，显示UI提示
+        logger.warning("⚠️  连接资产库失败")
+        ask_offline_or_exit("连接资产库失败", "无法连接到资产服务器，请检查网络连接。")
+        return True  # 用户选择离线启动
+    
+    if not token_valid:
         logger.warning("⚠️  Token 已过期或无效，需要重新认证")
         TokenStorage.clear_token()
         
@@ -198,11 +206,15 @@ def run_asset_sync_ui(config_service) -> bool:
     # 在后台线程执行同步
     sync_result = [True]  # 使用列表来存储结果，因为需要在闭包中修改
     token_expired = [False]
+    connection_failed = [False]
     
     def run_sync():
         result = sync_assets(config_service, callbacks=callbacks, verbose=False)
         if result == 'TOKEN_EXPIRED':
             token_expired[0] = True
+            sync_result[0] = False
+        elif result == 'CONNECTION_FAILED':
+            connection_failed[0] = True
             sync_result[0] = False
         else:
             sync_result[0] = result
@@ -228,9 +240,13 @@ def run_asset_sync_ui(config_service) -> bool:
     # 如果同步过程中检测到 token 过期（理论上不应该发生，因为已经提前验证过）
     if token_expired[0]:
         logger.warning("⚠️  同步过程中 Token 意外过期，现有资产包已保留")
-        logger.info("✓ 以离线模式继续启动（使用现有资产包）")
+        ask_offline_or_exit("Token 已过期", "访问令牌已过期，请重新登录。")
+    elif connection_failed[0]:
+        logger.warning("⚠️  连接资产库失败")
+        ask_offline_or_exit("连接资产库失败", "同步过程中无法连接到资产服务器，请检查网络连接。")
     elif not sync_result[0]:
-        logger.warning("⚠️  资产同步失败，但程序将继续启动（使用现有资产包）")
+        logger.warning("⚠️  资产同步失败")
+        ask_offline_or_exit("资产同步失败", "资产同步过程中发生错误。")
     else:
         logger.info("✓ 资产同步完成")
     

@@ -1,4 +1,5 @@
 import asyncio
+import webbrowser
 
 from typing import Any, Dict, List, Tuple, override
 import numpy as np
@@ -61,8 +62,9 @@ from orcalab.asset_service_bus import (
 )
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 from orcalab.token_storage import TokenStorage
-
+from orcalab.mcp_service.mcp_service import OrcaLabMCPServer
 from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
+
 
 
 logger = logging.getLogger(__name__)
@@ -229,6 +231,10 @@ class MainWindow(
         cameras = await self.remote_scene. get_cameras()
         viewport_camera_index = await self.remote_scene.get_active_camera()
         self.on_cameras_changed(cameras, viewport_camera_index)
+
+        self.mcp_service = OrcaLabMCPServer(port=8000)
+        self.mcp_service.add_tools()
+        self.mcp_service._task = asyncio.create_task(self.mcp_service.run())
 
     def stop_viewport_main_loop(self):
         """停止viewport主循环"""
@@ -941,7 +947,15 @@ class MainWindow(
         if reply != QtWidgets.QMessageBox.StandardButton.Yes:
             return
         
-        # Clear token
+        # Open browser to logout from server
+        logout_url = "https://datalink.orca3d.cn:8081/auth/v1/logout/"
+        try:
+            webbrowser.open(logout_url)
+            logger.info("已打开浏览器进行服务器端登出")
+        except Exception as e:
+            logger.warning("打开浏览器失败: %s", e)
+        
+        # Clear local token
         TokenStorage.clear_token()
         logger.info("用户已退出登录")
         
@@ -1104,7 +1118,12 @@ class MainWindow(
             if hasattr(self, 'url_server'):
                 await self.url_server.stop()
 
-            # 6. 强制垃圾回收
+            # 6. 停止MCP服务
+            if hasattr(self, 'mcp_service'):
+                self.mcp_service.stop()
+                logger.info("cleanup: MCP服务已停止")
+
+            # 7. 强制垃圾回收
             import gc
             gc.collect()
 
