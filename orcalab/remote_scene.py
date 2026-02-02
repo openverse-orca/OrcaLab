@@ -410,13 +410,13 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             return await self._service.get_actor_assets()
 
-    async def save_body_transform(self):
+    async def save_state(self):
         async with self._grpc_lock:
-            await self._service.save_body_transform()
+            await self._service.save_state()
 
-    async def restore_body_transform(self):
+    async def restore_state(self):
         async with self._grpc_lock:
-            await self._service.restore_body_transform()
+            await self._service.restore_state()
 
     async def delete_actor(self, actor_path: Path):
         async with self._grpc_lock:

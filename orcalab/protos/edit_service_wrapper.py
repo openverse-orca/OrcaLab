@@ -182,14 +182,14 @@ class EditServiceWrapper:
         self._check_response(response)
         return response.actor_asset_names
 
-    async def save_body_transform(self):
-        request = edit_service_pb2.SaveBodyTransformRequest()
-        response = await self.stub.SaveBodyTransform(request)
+    async def save_state(self):
+        request = edit_service_pb2.SaveStateRequest()
+        response = await self.stub.SaveState(request)
         self._check_response(response)
 
-    async def restore_body_transform(self):
-        request = edit_service_pb2.RestoreBodyTransformRequest()
-        response = await self.stub.RestoreBodyTransform(request)
+    async def restore_state(self):
+        request = edit_service_pb2.RestoreStateRequest()
+        response = await self.stub.RestoreState(request)
         self._check_response(response)
 
     async def delete_actor(self, actor_path: Path):
@@ -254,7 +254,9 @@ class EditServiceWrapper:
         self._check_response(response)
         return response
 
-    async def get_camera_png(self, camera_name: str, png_path: str, png_name: str) -> bool:
+    async def get_camera_png(
+        self, camera_name: str, png_path: str, png_name: str
+    ) -> bool:
         request = edit_service_pb2.GetCameraPNGRequest(
             camera_name=camera_name,
             png_path=png_path,
@@ -309,7 +311,7 @@ class EditServiceWrapper:
     async def get_active_camera(self) -> int:
         request = edit_service_pb2.GetActiveCameraRequest()
         response = await self.stub.GetActiveCamera(request)
-        
+
         if response.status_code != Success:
             return -1
 
@@ -334,7 +336,7 @@ class EditServiceWrapper:
             )
 
             for prop_msg in pg_msg.properties:
-                prop : ActorProperty | None = None
+                prop: ActorProperty | None = None
                 match prop_msg.type:
                     case edit_service_pb2.PropertyType.Unknown:
                         continue

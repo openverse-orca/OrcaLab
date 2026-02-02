@@ -106,7 +106,7 @@ class SimulationService(SimulationRequest):
 
         await self.remote_scene.publish_scene()
         await asyncio.sleep(0.5)
-        await self.remote_scene.save_body_transform()
+        await self.remote_scene.save_state()
         await self.remote_scene.change_sim_state(True)
         await asyncio.sleep(0.5)
 
@@ -149,7 +149,7 @@ class SimulationService(SimulationRequest):
 
         await self.remote_scene.publish_scene()
         await asyncio.sleep(0.5)
-        await self.remote_scene.save_body_transform()
+        await self.remote_scene.save_state()
         await self.remote_scene.change_sim_state(True)
         await asyncio.sleep(0.5)
 
@@ -361,7 +361,7 @@ class SimulationService(SimulationRequest):
                 self.terminal.clear_pty_process()
 
             await asyncio.sleep(0.5)
-            await self.remote_scene.restore_body_transform()
+            await self.remote_scene.restore_state()
             await self.remote_scene.publish_scene()
             await self.remote_scene.change_sim_state(self.sim_process_running)
 

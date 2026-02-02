@@ -144,16 +144,16 @@ message SetSelectionResponse {
 }
 
 
-message SaveBodyTransformRequest {
+message SaveStateRequest {
 }
-message SaveBodyTransformResponse {
+message SaveStateResponse {
     StatusCode status_code = 1;
     string error_message = 2;
 }
 
-message RestoreBodyTransformRequest {
+message RestoreStateRequest {
 }
-message RestoreBodyTransformResponse {
+message RestoreStateResponse {
     StatusCode status_code = 1;
     string error_message = 2;
 }
@@ -424,8 +424,8 @@ service GrpcService {
     rpc GetPendingAddItem(GetPendingAddItemRequest) returns (GetPendingAddItemResponse);
     rpc SetSelection(SetSelectionRequest) returns (SetSelectionResponse);
 
-    rpc SaveBodyTransform(SaveBodyTransformRequest) returns (SaveBodyTransformResponse);
-    rpc RestoreBodyTransform(RestoreBodyTransformRequest) returns (RestoreBodyTransformResponse);
+    rpc SaveState(SaveStateRequest) returns (SaveStateResponse);
+    rpc RestoreState(RestoreStateRequest) returns (RestoreStateResponse);
 
     rpc DeleteActor(DeleteActorRequest) returns (DeleteActorResponse);
     rpc RenameActor(RenameActorRequest) returns (RenameActorResponse);
