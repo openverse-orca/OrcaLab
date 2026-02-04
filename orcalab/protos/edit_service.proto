@@ -326,6 +326,7 @@ enum PropertyType {
     Int = 2;
     Float = 3;
     String = 4;
+    Tree = 5;
 }
 
 message PropertyValue {
@@ -349,12 +350,20 @@ message Property {
     string editor_hint = 5;
 }
 
+message TreePropertyNode {
+    string name = 1;
+    string display_name = 2;
+    repeated Property properties = 3;
+    repeated TreePropertyNode children = 4;
+}
+
 message PropertyGroup {
     string prefix = 1;
     string name = 2;
     string display_name = 3;
     string hint = 4;
     repeated Property properties = 5;
+    repeated TreePropertyNode tree_data = 6;
 }
 
 message PropertyKey {

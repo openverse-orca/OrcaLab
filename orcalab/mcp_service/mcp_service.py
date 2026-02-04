@@ -36,6 +36,8 @@ class OrcaLabMCPServer:
         asset_info = output[0]
         return json.dumps(asset_info)
 
+    
+
     def add_tools(self):
         self.mcp.tool(self.get_asset_map)
         self.mcp.tool(self.get_asset_info)

@@ -1,4 +1,4 @@
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from orcalab.actor import BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyKey
@@ -112,6 +112,8 @@ class SceneEditRequest:
     def get_editing_actor_path(self, out: List[Path]):
         pass
 
+    def get_all_actors(self, out: List[Dict[Path, BaseActor]]):
+        pass
 
 SceneEditRequestBus = create_event_bus(SceneEditRequest)
 

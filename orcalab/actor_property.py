@@ -10,6 +10,7 @@ class ActorPropertyType(Enum):
     INTEGER = 2
     FLOAT = 3
     STRING = 4
+    TREE = 5
 
 
 class ValueWrapper:
@@ -79,6 +80,9 @@ class ActorProperty:
                 if not isinstance(value, str):
                     raise ValueError("Value must be a string")
                 target.value = value
+            case ActorPropertyType.TREE:
+                # TREE 类型没有直接值，数据在 group.tree_data 中
+                pass
             case _:
                 raise NotImplementedError("Unsupported property type")
 
@@ -94,6 +98,28 @@ class ActorProperty:
     def set_editor_hint(self, hint: str):
         self._editor_hint = hint
 
+    def create_alias(self, new_name: str) -> "ActorProperty":
+        """创建共享值引用的别名属性，修改别名时原属性也会更新"""
+        alias = object.__new__(ActorProperty)
+        alias._name = new_name
+        alias._display_name = self._display_name
+        alias._type = self._type
+        alias._value = self._value  # 共享引用
+        alias._original_value = self._original_value  # 共享引用
+        alias._read_only = self._read_only
+        alias._editor_hint = self._editor_hint
+        return alias
+
+
+class TreePropertyNode:
+    """树形属性节点"""
+
+    def __init__(self, name: str, display_name: str | None = None):
+        self.name = name
+        self.display_name = display_name if display_name else name
+        self.properties: List[ActorProperty] = []
+        self.children: List["TreePropertyNode"] = []
+
 
 class ActorPropertyGroup:
     def __init__(self, prefix: str, name: str, hint: str):
@@ -102,6 +128,7 @@ class ActorPropertyGroup:
         self.display_name = name
         self.hint = hint
         self.properties: List[ActorProperty] = []
+        self.tree_data: List[TreePropertyNode] = []
 
 
 class ActorPropertyKey:

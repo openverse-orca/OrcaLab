@@ -1,7 +1,13 @@
 from typing import List, Tuple, Dict
 
 from orcalab.actor import AssetActor, BaseActor, GroupActor
-from orcalab.actor_property import ActorProperty, ActorPropertyGroup, ActorPropertyKey
+from orcalab.actor_property import (
+    ActorProperty,
+    ActorPropertyGroup,
+    ActorPropertyKey,
+    ActorPropertyType,
+    TreePropertyNode,
+)
 from orcalab.path import Path
 
 
@@ -28,6 +34,10 @@ class LocalScene:
     @property
     def selection(self) -> List[Path]:
         return self._selection.copy()
+
+    @property
+    def actors(self) -> Dict[Path, BaseActor]:
+        return self._actors.copy()
 
     @selection.setter
     def selection(self, actors: List[Path]):
@@ -225,6 +235,24 @@ class LocalScene:
 
         self._replace_path(actor_path, new_actor_path)
 
+    def _find_property_in_tree(
+        self,
+        node: TreePropertyNode,
+        full_prop_name: str,
+        prop_type: ActorPropertyType,
+    ) -> ActorProperty | None:
+        """在树节点中递归查找属性，使用完整属性名匹配"""
+        for prop in node.properties:
+            # 树形属性的完整名称格式: NodeName.PropertyName
+            expected_name = f"{node.name}.{prop.name()}"
+            if expected_name == full_prop_name and prop.value_type() == prop_type:
+                return prop
+        for child in node.children:
+            result = self._find_property_in_tree(child, full_prop_name, prop_type)
+            if result:
+                return result
+        return None
+
     def parse_property_key(
         self, property_key: ActorPropertyKey
     ) -> Tuple[BaseActor, ActorPropertyGroup, ActorProperty]:
@@ -237,8 +265,23 @@ class LocalScene:
 
         for group in actor.property_groups:
             if group.prefix == property_key.group_prefix:
+                # 先在 properties 中查找
                 for prop in group.properties:
-                    if prop.name() == property_key.property_name:
+                    if (
+                        prop.name() == property_key.property_name
+                        and prop.value_type() == property_key.property_type
+                    ):
+                        return actor, group, prop
+
+                # 再在 tree_data 中查找（遍历所有节点匹配完整属性名）
+                for tree_node in group.tree_data:
+                    prop = self._find_property_in_tree(
+                        tree_node,
+                        property_key.property_name,
+                        property_key.property_type,
+                    )
+                    if prop:
                         return actor, group, prop
 
         raise Exception("Property not found.")
+

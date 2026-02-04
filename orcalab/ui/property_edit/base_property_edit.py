@@ -110,7 +110,10 @@ class BasePropertyEdit[T](StyledWidget):
         pass
 
     def _create_label(self, label_width: int) -> QtWidgets.QLabel:
-        label = QtWidgets.QLabel(self.context.prop.name())
+        display_name = self.context.prop.display_name()
+        if not display_name:
+            display_name = self.context.prop.name()
+        label = QtWidgets.QLabel(display_name)
         label.setFixedWidth(label_width)
         label.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter

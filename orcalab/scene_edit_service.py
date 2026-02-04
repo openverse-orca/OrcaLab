@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Any, List, override
+from typing import Any, Dict, List, override
 import logging
 
 
@@ -366,3 +366,8 @@ class SceneEditService(SceneEditRequest):
 
         if self.property_key is not None:
             out.append(self.property_key.actor_path)
+
+    @override
+    def get_all_actors(self, out: List[Dict[Path, BaseActor]]):
+        if out is not None:
+            out.append(self.local_scene.actors)
