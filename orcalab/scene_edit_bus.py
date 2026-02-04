@@ -115,6 +115,9 @@ class SceneEditRequest:
     def get_all_actors(self, out: List[Dict[Path, BaseActor]]):
         pass
 
+    def get_selection(self, out: List[List[Path]]):
+        pass
+
 SceneEditRequestBus = create_event_bus(SceneEditRequest)
 
 

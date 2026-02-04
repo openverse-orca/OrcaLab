@@ -1,5 +1,6 @@
 import asyncio
 import json
+import numpy as np
 from fastmcp import FastMCP
 from orcalab.math import Transform
 from orcalab.metadata_service_bus import MetadataServiceRequestBus
@@ -25,9 +26,9 @@ class OrcaLabMCPServer:
             所有已订阅资产的元数据信息的json字符串格式
         '''
         output = []
-        self.metadata_service_bus.get_asset_info(output)
+        self.metadata_service_bus.get_asset_map(output)
         asset_map = output[0]
-        return json.dumps(asset_map)
+        return json.dumps(asset_map, ensure_ascii=False)
 
     def get_asset_info(self, asset_path: str) -> str:
         '''
@@ -40,7 +41,7 @@ class OrcaLabMCPServer:
         output = []
         self.metadata_service_bus.get_asset_info(asset_path, output)
         asset_info = output[0]
-        return json.dumps(asset_info)
+        return json.dumps(asset_info, ensure_ascii=False)
 
     def get_all_actors(self) -> str:
         '''
@@ -100,8 +101,8 @@ class OrcaLabMCPServer:
         if len(actors) > 0 and actors[0] is not None:
             actors: Dict[Path, BaseActor] = actors[0]
             if Path(actor_path) in actors:
-                return json.dumps({actor_path: actors[Path(actor_path)].to_dict()})
-        return json.dumps({})
+                return json.dumps({actor_path: actors[Path(actor_path)].to_dict()}, ensure_ascii=False)
+        return json.dumps({}, ensure_ascii=False)
 
     async def set_actor_transform(self, actor_path: str, position: List[float], rotation: List[float], scale: float) -> str:
         '''
@@ -114,39 +115,41 @@ class OrcaLabMCPServer:
         Returns:
             设置Actor的变换的结果的json字符串格式
         '''
-        transform = Transform(position=position, rotation=rotation, scale=scale)
+        # Convert lists to numpy arrays as required by Transform class
+        position_array = np.array(position, dtype=np.float64)
+        rotation_array = np.array(rotation, dtype=np.float64)
+        transform = Transform(position=position_array, rotation=rotation_array, scale=scale)
         await self.scene_edit_bus.set_transform(Path(actor_path), transform, local=True, undo=True, source="mcp")
-        return json.dumps({"success": True, "message": "成功设置Actor的变换"})
+        return json.dumps({"success": True, "message": "成功设置Actor的变换"}, ensure_ascii=False)
 
     async def add_actor(self, actor_name:str, actor_path: str, parent_path: str = None) -> str:
         '''
         添加Actor
         Args:
-            actor_path: Actor在资产库中的路径
-            parent_path: Actor的父Actor在场景中的路径
+            actor_name: Actor的名称
+            actor_path: Actor在资产库中的路径，通过get_asset_map 或者get_asset_info获取
+            parent_path: Actor的父Actor在场景中的路径，默认为"/" 
+            
         Returns:
             添加Actor的结果的json字符串格式
         '''
-        actor = None
+        print(f"add_actor: actor_name: {actor_name}, actor_path: {actor_path}, parent_path: {parent_path}")
+        actor, parent_actor = AssetActor(actor_name, actor_path), None
         actors: List[Dict[Path, BaseActor]] = []
         self.scene_edit_bus.get_all_actors(actors)
         if len(actors) > 0 and actors[0] is not None:
             actors: Dict[Path, BaseActor] = actors[0]
             if Path(parent_path) in actors:
-                parent_actor = actors[Path(parent_path)]
-                if isinstance(parent_actor, GroupActor):
-                    actor = AssetActor(actor_name, actor_path, parent_actor)
-        if actor is None:
-            actor = AssetActor(actor_name, actor_path)
-        
+                parent_actor = actors[Path(parent_path)]   
+       
         try:
             if parent_path is not None:
                 await self.scene_edit_bus.add_actor(actor, Path(parent_path), undo=True, source="mcp")
             else:
                 await self.scene_edit_bus.add_actor(actor, Path.root_path(), undo=True, source="mcp")
         except Exception as e:
-            return json.dumps({"success": False, "message": f"添加Actor失败: {e}"})
-        return json.dumps({"success": True, "message": "成功添加Actor"})
+            return json.dumps({"success": False, "message": f"添加Actor失败: {e}"}, ensure_ascii=False)
+        return json.dumps({"success": True, "message": "成功添加Actor"}, ensure_ascii=False)
 
     async def delete_actor(self, actor_path: str) -> str:
         '''
@@ -159,8 +162,30 @@ class OrcaLabMCPServer:
         try:
             await self.scene_edit_bus.delete_actor(Path(actor_path), undo=True, source="mcp")
         except Exception as e:
-            return json.dumps({"success": False, "message": f"删除Actor失败: {e}"})
-        return json.dumps({"success": True, "message": "成功删除Actor"})
+            return json.dumps({"success": False, "message": f"删除Actor失败: {e}"}, ensure_ascii=False)
+        return json.dumps({"success": True, "message": "成功删除Actor"}, ensure_ascii=False)
+
+    def get_selection(self) -> str:
+        '''
+        获取当前场景中的选择
+        Args:
+            无需传递参数
+        Returns:
+            当前场景中的选择的actor的json字符串格式
+        '''
+        selection: List[List[Path]] = []
+        self.scene_edit_bus.get_selection(selection)
+        selection_dict = {}
+        if len(selection) > 0 and selection[0] is not None:
+            selection: List[Path] = selection[0]
+            actors: List[Dict[Path, BaseActor]] = []
+            self.scene_edit_bus.get_all_actors(actors)
+            if len(actors) > 0 and actors[0] is not None:
+                actors: Dict[Path, BaseActor] = actors[0]
+            for path in selection:
+                if path in actors:
+                    selection_dict[path.string()] = actors[path].to_dict()
+        return json.dumps(selection_dict, ensure_ascii=False)
 
     def add_tools(self):
         self.mcp.tool(self.get_asset_map)
@@ -170,6 +195,7 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.set_actor_transform)
         self.mcp.tool(self.add_actor)
         self.mcp.tool(self.delete_actor)
+        self.mcp.tool(self.get_selection)
         
     async def run(self):
         await self.mcp.run_async(transport="http", port=self.port)

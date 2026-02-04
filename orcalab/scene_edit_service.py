@@ -371,3 +371,8 @@ class SceneEditService(SceneEditRequest):
     def get_all_actors(self, out: List[Dict[Path, BaseActor]]):
         if out is not None:
             out.append(self.local_scene.actors)
+
+    @override
+    def get_selection(self, out: List[List[Path]]):
+        if out is not None:
+            out.append(self.local_scene.selection)
