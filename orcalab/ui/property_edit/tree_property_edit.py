@@ -15,13 +15,15 @@ from orcalab.ui.property_edit.base_property_edit import (
 from orcalab.ui.styled_widget import StyledWidget
 from orcalab.ui.theme_service import ThemeService
 
+INDENT_WIDTH = 20
+EDITOR_MIN_WIDTH = 300
+
 
 def create_property_edit(
     parent: QtWidgets.QWidget,
     context: PropertyEditContext,
     label_width: int,
 ) -> BasePropertyEdit:
-    """统一的属性编辑器创建函数，避免循环导入"""
     from orcalab.ui.property_edit.bool_property_edit import BooleanPropertyEdit
     from orcalab.ui.property_edit.float_property_edit import FloatPropertyEdit
     from orcalab.ui.property_edit.int_property_edit import IntegerPropertyEdit
@@ -34,14 +36,35 @@ def create_property_edit(
             return IntegerPropertyEdit(parent, context, label_width)
         case ActorPropertyType.FLOAT:
             return FloatPropertyEdit(parent, context, label_width)
-        case ActorPropertyType.STRING:
-            return StringPropertyEdit(parent, context, label_width)
         case _:
             return StringPropertyEdit(parent, context, label_width)
 
 
+def collect_all_names(nodes: List[TreePropertyNode]) -> List[str]:
+    names = []
+    for node in nodes:
+        names.append(node.display_name)
+        names.extend(collect_all_names(node.children))
+    return names
+
+
+def calc_tree_max_depth(nodes: List[TreePropertyNode], depth: int = 0) -> int:
+    if not nodes:
+        return depth
+    return max(calc_tree_max_depth(n.children, depth + 1) for n in nodes)
+
+
+def calc_required_width(max_depth: int, label_width: int) -> int:
+    return (max_depth + 1) * INDENT_WIDTH + label_width + EDITOR_MIN_WIDTH + 40
+
+
+def create_spacer(width: int) -> QtWidgets.QWidget:
+    spacer = QtWidgets.QWidget()
+    spacer.setFixedWidth(width)
+    return spacer
+
+
 class TreeNodeWidget(StyledWidget):
-    """树节点组件，包含标题和可折叠的内容区"""
 
     def __init__(
         self,
@@ -59,27 +82,24 @@ class TreeNodeWidget(StyledWidget):
         self._property_edits: List[BasePropertyEdit] = []
         self._child_nodes: List["TreeNodeWidget"] = []
         self._is_collapsed = False
-
         self._init_ui()
 
     def _init_ui(self):
         root_layout = QtWidgets.QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(2)
-        
-        # 计算最小宽度：缩进 + 标签宽度 + 编辑器最小宽度 + 边距
-        indent = self._indent_level * 16
-        min_width = indent + 24 + self._label_width + 200  # 200 是编辑器最小宽度
-        self.setMinimumWidth(min_width)
 
-        theme = ThemeService()
-        text_color = theme.get_color("text")
+        text_color = ThemeService().get_color("text")
+        indent = self._indent_level * INDENT_WIDTH
 
         # 标题区域
         title_widget = QtWidgets.QWidget()
         title_layout = QtWidgets.QHBoxLayout(title_widget)
-        title_layout.setContentsMargins(4 + self._indent_level * 16, 2, 4, 2)
+        title_layout.setContentsMargins(0, 2, 4, 2)
         title_layout.setSpacing(4)
+
+        if indent > 0:
+            title_layout.addWidget(create_spacer(indent))
 
         self._expand_icon = make_color_svg(":/icons/chevron_down", text_color)
         self._collapse_icon = make_color_svg(":/icons/chevron_right", text_color)
@@ -97,81 +117,145 @@ class TreeNodeWidget(StyledWidget):
 
         title_widget.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         title_widget.mousePressEvent = self._on_title_clicked
-
         root_layout.addWidget(title_widget)
 
         # 内容区域
         self._content_widget = QtWidgets.QWidget()
         content_layout = QtWidgets.QVBoxLayout(self._content_widget)
-        content_layout.setContentsMargins(4 + self._indent_level * 16 + 20, 0, 4, 4)
+        content_layout.setContentsMargins(0, 0, 0, 4)
         content_layout.setSpacing(4)
 
-        adjusted_label_width = max(80, self._label_width - self._indent_level * 16)
+        prop_indent = (self._indent_level + 1) * INDENT_WIDTH
 
-        # 添加属性编辑器
         for prop in self._node.properties:
-            context = self._create_child_context(prop)
-            editor = create_property_edit(self, context, adjusted_label_width)
+            prop_row = QtWidgets.QWidget()
+            row_layout = QtWidgets.QHBoxLayout(prop_row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(0)
+
+            if prop_indent > 0:
+                row_layout.addWidget(create_spacer(prop_indent))
+
+            context = PropertyEditContext(
+                actor=self._base_context.actor,
+                actor_path=self._base_context.actor_path,
+                group=self._base_context.group,
+                prop=prop.create_alias(f"{self._node.name}.{prop.name()}"),
+            )
+            editor = create_property_edit(prop_row, context, self._label_width)
+            editor.setMinimumWidth(self._label_width + EDITOR_MIN_WIDTH)
             if prop.is_read_only():
                 editor.set_read_only(True)
             self._property_edits.append(editor)
-            content_layout.addWidget(editor)
+            row_layout.addWidget(editor)
+            row_layout.addStretch()
+            content_layout.addWidget(prop_row)
 
-        # 添加子节点
         for child_node in self._node.children:
-            child_widget = TreeNodeWidget(
-                self,
-                child_node,
-                self._base_context,
-                self._label_width,
-                self._indent_level + 1,
+            child = TreeNodeWidget(
+                self, child_node, self._base_context,
+                self._label_width, self._indent_level + 1
             )
-            self._child_nodes.append(child_widget)
-            content_layout.addWidget(child_widget)
+            self._child_nodes.append(child)
+            content_layout.addWidget(child)
 
         root_layout.addWidget(self._content_widget)
-        
-        # 更新最小宽度为自身和所有子节点的最大值
-        max_child_width = max((c.minimumWidth() for c in self._child_nodes), default=0)
-        if max_child_width > self.minimumWidth():
-            self.setMinimumWidth(max_child_width)
-
-    def _create_child_context(self, prop: ActorProperty) -> PropertyEditContext:
-        """创建子属性的上下文，属性名使用 节点名.属性名 格式"""
-        full_prop_name = f"{self._node.name}.{prop.name()}"
-        # 使用 create_alias 共享值引用，修改别名时原属性也会更新
-        alias_prop = prop.create_alias(full_prop_name)
-
-        return PropertyEditContext(
-            actor=self._base_context.actor,
-            actor_path=self._base_context.actor_path,
-            group=self._base_context.group,
-            prop=alias_prop,
-        )
 
     def _on_title_clicked(self, event: QtGui.QMouseEvent):
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
-            self._toggle()
-
-    def _toggle(self):
-        self._is_collapsed = not self._is_collapsed
-        if self._is_collapsed:
-            self._content_widget.hide()
-            self._indicator.set_pixmap(self._collapse_icon)
-        else:
-            self._content_widget.show()
-            self._indicator.set_pixmap(self._expand_icon)
+            self._is_collapsed = not self._is_collapsed
+            self._content_widget.setVisible(not self._is_collapsed)
+            self._indicator.set_pixmap(
+                self._collapse_icon if self._is_collapsed else self._expand_icon
+            )
 
     def get_property_edits(self) -> List[BasePropertyEdit]:
-        """递归获取所有属性编辑器"""
         edits = list(self._property_edits)
         for child in self._child_nodes:
             edits.extend(child.get_property_edits())
         return edits
 
 
+class TreePropertyDialog(QtWidgets.QDialog):
+
+    def __init__(
+        self,
+        parent: QtWidgets.QWidget | None,
+        context: PropertyEditContext,
+        label_width: int,
+    ):
+        super().__init__(parent)
+        self._context = context
+        self._label_width = label_width
+        self._node_widgets: List[TreeNodeWidget] = []
+        self._init_ui()
+
+    def _init_ui(self):
+        self.setWindowTitle(f"编辑 - {self._context.prop.display_name()}")
+        self.setMinimumSize(500, 400)
+        self.resize(800, 600)
+
+        root_layout = QtWidgets.QVBoxLayout(self)
+        root_layout.setContentsMargins(8, 8, 8, 8)
+        root_layout.setSpacing(8)
+
+        self._scroll_area = QtWidgets.QScrollArea()
+        self._scroll_area.setWidgetResizable(False)
+
+        self._content_widget = QtWidgets.QWidget()
+        content_layout = QtWidgets.QVBoxLayout(self._content_widget)
+        content_layout.setContentsMargins(8, 8, 8, 8)
+        content_layout.setSpacing(8)
+
+        tree_data = self._context.group.tree_data
+        max_depth = calc_tree_max_depth(tree_data)
+        self._content_widget.setMinimumWidth(
+            calc_required_width(max_depth, self._label_width)
+        )
+
+        for node in tree_data:
+            node_widget = TreeNodeWidget(
+                self._content_widget, node, self._context, self._label_width
+            )
+            self._node_widgets.append(node_widget)
+            content_layout.addWidget(node_widget)
+
+        content_layout.addStretch()
+        self._scroll_area.setWidget(self._content_widget)
+        root_layout.addWidget(self._scroll_area, 1)
+
+        button_layout = QtWidgets.QHBoxLayout()
+        button_layout.addStretch()
+        close_btn = QtWidgets.QPushButton("关闭")
+        close_btn.setFixedWidth(80)
+        close_btn.clicked.connect(self.accept)
+        button_layout.addWidget(close_btn)
+        root_layout.addLayout(button_layout)
+
+    def resizeEvent(self, event: QtGui.QResizeEvent):
+        super().resizeEvent(event)
+        hint = self._content_widget.sizeHint()
+        width = max(self._content_widget.minimumWidth(),
+                    self._scroll_area.viewport().width())
+        self._content_widget.resize(width, hint.height())
+
+    def _find_edit(self, property_name: str) -> BasePropertyEdit | None:
+        for node in self._node_widgets:
+            for edit in node.get_property_edits():
+                if edit.context.prop.name() == property_name:
+                    return edit
+        return None
+
+    def set_child_value(self, property_name: str, value: Any):
+        if edit := self._find_edit(property_name):
+            edit.set_value(value)
+
+    def set_child_read_only(self, property_name: str, read_only: bool):
+        if edit := self._find_edit(property_name):
+            edit.set_read_only(read_only)
+
+
 class TreePropertyEdit(BasePropertyEdit):
-    """树形属性编辑器，继承自 BasePropertyEdit"""
 
     def __init__(
         self,
@@ -181,8 +265,7 @@ class TreePropertyEdit(BasePropertyEdit):
     ):
         super().__init__(parent, context)
         self._label_width = label_width
-        self._node_widgets: List[TreeNodeWidget] = []
-
+        self._dialog: TreePropertyDialog | None = None
         self._init_ui()
 
     def _init_ui(self):
@@ -190,40 +273,78 @@ class TreePropertyEdit(BasePropertyEdit):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(4)
 
-        tree_data = self.context.group.tree_data
-        for node in tree_data:
-            node_widget = TreeNodeWidget(
-                self,
-                node,
-                self.context,
-                self._label_width,
-                indent_level=0,
+        theme = ThemeService()
+        brand_color = theme.get_color_hex("brand")
+
+        header_layout = QtWidgets.QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(8)
+        header_layout.addWidget(self._create_label(self._label_width))
+
+        edit_btn = QtWidgets.QPushButton("✎ 编辑属性")
+        edit_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        edit_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {brand_color};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: {brand_color}dd; }}
+            QPushButton:pressed {{ background-color: {brand_color}bb; }}
+        """)
+        edit_btn.clicked.connect(self._on_edit_clicked)
+        header_layout.addWidget(edit_btn)
+        header_layout.addStretch()
+        root_layout.addLayout(header_layout)
+
+        names = collect_all_names(self.context.group.tree_data)
+        if names:
+            bg_color = theme.get_color_hex("property_group_bg")
+            text_color = theme.get_color_hex("text")
+
+            names_edit = QtWidgets.QPlainTextEdit(", ".join(names))
+            names_edit.setReadOnly(True)
+            names_edit.setMaximumHeight(80)
+            names_edit.setStyleSheet(f"""
+                QPlainTextEdit {{
+                    background-color: {bg_color};
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 4px;
+                    padding: 4px;
+                    color: {text_color};
+                }}
+            """)
+
+            container = QtWidgets.QWidget()
+            layout = QtWidgets.QHBoxLayout(container)
+            layout.setContentsMargins(self._label_width + 8, 0, 0, 0)
+            layout.setSpacing(0)
+            layout.addWidget(names_edit)
+            root_layout.addWidget(container)
+
+    def _on_edit_clicked(self):
+        if self._dialog is None:
+            self._dialog = TreePropertyDialog(
+                self.window(), self.context, self._label_width
             )
-            self._node_widgets.append(node_widget)
-            root_layout.addWidget(node_widget)
+        self._dialog.exec()
 
     def set_value(self, value: Any):
-        """树形属性不直接设置值，而是设置子属性"""
         pass
 
     def set_read_only(self, read_only: bool):
-        """设置所有子属性的只读状态"""
-        for node_widget in self._node_widgets:
-            for edit in node_widget.get_property_edits():
-                edit.set_read_only(read_only)
+        if self._dialog:
+            for edit in self._dialog._node_widgets:
+                for e in edit.get_property_edits():
+                    e.set_read_only(read_only)
 
     def set_child_value(self, property_name: str, value: Any):
-        """根据属性名设置子属性值"""
-        for node_widget in self._node_widgets:
-            for edit in node_widget.get_property_edits():
-                if edit.context.prop.name() == property_name:
-                    edit.set_value(value)
-                    return
+        if self._dialog:
+            self._dialog.set_child_value(property_name, value)
 
     def set_child_read_only(self, property_name: str, read_only: bool):
-        """根据属性名设置子属性只读状态"""
-        for node_widget in self._node_widgets:
-            for edit in node_widget.get_property_edits():
-                if edit.context.prop.name() == property_name:
-                    edit.set_read_only(read_only)
-                    return
+        if self._dialog:
+            self._dialog.set_child_read_only(property_name, read_only)
