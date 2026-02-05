@@ -66,6 +66,8 @@ def create_spacer(width: int) -> QtWidgets.QWidget:
 
 class TreeNodeWidget(StyledWidget):
 
+    collapsed_changed = QtCore.Signal()
+
     def __init__(
         self,
         parent: QtWidgets.QWidget | None,
@@ -168,6 +170,7 @@ class TreeNodeWidget(StyledWidget):
             self._indicator.set_pixmap(
                 self._collapse_icon if self._is_collapsed else self._expand_icon
             )
+            self.collapsed_changed.emit()
 
     def get_property_edits(self) -> List[BasePropertyEdit]:
         edits = list(self._property_edits)
@@ -217,6 +220,7 @@ class TreePropertyDialog(QtWidgets.QDialog):
             node_widget = TreeNodeWidget(
                 self._content_widget, node, self._context, self._label_width
             )
+            self._connect_collapsed_signals(node_widget)
             self._node_widgets.append(node_widget)
             content_layout.addWidget(node_widget)
 
@@ -232,12 +236,23 @@ class TreePropertyDialog(QtWidgets.QDialog):
         button_layout.addWidget(close_btn)
         root_layout.addLayout(button_layout)
 
-    def resizeEvent(self, event: QtGui.QResizeEvent):
-        super().resizeEvent(event)
+    def _connect_collapsed_signals(self, node: TreeNodeWidget):
+        node.collapsed_changed.connect(self._update_content_size)
+        for child in node._child_nodes:
+            self._connect_collapsed_signals(child)
+
+    def _update_content_size(self):
+        QtCore.QTimer.singleShot(0, self._do_update_content_size)
+
+    def _do_update_content_size(self):
         hint = self._content_widget.sizeHint()
         width = max(self._content_widget.minimumWidth(),
                     self._scroll_area.viewport().width())
         self._content_widget.resize(width, hint.height())
+
+    def resizeEvent(self, event: QtGui.QResizeEvent):
+        super().resizeEvent(event)
+        self._do_update_content_size()
 
     def _find_edit(self, property_name: str) -> BasePropertyEdit | None:
         for node in self._node_widgets:
