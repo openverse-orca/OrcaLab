@@ -18,6 +18,19 @@ class BaseActor:
         self.name = name
         self.parent = parent
 
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "parent": self.parent.name if self.parent else None,
+            "transform.position": self.transform.position.tolist(),
+            "transform.rotation": self.transform.rotation.tolist(),
+            "transform.scale": self.transform.scale,
+            "world_transform.position": self.world_transform.position.tolist(),
+            "world_transform.rotation": self.world_transform.rotation.tolist(),
+            "world_transform.scale": self.world_transform.scale,
+            "type": self.__class__.__name__,
+        }
+
     def __repr__(self):
         return f"BaseActor(name={self._name})"
 

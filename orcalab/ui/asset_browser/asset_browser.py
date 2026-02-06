@@ -166,7 +166,7 @@ class AssetBrowser(QtWidgets.QWidget):
         self._view.set_loading_text("正在加载资产缩略图...")
 
         self._info_view = AssetInfoView()
-        self._info_view.setFixedWidth(250)
+        self._info_view.setMinimumWidth(200)
 
         tool_bar_layout = QtWidgets.QHBoxLayout()
         tool_bar_layout.setContentsMargins(0, 0, 0, 0)
@@ -185,18 +185,36 @@ class AssetBrowser(QtWidgets.QWidget):
             tool_bar_layout.addSpacing(5)
         tool_bar_layout.addWidget(self.status_label)
 
-        center_layout = QtWidgets.QVBoxLayout()
+        center_widget = QtWidgets.QWidget()
+        center_layout = QtWidgets.QVBoxLayout(center_widget)
         center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.setSpacing(0)
         center_layout.addLayout(tool_bar_layout)
         center_layout.addWidget(self._view, 1)
 
+        # 使用 QSplitter 实现可拖动调整宽度
+        splitter = QtWidgets.QSplitter(Qt.Horizontal)
+        splitter.setHandleWidth(4)
+        splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #404040;
+            }
+            QSplitter::handle:hover {
+                background-color: #0078d4;
+            }
+        """)
+        splitter.addWidget(self._tree_view)
+        splitter.addWidget(center_widget)
+        splitter.addWidget(self._info_view)
+        splitter.setSizes([150, 600, 320])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setStretchFactor(2, 0)
+
         root_layout = QtWidgets.QHBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
-        root_layout.addWidget(self._tree_view)
-        root_layout.addLayout(center_layout)
-        root_layout.addWidget(self._info_view)
+        root_layout.addWidget(splitter)
 
         self._view.selection_changed.connect(self._on_selection_changed)
         self._tree_view.category_selected.connect(self._on_category_selected)

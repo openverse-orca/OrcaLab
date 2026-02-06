@@ -1,10 +1,13 @@
 import asyncio
 import os
-import pty
 import subprocess
 import sys
 import logging
 from PySide6 import QtCore, QtWidgets, QtGui
+
+# PTY 只在 Unix 系统上可用
+if sys.platform != "win32":
+    import pty
 
 
 from orcalab.application_bus import ApplicationRequestBus
@@ -103,7 +106,7 @@ class SimulationService(SimulationRequest):
 
         await self.remote_scene.publish_scene()
         await asyncio.sleep(0.5)
-        await self.remote_scene.save_body_transform()
+        await self.remote_scene.save_state()
         await self.remote_scene.change_sim_state(True)
         await asyncio.sleep(0.5)
 
@@ -146,7 +149,7 @@ class SimulationService(SimulationRequest):
 
         await self.remote_scene.publish_scene()
         await asyncio.sleep(0.5)
-        await self.remote_scene.save_body_transform()
+        await self.remote_scene.save_state()
         await self.remote_scene.change_sim_state(True)
         await asyncio.sleep(0.5)
 
@@ -178,7 +181,7 @@ class SimulationService(SimulationRequest):
     async def _start_external_process(
         self, command: str, args: list
     ):
-        """在主线程中启动外部进程，使用PTY提供真实终端环境"""
+        """在主线程中启动外部进程"""
         try:
             # 构建完整的命令
             resolved_command = command
@@ -186,25 +189,34 @@ class SimulationService(SimulationRequest):
                 resolved_command = sys.executable or command
             cmd = [resolved_command] + args
 
-            # 创建伪终端，使外部程序获得真实的TTY环境
-            master_fd, slave_fd = pty.openpty()
-            self._pty_master_fd = master_fd
+            if sys.platform != "win32":
+                # Linux/macOS: 使用 PTY 提供真实终端环境
+                master_fd, slave_fd = pty.openpty()
+                self._pty_master_fd = master_fd
 
-            # 使用PTY的从端作为进程的stdin/stdout/stderr
-            self.sim_process = subprocess.Popen(
-                cmd,
-                stdin=slave_fd,
-                stdout=slave_fd,
-                stderr=slave_fd,
-                env=os.environ.copy(),
-                start_new_session=True,
-            )
-
-            # 关闭从端（子进程已经持有）
-            os.close(slave_fd)
-
-            # 将PTY主端传递给terminal_widget，以支持输入
-            self.terminal.set_pty_process(self.sim_process, master_fd)
+                self.sim_process = subprocess.Popen(
+                    cmd,
+                    stdin=slave_fd,
+                    stdout=slave_fd,
+                    stderr=slave_fd,
+                    env=os.environ.copy(),
+                    start_new_session=True,
+                )
+                os.close(slave_fd)
+                self.terminal.set_pty_process(self.sim_process, master_fd)
+            else:
+                # Windows: 使用 PIPE 方式
+                self._pty_master_fd = None
+                self.sim_process = subprocess.Popen(
+                    cmd,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    universal_newlines=True,
+                    bufsize=1,
+                    env=os.environ.copy(),
+                )
+                self.terminal.set_external_process(self.sim_process)
 
             # 在terminal_widget中显示启动信息
             self.terminal._append_output(f"启动进程: {' '.join(cmd)}\n")
@@ -212,8 +224,11 @@ class SimulationService(SimulationRequest):
             self.terminal._append_output("-" * 50 + "\n")
             logger.info("启动外部程序: %s", " ".join(cmd))
 
-            # 启动PTY输出读取线程
-            self._start_pty_output_thread()
+            # 启动输出读取线程
+            if sys.platform != "win32":
+                self._start_pty_output_thread()
+            else:
+                self._start_pipe_output_thread()
 
             return True
 
@@ -269,6 +284,42 @@ class SimulationService(SimulationRequest):
         self.output_thread = threading.Thread(target=read_pty_output, daemon=True)
         self.output_thread.start()
 
+    def _start_pipe_output_thread(self):
+        """启动PIPE输出读取线程（Windows）"""
+        import threading
+
+        def read_pipe_output():
+            """从PIPE读取输出"""
+            try:
+                while self.sim_process and self.sim_process.poll() is None:
+                    if self.sim_process.stdout is None:
+                        break
+                    line = self.sim_process.stdout.readline()
+                    if line:
+                        self._append_line_to_terminal(line)
+                    else:
+                        break
+
+                # 读取剩余输出
+                if self.sim_process and self.sim_process.stdout:
+                    remaining = self.sim_process.stdout.read()
+                    if remaining:
+                        self._append_line_to_terminal(remaining)
+
+                # 检查进程退出码
+                if self.sim_process:
+                    return_code = self.sim_process.poll()
+                    if return_code is not None:
+                        self._append_line_to_terminal(
+                            f"\n进程退出，返回码: {return_code}\n"
+                        )
+
+            except Exception as e:
+                self._append_line_to_terminal(f"读取输出时出错: {str(e)}\n")
+
+        self.output_thread = threading.Thread(target=read_pipe_output, daemon=True)
+        self.output_thread.start()
+
     async def start_simulation(self) -> None:
         await asyncWrap(self.show_launch_dialog)
 
@@ -310,7 +361,7 @@ class SimulationService(SimulationRequest):
                 self.terminal.clear_pty_process()
 
             await asyncio.sleep(0.5)
-            await self.remote_scene.restore_body_transform()
+            await self.remote_scene.restore_state()
             await self.remote_scene.publish_scene()
             await self.remote_scene.change_sim_state(self.sim_process_running)
 

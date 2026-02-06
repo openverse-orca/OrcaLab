@@ -24,6 +24,7 @@ from orcalab.ui.property_edit.bool_property_edit import BooleanPropertyEdit
 from orcalab.ui.property_edit.float_property_edit import FloatPropertyEdit
 from orcalab.ui.property_edit.int_property_edit import IntegerPropertyEdit
 from orcalab.ui.property_edit.string_property_edit import StringPropertyEdit
+from orcalab.ui.property_edit.tree_property_edit import TreePropertyEdit
 
 from orcalab.ui.styled_widget import StyledWidget
 from orcalab.ui.text_label import TextLabel
@@ -81,6 +82,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
 
         self._actor = actor
         self._group = group
+        self._label_width = label_width
 
         scene = get_local_scene()
         actor_path = scene.get_actor_path(actor)
@@ -153,6 +155,8 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
                 return FloatPropertyEdit(self, context, label_width)
             case ActorPropertyType.STRING:
                 return StringPropertyEdit(self, context, label_width)
+            case ActorPropertyType.TREE:
+                return TreePropertyEdit(self, context, label_width)
             case _:
                 raise NotImplementedError("Unsupported property type")
 
@@ -167,11 +171,6 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         value: Any,
         source: str,
     ):
-
-        # 属性的修改有两个来源，一个是UI，另一个是undo/redo。
-        # 目前还不能通过viewport修改属性。
-        # 但是可以通过viewport修改Transform，所以Transform的修改有三个来源。
-
         if source == "ui":
             return
 
@@ -184,6 +183,10 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         for edit in self._property_edits:
             if edit.context.prop.name() == property_key.property_name:
                 edit.set_value(value)
+                return
+            # 处理树形属性的子属性
+            if isinstance(edit, TreePropertyEdit):
+                edit.set_child_value(property_key.property_name, value)
 
     @override
     async def on_property_read_only_changed(
@@ -202,7 +205,10 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         for edit in self._property_edits:
             if edit.context.prop.name() == property_name:
                 edit.set_read_only(read_only)
-                break
+                return
+            # 处理树形属性的子属性
+            if isinstance(edit, TreePropertyEdit):
+                edit.set_child_read_only(property_name, read_only)
 
     def expand(self):
         self._content_area.show()

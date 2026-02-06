@@ -335,7 +335,8 @@ def _get_current_orcalab_pyside_path() -> Optional[Path]:
                 return current
             current = current.parent
         return package_path
-    except ImportError:
+    except ImportError as e:
+        logger.error("Failed to get current orcalab-pyside path: %s", e)
         return None
 
 

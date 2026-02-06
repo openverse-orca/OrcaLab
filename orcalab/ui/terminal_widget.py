@@ -4,18 +4,106 @@ import threading
 import queue
 import os
 import sys
+import re
 
 
 class TerminalTextEdit(QtWidgets.QTextEdit):
-    """支持输入捕获的终端文本编辑器"""
+    """支持输入捕获和ANSI颜色的终端文本编辑器"""
     
     input_submitted = QtCore.Signal(str)
+    
+    # ANSI颜色映射表
+    ANSI_COLORS = {
+        '30': '#000000',  # Black
+        '31': '#cd3131',  # Red
+        '32': '#0dbc79',  # Green
+        '33': '#e5e510',  # Yellow
+        '34': '#2472c8',  # Blue
+        '35': '#bc3fbc',  # Magenta
+        '36': '#11a8cd',  # Cyan
+        '37': '#e5e5e5',  # White
+        '90': '#666666',  # Bright Black (Gray)
+        '91': '#f14c4c',  # Bright Red
+        '92': '#23d18b',  # Bright Green
+        '93': '#f5f543',  # Bright Yellow
+        '94': '#3b8eea',  # Bright Blue
+        '95': '#d670d6',  # Bright Magenta
+        '96': '#29b8db',  # Bright Cyan
+        '97': '#ffffff',  # Bright White
+    }
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self._input_buffer = ""
         # 禁用默认的undo/redo
         self.setUndoRedoEnabled(False)
+        
+        # 当前文本格式
+        self._current_format = QtGui.QTextCharFormat()
+        self._reset_format()
+    def _reset_format(self):
+        """重置文本格式为默认"""
+        self._current_format = QtGui.QTextCharFormat()
+        self._current_format.setForeground(QtGui.QColor("#e6edf3"))
+        
+    def _parse_ansi_codes(self, code_str):
+        """解析ANSI转义码并更新当前格式"""
+        if not code_str:
+            return
+            
+        codes = code_str.split(';')
+        for code in codes:
+            if not code:
+                continue
+                
+            if code == '0':  # Reset
+                self._reset_format()
+            elif code == '1':  # Bold
+                self._current_format.setFontWeight(QtGui.QFont.Weight.Bold)
+            elif code == '22':  # Normal intensity
+                self._current_format.setFontWeight(QtGui.QFont.Weight.Normal)
+            elif code == '4':  # Underline
+                self._current_format.setFontUnderline(True)
+            elif code == '24':  # No underline
+                self._current_format.setFontUnderline(False)
+            elif code in self.ANSI_COLORS:  # 前景色
+                self._current_format.setForeground(QtGui.QColor(self.ANSI_COLORS[code]))
+            elif code.startswith('3') and len(code) == 2:  # 其他前景色
+                pass  # 已在ANSI_COLORS中处理
+            elif code.startswith('9') and len(code) == 2:  # 高亮前景色
+                pass  # 已在ANSI_COLORS中处理
+    
+    def append_ansi_text(self, text):
+        """追加带ANSI转义码的文本"""
+        # ANSI转义码正则表达式
+        ansi_pattern = re.compile(r'\x1b\[([0-9;]*)m')
+        
+        cursor = self.textCursor()
+        cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
+        
+        last_pos = 0
+        for match in ansi_pattern.finditer(text):
+            # 插入转义码之前的文本
+            if match.start() > last_pos:
+                plain_text = text[last_pos:match.start()]
+                cursor.insertText(plain_text, self._current_format)
+            
+            # 解析并应用ANSI代码
+            codes = match.group(1)
+            self._parse_ansi_codes(codes)
+            
+            last_pos = match.end()
+        
+        # 插入剩余文本
+        if last_pos < len(text):
+            plain_text = text[last_pos:]
+            cursor.insertText(plain_text, self._current_format)
+        
+        self.setTextCursor(cursor)
+        
+        # 自动滚动到底部
+        scrollbar = self.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
         
     def keyPressEvent(self, event):
         key = event.key()
@@ -356,13 +444,8 @@ class TerminalWidget(QtWidgets.QWidget):
     @QtCore.Slot(str)
     def _append_output_safe(self, text):
         """安全地追加输出（在主线程中调用）"""
-        cursor = self.output_text.textCursor()
-        cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
-        cursor.insertText(text)
-        
-        # 自动滚动到底部
-        scrollbar = self.output_text.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        # 使用新的ANSI支持方法
+        self.output_text.append_ansi_text(text)
     
     def clear_output(self):
         """清空输出"""

@@ -8,6 +8,7 @@ from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
     ActorPropertyKey,
+    TreePropertyNode,
 )
 from orcalab.actor_util import make_unique_name
 from orcalab.application_util import get_local_scene
@@ -310,6 +311,7 @@ class RemoteScene(SceneEditNotification):
             if old_group is None:
                 continue
 
+            # 处理普通属性
             for new_prop in new_group.properties:
                 old_prop = next(
                     (p for p in old_group.properties if p.name() == new_prop.name()), None
@@ -326,7 +328,88 @@ class RemoteScene(SceneEditNotification):
                         new_prop.is_read_only(),
                     )
 
+            # 处理树形属性
+            await self._sync_tree_read_only_state(
+                property_key.actor_path,
+                new_group,
+                old_group,
+            )
+
+    async def _sync_tree_read_only_state(
+        self,
+        actor_path: Path,
+        new_group: ActorPropertyGroup,
+        old_group: ActorPropertyGroup,
+    ):
+        """同步树形属性的 read_only 状态"""
+        from orcalab.actor_property import TreePropertyNode
+
+        def sync_node(new_node: TreePropertyNode, old_node: TreePropertyNode | None):
+            if old_node is None:
+                return
+
+            for new_prop in new_node.properties:
+                old_prop = next(
+                    (p for p in old_node.properties if p.name() == new_prop.name()), None
+                )
+                if old_prop is None:
+                    continue
+
+                if old_prop.is_read_only() != new_prop.is_read_only():
+                    old_prop.set_read_only(new_prop.is_read_only())
+                    # 构造完整属性名：节点名.属性名
+                    full_prop_name = f"{new_node.name}.{new_prop.name()}"
+                    asyncio.create_task(
+                        SceneEditNotificationBus().on_property_read_only_changed(
+                            actor_path,
+                            new_group.prefix,
+                            full_prop_name,
+                            new_prop.is_read_only(),
+                        )
+                    )
+
+            # 递归处理子节点
+            for new_child in new_node.children:
+                old_child = next(
+                    (c for c in old_node.children if c.name == new_child.name), None
+                )
+                sync_node(new_child, old_child)
+
+        # 同步树形数据的 read_only 状态（保留原有值，不替换整个 tree_data）
+        for new_node in new_group.tree_data:
+            old_node = next(
+                (n for n in old_group.tree_data if n.name == new_node.name), None
+            )
+            sync_node(new_node, old_node)
+
+    def _collect_tree_property_keys(
+        self,
+        actor_path: Path,
+        group_prefix: str,
+        node: TreePropertyNode,
+        keys: List[ActorPropertyKey],
+        props: List[ActorProperty],
+    ):
+        """递归收集树形属性的子属性 key"""
+        for prop in node.properties:
+            full_name = f"{node.name}.{prop.name()}"
+            key = ActorPropertyKey(
+                actor_path,
+                group_prefix,
+                full_name,
+                prop.value_type(),
+            )
+            keys.append(key)
+            props.append(prop)
+
+        for child in node.children:
+            self._collect_tree_property_keys(
+                actor_path, group_prefix, child, keys, props
+            )
+
     async def _fetch_actor_proprerties(self, actor: AssetActor, actor_path: Path):
+        from orcalab.actor_property import ActorPropertyType
+
         property_groups = await self.get_property_groups(actor_path)
         actor.property_groups = property_groups
 
@@ -334,6 +417,9 @@ class RemoteScene(SceneEditNotification):
         props: List[ActorProperty] = []
         for group in property_groups:
             for prop in group.properties:
+                # TREE 类型的属性没有直接值，跳过获取
+                if prop.value_type() == ActorPropertyType.TREE:
+                    continue
                 key = ActorPropertyKey(
                     actor_path,
                     group.prefix,
@@ -342,6 +428,12 @@ class RemoteScene(SceneEditNotification):
                 )
                 keys.append(key)
                 props.append(prop)
+
+            # 收集树形属性的子属性
+            for tree_node in group.tree_data:
+                self._collect_tree_property_keys(
+                    actor_path, group.prefix, tree_node, keys, props
+                )
 
         values = await self.get_properties(keys)
         for prop, value in zip(props, values):
@@ -410,13 +502,13 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             return await self._service.get_actor_assets()
 
-    async def save_body_transform(self):
+    async def save_state(self):
         async with self._grpc_lock:
-            await self._service.save_body_transform()
+            await self._service.save_state()
 
-    async def restore_body_transform(self):
+    async def restore_state(self):
         async with self._grpc_lock:
-            await self._service.restore_body_transform()
+            await self._service.restore_state()
 
     async def delete_actor(self, actor_path: Path):
         async with self._grpc_lock:

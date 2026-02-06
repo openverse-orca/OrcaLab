@@ -99,15 +99,15 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.SetSelectionRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetSelectionResponse.FromString,
                 _registered_method=True)
-        self.SaveBodyTransform = channel.unary_unary(
-                '/SceneEdit.GrpcService/SaveBodyTransform',
-                request_serializer=edit__service__pb2.SaveBodyTransformRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.SaveBodyTransformResponse.FromString,
+        self.SaveState = channel.unary_unary(
+                '/SceneEdit.GrpcService/SaveState',
+                request_serializer=edit__service__pb2.SaveStateRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.SaveStateResponse.FromString,
                 _registered_method=True)
-        self.RestoreBodyTransform = channel.unary_unary(
-                '/SceneEdit.GrpcService/RestoreBodyTransform',
-                request_serializer=edit__service__pb2.RestoreBodyTransformRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.RestoreBodyTransformResponse.FromString,
+        self.RestoreState = channel.unary_unary(
+                '/SceneEdit.GrpcService/RestoreState',
+                request_serializer=edit__service__pb2.RestoreStateRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.RestoreStateResponse.FromString,
                 _registered_method=True)
         self.DeleteActor = channel.unary_unary(
                 '/SceneEdit.GrpcService/DeleteActor',
@@ -297,13 +297,13 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def SaveBodyTransform(self, request, context):
+    def SaveState(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def RestoreBodyTransform(self, request, context):
+    def RestoreState(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -503,15 +503,15 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     request_deserializer=edit__service__pb2.SetSelectionRequest.FromString,
                     response_serializer=edit__service__pb2.SetSelectionResponse.SerializeToString,
             ),
-            'SaveBodyTransform': grpc.unary_unary_rpc_method_handler(
-                    servicer.SaveBodyTransform,
-                    request_deserializer=edit__service__pb2.SaveBodyTransformRequest.FromString,
-                    response_serializer=edit__service__pb2.SaveBodyTransformResponse.SerializeToString,
+            'SaveState': grpc.unary_unary_rpc_method_handler(
+                    servicer.SaveState,
+                    request_deserializer=edit__service__pb2.SaveStateRequest.FromString,
+                    response_serializer=edit__service__pb2.SaveStateResponse.SerializeToString,
             ),
-            'RestoreBodyTransform': grpc.unary_unary_rpc_method_handler(
-                    servicer.RestoreBodyTransform,
-                    request_deserializer=edit__service__pb2.RestoreBodyTransformRequest.FromString,
-                    response_serializer=edit__service__pb2.RestoreBodyTransformResponse.SerializeToString,
+            'RestoreState': grpc.unary_unary_rpc_method_handler(
+                    servicer.RestoreState,
+                    request_deserializer=edit__service__pb2.RestoreStateRequest.FromString,
+                    response_serializer=edit__service__pb2.RestoreStateResponse.SerializeToString,
             ),
             'DeleteActor': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteActor,
@@ -981,7 +981,7 @@ class GrpcService(object):
             _registered_method=True)
 
     @staticmethod
-    def SaveBodyTransform(request,
+    def SaveState(request,
             target,
             options=(),
             channel_credentials=None,
@@ -994,9 +994,9 @@ class GrpcService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/SceneEdit.GrpcService/SaveBodyTransform',
-            edit__service__pb2.SaveBodyTransformRequest.SerializeToString,
-            edit__service__pb2.SaveBodyTransformResponse.FromString,
+            '/SceneEdit.GrpcService/SaveState',
+            edit__service__pb2.SaveStateRequest.SerializeToString,
+            edit__service__pb2.SaveStateResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1008,7 +1008,7 @@ class GrpcService(object):
             _registered_method=True)
 
     @staticmethod
-    def RestoreBodyTransform(request,
+    def RestoreState(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1021,9 +1021,9 @@ class GrpcService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/SceneEdit.GrpcService/RestoreBodyTransform',
-            edit__service__pb2.RestoreBodyTransformRequest.SerializeToString,
-            edit__service__pb2.RestoreBodyTransformResponse.FromString,
+            '/SceneEdit.GrpcService/RestoreState',
+            edit__service__pb2.RestoreStateRequest.SerializeToString,
+            edit__service__pb2.RestoreStateResponse.FromString,
             options,
             channel_credentials,
             insecure,

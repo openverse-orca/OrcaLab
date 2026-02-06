@@ -14,6 +14,7 @@ from orcalab.actor_property import (
     ActorPropertyGroup,
     ActorPropertyKey,
     ActorPropertyType,
+    TreePropertyNode,
 )
 from orcalab.ui.camera.camera_brief import CameraBrief
 
@@ -182,14 +183,14 @@ class EditServiceWrapper:
         self._check_response(response)
         return response.actor_asset_names
 
-    async def save_body_transform(self):
-        request = edit_service_pb2.SaveBodyTransformRequest()
-        response = await self.stub.SaveBodyTransform(request)
+    async def save_state(self):
+        request = edit_service_pb2.SaveStateRequest()
+        response = await self.stub.SaveState(request)
         self._check_response(response)
 
-    async def restore_body_transform(self):
-        request = edit_service_pb2.RestoreBodyTransformRequest()
-        response = await self.stub.RestoreBodyTransform(request)
+    async def restore_state(self):
+        request = edit_service_pb2.RestoreStateRequest()
+        response = await self.stub.RestoreState(request)
         self._check_response(response)
 
     async def delete_actor(self, actor_path: Path):
@@ -254,7 +255,9 @@ class EditServiceWrapper:
         self._check_response(response)
         return response
 
-    async def get_camera_png(self, camera_name: str, png_path: str, png_name: str) -> bool:
+    async def get_camera_png(
+        self, camera_name: str, png_path: str, png_name: str
+    ) -> bool:
         request = edit_service_pb2.GetCameraPNGRequest(
             camera_name=camera_name,
             png_path=png_path,
@@ -309,7 +312,7 @@ class EditServiceWrapper:
     async def get_active_camera(self) -> int:
         request = edit_service_pb2.GetActiveCameraRequest()
         response = await self.stub.GetActiveCamera(request)
-        
+
         if response.status_code != Success:
             return -1
 
@@ -319,6 +322,67 @@ class EditServiceWrapper:
         request = edit_service_pb2.SetActiveCameraRequest(index=camera_index)
         response = await self.stub.SetActiveCamera(request)
         self._check_response(response)
+
+    def _parse_property_msg(self, prop_msg) -> ActorProperty | None:
+        """解析属性消息"""
+        prop: ActorProperty | None = None
+        match prop_msg.type:
+            case edit_service_pb2.PropertyType.Unknown:
+                return None
+            case edit_service_pb2.PropertyType.Bool:
+                prop = ActorProperty(
+                    name=prop_msg.name,
+                    display_name=prop_msg.display_name,
+                    type=ActorPropertyType.BOOL,
+                    value=False,
+                )
+            case edit_service_pb2.PropertyType.Int:
+                prop = ActorProperty(
+                    name=prop_msg.name,
+                    display_name=prop_msg.display_name,
+                    type=ActorPropertyType.INTEGER,
+                    value=0,
+                )
+            case edit_service_pb2.PropertyType.Float:
+                prop = ActorProperty(
+                    name=prop_msg.name,
+                    display_name=prop_msg.display_name,
+                    type=ActorPropertyType.FLOAT,
+                    value=0.0,
+                )
+            case edit_service_pb2.PropertyType.String:
+                prop = ActorProperty(
+                    name=prop_msg.name,
+                    display_name=prop_msg.display_name,
+                    type=ActorPropertyType.STRING,
+                    value="",
+                )
+            case edit_service_pb2.PropertyType.Tree:
+                prop = ActorProperty(
+                    name=prop_msg.name,
+                    display_name=prop_msg.display_name,
+                    type=ActorPropertyType.TREE,
+                    value=None,
+                )
+        if prop:
+            prop.set_read_only(prop_msg.read_only)
+            prop.set_editor_hint(prop_msg.editor_hint)
+        return prop
+
+    def _parse_tree_node_msg(self, node_msg) -> TreePropertyNode:
+        """递归解析树节点消息"""
+        node = TreePropertyNode(
+            name=node_msg.name,
+            display_name=node_msg.display_name,
+        )
+        for prop_msg in node_msg.properties:
+            prop = self._parse_property_msg(prop_msg)
+            if prop:
+                node.properties.append(prop)
+        for child_msg in node_msg.children:
+            child_node = self._parse_tree_node_msg(child_msg)
+            node.children.append(child_node)
+        return node
 
     async def get_property_groups(self, actor_path: Path) -> List[ActorPropertyGroup]:
         request = edit_service_pb2.GetPropertyGroupsRequest()
@@ -334,42 +398,14 @@ class EditServiceWrapper:
             )
 
             for prop_msg in pg_msg.properties:
-                prop : ActorProperty | None = None
-                match prop_msg.type:
-                    case edit_service_pb2.PropertyType.Unknown:
-                        continue
-                    case edit_service_pb2.PropertyType.Bool:
-                        prop = ActorProperty(
-                            name=prop_msg.name,
-                            display_name=prop_msg.display_name,
-                            type=ActorPropertyType.BOOL,
-                            value=False,
-                        )
-                    case edit_service_pb2.PropertyType.Int:
-                        prop = ActorProperty(
-                            name=prop_msg.name,
-                            display_name=prop_msg.display_name,
-                            type=ActorPropertyType.INTEGER,
-                            value=0,
-                        )
-                    case edit_service_pb2.PropertyType.Float:
-                        prop = ActorProperty(
-                            name=prop_msg.name,
-                            display_name=prop_msg.display_name,
-                            type=ActorPropertyType.FLOAT,
-                            value=0.0,
-                        )
-                    case edit_service_pb2.PropertyType.String:
-                        prop = ActorProperty(
-                            name=prop_msg.name,
-                            display_name=prop_msg.display_name,
-                            type=ActorPropertyType.STRING,
-                            value="",
-                        )
-                assert prop is not None
-                prop.set_read_only(prop_msg.read_only)
-                prop.set_editor_hint(prop_msg.editor_hint)
-                pg.properties.append(prop)
+                prop = self._parse_property_msg(prop_msg)
+                if prop:
+                    pg.properties.append(prop)
+
+            # 解析树形数据
+            for tree_node_msg in pg_msg.tree_data:
+                tree_node = self._parse_tree_node_msg(tree_node_msg)
+                pg.tree_data.append(tree_node)
 
             property_groups.append(pg)
 
