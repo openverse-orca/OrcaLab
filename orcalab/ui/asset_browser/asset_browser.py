@@ -40,9 +40,16 @@ class AssetBrowser(QtWidgets.QWidget):
         self._config_service = ConfigService()
         self._loading_thumbnails = set()
         self._model_connected = False
-        self.is_admin =  self._http_service.is_admin()
+        self.is_admin = self._http_service.is_admin()
+        self._can_render_thumbnail = self._check_can_render_thumbnail()
         self._setup_ui()
         self._setup_connections()
+
+    def _check_can_render_thumbnail(self) -> bool:
+        if not self.is_admin:
+            return False
+        current_level = self._config_service.level()
+        return "previewthumbnail_orcalab" in current_level
 
 
     def _setup_ui(self):
@@ -95,7 +102,7 @@ class AssetBrowser(QtWidgets.QWidget):
         """
         )
 
-        if self.is_admin:
+        if self._can_render_thumbnail:
             self.create_panorama_apng_button = QtWidgets.QPushButton("渲染缩略图")
             self.create_panorama_apng_button.setToolTip("渲染资产缩略图")
             self.create_panorama_apng_button.setStyleSheet(
@@ -180,7 +187,7 @@ class AssetBrowser(QtWidgets.QWidget):
         tool_bar_layout.addStretch()
         tool_bar_layout.addWidget(self.open_asset_store_button)
         tool_bar_layout.addSpacing(5)
-        if self.is_admin:
+        if self._can_render_thumbnail:
             tool_bar_layout.addWidget(self.create_panorama_apng_button)
             tool_bar_layout.addSpacing(5)
         tool_bar_layout.addWidget(self.status_label)
@@ -224,7 +231,7 @@ class AssetBrowser(QtWidgets.QWidget):
         self.include_search_box.textChanged.connect(self._on_include_filter_changed)
         self.exclude_search_box.textChanged.connect(self._on_exclude_filter_changed)
         self.open_asset_store_button.clicked.connect(self._on_open_asset_store_clicked)
-        if self.is_admin:
+        if self._can_render_thumbnail:
             self.create_panorama_apng_button.clicked.connect(
                 lambda: asyncio.create_task(self._on_create_panorama_apng_clicked())
             )
@@ -244,7 +251,7 @@ class AssetBrowser(QtWidgets.QWidget):
         self._view._scroll_bar.setValue(0)
         
     async def set_assets(self, assets: List[str]):
-        if self.is_admin:
+        if self._can_render_thumbnail:
             self.create_panorama_apng_button.setDisabled(True)
         infos = []
         thumbnail_cache_path = get_cache_folder() / "thumbnail"
@@ -278,7 +285,7 @@ class AssetBrowser(QtWidgets.QWidget):
             self._model_connected = True
         
         self._tree_view.set_assets(infos)
-        if self.is_admin:
+        if self._can_render_thumbnail:
             self.create_panorama_apng_button.setText("渲染缩略图")
             self.create_panorama_apng_button.setDisabled(False)
         self.status_label.setText(f"{len(infos)} assets")
