@@ -232,7 +232,7 @@ class MainWindow(
         viewport_camera_index = await self.remote_scene.get_active_camera()
         self.on_cameras_changed(cameras, viewport_camera_index)
 
-        self.mcp_service = OrcaLabMCPServer(port=8000)
+        self.mcp_service = OrcaLabMCPServer(port=self.config_service.mcp_port())
         self.mcp_service.add_tools()
         self.mcp_service._task = asyncio.create_task(self.mcp_service.run())
 
