@@ -280,7 +280,7 @@ class TreePropertyEdit(BasePropertyEdit):
     ):
         super().__init__(parent, context)
         self._label_width = label_width
-1        # self._dialog: TreePropertyDialog | None = None
+        self._dialog: TreePropertyDialog | None = None
         self._init_ui()
 
     def _init_ui(self):
