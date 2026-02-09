@@ -318,6 +318,9 @@ class ConfigService:
         else:
             return ""
 
+    def mcp_port(self) -> int:
+        return self.config.get("mcp", {}).get("port", 8000)
+
     def copilot_server_url(self) -> str:
         return self.config.get("copilot", {}).get(
             "server_url", "http://103.237.28.246:9023"

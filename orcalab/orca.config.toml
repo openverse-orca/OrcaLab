@@ -11,6 +11,9 @@ pak_urls = []
 python_project_path = ""
 python_project_url = ""
 
+[mcp]
+port = 12345
+
 [copilot]
 enable = false
 server_url = "http://103.237.28.246:9023"
