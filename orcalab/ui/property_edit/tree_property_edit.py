@@ -43,7 +43,8 @@ def create_property_edit(
 def collect_all_names(nodes: List[TreePropertyNode]) -> List[str]:
     names = []
     for node in nodes:
-        names.append(node.display_name)
+        if not node.display_name.startswith("未命名"):
+            names.append(node.display_name)
         names.extend(collect_all_names(node.children))
     return names
 
