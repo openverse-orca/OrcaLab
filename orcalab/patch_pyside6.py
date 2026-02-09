@@ -53,31 +53,35 @@ def find_pyside6_paths():
     return pyside6_path
 
 
-def find_libxcb_cursor_path() -> bool:
+def is_apt_package_installed(package: str) -> bool:
     result = subprocess.run(
-        [
-            "apt",
-            "list",
-            "--installed",
-            "libxcb-cursor0",
-        ],
+        ["apt", "list", "--installed", package],
         check=True,
         capture_output=True,
         text=True,
     )
     lines = result.stdout.strip().splitlines()
     for line in lines:
-        if line.startswith("libxcb-cursor0/"):
+        if line.startswith(f"{package}/"):
             return True
-
     return False
+
+
+def install_apt_package(package: str):
+    if is_apt_package_installed(package):
+        print(f"{package} is already installed.")
+        return
+    subprocess.run(["sudo", "apt", "install", "-y", package], check=True)
+    print(f"{package} installed successfully.")
 
 
 def patch_pyside6():
     if sys.platform != "linux":
         return
 
-    if find_libxcb_cursor_path():
+    install_apt_package("libvdpau1")
+
+    if is_apt_package_installed("libxcb-cursor0"):
         print("libxcb-cursor0 is already installed. No patching needed.")
         return
 
