@@ -420,3 +420,6 @@ class ConfigService:
         if isinstance(level_value, str):
             return {"name": level_value, "path": level_value}
         return None
+    
+    def enable_debug_tool(self) -> bool:
+        return self.config.get("orcalab", {}).get("debug_tool", False)

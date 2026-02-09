@@ -49,6 +49,9 @@ class Viewport(QtWidgets.QWidget):
             config_service.lock_fps(),
         ]
 
+        if config_service.enable_debug_tool():
+            self.command_line.append("--debug-tool")
+
         project_path = config_service.orca_project_folder()
         connect_builder_hub = False
 
