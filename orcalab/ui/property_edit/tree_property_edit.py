@@ -280,7 +280,7 @@ class TreePropertyEdit(BasePropertyEdit):
     ):
         super().__init__(parent, context)
         self._label_width = label_width
-        self._dialog: TreePropertyDialog | None = None
+1        # self._dialog: TreePropertyDialog | None = None
         self._init_ui()
 
     def _init_ui(self):
@@ -289,31 +289,31 @@ class TreePropertyEdit(BasePropertyEdit):
         root_layout.setSpacing(4)
 
         theme = ThemeService()
-        brand_color = theme.get_color_hex("brand")
 
-        header_layout = QtWidgets.QHBoxLayout()
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(8)
-        header_layout.addWidget(self._create_label(self._label_width))
-
-        edit_btn = QtWidgets.QPushButton("✎ 编辑属性")
-        edit_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        edit_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {brand_color};
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 4px 12px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{ background-color: {brand_color}dd; }}
-            QPushButton:pressed {{ background-color: {brand_color}bb; }}
-        """)
-        edit_btn.clicked.connect(self._on_edit_clicked)
-        header_layout.addWidget(edit_btn)
-        header_layout.addStretch()
-        root_layout.addLayout(header_layout)
+        # # 标签和编辑按钮（暂时隐藏）
+        # header_layout = QtWidgets.QHBoxLayout()
+        # header_layout.setContentsMargins(0, 0, 0, 0)
+        # header_layout.setSpacing(8)
+        # header_layout.addWidget(self._create_label(self._label_width))
+        # brand_color = theme.get_color_hex("brand")
+        # edit_btn = QtWidgets.QPushButton("✎ 编辑属性")
+        # edit_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        # edit_btn.setStyleSheet(f"""
+        #     QPushButton {{
+        #         background-color: {brand_color};
+        #         color: white;
+        #         border: none;
+        #         border-radius: 4px;
+        #         padding: 4px 12px;
+        #         font-weight: bold;
+        #     }}
+        #     QPushButton:hover {{ background-color: {brand_color}dd; }}
+        #     QPushButton:pressed {{ background-color: {brand_color}bb; }}
+        # """)
+        # edit_btn.clicked.connect(self._on_edit_clicked)
+        # header_layout.addWidget(edit_btn)
+        # header_layout.addStretch()
+        # root_layout.addLayout(header_layout)
 
         names = collect_all_names(self.context.group.tree_data)
         if names:
@@ -332,34 +332,32 @@ class TreePropertyEdit(BasePropertyEdit):
                     color: {text_color};
                 }}
             """)
+            root_layout.addWidget(names_edit)
 
-            container = QtWidgets.QWidget()
-            layout = QtWidgets.QHBoxLayout(container)
-            layout.setContentsMargins(self._label_width + 8, 0, 0, 0)
-            layout.setSpacing(0)
-            layout.addWidget(names_edit)
-            root_layout.addWidget(container)
-
-    def _on_edit_clicked(self):
-        if self._dialog is None:
-            self._dialog = TreePropertyDialog(
-                self.window(), self.context, self._label_width
-            )
-        self._dialog.exec()
+    # # 编辑对话框（暂时隐藏）
+    # def _on_edit_clicked(self):
+    #     if self._dialog is None:
+    #         self._dialog = TreePropertyDialog(
+    #             self.window(), self.context, self._label_width
+    #         )
+    #     self._dialog.exec()
 
     def set_value(self, value: Any):
         pass
 
     def set_read_only(self, read_only: bool):
-        if self._dialog:
-            for edit in self._dialog._node_widgets:
-                for e in edit.get_property_edits():
-                    e.set_read_only(read_only)
+        pass
+        # if self._dialog:
+        #     for edit in self._dialog._node_widgets:
+        #         for e in edit.get_property_edits():
+        #             e.set_read_only(read_only)
 
     def set_child_value(self, property_name: str, value: Any):
-        if self._dialog:
-            self._dialog.set_child_value(property_name, value)
+        pass
+        # if self._dialog:
+        #     self._dialog.set_child_value(property_name, value)
 
     def set_child_read_only(self, property_name: str, read_only: bool):
-        if self._dialog:
-            self._dialog.set_child_read_only(property_name, read_only)
+        pass
+        # if self._dialog:
+        #     self._dialog.set_child_read_only(property_name, read_only)
