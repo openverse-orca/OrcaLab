@@ -851,7 +851,19 @@ class MainWindow(
             return
 
         await self.clear_scene_layout(self.local_scene.root_actor)
-        await self.create_actor_from_scene_layout(data)
+        errors = []
+        await self.create_actor_from_scene_layout(data, errors=errors)
+
+        if errors:
+            error_detail = "\n".join(errors)
+            logger.warning("加载场景布局时部分Actor创建失败:\n%s", error_detail)
+            QtCore.QTimer.singleShot(0, lambda: QtWidgets.QMessageBox.warning(
+                self,
+                "加载场景布局警告",
+                f"场景布局 '{filename}' 加载过程中部分Actor创建失败:\n\n{error_detail}",
+                QtWidgets.QMessageBox.StandardButton.Ok,
+            ))
+
         self.current_layout_path = resolved
         self._infer_scene_and_layout_names()
         self._mark_layout_clean()
@@ -869,7 +881,10 @@ class MainWindow(
         await SceneEditRequestBus().set_selection([], undo=False)
 
 
-    async def create_actor_from_scene_layout(self, actor_data, parent: GroupActor = None):
+    async def create_actor_from_scene_layout(self, actor_data, parent: GroupActor = None, errors: List[str] = None):
+        if errors is None:
+            errors = []
+
         name = actor_data["name"]
         actor_type = actor_data.get("type", "BaseActor")
         if actor_type == "AssetActor":
@@ -891,13 +906,15 @@ class MainWindow(
             try:
                 await SceneEditRequestBus().add_actor(actor=actor, parent_actor=parent)
             except Exception as e:
-                logger.warning(f"创建 Actor {name} 失败: {e}, actor_path: {actor.asset_path}")
-                self.terminal_widget._append_output(f"创建 Actor {name} 失败: {e}, actor_path: {actor.asset_path}\n")
+                error_msg = f"创建 Actor {name} 失败: {e}, asset_path: {actor.asset_path}"
+                logger.warning(error_msg)
+                errors.append(error_msg)
+                self.terminal_widget._append_output(f"{error_msg}\n")
                 self.terminal_widget._append_output(f"确认是否有未订阅资产包， 资产包是否已更新\n")
 
         if isinstance(actor, GroupActor):
             for child_data in actor_data.get("children", []):
-                await self.create_actor_from_scene_layout(child_data, actor)
+                await self.create_actor_from_scene_layout(child_data, actor, errors)
         self._layout_modified = True
         self._update_title()
         logger.debug("create_actor_from_scene_layout: 标记布局已修改")
