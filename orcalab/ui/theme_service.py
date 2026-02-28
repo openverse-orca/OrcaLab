@@ -28,10 +28,12 @@ class ThemeService:
         self.set_color("button_bg", "#181818")
         self.set_color("button_bg_hover", "#444444")
         self.set_color("button_bg_pressed", "#555555")
+        self.set_color("button_bg_selected", "#707070")
         self.set_color("button_text", "#FFFFFF")
         self.set_color("button_text_hover", "#FFFFFF")
         self.set_color("button_text_pressed", "#FFFFFF")
         self.set_color("panel_icon", "#C2C2C2")
+        self.set_color("tool_icon", "#C2C2C2")
 
         self.set_color("brand", "#F02C6D")
 

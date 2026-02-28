@@ -26,6 +26,7 @@ from orcalab.simulation.simulation_bus import (
     SimulationState,
 )
 from orcalab.simulation.simulation_service import SimulationService
+from orcalab.state_sync_bus import ManipulatorType, StateSyncRequest, StateSyncRequestBus
 from orcalab.ui.actor_editor import ActorEditor
 from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.actor_outline_model import ActorOutlineModel
@@ -78,6 +79,7 @@ class MainWindow(
     CameraNotification,
     CameraRequest,
     SimulationNotification,
+    StateSyncRequest,
 ):
 
     add_item_by_drag = QtCore.Signal(str, Transform)
@@ -109,9 +111,11 @@ class MainWindow(
         CameraNotificationBus.connect(self)
         CameraRequestBus.connect(self)
         SimulationNotificationBus.connect(self)
+        StateSyncRequestBus.connect(self)
         logger.debug("connect_buses")
 
     def disconnect_buses(self):
+        StateSyncRequestBus.disconnect(self)
         SimulationNotificationBus.disconnect(self)
         UserEventRequestBus.disconnect(self)
         AssetServiceNotificationBus.disconnect(self)
@@ -191,6 +195,8 @@ class MainWindow(
         self.scene_edit_service.connect_bus()
         self.remote_scene.connect_bus()
         self.simulation_service.connect_bus()
+
+        self.manipulator_bar.connect_buses()
 
         self.connect_buses()
 
@@ -349,33 +355,6 @@ class MainWindow(
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.manipulator_bar)
-
-        # 为工具栏添加样式
-        self.manipulator_bar.setStyleSheet("""
-            QTreeWidget {
-                background-color: #3c3c3c;
-                border-bottom: 1px solid #404040;
-            }
-            QToolButton {
-                color: #cccccc;
-                background-color: #4a4a4a;
-                border: 1px solid #555555;
-                border-radius: 3px;
-                padding: 4px;
-                margin: 2px;
-            }
-            QToolButton:hover {
-                background-color: #5a5a5a;
-                border-color: #666666;
-            }
-            QToolButton:pressed {
-                background-color: #2a2a2a;
-            }
-        """)
-
-        connect(self.manipulator_bar.move_button.triggered, self.manipulator_move)
-        connect(self.manipulator_bar.rotate_button.triggered, self.manipulator_rotate)
-        connect(self.manipulator_bar.scale_button.triggered, self.manipulator_scale)
 
         logger.info("设置主内容区域…")
         layout = QtWidgets.QVBoxLayout(self._main_content_area)
@@ -1250,6 +1229,18 @@ class MainWindow(
     def on_cameras_changed(self, cameras: List[CameraBrief], viewport_camera_index: int) -> None:
         self.camera_selector_widget.set_cameras(cameras, viewport_camera_index)
 
+    #
+    # StateSyncRequestBus overrides
+    #
+    @override
+    async def set_manipulator_type(self, type: ManipulatorType) -> None:
+        if type == ManipulatorType.Translate:
+            await self.remote_scene.change_manipulator_type(1)
+        elif type == ManipulatorType.Rotate:
+            await self.remote_scene.change_manipulator_type(2)
+        elif type == ManipulatorType.Scale:
+            await self.remote_scene.change_manipulator_type(3)
+
     def _mark_layout_clean(self):
         self._layout_modified = False
         self._update_title()
@@ -1304,11 +1295,6 @@ class MainWindow(
         self._mark_layout_clean()
         return True
     
-    async def manipulator_move(self, *args):
-        await self.remote_scene.change_manipulator_type(1)
 
-    async def manipulator_rotate(self, *args):
-        await self.remote_scene.change_manipulator_type(2)
 
-    async def manipulator_scale(self, *args):
-        await self.remote_scene.change_manipulator_type(3)
+        

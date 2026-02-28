@@ -127,7 +127,7 @@ class Viewport(QtWidgets.QWidget):
         mime = event.mimeData()
         if mime.hasFormat("application/x-orca-asset"):
             asset_name = mime.data("application/x-orca-asset").data().decode("utf-8")
-            local_pos = event.pos()  # QPoint
+            local_pos = event.position()  # QPointF
             x, y = local_pos.x(), local_pos.y()
             viewport_width = self.width()
             viewport_height = self.height()
