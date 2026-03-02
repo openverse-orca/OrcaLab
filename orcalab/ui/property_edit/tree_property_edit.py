@@ -104,8 +104,8 @@ class TreeNodeWidget(StyledWidget):
         if indent > 0:
             title_layout.addWidget(create_spacer(indent))
 
-        self._expand_icon = make_color_svg(":/icons/chevron_down", text_color)
-        self._collapse_icon = make_color_svg(":/icons/chevron_right", text_color)
+        self._expand_icon = make_color_svg(":/icons/chevron_down.svg", text_color)
+        self._collapse_icon = make_color_svg(":/icons/chevron_right.svg", text_color)
 
         self._indicator = Icon()
         self._indicator.set_icon_size(16)

@@ -374,19 +374,19 @@ class MainWindow(
         panel_icon_color = theme_service.get_color("panel_icon")
 
         panel = Panel("大纲", self.actor_outline_widget)
-        panel.panel_icon = make_icon(":/icons/text_bullet_list_tree", panel_icon_color)
+        panel.panel_icon = make_icon(":/icons/text_bullet_list_tree.svg", panel_icon_color)
         self.add_panel(panel, "left")
 
         logger.info("创建属性编辑器…")
         self.actor_editor_widget = ActorEditor()
         panel = Panel("编辑", self.actor_editor_widget)
-        panel.panel_icon = make_icon(":/icons/circle_edit", panel_icon_color)
+        panel.panel_icon = make_icon(":/icons/circle_edit.svg", panel_icon_color)
         self.add_panel(panel, "right")
 
         logger.info("创建资产浏览器…")
         self.asset_browser_widget = AssetBrowser()
         panel = Panel("资产", self.asset_browser_widget)
-        panel.panel_icon = make_icon(":/icons/box", panel_icon_color)
+        panel.panel_icon = make_icon(":/icons/box.svg", panel_icon_color)
         self.add_panel(panel, "bottom")
 
         logger.info("创建 Copilot 组件…")
@@ -397,7 +397,7 @@ class MainWindow(
             self.config_service.copilot_timeout()
         )
         panel = Panel("小O", self.copilot_widget)
-        panel.panel_icon = make_icon(":/icons/chat_sparkle", panel_icon_color)
+        panel.panel_icon = make_icon(":/icons/chat_sparkle.svg", panel_icon_color)
 
         if self.config_service.copilot_enable():
             self.add_panel(panel, "right")
@@ -406,12 +406,12 @@ class MainWindow(
         # 添加终端组件
         self.terminal_widget = TerminalWidget()
         panel = Panel("终端", self.terminal_widget)
-        panel.panel_icon = make_icon(":/icons/window_console", panel_icon_color)
+        panel.panel_icon = make_icon(":/icons/window_console.svg", panel_icon_color)
         self.add_panel(panel, "bottom")
 
         self.camera_selector_widget = CameraSelector()
         panel = Panel("相机", self.camera_selector_widget)
-        panel.panel_icon = make_icon(":/icons/camera", panel_icon_color)
+        panel.panel_icon = make_icon(":/icons/camera.svg", panel_icon_color)
         self.add_panel(panel, "left")
 
         self.menu_bar = QtWidgets.QMenuBar()
@@ -631,8 +631,6 @@ class MainWindow(
             self.copilot_widget.setEnabled(False)
             self.copilot_widget.setAttribute(t, True)
         self.menu_edit.setEnabled(False)
-
-        self.manipulator_bar.action_scale.setEnabled(False)
     
     def _enable_edit(self):
         t = QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents
@@ -646,8 +644,6 @@ class MainWindow(
             self.copilot_widget.setEnabled(True)
             self.copilot_widget.setAttribute(t, False)
         self.menu_edit.setEnabled(True)
-
-        self.manipulator_bar.action_scale.setEnabled(True)
     
     @override
     async def on_simulation_state_changed(self, old_state: SimulationState, new_state: SimulationState) -> None:
@@ -1240,6 +1236,20 @@ class MainWindow(
             await self.remote_scene.change_manipulator_type(2)
         elif type == ManipulatorType.Scale:
             await self.remote_scene.change_manipulator_type(3)
+
+    @override
+    async def set_debug_draw(self, enabled: bool):
+        if enabled:
+            await self.remote_scene.custom_command(f"debug_draw:true")
+        else:
+            await self.remote_scene.custom_command(f"debug_draw:false")
+
+    @override
+    async def set_runtime_grab(self, enabled: bool):
+        if enabled:
+            await self.remote_scene.custom_command(f"user_control:true")
+        else:
+            await self.remote_scene.custom_command(f"user_control:false")
 
     def _mark_layout_clean(self):
         self._layout_modified = False

@@ -27,7 +27,7 @@ class Panel(QtWidgets.QWidget):
 
         theme_service = ThemeService()
         panel_icon_color = theme_service.get_color("panel_icon")
-        icon = make_icon(":/icons/subtract", panel_icon_color)
+        icon = make_icon(":/icons/subtract.svg", panel_icon_color)
 
         close_btn = Button(icon=icon)
         close_btn.icon_size = 16

@@ -39,17 +39,17 @@ class Checkbox(QtWidgets.QWidget):
         self.border_radius = 4
 
         self._pixmap_checked = make_color_svg(
-            ":/icons/checkbox_checked", self.text_color
+            ":/icons/checkbox_checked.svg", self.text_color
         )
         self._pixmap_unchecked = make_color_svg(
-            ":/icons/checkbox_unchecked", self.text_color
+            ":/icons/checkbox_unchecked.svg", self.text_color
         )
 
         self._pixmap_checked_readonly = make_color_svg(
-            ":/icons/checkbox_checked", self.text_color_disabled
+            ":/icons/checkbox_checked.svg", self.text_color_disabled
         )
         self._pixmap_unchecked_readonly = make_color_svg(
-            ":/icons/checkbox_unchecked", self.text_color_disabled
+            ":/icons/checkbox_unchecked.svg", self.text_color_disabled
         )
 
         self._read_only = False

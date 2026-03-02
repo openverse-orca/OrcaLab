@@ -486,3 +486,8 @@ class EditServiceWrapper:
 
         response = await self.stub.SetProperties(request)
         self._check_response(response)
+
+    async def custom_command(self, command: str):
+        request = edit_service_pb2.CustomCommandRequest(command=command)
+        response = await self.stub.CustomCommand(request)
+        self._check_response(response)

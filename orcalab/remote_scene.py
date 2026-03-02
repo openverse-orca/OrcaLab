@@ -94,52 +94,51 @@ class RemoteScene(SceneEditNotification):
 
     async def _process_pending_operation(self, op: str):
         print(op)
-        sltc = "start_local_transform_change:"
-        if op.startswith(sltc):
-            actor_path = Path(op[len(sltc) :])
+        prefix = "start_local_transform_change:"
+        if op.startswith(prefix):
+            actor_path = Path(op[len(prefix) :])
             self._start_transform_change(actor_path, local=True)
             return
 
-        eltc = "end_local_transform_change:"
-        if op.startswith(eltc):
-            actor_path = Path(op[len(eltc) :])
+        prefix = "end_local_transform_change:"
+        if op.startswith(prefix):
+            actor_path = Path(op[len(prefix) :])
             await self._end_transform_change(actor_path, local=True)
             return
 
-        swtc = "start_world_transform_change:"
-        if op.startswith(swtc):
-            actor_path = Path(op[len(swtc) :])
+        prefix = "start_world_transform_change:"
+        if op.startswith(prefix):
+            actor_path = Path(op[len(prefix) :])
             self._start_transform_change(actor_path, local=False)
             return
 
-        ewtc = "end_world_transform_change:"
-        if op.startswith(ewtc):
-            actor_path = Path(op[len(ewtc) :])
+        prefix = "end_world_transform_change:"
+        if op.startswith(prefix):
+            actor_path = Path(op[len(prefix) :])
             await self._end_transform_change(actor_path, local=False)
             return
 
-        local_transform_change = "local_transform_change:"
-        if op.startswith(local_transform_change):
-            actor_path = Path(op[len(local_transform_change) :])
+        prefix = "local_transform_change:"
+        if op.startswith(prefix):
+            actor_path = Path(op[len(prefix) :])
             await self._fetch_and_set_transform(actor_path, local=True)
             return
 
-        world_transform_change = "world_transform_change:"
-        if op.startswith(world_transform_change):
-            actor_path = Path(op[len(world_transform_change) :])
+        prefix = "world_transform_change:"
+        if op.startswith(prefix):
+            actor_path = Path(op[len(prefix) :])
             await self._fetch_and_set_transform(actor_path, local=False)
             return
 
-        ad = "actor_delete:"
-        if op.startswith(ad):
-            actor_path = Path(op[len(ad) :])
+        prefix = "actor_delete:"
+        if op.startswith(prefix):
+            actor_path = Path(op[len(prefix) :])
             await SceneEditRequestBus().delete_actor(
                 actor_path, undo=True, source="remote"
             )
             return
 
-        selection_change = "selection_change"
-        if op.startswith(selection_change):
+        if op == "selection_change":
             actor_paths = await self.get_pending_selection_change()
 
             paths = []
@@ -150,8 +149,7 @@ class RemoteScene(SceneEditNotification):
             return
 
         # TODO: refactor using e-bus
-        add_item = "add_item"
-        if op.startswith(add_item):
+        if op == "add_item":
             [transform, name] = await self.get_pending_add_item()
 
             actor_name = make_unique_name(name, Path("/"))
@@ -191,6 +189,22 @@ class RemoteScene(SceneEditNotification):
 
             bus = StateSyncNotificationBus()
             bus.on_manipulator_type_changed(manipulator_type)
+            return
+
+        prefix = "debug_draw:"
+        if op.startswith(prefix):
+            value = op[len(prefix) :]
+            enabled = value == "true"
+            bus = StateSyncNotificationBus()
+            bus.on_debug_draw_changed(enabled)
+            return
+        
+        prefix = "user_control:"
+        if op.startswith(prefix):
+            value = op[len(prefix) :]
+            enabled = value == "true"
+            bus = StateSyncNotificationBus()
+            bus.on_runtime_grab_changed(enabled)
             return
 
         print(f"Unknown pending operation: {op}")
@@ -626,3 +640,7 @@ class RemoteScene(SceneEditNotification):
 
     async def set_properties(self, keys: List[ActorPropertyKey], values: List[Any]):
         await self._service.set_properties(keys, values)
+
+    async def custom_command(self, command: str):
+        async with self._grpc_lock:
+            return await self._service.custom_command(command)

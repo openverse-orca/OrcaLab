@@ -413,6 +413,15 @@ message PublishSceneResponse {
 }
 
 
+message CustomCommandRequest {
+    string command = 1;
+}
+message CustomCommandResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+
 service GrpcService {
     rpc Aloha(AlohaRequest) returns (AlohaResponse);
     
@@ -464,4 +473,6 @@ service GrpcService {
     rpc SetProperties(SetPropertiesRequest) returns (SetPropertiesResponse);
 
     rpc PublishScene(PublishSceneRequest) returns (PublishSceneResponse);
+
+    rpc CustomCommand(CustomCommandRequest) returns (CustomCommandResponse);
 }

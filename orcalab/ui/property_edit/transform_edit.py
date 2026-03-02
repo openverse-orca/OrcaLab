@@ -88,8 +88,8 @@ class TransformEdit(StyledWidget, SceneEditNotification):
             """
         self.setStyleSheet(style_sheet)
 
-        self._expand_icon = make_color_svg(":/icons/chevron_down", text_color)
-        self._collapse_icon = make_color_svg(":/icons/chevron_right", text_color)
+        self._expand_icon = make_color_svg(":/icons/chevron_down.svg", text_color)
+        self._collapse_icon = make_color_svg(":/icons/chevron_right.svg", text_color)
 
         root_layout = QtWidgets.QVBoxLayout(self)
         root_layout.setContentsMargins(4, 4, 4, 4)

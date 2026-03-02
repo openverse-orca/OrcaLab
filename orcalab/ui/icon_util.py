@@ -2,6 +2,7 @@ from PySide6 import QtCore, QtWidgets, QtGui, QtSvg
 
 import orcalab.assets.rc_assets
 
+
 def make_color_svg(svg_file: str, color: QtGui.QColor) -> QtGui.QPixmap:
     # Load the SVG file
     svg_renderer = QtSvg.QSvgRenderer(svg_file)
@@ -17,7 +18,6 @@ def make_color_svg(svg_file: str, color: QtGui.QColor) -> QtGui.QPixmap:
 
     # Use svg as a mask to apply the color
     painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_SourceIn)
-    painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_SourceIn)
     painter.fillRect(pixmap.rect(), color)
 
     painter.end()
@@ -25,8 +25,20 @@ def make_color_svg(svg_file: str, color: QtGui.QColor) -> QtGui.QPixmap:
     return pixmap
 
 
-def make_icon(svg_file: str, color: QtGui.QColor) -> QtGui.QIcon:
-    pixmap = make_color_svg(svg_file, color)
+def make_color_image(file: str, color: QtGui.QColor) -> QtGui.QPixmap:
+    pixmap = QtGui.QPixmap(file)
+    painter = QtGui.QPainter(pixmap)
+    painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(pixmap.rect(), color)
+    painter.end()
+    return pixmap
+
+
+def make_icon(file: str, color: QtGui.QColor) -> QtGui.QIcon:
+    if file.endswith(".svg"):
+        pixmap = make_color_svg(file, color)
+    else:
+        pixmap = make_color_image(file, color)
     icon = QtGui.QIcon(pixmap)
     return icon
 
