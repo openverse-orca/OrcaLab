@@ -18,6 +18,8 @@ from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.pyside_util import connect
 from orcalab.remote_scene import RemoteScene
+from orcalab.report.ask_statistics_dialog import AskStatisticsDialog
+from orcalab.report.report import collect_user_env
 from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
 from orcalab.simulation.simulation_bus import (
     SimulationRequestBus,
@@ -166,9 +168,11 @@ class MainWindow(
         self.restore_default_layout()
         self.show()
 
+        logger.info("初始化引擎...")
         self._viewport_widget.init_viewport()
         self._viewport_widget.start_viewport_main_loop()
         await asyncio.sleep(0.5)
+        logger.info("引擎初始化完成")
 
         connect(self.actor_outline_model.add_item, self.add_item_to_scene)
 
@@ -241,6 +245,9 @@ class MainWindow(
         self.mcp_service = OrcaLabMCPServer(port=self.config_service.mcp_port())
         self.mcp_service.add_tools()
         self.mcp_service._task = asyncio.create_task(self.mcp_service.run())
+
+        # 发送匿名统计数据
+        await self.send_statistics()
 
     def stop_viewport_main_loop(self):
         """停止viewport主循环"""
@@ -1305,6 +1312,22 @@ class MainWindow(
         self._mark_layout_clean()
         return True
     
+    async def send_statistics(self):
+        send_statistics = self.config_service.send_statistics()
 
+        if send_statistics == "unset":
+            def ask():
+                return AskStatisticsDialog.ask(self)
 
-        
+            allow = await asyncWrap(ask)
+
+            send_statistics = "true" if allow else "false"
+            self.config_service.set_send_statistics(send_statistics)
+            
+        if send_statistics == "true":
+            logger.info("用户允许发送统计数据")
+            data = collect_user_env()
+            await self.remote_scene.custom_command(f"user_env_report:{json.dumps(data)}")
+        else:
+            logger.info("用户拒绝发送统计数据")
+

@@ -10,6 +10,7 @@ paks = []
 pak_urls = []
 python_project_path = ""
 python_project_url = ""
+send_statistics = "unset"
 
 [mcp]
 port = 12345

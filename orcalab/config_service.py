@@ -4,6 +4,7 @@ import sys
 import pathlib
 import importlib.metadata
 import logging
+import tomli_w
 
 from orcalab.project_util import get_project_dir
 
@@ -25,6 +26,11 @@ def deep_merge(dict1, dict2):
             # Update or add non-dictionary values
             dict1[key] = value
     return dict1
+
+
+def get_user_config_path() -> str:
+    """返回用户配置文件路径"""
+    return pathlib.Path("~/Orca/OrcaLab/config.toml").expanduser().as_posix()
 
 
 # ConfigService is a singleton
@@ -118,9 +124,7 @@ class ConfigService:
         self.config_path = self._find_config_file(
             "orca.config.toml", root_folder.as_posix()
         )
-        self.old_user_config_path = self._find_config_file(
-            "orca.config.user.toml", root_folder.as_posix()
-        )
+        self.user_config_path = get_user_config_path()
 
         if sys.platform == "win32":
             platform_config_name = "orca.config.platform_win32.toml"
@@ -139,12 +143,10 @@ class ConfigService:
             with open(self.platform_config_path, "rb") as file:
                 platform_config = tomllib.load(file)
 
-        # Deperacated
-        # 加载用户配置（如果存在）
-        old_user_config = {}
-        if os.path.exists(self.old_user_config_path):
-            with open(self.old_user_config_path, "rb") as file:
-                old_user_config = tomllib.load(file)
+        user_config = {}
+        if os.path.exists(self.user_config_path):
+            with open(self.user_config_path, "rb") as file:
+                user_config = tomllib.load(file)
 
         workspace_config = {}
         if os.path.exists(self.workspace_config_file()):
@@ -153,7 +155,7 @@ class ConfigService:
 
         self.config = deep_merge(self.config, shared_config)
         self.config = deep_merge(self.config, platform_config)
-        self.config = deep_merge(self.config, old_user_config)
+        self.config = deep_merge(self.config, user_config)
         self.config = deep_merge(self.config, workspace_config)
 
         self._normalize_levels()
@@ -426,3 +428,34 @@ class ConfigService:
     
     def enable_debug_tool(self) -> bool:
         return self.config.get("orcalab", {}).get("debug_tool", False)
+
+    
+    def set_user_config(self, key: str, cb):
+        """更新用户配置文件中的指定键值对"""
+        user_config = {}
+        
+        parent_forder = os.path.dirname(self.user_config_path)
+        os.makedirs(parent_forder, exist_ok=True)
+        
+        if os.path.exists(self.user_config_path):
+            with open(self.user_config_path, "rb") as file:
+                user_config = tomllib.load(file)
+
+        # 更新指定键值对
+        cb(user_config)
+
+        # 保存回文件
+        with open(self.user_config_path, "wb") as file:
+            tomli_w.dump(user_config, file)
+        
+    def send_statistics(self) -> str:
+        return self.config.get("orcalab", {}).get("send_statistics", "unset")
+    
+    def set_send_statistics(self, value: str):
+        self.config.setdefault("orcalab", {})["send_statistics"] = value
+
+        def update_func(config):
+            orcalab_cfg = config.setdefault("orcalab", {})
+            orcalab_cfg["send_statistics"] = value
+
+        self.set_user_config("orcalab", update_func)
