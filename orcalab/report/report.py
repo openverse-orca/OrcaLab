@@ -1,4 +1,3 @@
-
 import os
 import platform
 import shutil
@@ -25,24 +24,25 @@ def get_system_info() -> Dict[str, Optional[str]]:
     info["platform"] = platform.platform()
     info["python_version"] = platform.python_version()
 
-    # Try to get a distro string on Linux
-    distro_name = None
-    if info["system"] == "Linux":
-        try:
-            import distro as _distro  # type: ignore
-
-            distro_name = _distro.name(pretty=True)
-        except Exception:
-            # fallback: check /etc/os-release
+    if sys.platform == "linux":
+        # Try to get a distro string on Linux
+        distro_name = None
+        if info["system"] == "Linux":
             try:
-                with open("/etc/os-release", "r") as f:
-                    for line in f:
-                        if line.startswith("PRETTY_NAME="):
-                            distro_name = line.split("=", 1)[1].strip().strip('"')
-                            break
+                import distro as _distro  # type: ignore
+
+                distro_name = _distro.name(pretty=True)
             except Exception:
-                distro_name = None
-    info["distro"] = distro_name
+                # fallback: check /etc/os-release
+                try:
+                    with open("/etc/os-release", "r") as f:
+                        for line in f:
+                            if line.startswith("PRETTY_NAME="):
+                                distro_name = line.split("=", 1)[1].strip().strip('"')
+                                break
+                except Exception:
+                    distro_name = None
+        info["distro"] = distro_name
 
     return info
 
@@ -69,21 +69,30 @@ def get_cpu_info() -> Dict[str, Optional[object]]:
         cpu["physical_cores"] = None
         cpu["frequency_mhz"] = None
 
-    # model name (Linux /proc/cpuinfo best-effort)
-    model = None
-    try:
-        if os.path.exists("/proc/cpuinfo"):
-            with open("/proc/cpuinfo", "r") as f:
-                for line in f:
-                    if line.strip().startswith("model name") or line.strip().startswith(
-                        "Hardware"
-                    ):
-                        parts = line.split(":", 1)
-                        if len(parts) > 1:
-                            model = parts[1].strip()
-                            break
-    except Exception:
+    if sys.platform == "linux":
+        # model name (Linux /proc/cpuinfo best-effort)
         model = None
+        try:
+            if os.path.exists("/proc/cpuinfo"):
+                with open("/proc/cpuinfo", "r") as f:
+                    for line in f:
+                        if line.strip().startswith(
+                            "model name"
+                        ) or line.strip().startswith("Hardware"):
+                            parts = line.split(":", 1)
+                            if len(parts) > 1:
+                                model = parts[1].strip()
+                                break
+        except Exception:
+            model = None
+    else:
+        model = _run_cmd(
+            [
+                "powershell",
+                "-Command",
+                "(Get-WmiObject Win32_Processor).Name",
+            ]
+        )
     cpu["model_name"] = model
     return cpu
 
@@ -123,13 +132,11 @@ def get_gpu_info() -> List[Dict[str, Optional[object]]]:
             if gpus:
                 return gpus
 
-    # AMD: try amd-smi (newer AMD utilities) first
     if shutil.which("amd-smi"):
-        # try a verbose dump, fallback to no-arg
-        out = _run_cmd(["amd-smi", "-a"]) or _run_cmd(["amd-smi"])
+        out = _run_cmd(["amd-smi", "static", "--asic", "--vram", "--json"])
         if out:
-            gpus.append({"source": "amd-smi", "info": out})
-            return gpus
+            json_data = json.loads(out)
+            return json_data
 
     return gpus
 
