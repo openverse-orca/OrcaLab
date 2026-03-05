@@ -161,12 +161,12 @@ class MainWindow(
         await self._init_ui()
         logger.info("UI 初始化完成")
 
-        rect = QtCore.QRect(0, 0, 2000, 1200)
+        rect = self.screen().availableGeometry()
         self.resize(rect.width(), rect.height())
-        center=self.screen().availableGeometry().center()
-        self.move(center-rect.center())
+        # center = self.screen().availableGeometry().center()
+        # self.move(center - rect.center())
         self.restore_default_layout()
-        self.show()
+        self.showMaximized()
 
         logger.info("初始化引擎...")
         self._viewport_widget.init_viewport()
