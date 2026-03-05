@@ -125,8 +125,8 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
             """
         )
 
-        self._expand_icon = make_color_svg(":/icons/chevron_down", text_color)
-        self._collapse_icon = make_color_svg(":/icons/chevron_right", text_color)
+        self._expand_icon = make_color_svg(":/icons/chevron_down.svg", text_color)
+        self._collapse_icon = make_color_svg(":/icons/chevron_right.svg", text_color)
 
         self._title_area.l_indicator.set_pixmap(self._expand_icon)
 

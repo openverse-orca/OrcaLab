@@ -18,6 +18,8 @@ from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.pyside_util import connect
 from orcalab.remote_scene import RemoteScene
+from orcalab.report.ask_statistics_dialog import AskStatisticsDialog
+from orcalab.report.report import collect_user_env
 from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
 from orcalab.simulation.simulation_bus import (
     SimulationRequestBus,
@@ -26,6 +28,7 @@ from orcalab.simulation.simulation_bus import (
     SimulationState,
 )
 from orcalab.simulation.simulation_service import SimulationService
+from orcalab.state_sync_bus import ManipulatorType, StateSyncRequest, StateSyncRequestBus
 from orcalab.ui.actor_editor import ActorEditor
 from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.actor_outline_model import ActorOutlineModel
@@ -78,6 +81,7 @@ class MainWindow(
     CameraNotification,
     CameraRequest,
     SimulationNotification,
+    StateSyncRequest,
 ):
 
     add_item_by_drag = QtCore.Signal(str, Transform)
@@ -109,9 +113,11 @@ class MainWindow(
         CameraNotificationBus.connect(self)
         CameraRequestBus.connect(self)
         SimulationNotificationBus.connect(self)
+        StateSyncRequestBus.connect(self)
         logger.debug("connect_buses")
 
     def disconnect_buses(self):
+        StateSyncRequestBus.disconnect(self)
         SimulationNotificationBus.disconnect(self)
         UserEventRequestBus.disconnect(self)
         AssetServiceNotificationBus.disconnect(self)
@@ -155,16 +161,18 @@ class MainWindow(
         await self._init_ui()
         logger.info("UI 初始化完成")
 
-        rect = QtCore.QRect(0, 0, 2000, 1200)
+        rect = self.screen().availableGeometry()
         self.resize(rect.width(), rect.height())
-        center=self.screen().availableGeometry().center()
-        self.move(center-rect.center())
+        # center = self.screen().availableGeometry().center()
+        # self.move(center - rect.center())
         self.restore_default_layout()
-        self.show()
+        self.showMaximized()
 
+        logger.info("初始化引擎...")
         self._viewport_widget.init_viewport()
         self._viewport_widget.start_viewport_main_loop()
         await asyncio.sleep(0.5)
+        logger.info("引擎初始化完成")
 
         connect(self.actor_outline_model.add_item, self.add_item_to_scene)
 
@@ -191,6 +199,8 @@ class MainWindow(
         self.scene_edit_service.connect_bus()
         self.remote_scene.connect_bus()
         self.simulation_service.connect_bus()
+
+        self.manipulator_bar.connect_buses()
 
         self.connect_buses()
 
@@ -235,6 +245,9 @@ class MainWindow(
         self.mcp_service = OrcaLabMCPServer(port=self.config_service.mcp_port())
         self.mcp_service.add_tools()
         self.mcp_service._task = asyncio.create_task(self.mcp_service.run())
+
+        # 发送匿名统计数据
+        await self.send_statistics()
 
     def stop_viewport_main_loop(self):
         """停止viewport主循环"""
@@ -350,33 +363,6 @@ class MainWindow(
         layout.setSpacing(0)
         layout.addWidget(self.manipulator_bar)
 
-        # 为工具栏添加样式
-        self.manipulator_bar.setStyleSheet("""
-            QTreeWidget {
-                background-color: #3c3c3c;
-                border-bottom: 1px solid #404040;
-            }
-            QToolButton {
-                color: #cccccc;
-                background-color: #4a4a4a;
-                border: 1px solid #555555;
-                border-radius: 3px;
-                padding: 4px;
-                margin: 2px;
-            }
-            QToolButton:hover {
-                background-color: #5a5a5a;
-                border-color: #666666;
-            }
-            QToolButton:pressed {
-                background-color: #2a2a2a;
-            }
-        """)
-
-        connect(self.manipulator_bar.move_button.triggered, self.manipulator_move)
-        connect(self.manipulator_bar.rotate_button.triggered, self.manipulator_rotate)
-        connect(self.manipulator_bar.scale_button.triggered, self.manipulator_scale)
-
         logger.info("设置主内容区域…")
         layout = QtWidgets.QVBoxLayout(self._main_content_area)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -395,19 +381,19 @@ class MainWindow(
         panel_icon_color = theme_service.get_color("panel_icon")
 
         panel = Panel("大纲", self.actor_outline_widget)
-        panel.panel_icon = make_icon(":/icons/text_bullet_list_tree", panel_icon_color)
+        panel.panel_icon = make_icon(":/icons/text_bullet_list_tree.svg", panel_icon_color)
         self.add_panel(panel, "left")
 
         logger.info("创建属性编辑器…")
         self.actor_editor_widget = ActorEditor()
         panel = Panel("编辑", self.actor_editor_widget)
-        panel.panel_icon = make_icon(":/icons/circle_edit", panel_icon_color)
+        panel.panel_icon = make_icon(":/icons/circle_edit.svg", panel_icon_color)
         self.add_panel(panel, "right")
 
         logger.info("创建资产浏览器…")
         self.asset_browser_widget = AssetBrowser()
         panel = Panel("资产", self.asset_browser_widget)
-        panel.panel_icon = make_icon(":/icons/box", panel_icon_color)
+        panel.panel_icon = make_icon(":/icons/box.svg", panel_icon_color)
         self.add_panel(panel, "bottom")
 
         logger.info("创建 Copilot 组件…")
@@ -418,7 +404,7 @@ class MainWindow(
             self.config_service.copilot_timeout()
         )
         panel = Panel("小O", self.copilot_widget)
-        panel.panel_icon = make_icon(":/icons/chat_sparkle", panel_icon_color)
+        panel.panel_icon = make_icon(":/icons/chat_sparkle.svg", panel_icon_color)
 
         if self.config_service.copilot_enable():
             self.add_panel(panel, "right")
@@ -427,12 +413,12 @@ class MainWindow(
         # 添加终端组件
         self.terminal_widget = TerminalWidget()
         panel = Panel("终端", self.terminal_widget)
-        panel.panel_icon = make_icon(":/icons/window_console", panel_icon_color)
+        panel.panel_icon = make_icon(":/icons/window_console.svg", panel_icon_color)
         self.add_panel(panel, "bottom")
 
         self.camera_selector_widget = CameraSelector()
         panel = Panel("相机", self.camera_selector_widget)
-        panel.panel_icon = make_icon(":/icons/camera", panel_icon_color)
+        panel.panel_icon = make_icon(":/icons/camera.svg", panel_icon_color)
         self.add_panel(panel, "left")
 
         self.menu_bar = QtWidgets.QMenuBar()
@@ -652,8 +638,6 @@ class MainWindow(
             self.copilot_widget.setEnabled(False)
             self.copilot_widget.setAttribute(t, True)
         self.menu_edit.setEnabled(False)
-
-        self.manipulator_bar.action_scale.setEnabled(False)
     
     def _enable_edit(self):
         t = QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents
@@ -667,8 +651,6 @@ class MainWindow(
             self.copilot_widget.setEnabled(True)
             self.copilot_widget.setAttribute(t, False)
         self.menu_edit.setEnabled(True)
-
-        self.manipulator_bar.action_scale.setEnabled(True)
     
     @override
     async def on_simulation_state_changed(self, old_state: SimulationState, new_state: SimulationState) -> None:
@@ -1250,6 +1232,32 @@ class MainWindow(
     def on_cameras_changed(self, cameras: List[CameraBrief], viewport_camera_index: int) -> None:
         self.camera_selector_widget.set_cameras(cameras, viewport_camera_index)
 
+    #
+    # StateSyncRequestBus overrides
+    #
+    @override
+    async def set_manipulator_type(self, type: ManipulatorType) -> None:
+        if type == ManipulatorType.Translate:
+            await self.remote_scene.change_manipulator_type(1)
+        elif type == ManipulatorType.Rotate:
+            await self.remote_scene.change_manipulator_type(2)
+        elif type == ManipulatorType.Scale:
+            await self.remote_scene.change_manipulator_type(3)
+
+    @override
+    async def set_debug_draw(self, enabled: bool):
+        if enabled:
+            await self.remote_scene.custom_command(f"debug_draw:true")
+        else:
+            await self.remote_scene.custom_command(f"debug_draw:false")
+
+    @override
+    async def set_runtime_grab(self, enabled: bool):
+        if enabled:
+            await self.remote_scene.custom_command(f"user_control:true")
+        else:
+            await self.remote_scene.custom_command(f"user_control:false")
+
     def _mark_layout_clean(self):
         self._layout_modified = False
         self._update_title()
@@ -1304,11 +1312,22 @@ class MainWindow(
         self._mark_layout_clean()
         return True
     
-    async def manipulator_move(self, *args):
-        await self.remote_scene.change_manipulator_type(1)
+    async def send_statistics(self):
+        send_statistics = self.config_service.send_statistics()
 
-    async def manipulator_rotate(self, *args):
-        await self.remote_scene.change_manipulator_type(2)
+        if send_statistics == "unset":
+            def ask():
+                return AskStatisticsDialog.ask(self)
 
-    async def manipulator_scale(self, *args):
-        await self.remote_scene.change_manipulator_type(3)
+            allow = await asyncWrap(ask)
+
+            send_statistics = "true" if allow else "false"
+            self.config_service.set_send_statistics(send_statistics)
+            
+        if send_statistics == "true":
+            logger.info("用户允许发送统计数据")
+            data = collect_user_env()
+            await self.remote_scene.custom_command(f"user_env_report:{json.dumps(data)}")
+        else:
+            logger.info("用户拒绝发送统计数据")
+

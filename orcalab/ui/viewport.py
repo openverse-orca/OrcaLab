@@ -42,11 +42,17 @@ class Viewport(QtWidgets.QWidget):
 
         config_service = ConfigService()
 
+        base_url = config_service.datalink_base_url()
+        if base_url.endswith("/api"):
+            base_url = base_url[:-4]
+
         self.command_line = [
             "pseudo.exe",
             "--LoadLevel",
             config_service.level(),
             config_service.lock_fps(),
+            "-datalink-scheme-host-port",
+            f"{base_url}"
         ]
 
         if config_service.enable_debug_tool():
@@ -127,7 +133,7 @@ class Viewport(QtWidgets.QWidget):
         mime = event.mimeData()
         if mime.hasFormat("application/x-orca-asset"):
             asset_name = mime.data("application/x-orca-asset").data().decode("utf-8")
-            local_pos = event.pos()  # QPoint
+            local_pos = event.position()  # QPointF
             x, y = local_pos.x(), local_pos.y()
             viewport_width = self.width()
             viewport_height = self.height()

@@ -1,35 +1,39 @@
 <!DOCTYPE RCC><RCC version="1.0">
 <qresource prefix="/icons/">
-    <file alias="play">icons/ic_fluent_play_20_filled_green.svg</file>
-    <file alias="stop">icons/ic_fluent_stop_20_filled_red.svg</file>
-    <file alias="pause">icons/ic_fluent_pause_20_filled.svg</file>
-    <file alias="eye-open">icons/ic_fluent_eye_off_20_regular.svg</file>
-    <file alias="eye-close">icons/ic_fluent_eye_off_20_regular.svg</file>
-    <file alias="lock-open">icons/ic_fluent_lock_open_20_regular.svg</file>
-    <file alias="lock-close">icons/ic_fluent_lock_closed_20_regular.svg</file>
+    <file alias="play.svg">icons/ic_fluent_play_20_filled_green.svg</file>
+    <file alias="stop.svg">icons/ic_fluent_stop_20_filled_red.svg</file>
+    <file alias="pause.svg">icons/ic_fluent_pause_20_filled.svg</file>
+    <file alias="eye-open.svg">icons/ic_fluent_eye_off_20_regular.svg</file>
+    <file alias="eye-close.svg">icons/ic_fluent_eye_off_20_regular.svg</file>
+    <file alias="lock-open.svg">icons/ic_fluent_lock_open_20_regular.svg</file>
+    <file alias="lock-close.svg">icons/ic_fluent_lock_closed_20_regular.svg</file>
 
-    <file alias="box">icons/ic_fluent_box_20_regular.svg</file>
-    <file alias="chat_sparkle">icons/ic_fluent_chat_sparkle_20_regular.svg</file>
-    <file alias="circle_edit">icons/ic_fluent_circle_edit_20_regular.svg</file>
-    <file alias="window_console">icons/ic_fluent_window_console_20_regular.svg</file>
-    <file alias="text_bullet_list_tree">icons/ic_fluent_text_bullet_list_tree_20_regular.svg</file>
+    <file alias="box.svg">icons/ic_fluent_box_20_regular.svg</file>
+    <file alias="chat_sparkle.svg">icons/ic_fluent_chat_sparkle_20_regular.svg</file>
+    <file alias="circle_edit.svg">icons/ic_fluent_circle_edit_20_regular.svg</file>
+    <file alias="window_console.svg">icons/ic_fluent_window_console_20_regular.svg</file>
+    <file alias="text_bullet_list_tree.svg">icons/ic_fluent_text_bullet_list_tree_20_regular.svg</file>
 
-    <file alias="subtract">icons/ic_fluent_subtract_20_regular.svg</file>
-    <file alias="add">icons/ic_fluent_add_20_filled.svg</file>
+    <file alias="subtract.svg">icons/ic_fluent_subtract_20_regular.svg</file>
+    <file alias="add.svg">icons/ic_fluent_add_20_filled.svg</file>
 
-    <file alias="checkbox_checked">icons/ic_fluent_checkbox_checked_20_regular.svg</file>
-    <file alias="checkbox_unchecked">icons/ic_fluent_checkbox_unchecked_20_regular.svg</file>
+    <file alias="checkbox_checked.svg">icons/ic_fluent_checkbox_checked_20_regular.svg</file>
+    <file alias="checkbox_unchecked.svg">icons/ic_fluent_checkbox_unchecked_20_regular.svg</file>
 
-    <file alias="chevron_down">icons/ic_fluent_chevron_down_20_filled.svg</file>
-    <file alias="chevron_up">icons/ic_fluent_chevron_up_20_filled.svg</file>
-    <file alias="chevron_left">icons/ic_fluent_chevron_left_20_filled.svg</file>
-    <file alias="chevron_right">icons/ic_fluent_chevron_right_20_filled.svg</file>
+    <file alias="chevron_down.svg">icons/ic_fluent_chevron_down_20_filled.svg</file>
+    <file alias="chevron_up.svg">icons/ic_fluent_chevron_up_20_filled.svg</file>
+    <file alias="chevron_left.svg">icons/ic_fluent_chevron_left_20_filled.svg</file>
+    <file alias="chevron_right.svg">icons/ic_fluent_chevron_right_20_filled.svg</file>
 
-    <file alias="move">icons/ic_fluent_arrow_move_20_filled.svg</file>
-    <file alias="rotate">icons/ic_fluent_cube_rotate_20_filled.svg</file>
-    <file alias="scale">icons/ic_fluent_scale_fill_20_filled.svg</file>
+    <file alias="move.svg">icons/ic_fluent_arrow_move_20_filled.svg</file>
+    <file alias="rotate.svg">icons/ic_fluent_cube_rotate_20_filled.svg</file>
+    <file alias="scale.svg">icons/ic_fluent_scale_fill_20_filled.svg</file>
 
-    <file alias="camera">icons/ic_fluent_camera_20_regular.svg</file>
+    <file alias="camera.svg">icons/ic_fluent_camera_20_regular.svg</file>
+
+    <file alias="grab.png">icons/opvs_grab.png</file>
+    <file alias="physics.png">icons/opvs_physics.png</file>
+
 
 </qresource>
 </RCC>

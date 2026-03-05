@@ -209,6 +209,16 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.SetPropertiesRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetPropertiesResponse.FromString,
                 _registered_method=True)
+        self.SetHighlightJoint = channel.unary_unary(
+                '/SceneEdit.GrpcService/SetHighlightJoint',
+                request_serializer=edit__service__pb2.SetHighlightJointRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.SetHighlightJointResponse.FromString,
+                _registered_method=True)
+        self.CustomCommand = channel.unary_unary(
+                '/SceneEdit.GrpcService/CustomCommand',
+                request_serializer=edit__service__pb2.CustomCommandRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.CustomCommandResponse.FromString,
+                _registered_method=True)
         self.PublishScene = channel.unary_unary(
                 '/SceneEdit.GrpcService/PublishScene',
                 request_serializer=edit__service__pb2.PublishSceneRequest.SerializeToString,
@@ -429,6 +439,18 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SetHighlightJoint(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CustomCommand(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def PublishScene(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -612,6 +634,16 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.SetProperties,
                     request_deserializer=edit__service__pb2.SetPropertiesRequest.FromString,
                     response_serializer=edit__service__pb2.SetPropertiesResponse.SerializeToString,
+            ),
+            'SetHighlightJoint': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetHighlightJoint,
+                    request_deserializer=edit__service__pb2.SetHighlightJointRequest.FromString,
+                    response_serializer=edit__service__pb2.SetHighlightJointResponse.SerializeToString,
+            ),
+            'CustomCommand': grpc.unary_unary_rpc_method_handler(
+                    servicer.CustomCommand,
+                    request_deserializer=edit__service__pb2.CustomCommandRequest.FromString,
+                    response_serializer=edit__service__pb2.CustomCommandResponse.SerializeToString,
             ),
             'PublishScene': grpc.unary_unary_rpc_method_handler(
                     servicer.PublishScene,
@@ -1564,6 +1596,60 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/SetProperties',
             edit__service__pb2.SetPropertiesRequest.SerializeToString,
             edit__service__pb2.SetPropertiesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetHighlightJoint(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/SetHighlightJoint',
+            edit__service__pb2.SetHighlightJointRequest.SerializeToString,
+            edit__service__pb2.SetHighlightJointResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CustomCommand(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/CustomCommand',
+            edit__service__pb2.CustomCommandRequest.SerializeToString,
+            edit__service__pb2.CustomCommandResponse.FromString,
             options,
             channel_credentials,
             insecure,
