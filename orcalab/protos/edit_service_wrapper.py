@@ -487,6 +487,14 @@ class EditServiceWrapper:
         response = await self.stub.SetProperties(request)
         self._check_response(response)
 
+    async def set_highlight_joint(self, entity_id: int, highlight: bool):
+        request = edit_service_pb2.SetHighlightJointRequest(
+            entity_id=entity_id,
+            highlight=highlight,
+        )
+        response = await self.stub.SetHighlightJoint(request)
+        self._check_response(response)
+
     async def custom_command(self, command: str):
         request = edit_service_pb2.CustomCommandRequest(command=command)
         response = await self.stub.CustomCommand(request)

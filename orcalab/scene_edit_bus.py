@@ -118,6 +118,14 @@ class SceneEditRequest:
     def get_selection(self, out: List[List[Path]]):
         pass
 
+    async def set_highlight_joint(self, entity_id: int, highlight: bool) -> None:
+        """Highlight or unhighlight a single joint in the viewport.
+        Args:
+            entity_id (int): The EntityId of the joint entity (from TreePropertyNode.name).
+            highlight (bool): True to highlight, False to clear.
+        """
+        pass
+
 SceneEditRequestBus = create_event_bus(SceneEditRequest)
 
 
