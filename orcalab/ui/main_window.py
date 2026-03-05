@@ -633,13 +633,13 @@ class MainWindow(
 
         if not self.is_viewport_fullscreen():
             self._reset_viewport_fullscreen_state = True
-            self.set_viewport_fullscreen(True, message="已进入全屏模式，按 Esc 键退出并停止仿真")
+            await self.set_viewport_fullscreen(True, message="已进入全屏模式，按 Esc 键退出并停止仿真")
 
     async def stop_sim(self):
         await SimulationRequestBus().stop_simulation()
 
         if self._reset_viewport_fullscreen_state:
-            self.set_viewport_fullscreen(False)
+            await self.set_viewport_fullscreen(False)
             self._reset_viewport_fullscreen_state = False
 
     def _set_window_border_style(self, is_runtime: bool):
@@ -944,18 +944,19 @@ class MainWindow(
         self.menu_viewport.clear()
 
         action_fullscreen = self.menu_viewport.addAction("全屏")
-        connect(
-            action_fullscreen.triggered,
-            lambda: self.set_viewport_fullscreen(
+
+        async def enter_fullscreen():
+            await self.set_viewport_fullscreen(
                 True, message="已进入全屏模式，按 Esc 键退出"
-            ),
-        )
+            )
+
+        connect(action_fullscreen.triggered, enter_fullscreen)
+
+        async def exit_fullscreen():
+            await self.set_viewport_fullscreen(False)
 
         action_exit_fullscreen = self.menu_viewport.addAction("退出全屏")
-        connect(
-            action_exit_fullscreen.triggered,
-            lambda: self.set_viewport_fullscreen(False),
-        )
+        connect(action_exit_fullscreen.triggered, exit_fullscreen)
 
     def prepare_run_menu(self):
         self.menu_run.clear()
@@ -1401,7 +1402,7 @@ class MainWindow(
             assert isinstance(event, QtGui.QKeyEvent)
 
             if event.key() == QtCore.Qt.Key.Key_F11:
-                self.set_viewport_fullscreen(fullscreen=True, message="已进入全屏模式，按 Esc 键退出")
+                asyncio.create_task(self.set_viewport_fullscreen(fullscreen=True, message="已进入全屏模式，按 Esc 键退出"))
                 return True  # 事件已处理
 
             if event.key() == QtCore.Qt.Key.Key_Escape:
@@ -1413,7 +1414,7 @@ class MainWindow(
                     if sim_state == SimulationState.Running:
                         asyncio.create_task(self.stop_sim())
                     else:
-                        self.set_viewport_fullscreen(fullscreen=False)
+                        asyncio.create_task(self.set_viewport_fullscreen(fullscreen=False))
                 return True  # 事件已处理
 
         return super().eventFilter(watched, event)
@@ -1423,7 +1424,7 @@ class MainWindow(
             return False
         return self._viewport_widget.parent() is None
 
-    def set_viewport_fullscreen(self, fullscreen: bool, message: str = ""):
+    async def set_viewport_fullscreen(self, fullscreen: bool, message: str = ""):
         if self._viewport_widget is None or self._viewport_layout is None:
             return
 
@@ -1431,18 +1432,26 @@ class MainWindow(
         layout = self._viewport_layout
 
         if fullscreen:
+            await self.remote_scene.custom_command("pause_render:true")
             viewport.setParent(None)
+            self.viewport_window_flags = viewport.windowFlags()
             viewport.setWindowFlags(
                 QtCore.Qt.WindowType.Window | QtCore.Qt.WindowType.FramelessWindowHint
             )
             viewport.showFullScreen()
 
+            await asyncio.sleep(3)
+            await self.remote_scene.custom_command("pause_render:false")
+
             if message:
                 self.full_screen_message_bubble(message, duration=3000, parent=viewport)
         else:
             if self.is_viewport_fullscreen():
-                viewport.setWindowFlags(QtCore.Qt.WindowType.Widget)
+                await self.remote_scene.custom_command("pause_render:true")
+                viewport.setWindowFlags(self.viewport_window_flags)
                 layout.addWidget(viewport)
+                await asyncio.sleep(6)
+                await self.remote_scene.custom_command("pause_render:false")
 
     def full_screen_message_bubble(
         self, message: str, duration: int, parent: QtWidgets.QWidget
