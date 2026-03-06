@@ -1,4 +1,5 @@
 import asyncio
+import math
 import webbrowser
 
 from typing import Any, Dict, List, Tuple, override
@@ -21,6 +22,7 @@ from orcalab.remote_scene import RemoteScene
 from orcalab.report.ask_statistics_dialog import AskStatisticsDialog
 from orcalab.report.report import collect_user_env
 from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
+from orcalab.setting.settings_dialog import SettingsDialog
 from orcalab.simulation.simulation_bus import (
     SimulationRequestBus,
     SimulationNotification,
@@ -69,7 +71,6 @@ from orcalab.mcp_service.mcp_service import OrcaLabMCPServer
 from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
 
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -97,7 +98,7 @@ class MainWindow(
         self._cleanup_in_progress = False
         self._cleanup_completed = False
         self._is_runtime_mode = False
-        
+
         # 状态指示器（顶部蓝色条）
         self._status_indicator = None
 
@@ -184,6 +185,7 @@ class MainWindow(
 
         connect(self.menu_file.aboutToShow, self.prepare_file_menu)
         connect(self.menu_edit.aboutToShow, self.prepare_edit_menu)
+        connect(self.menu_run.aboutToShow, self.prepare_run_menu)
         connect(self.menu_help.aboutToShow, self.prepare_help_menu)
 
         connect(self.add_item_by_drag, self.add_item_drag)
@@ -320,12 +322,12 @@ class MainWindow(
             padding: 4px;
         """)
         self._status_indicator.setText("● 运行时模式 (RunTime)")
-        
+
         # 将状态指示器插入到窗口布局的最顶部
         main_layout = self.layout()
         if main_layout:
             main_layout.insertWidget(0, self._status_indicator)
-        
+
         logger.info("创建工具栏…")
         self.tool_bar = ToolBar()
         layout = QtWidgets.QVBoxLayout(self._tool_bar_area)
@@ -368,6 +370,7 @@ class MainWindow(
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self._viewport_widget)
+        self._viewport_layout = layout
 
         logger.info("创建场景层次结构…")
         self.actor_outline_model = ActorOutlineModel(self.local_scene)
@@ -455,10 +458,15 @@ class MainWindow(
             QMenu::item:selected {
                 background-color: #4a4a4a;
             }
+            QMenu::item:disabled {
+                color: #aaaaaa; /* Light gray text */
+                background-color: transparent;
+            }
         """)
 
         self.menu_file = self.menu_bar.addMenu("文件")
         self.menu_edit = self.menu_bar.addMenu("编辑")
+        self.menu_run = self.menu_bar.addMenu("运行")
         self.menu_help = self.menu_bar.addMenu("帮助")
         self.menu_user = self.menu_bar.addMenu("用户")
         connect(self.menu_user.aboutToShow, self.prepare_user_menu)
@@ -614,7 +622,7 @@ class MainWindow(
 
     async def stop_sim(self):
         await SimulationRequestBus().stop_simulation()
-    
+
     def _set_window_border_style(self, is_runtime: bool):
         """设置运行时状态指示：运行时显示蓝色指示器，编辑模式隐藏"""
         # 显示/隐藏顶部蓝色状态指示器
@@ -638,7 +646,7 @@ class MainWindow(
             self.copilot_widget.setEnabled(False)
             self.copilot_widget.setAttribute(t, True)
         self.menu_edit.setEnabled(False)
-    
+
     def _enable_edit(self):
         t = QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents
         self.actor_outline_widget.setEnabled(True)
@@ -651,7 +659,7 @@ class MainWindow(
             self.copilot_widget.setEnabled(True)
             self.copilot_widget.setAttribute(t, False)
         self.menu_edit.setEnabled(True)
-    
+
     @override
     async def on_simulation_state_changed(self, old_state: SimulationState, new_state: SimulationState) -> None:
         if new_state == SimulationState.Launching:
@@ -770,7 +778,7 @@ class MainWindow(
             data["children"] = [self.actor_to_dict(child) for child in actor.children]
 
         return data
-    
+
     async def create_scene_layout(self):
         def select_file():
             filename, _ = QtWidgets.QFileDialog.getSaveFileName(
@@ -782,15 +790,15 @@ class MainWindow(
             return filename
 
         filename =await asyncWrap(select_file)
-        
+
         if not filename:
             return
         if not filename.lower().endswith(".json"):
             filename += ".json"
-        
+
         if not await asyncWrap(self._confirm_discard_changes):
             return
-        
+
         helper = SceneLayoutHelper(self.local_scene)
         helper.create_empty_layout(filename)
 
@@ -859,9 +867,8 @@ class MainWindow(
                 await self.clear_scene_layout(child_actor)
         if actor != self.local_scene.root_actor:
             await SceneEditRequestBus().delete_actor(actor)
-        
-        await SceneEditRequestBus().set_selection([], undo=False)
 
+        await SceneEditRequestBus().set_selection([], undo=False)
 
     async def create_actor_from_scene_layout(self, actor_data, parent: GroupActor = None, errors: List[str] = None):
         if errors is None:
@@ -906,11 +913,32 @@ class MainWindow(
 
         action_undo = self.menu_edit.addAction("撤销")
         action_undo.setEnabled(can_undo())
+        action_undo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
         connect(action_undo.triggered, self.undo)
 
         action_redo = self.menu_edit.addAction("重做")
         action_redo.setEnabled(can_redo())
+        action_redo.setShortcut(QtGui.QKeySequence("Ctrl+Shift+Z"))
         connect(action_redo.triggered, self.redo)
+
+
+        action_settings = self.menu_edit.addAction("配置")
+        connect(action_settings.triggered, self.open_settings)
+
+    def prepare_run_menu(self):
+        self.menu_run.clear()
+
+        out: List[SimulationState] = []
+        SimulationRequestBus().get_simulation_state(out)
+        sim_state = out[0] if out else SimulationState.Stopped
+
+        action_start = self.menu_run.addAction("开始模拟")
+        action_start.setEnabled(sim_state == SimulationState.Stopped)
+        connect(action_start.triggered, self.start_sim)
+
+        action_stop = self.menu_run.addAction("停止模拟")
+        action_stop.setEnabled(sim_state == SimulationState.Running)
+        connect(action_stop.triggered, self.stop_sim)
 
     def prepare_help_menu(self):
         self.menu_help.clear()
@@ -920,14 +948,14 @@ class MainWindow(
         self.menu_user.clear()
         token_data = TokenStorage.load_token()
         username = token_data.get('username', '未登录') if token_data else '未登录'
-        
+
         # Display username (non-clickable)
         action_username = QtGui.QAction(f"当前用户: {username}", self)
         action_username.setEnabled(False)
         self.menu_user.addAction(action_username)
-        
+
         self.menu_user.addSeparator()
-        
+
         # Logout action
         action_logout = QtGui.QAction("退出登录", self)
         connect(action_logout.triggered, self.logout)
@@ -942,10 +970,10 @@ class MainWindow(
             QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
             QtWidgets.QMessageBox.StandardButton.No
         )
-        
+
         if reply != QtWidgets.QMessageBox.StandardButton.Yes:
             return
-        
+
         # Open browser to logout from server
         logout_url = "https://datalink.orca3d.cn:8081/auth/v1/logout/"
         try:
@@ -953,24 +981,24 @@ class MainWindow(
             logger.info("已打开浏览器进行服务器端登出")
         except Exception as e:
             logger.warning("打开浏览器失败: %s", e)
-        
+
         # Clear local token
         TokenStorage.clear_token()
         logger.info("用户已退出登录")
-        
+
         # Show success message and exit
         QtWidgets.QMessageBox.information(
             self,
             "退出登录成功",
             "已成功退出登录。\n请重新启动应用程序以完成登录。"
         )
-        
+
         # Exit application
         QtWidgets.QApplication.quit()
 
     def show_about_dialog(self):
         version = self.config_service._get_package_version()
-        
+
         about_html = f"""
         <div style="font-family: Arial, sans-serif;">
             <h2 style="color: #007acc; margin-bottom: 10px;">OrcaLab</h2>
@@ -995,14 +1023,14 @@ class MainWindow(
             </p>
         </div>
         """
-        
+
         msg_box = QtWidgets.QMessageBox(self)
         msg_box.setWindowTitle("关于 OrcaLab")
         msg_box.setTextFormat(QtCore.Qt.TextFormat.RichText)
         msg_box.setText(about_html)
         msg_box.setIconPixmap(QtGui.QPixmap())
         msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Ok)
-        
+
         msg_box.setStyleSheet("""
             QMessageBox {
                 background-color: #2b2b2b;
@@ -1026,7 +1054,7 @@ class MainWindow(
                 background-color: #004578;
             }
         """)
-        
+
         msg_box.exec()
 
     async def undo(self):
@@ -1281,7 +1309,7 @@ class MainWindow(
             layout_label = f"[* {layout_part}]"
         else:
             layout_label = f"[{layout_part}]"
-        
+
         mode_label = "RunTime" if self._is_runtime_mode else "Editor"
         self.setWindowTitle(f"{self._base_title}    [{scene_part}]    {layout_label}    [{mode_label}]")
 
@@ -1311,7 +1339,7 @@ class MainWindow(
         logger.debug("_confirm_discard_changes: 用户选择放弃修改，重置状态")
         self._mark_layout_clean()
         return True
-    
+
     async def send_statistics(self):
         send_statistics = self.config_service.send_statistics()
 
@@ -1323,7 +1351,7 @@ class MainWindow(
 
             send_statistics = "true" if allow else "false"
             self.config_service.set_send_statistics(send_statistics)
-            
+
         if send_statistics == "true":
             logger.info("用户允许发送统计数据")
             data = collect_user_env()
@@ -1331,3 +1359,6 @@ class MainWindow(
         else:
             logger.info("用户拒绝发送统计数据")
 
+    def open_settings(self):
+        # 打开设置窗口的逻辑
+        SettingsDialog(self).exec()

@@ -4,7 +4,7 @@ from orcalab.ui.icon_util import make_color_svg
 from orcalab.ui.theme_service import ThemeService
 
 
-class Checkbox(QtWidgets.QWidget):
+class CheckBox(QtWidgets.QWidget):
     value_changed = QtCore.Signal()
 
     def __init__(self, parent: QtWidgets.QWidget | None = None):

@@ -1,5 +1,6 @@
 from enum import Enum, auto
 from orcalab.event_bus import create_event_bus
+from typing import List
 
 
 class SimulationState(Enum):
@@ -14,6 +15,9 @@ class SimulationRequest:
         pass
 
     async def stop_simulation(self) -> None:
+        pass
+
+    def get_simulation_state(self, out: List[SimulationState]) -> None:
         pass
 
 
