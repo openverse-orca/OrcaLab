@@ -45,7 +45,9 @@ def make_unique_name(base_name: str, parent: BaseActor | Path) -> str:
     out_put = []
     MetadataServiceRequestBus().get_asset_info(base_name, out_put)
     if len(out_put) > 0 and out_put[0] is not None:
-        base_name = out_put[0].get('englishName', base_name)
+        english_name = out_put[0].get('englishName', None)
+        if type(english_name) == str and english_name.strip() != "":
+            base_name = english_name
     base_name = base_name.split("/")[-1]
     base_name = santitize_name(base_name)
     new_name = f"{base_name}_{counter}"

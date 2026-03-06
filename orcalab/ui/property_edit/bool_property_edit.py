@@ -1,7 +1,7 @@
 from typing import override
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from orcalab.ui.checkbox import Checkbox
+from orcalab.ui.checkbox import CheckBox
 from orcalab.ui.property_edit.base_property_edit import (
     BasePropertyEdit,
     PropertyEditContext,
@@ -28,7 +28,7 @@ class BooleanPropertyEdit(BasePropertyEdit[bool]):
         bg_color = theme.get_color("property_edit_bg")
         parent_bg_color = theme.get_color("property_group_bg")
 
-        editor = Checkbox()
+        editor = CheckBox()
         editor.icon_size = 24
         editor.bg_color = parent_bg_color
         editor.bg_hover_color = bg_color

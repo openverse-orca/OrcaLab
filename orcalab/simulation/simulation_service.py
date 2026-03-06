@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import logging
+from typing import List, override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 # PTY 只在 Unix 系统上可用
@@ -55,7 +56,7 @@ class SimulationService(SimulationRequest):
             return self._terminal
 
         raise RuntimeError("Failed to get TerminalWidget")
-    
+
     def _on_process_interrupted(self):
         """处理进程被 Ctrl+C 中断"""
         asyncio.create_task(self.stop_sim())
@@ -137,7 +138,7 @@ class SimulationService(SimulationRequest):
                 logger.exception("回滚模拟状态时发生错误: %s", e)
             finally:
                 self.sim_process_running = False
-            
+
             await self._set_simulation_state(SimulationState.Failed)
             await self._set_simulation_state(SimulationState.Stopped)
 
@@ -145,7 +146,6 @@ class SimulationService(SimulationRequest):
         """无外部程序处理（异步版本）"""
 
         await self._set_simulation_state(SimulationState.Launching)
-
 
         await self.remote_scene.publish_scene()
         await asyncio.sleep(0.5)
@@ -178,9 +178,7 @@ class SimulationService(SimulationRequest):
         else:
             logger.error("无外部程序模式启动失败")
 
-    async def _start_external_process(
-        self, command: str, args: list
-    ):
+    async def _start_external_process(self, command: str, args: list):
         """在主线程中启动外部进程"""
         try:
             # 构建完整的命令
@@ -263,7 +261,7 @@ class SimulationService(SimulationRequest):
                         try:
                             data = os.read(self._pty_master_fd, 4096)
                             if data:
-                                text = data.decode('utf-8', errors='replace')
+                                text = data.decode("utf-8", errors="replace")
                                 self._append_line_to_terminal(text)
                             else:
                                 break
@@ -320,18 +318,26 @@ class SimulationService(SimulationRequest):
         self.output_thread = threading.Thread(target=read_pipe_output, daemon=True)
         self.output_thread.start()
 
+    # SimulationRequest 接口实现
+
+    @override
     async def start_simulation(self) -> None:
         await asyncWrap(self.show_launch_dialog)
 
+    @override
     async def stop_simulation(self) -> None:
         await self.stop_sim()
+
+    @override
+    def get_simulation_state(self, out: List[SimulationState]) -> None:
+        out.append(self._sim_state)
 
     async def stop_sim(self):
         if not self.sim_process_running:
             return
 
         async with self._sim_process_check_lock:
-            
+
             await self.remote_scene.set_sync_from_mujoco_to_scene(False)
             self.sim_process_running = False
 
