@@ -23,15 +23,17 @@ class SettingsDialog(QtWidgets.QDialog):
 
         self.checkbox = checkbox
 
-        connect(checkbox.value_changed, self.on_checkbox_toggled)
+        config = ConfigService()
+        send_statistics = config.send_statistics()
+        self.checkbox.set_checked(send_statistics == "true")
 
         root_layout.addLayout(row_layout)
         root_layout.addStretch()
+
+        connect(checkbox.value_changed, self.on_checkbox_toggled)
 
         self.resize(800, 600)
 
     def on_checkbox_toggled(self):
         config = ConfigService()
         config.set_send_statistics("true" if self.checkbox.checked() else "false")
-
-
