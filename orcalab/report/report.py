@@ -9,8 +9,10 @@ import json
 import importlib.metadata as importlib_metadata
 
 import aiohttp
+from qasync import asyncWrap
 
 from orcalab.config_service import ConfigService
+from orcalab.report.ask_statistics_dialog import AskStatisticsDialog
 from orcalab.token_storage import TokenStorage
 
 logger = logging.getLogger(__name__)
@@ -235,6 +237,50 @@ def collect_user_env() -> Dict[str, object]:
     }
 
     return data
+
+
+async def ask_user_consent() -> bool:
+    config_service = ConfigService()
+    send_statistics = config_service.send_statistics()
+
+    if send_statistics == "unset":
+
+        def ask():
+            return AskStatisticsDialog.ask()
+
+        allow = await asyncWrap(ask)
+
+        send_statistics = "true" if allow else "false"
+        config_service.set_send_statistics(send_statistics)
+
+    return send_statistics == "true"
+
+
+async def send_report_directly():
+    if not await ask_user_consent():
+        logger.info("User declined to send statistics report.")
+        return
+
+    data = collect_user_env()
+
+    token_data = TokenStorage.load_token()
+    username = token_data.get("username", "") if token_data else ""
+    access_token = token_data.get("access_token", "") if token_data else ""
+
+    config_service = ConfigService()
+    config_service.datalink_base_url()
+    url = f"{config_service.datalink_base_url()}/orcalab/info/"
+
+    headers = {
+        "Username": username,
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=data, headers=headers) as response:
+            print(f"Status: {response.status}")
+            print(await response.json())
 
 
 if __name__ == "__main__":
