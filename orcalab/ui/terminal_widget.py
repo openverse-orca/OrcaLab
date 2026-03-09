@@ -35,6 +35,7 @@ class TerminalTextEdit(QtWidgets.QTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._input_buffer = ""
+        self._pty_mode = False
         # 禁用默认的undo/redo
         self.setUndoRedoEnabled(False)
         
@@ -114,34 +115,45 @@ class TerminalTextEdit(QtWidgets.QTextEdit):
             if key in (QtCore.Qt.Key.Key_Z, QtCore.Qt.Key.Key_Y):
                 return
         
+        # Ctrl+C：发送中断信号
+        if key == QtCore.Qt.Key.Key_C and modifiers & QtCore.Qt.KeyboardModifier.ControlModifier:
+            self.input_submitted.emit("\x03")
+            return
+        
+        # Ctrl+D：发送EOF
+        if key == QtCore.Qt.Key.Key_D and modifiers & QtCore.Qt.KeyboardModifier.ControlModifier:
+            self.input_submitted.emit("\x04")
+            return
+
+        # PTY 模式（Linux PTY / Windows ConPTY）：每个按键立即发送，不缓冲
+        if self._pty_mode:
+            text = event.text()
+            if key in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
+                self.input_submitted.emit("\r")
+            elif key == QtCore.Qt.Key.Key_Backspace:
+                self.input_submitted.emit("\x7f")
+            elif text:
+                self.input_submitted.emit(text)
+            else:
+                super().keyPressEvent(event)
+            return
+        
+        # 普通 PIPE 模式：缓冲到回车再发送
         # Enter键：发送当前输入缓冲区
         if key in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
             text_to_send = self._input_buffer + "\n"
             self._input_buffer = ""
-            # 显示换行
             cursor = self.textCursor()
             cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
             cursor.insertText("\n")
             self.setTextCursor(cursor)
-            # 发送输入
             self.input_submitted.emit(text_to_send)
-            return
-        
-        # Ctrl+C：发送中断信号
-        if key == QtCore.Qt.Key.Key_C and event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
-            self.input_submitted.emit("\x03")  # ETX字符
-            return
-        
-        # Ctrl+D：发送EOF
-        if key == QtCore.Qt.Key.Key_D and event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
-            self.input_submitted.emit("\x04")  # EOT字符
             return
         
         # 退格键：删除输入缓冲区最后一个字符
         if key == QtCore.Qt.Key.Key_Backspace:
             if self._input_buffer:
                 self._input_buffer = self._input_buffer[:-1]
-                # 删除显示的字符
                 cursor = self.textCursor()
                 cursor.deletePreviousChar()
                 self.setTextCursor(cursor)
@@ -151,17 +163,14 @@ class TerminalTextEdit(QtWidgets.QTextEdit):
         text = event.text()
         if text and text.isprintable():
             self._input_buffer += text
-            # 显示输入的字符
             cursor = self.textCursor()
             cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
             cursor.insertText(text)
             self.setTextCursor(cursor)
-            # 滚动到底部
             scrollbar = self.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
             return
         
-        # 其他键使用默认处理（如方向键滚动等）
         super().keyPressEvent(event)
     
     def clear_input_buffer(self):
@@ -180,6 +189,7 @@ class TerminalWidget(QtWidgets.QWidget):
         
         self.process = None
         self._pty_master_fd = None
+        self._win_pty = None
         self.output_queue = queue.Queue()
         self.output_thread = None
         self.is_running = False
@@ -298,15 +308,16 @@ class TerminalWidget(QtWidgets.QWidget):
             cmd = [command] + args
             
             # 启动进程（包含stdin以支持输入）
+            extra = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if sys.platform == "win32" else {}
             self.process = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                universal_newlines=True,
-                bufsize=1,
+                bufsize=0,
                 cwd=working_dir,
-                env=os.environ.copy()
+                env=os.environ.copy(),
+                **extra
             )
             
             self.is_running = True
@@ -374,22 +385,33 @@ class TerminalWidget(QtWidgets.QWidget):
             if text == "\x03":
                 import signal
                 if sys.platform == "win32":
-                    self.process.send_signal(signal.CTRL_C_EVENT)
+                    if self._win_pty is not None:
+                        self._win_pty.sendintr()
+                    else:
+                        os.kill(self.process.pid, signal.CTRL_C_EVENT)
                 else:
                     self.process.send_signal(signal.SIGINT)
                 self._append_output_safe("^C\n")
-                # 发出中断信号，通知外部执行停止流程
                 self.process_interrupted.emit()
                 return
+
+            # Windows ConPTY 模式：直接写入 PtyProcess
+            if self._win_pty is not None:
+                self._win_pty.write(text)
+                return
             
-            # 优先使用PTY主端发送
+            # Linux PTY 主端
             if self._pty_master_fd is not None:
                 os.write(self._pty_master_fd, text.encode('utf-8'))
-            elif self.process.stdin:
-                self.process.stdin.write(text)
+                return
+
+            # 普通 PIPE
+            if self.process.stdin:
+                data = text.encode('utf-8') if isinstance(text, str) else text
+                self.process.stdin.write(data)
                 self.process.stdin.flush()
         except (BrokenPipeError, OSError):
-            self._append_output_safe(f"\n[输入失败: 进程已关闭]\n")
+            self._append_output_safe("\n[输入失败: 进程已关闭]\n")
     
     def _read_output(self):
         """在后台线程中读取进程输出"""
@@ -397,24 +419,16 @@ class TerminalWidget(QtWidgets.QWidget):
             return
         
         try:
-            while self.is_running and self.process and self.process.poll() is None:
-                line = self.process.stdout.readline()
-                if line:
-                    self.output_queue.put(line)
-                else:
+            stdout = self.process.stdout
+            while True:
+                chunk = stdout.read(4096)
+                if not chunk:
                     break
+                self.output_queue.put(chunk.decode("utf-8", errors="replace"))
             
-            # 读取剩余输出
-            remaining_output = self.process.stdout.read()
-            if remaining_output:
-                self.output_queue.put(remaining_output)
-            
-            # 检查进程退出码
-            if self.process:
-                return_code = self.process.poll()
-                if return_code is not None:
-                    self.output_queue.put(f"\n进程退出，返回码: {return_code}\n")
-                    
+            return_code = self.process.wait()
+            self.output_queue.put(f"\n进程退出，返回码: {return_code}\n")
+                
         except Exception as e:
             self.output_queue.put(f"读取输出时出错: {str(e)}\n")
     
@@ -466,6 +480,18 @@ class TerminalWidget(QtWidgets.QWidget):
                 "运行中 (PID: {})".format(self.process.pid) if self.is_running and self.process else "就绪"
             ))
     
+    def set_win_pty_process(self, win_pty):
+        """设置 Windows ConPTY 进程（pywinpty.PtyProcess）"""
+        self.process = win_pty
+        self._win_pty = win_pty
+        self._pty_master_fd = None
+        self.is_running = True
+        self.output_text._pty_mode = True
+        pid = getattr(win_pty, 'pid', '?')
+        self.status_label.setText(f"运行中 (PID: {pid})")
+        self.status_label.setStyleSheet("color: #3fb950; font-size: 11px;")
+        self.output_text.clear_input_buffer()
+
     def set_external_process(self, process: subprocess.Popen):
         """设置外部进程引用（用于外部启动的进程，使用PIPE）"""
         self.process = process
@@ -480,6 +506,7 @@ class TerminalWidget(QtWidgets.QWidget):
         self.process = process
         self._pty_master_fd = master_fd
         self.is_running = True
+        self.output_text._pty_mode = True
         self.status_label.setText(f"运行中 (PID: {process.pid})")
         self.status_label.setStyleSheet("color: #3fb950; font-size: 11px;")
         self.output_text.clear_input_buffer()
@@ -487,8 +514,10 @@ class TerminalWidget(QtWidgets.QWidget):
     def clear_external_process(self):
         """清除外部进程引用"""
         self.process = None
+        self._win_pty = None
         self._pty_master_fd = None
         self.is_running = False
+        self.output_text._pty_mode = False
         self.status_label.setText("已停止")
         self.status_label.setStyleSheet("color: #7d8590; font-size: 11px;")
         self.output_text.clear_input_buffer()

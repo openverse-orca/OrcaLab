@@ -6,9 +6,14 @@ import logging
 from typing import List, override
 from PySide6 import QtCore, QtWidgets, QtGui
 
-# PTY 只在 Unix 系统上可用
 if sys.platform != "win32":
     import pty
+else:
+    try:
+        import winpty as _winpty
+        _WINPTY_AVAILABLE = True
+    except ImportError:
+        _WINPTY_AVAILABLE = False
 
 
 from orcalab.application_bus import ApplicationRequestBus
@@ -32,6 +37,7 @@ class SimulationService(SimulationRequest):
         self._sim_process_check_lock = asyncio.Lock()
         self.sim_process_running = False
         self.sim_process: subprocess.Popen | None = None
+        self._win_pty: "_winpty.PtyProcess | None" = None
         self._sim_state = SimulationState.Stopped
         self._pty_master_fd: int | None = None
 
@@ -203,18 +209,15 @@ class SimulationService(SimulationRequest):
                 os.close(slave_fd)
                 self.terminal.set_pty_process(self.sim_process, master_fd)
             else:
-                # Windows: 使用 PIPE 方式
+                # Windows: 使用 ConPTY (pywinpty) 提供真实终端，使 sshkeyboard/msvcrt 正常工作
+                if not _WINPTY_AVAILABLE:
+                    raise RuntimeError(
+                        "pywinpty 未安装，请运行: pip install pywinpty"
+                    )
                 self._pty_master_fd = None
-                self.sim_process = subprocess.Popen(
-                    cmd,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    universal_newlines=True,
-                    bufsize=1,
-                    env=os.environ.copy(),
-                )
-                self.terminal.set_external_process(self.sim_process)
+                self._win_pty = _winpty.PtyProcess.spawn(cmd)
+                self.sim_process = self._win_pty
+                self.terminal.set_win_pty_process(self._win_pty)
 
             # 在terminal_widget中显示启动信息
             self.terminal._append_output(f"启动进程: {' '.join(cmd)}\n")
@@ -226,7 +229,7 @@ class SimulationService(SimulationRequest):
             if sys.platform != "win32":
                 self._start_pty_output_thread()
             else:
-                self._start_pipe_output_thread()
+                self._start_winpty_output_thread()
 
             return True
 
@@ -282,40 +285,29 @@ class SimulationService(SimulationRequest):
         self.output_thread = threading.Thread(target=read_pty_output, daemon=True)
         self.output_thread.start()
 
-    def _start_pipe_output_thread(self):
-        """启动PIPE输出读取线程（Windows）"""
+    def _start_winpty_output_thread(self):
+        """启动 ConPTY 输出读取线程（Windows）"""
         import threading
+        win_pty = self._win_pty
 
-        def read_pipe_output():
-            """从PIPE读取输出"""
+        def read_winpty_output():
             try:
-                while self.sim_process and self.sim_process.poll() is None:
-                    if self.sim_process.stdout is None:
+                while win_pty.isalive():
+                    try:
+                        data = win_pty.read(4096)
+                        if data:
+                            self._append_line_to_terminal(data)
+                    except EOFError:
                         break
-                    line = self.sim_process.stdout.readline()
-                    if line:
-                        self._append_line_to_terminal(line)
-                    else:
+                    except Exception:
                         break
 
-                # 读取剩余输出
-                if self.sim_process and self.sim_process.stdout:
-                    remaining = self.sim_process.stdout.read()
-                    if remaining:
-                        self._append_line_to_terminal(remaining)
-
-                # 检查进程退出码
-                if self.sim_process:
-                    return_code = self.sim_process.poll()
-                    if return_code is not None:
-                        self._append_line_to_terminal(
-                            f"\n进程退出，返回码: {return_code}\n"
-                        )
-
+                exit_code = win_pty.exitstatus
+                self._append_line_to_terminal(f"\n进程退出，返回码: {exit_code}\n")
             except Exception as e:
                 self._append_line_to_terminal(f"读取输出时出错: {str(e)}\n")
 
-        self.output_thread = threading.Thread(target=read_pipe_output, daemon=True)
+        self.output_thread = threading.Thread(target=read_winpty_output, daemon=True)
         self.output_thread.start()
 
     # SimulationRequest 接口实现
@@ -341,21 +333,28 @@ class SimulationService(SimulationRequest):
             await self.remote_scene.set_sync_from_mujoco_to_scene(False)
             self.sim_process_running = False
 
-            # 停止主线程启动的sim_process
             if self.sim_process is not None:
                 self.terminal._append_output("\n" + "-" * 50 + "\n")
                 self.terminal._append_output("正在停止进程...\n")
 
-                self.sim_process.terminate()
-                try:
-                    self.sim_process.wait(timeout=5)
-                    self.terminal._append_output("进程已正常终止\n")
-                except subprocess.TimeoutExpired:
-                    self.sim_process.kill()
-                    self.sim_process.wait()
-                    self.terminal._append_output("进程已强制终止\n")
+                if self._win_pty is not None:
+                    try:
+                        self._win_pty.terminate(force=True)
+                        self.terminal._append_output("进程已终止\n")
+                    except Exception:
+                        pass
+                    self._win_pty = None
+                else:
+                    self.sim_process.terminate()
+                    try:
+                        self.sim_process.wait(timeout=5)
+                        self.terminal._append_output("进程已正常终止\n")
+                    except subprocess.TimeoutExpired:
+                        self.sim_process.kill()
+                        self.sim_process.wait()
+                        self.terminal._append_output("进程已强制终止\n")
 
-                # 关闭PTY主端
+                # 关闭PTY主端（Linux/macOS）
                 if self._pty_master_fd is not None:
                     try:
                         os.close(self._pty_master_fd)
@@ -378,13 +377,20 @@ class SimulationService(SimulationRequest):
             if not self.sim_process_running:
                 return
 
-            # 检查主线程启动的sim_process
             if self.sim_process is not None:
-                code = self.sim_process.poll()
-                if code is not None:
+                # Windows ConPTY 用 isalive()，其他用 poll()
+                if self._win_pty is not None:
+                    alive = self._win_pty.isalive()
+                    code = self._win_pty.exitstatus if not alive else None
+                else:
+                    code = self.sim_process.poll()
+                    alive = code is None
+
+                if not alive:
                     logger.info("外部进程已退出，返回码 %s", code)
                     self.sim_process_running = False
-                    # 关闭PTY主端
+                    if self._win_pty is not None:
+                        self._win_pty = None
                     if self._pty_master_fd is not None:
                         try:
                             os.close(self._pty_master_fd)
