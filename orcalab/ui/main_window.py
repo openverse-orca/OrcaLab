@@ -1349,7 +1349,7 @@ class MainWindow(
         if not await ask_user_consent():
             return
 
-        data = collect_user_env()
+        data = collect_user_env("backend")
         await self.remote_scene.custom_command(f"user_env_report:{json.dumps(data)}")
 
     def open_settings(self):

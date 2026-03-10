@@ -216,7 +216,7 @@ def _get_python_packages() -> Dict[str, str]:
     return packages
 
 
-def collect_user_env() -> Dict[str, object]:
+def collect_user_env(source: str) -> Dict[str, object]:
     token_data = TokenStorage.load_token()
     username = token_data.get("username", "") if token_data else ""
 
@@ -224,6 +224,7 @@ def collect_user_env() -> Dict[str, object]:
         "metadata": {
             "type": "user_environment_report",
             "version": "1.0",
+            "source": source,
         },
         "content": {
             "username": username,
@@ -261,7 +262,7 @@ async def send_report_directly():
         logger.info("User declined to send statistics report.")
         return
 
-    data = collect_user_env()
+    data = collect_user_env(source="frontend")
 
     token_data = TokenStorage.load_token()
     username = token_data.get("username", "") if token_data else ""
@@ -285,6 +286,6 @@ async def send_report_directly():
 
 if __name__ == "__main__":
 
-    report = collect_user_env()
+    report = collect_user_env("test")
 
     print(json.dumps(report, indent=2, default=str))
