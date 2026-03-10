@@ -20,7 +20,7 @@ from orcalab.path import Path
 from orcalab.pyside_util import connect
 from orcalab.remote_scene import RemoteScene
 from orcalab.report.ask_statistics_dialog import AskStatisticsDialog
-from orcalab.report.report import collect_user_env
+from orcalab.report.report import ask_user_consent, collect_user_env, send_report_directly
 from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
 from orcalab.setting.settings_dialog import SettingsDialog
 from orcalab.simulation.simulation_bus import (
@@ -168,6 +168,12 @@ class MainWindow(
         # self.move(center - rect.center())
         self.restore_default_layout()
         self.showMaximized()
+
+        if await ask_user_consent():
+            logger.info("用户允许发送统计数据")
+            await send_report_directly()
+        else:
+            logger.info("用户拒绝发送统计数据")
 
         logger.info("初始化引擎...")
         self._viewport_widget.init_viewport()
@@ -921,7 +927,6 @@ class MainWindow(
         action_redo.setShortcut(QtGui.QKeySequence("Ctrl+Shift+Z"))
         connect(action_redo.triggered, self.redo)
 
-
         action_settings = self.menu_edit.addAction("配置")
         connect(action_settings.triggered, self.open_settings)
 
@@ -1341,23 +1346,11 @@ class MainWindow(
         return True
 
     async def send_statistics(self):
-        send_statistics = self.config_service.send_statistics()
+        if not await ask_user_consent():
+            return
 
-        if send_statistics == "unset":
-            def ask():
-                return AskStatisticsDialog.ask(self)
-
-            allow = await asyncWrap(ask)
-
-            send_statistics = "true" if allow else "false"
-            self.config_service.set_send_statistics(send_statistics)
-
-        if send_statistics == "true":
-            logger.info("用户允许发送统计数据")
-            data = collect_user_env()
-            await self.remote_scene.custom_command(f"user_env_report:{json.dumps(data)}")
-        else:
-            logger.info("用户拒绝发送统计数据")
+        data = collect_user_env("backend")
+        await self.remote_scene.custom_command(f"user_env_report:{json.dumps(data)}")
 
     def open_settings(self):
         # 打开设置窗口的逻辑
