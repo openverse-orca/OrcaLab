@@ -426,3 +426,9 @@ class ConfigService:
     
     def enable_debug_tool(self) -> bool:
         return self.config.get("orcalab", {}).get("debug_tool", False)
+
+    def render_pipeline_path(self) -> str:
+        """渲染管线资产路径，用于 VG1000/瀚博等设备使用独立 MainPipeline（如去掉 3DGS/流体）。
+        例如: passes/MainRenderPipeline_hb.azasset
+        为空则使用引擎默认管线。"""
+        return self.config.get("orcalab", {}).get("render_pipeline_path", "")

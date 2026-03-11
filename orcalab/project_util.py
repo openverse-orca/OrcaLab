@@ -12,7 +12,20 @@ import asyncio
 import logging
 
 
-project_id = "{3DB8A56E-2458-4543-93A1-1A41756B97DA}"
+def _resolve_project_id() -> str:
+    """
+    Resolve OrcaStudio project id from env.
+
+    If ORCALAB_PROJECT_ID is set, use it; otherwise fallback to legacy default id.
+    """
+    default_id = "{3DB8A56E-2458-4543-93A1-1A41756B97DA}"
+    env_id = os.getenv("ORCALAB_PROJECT_ID", "").strip()
+    if env_id:
+        return env_id
+    return default_id
+
+
+project_id = _resolve_project_id()
 
 logger = logging.getLogger(__name__)
 

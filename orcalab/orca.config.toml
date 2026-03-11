@@ -10,6 +10,8 @@ paks = []
 pak_urls = []
 python_project_path = ""
 python_project_url = ""
+# VG1000/瀚博：使用独立渲染管线（无 3DGS、无流体）时设置，例如: "passes/MainRenderPipeline_hb.azasset"
+# render_pipeline_path = "passes/MainRenderPipeline_hb.azasset"
 
 [mcp]
 port = 12345

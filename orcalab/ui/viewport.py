@@ -52,6 +52,14 @@ class Viewport(QtWidgets.QWidget):
         if config_service.enable_debug_tool():
             self.command_line.append("--debug-tool")
 
+        # VG1000/瀚博：使用独立 MainPipeline（无 3DGS、无流体）时传入管线路径
+        pipeline_path = config_service.render_pipeline_path()
+        if pipeline_path:
+            self.command_line.append(f'--r_renderPipelinePath={pipeline_path}')
+            logger.info("渲染管线已指定为瀚博/VG1000: r_renderPipelinePath=%s", pipeline_path)
+        else:
+            logger.info("使用引擎默认渲染管线（未配置 render_pipeline_path）")
+
         project_path = config_service.orca_project_folder()
         connect_builder_hub = False
 
