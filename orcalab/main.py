@@ -1,25 +1,24 @@
 # Patch PySide6 first. Before any other PySide6 imports.
-import pathlib
-from orcalab.cli_options import create_argparser
 from orcalab.patch_pyside6 import patch_pyside6
 
 patch_pyside6()
 
-import argparse
+import pathlib
+from typing import List
 import asyncio
 import sys
 import signal
 import logging
 
+from orcalab.cli_options import create_argparser
 from orcalab.config_service import ConfigService
 from orcalab.project_util import check_project_folder, copy_packages, sync_pak_urls
 from orcalab.asset_sync_ui import run_asset_sync_ui
-from orcalab.url_service.url_util import register_protocol
 from orcalab.ui.main_window import MainWindow
 from orcalab.logging_util import setup_logging, resolve_log_level
 from orcalab.default_layout import prepare_default_layout
 from orcalab.process_guard import ensure_single_instance
-
+from orcalab.ui.main_window_full_screen import MainWindowFullScreen
 import os
 
 # import PySide6.QtAsyncio as QtAsyncio
@@ -31,7 +30,8 @@ from orcalab.python_project_installer import ensure_python_project_installed
 # Global variable to store main window instance for cleanup
 _main_window = None
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("orcalab.main")
+
 
 def signal_handler(signum, frame):
     """Handle system signals to ensure cleanup"""
@@ -55,12 +55,15 @@ def register_signal_handlers():
         signal.signal(signal.SIGHUP, signal_handler)  # Hangup signal
 
 
-async def main_async(q_app):
+async def main_async(q_app, fullscreen: bool):
     global _main_window
 
     app_close_event = asyncio.Event()
     q_app.aboutToQuit.connect(app_close_event.set)
-    main_window = MainWindow()
+    if fullscreen:
+        main_window = MainWindowFullScreen()
+    else:
+        main_window = MainWindow()
     _main_window = main_window  # Store reference for signal handlers
     await main_window.init()
 
@@ -69,6 +72,106 @@ async def main_async(q_app):
     # Clean up resources before exiting
     logger.info("Application is closing, cleaning up resources...")
     await main_window.cleanup()
+
+
+def select_scene_and_layout(
+    config_service: ConfigService,
+    levels: List[dict],
+    level: str,
+    level_cli: str | None,
+    layout_cli: str | None,
+):
+    layout_mode = "unset"
+
+    # 1. 选择场景，优先级：命令行 > 场景选择界面
+
+    if type(level_cli) is str and level_cli.strip():
+        level_info = None
+        for _level in levels:
+            if _level["name"] == level_cli:
+                level_info = _level
+                break
+
+        if level_info is None:
+            logger.error("命令行指定的场景 '%s' 不在已发现的场景列表中。", level_cli)
+            exit(0)
+        else:
+            logger.info("命令行指定场景: %s", level_cli)
+            config_service.set_current_level(level_info)
+
+    else:
+        from orcalab.ui.scene_select_dialog import SceneSelectDialog
+
+        initial_layout_mode = config_service.layout_mode()
+        selected, layout_mode, ok = SceneSelectDialog.get_level(
+            levels, level, layout_mode=initial_layout_mode
+        )
+        if ok and selected:
+            layout_mode = (
+                layout_mode if layout_mode in {"default", "blank"} else "default"
+            )
+            config_service.set_layout_mode(layout_mode)
+            config_service.set_current_level(selected)
+            logger.info("用户选择了场景: %s", selected.get("name"))
+        else:
+            logger.info("用户未选择场景，退出程序")
+            exit(0)
+
+    # 2. 选择布局
+
+    def resolve_relative_layout_path(layout_cli: str):
+        # 1. 首先在当前工作目录下查找
+        p = (pathlib.Path.cwd() / layout_cli).resolve()
+        if p.exists():
+            return p
+
+        # 2. 如果在当前工作目录下找不到，再尝试在workspace目录下查找
+        p = (pathlib.Path(config_service.workspace()) / layout_cli).resolve()
+        if p.exists():
+            return p
+
+        return None
+
+    def prepare_layout():
+        default_layout_file = None
+        if layout_mode == "default":
+            current_level = config_service.current_level_info()
+            default_layout_file = prepare_default_layout(current_level)  # type: ignore
+            if default_layout_file:
+                logger.info("已生成默认布局: %s", default_layout_file)
+            else:
+                logger.warning("生成默认布局失败，将使用空白布局。")
+        config_service.set_default_layout_file(default_layout_file)
+
+    if type(layout_cli) is str and layout_cli.strip():
+        if layout_cli == "default" or layout_cli == "blank":
+            if layout_mode == "unset":
+                layout_mode = layout_cli
+                config_service.set_layout_mode(layout_mode)
+                logger.info("命令行指定布局模式: %s", layout_cli)
+
+            prepare_layout()
+        else:
+            p = pathlib.Path(layout_cli)
+            if p.is_absolute():
+                if p.exists():
+                    config_service.set_default_layout_file(str(p))
+                    logger.info("命令行指定布局文件: %s", p)
+                else:
+                    logger.error("命令行指定的布局文件 '%s' 不存在，无法加载。", p)
+            else:
+                p = resolve_relative_layout_path(layout_cli)
+                if p is not None:
+                    config_service.set_default_layout_file(str(p))
+                    logger.info("命令行指定布局文件: %s", p)
+                else:
+                    logger.error(
+                        "命令行指定的布局文件 '%s' 不存在，无法加载。", layout_cli
+                    )
+    else:
+        if layout_mode == "unset":
+            layout_mode = "default"
+        prepare_layout()
 
 
 def main():
@@ -128,7 +231,7 @@ def main():
 
     # 确保不会同时运行多个 OrcaLab 实例
     ensure_single_instance()
-    
+
     # 同步订阅的资产包（带UI）
     run_asset_sync_ui(config_service)
 
@@ -138,42 +241,26 @@ def main():
     if discovered_levels:
         config_service.merge_levels(discovered_levels)
 
-    # 场景选择
-    from orcalab.ui.scene_select_dialog import SceneSelectDialog
+    levels = config_service.levels()
+    current = config_service.level()
 
-    levels = config_service.levels() if hasattr(config_service, "levels") else []
-    current = config_service.level() if hasattr(config_service, "level") else None
-    if levels:
-        initial_layout_mode = config_service.layout_mode()
-        selected, layout_mode, ok = SceneSelectDialog.get_level(
-            levels, current, layout_mode=initial_layout_mode
-        )
-        if ok and selected:
-            layout_mode = (
-                layout_mode if layout_mode in {"default", "blank"} else "default"
-            )
-            config_service.set_layout_mode(layout_mode)
+    level_cli = getattr(args, "scene", None)
+    layout_cli = getattr(args, "layout", None)
 
-            default_layout_file = None
-            if layout_mode == "default":
-                default_layout_file = prepare_default_layout(selected)
-                if default_layout_file:
-                    logger.info("已生成默认布局: %s", default_layout_file)
-                else:
-                    logger.warning("生成默认布局失败，将使用空白布局。")
-            config_service.set_default_layout_file(default_layout_file)
-
-            config_service.set_current_level(selected)
-            logger.info("用户选择了场景: %s", selected.get("name"))
-        else:
-            logger.info("用户未选择场景，退出程序")
-            exit(0)
+    select_scene_and_layout(
+        config_service=config_service,
+        levels=levels,
+        level=current,
+        level_cli=level_cli,
+        layout_cli=layout_cli,
+    )
 
     event_loop = QEventLoop(q_app)
     asyncio.set_event_loop(event_loop)
 
     try:
-        event_loop.run_until_complete(main_async(q_app))
+        fullscreen = args.full_screen
+        event_loop.run_until_complete(main_async(q_app, fullscreen))
     except KeyboardInterrupt:
         logger.info("Received KeyboardInterrupt, cleaning up...")
     except Exception as e:

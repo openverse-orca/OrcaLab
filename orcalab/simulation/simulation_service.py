@@ -1,4 +1,5 @@
 import asyncio
+from io import TextIOWrapper
 import os
 import subprocess
 import sys
@@ -6,11 +7,15 @@ import logging
 from typing import List, override
 from PySide6 import QtCore, QtWidgets, QtGui
 
+from orcalab.cli_options import create_argparser
+from orcalab.project_util import get_user_log_folder
+
 if sys.platform != "win32":
     import pty
 else:
     try:
         import winpty as _winpty
+
         _WINPTY_AVAILABLE = True
     except ImportError:
         _WINPTY_AVAILABLE = False
@@ -40,6 +45,8 @@ class SimulationService(SimulationRequest):
         self._win_pty: "_winpty.PtyProcess | None" = None
         self._sim_state = SimulationState.Stopped
         self._pty_master_fd: int | None = None
+        self._log_file: TextIOWrapper | None = None
+        self._redirect_to_widget = True
 
     def connect_bus(self):
         SimulationRequestBus.connect(self)
@@ -48,7 +55,7 @@ class SimulationService(SimulationRequest):
         SimulationRequestBus.disconnect(self)
 
     @property
-    def terminal(self) -> TerminalWidget:
+    def terminal(self) -> TerminalWidget | None:
         terminal = getattr(self, "_terminal", None)
         if isinstance(terminal, TerminalWidget):
             return terminal
@@ -61,7 +68,7 @@ class SimulationService(SimulationRequest):
             self._terminal.process_interrupted.connect(self._on_process_interrupted)
             return self._terminal
 
-        raise RuntimeError("Failed to get TerminalWidget")
+        return None
 
     def _on_process_interrupted(self):
         """处理进程被 Ctrl+C 中断"""
@@ -135,7 +142,7 @@ class SimulationService(SimulationRequest):
             logger.info("外部程序 %s 启动成功", program_name)
         else:
             logger.error("外部程序 %s 启动失败", program_name)
-            self.terminal._append_output(
+            self._append_terminal(
                 f"外部程序 {program_name} 启动失败，请检查命令配置或日志输出。\n"
             )
             try:
@@ -174,12 +181,10 @@ class SimulationService(SimulationRequest):
 
             # 在终端显示提示信息
 
-            self.terminal._append_output("已切换到运行模式，等待外部程序连接...\n")
-            self.terminal._append_output("模拟地址: localhost:50051\n")
-            self.terminal._append_output("请手动启动外部程序并连接到上述地址\n")
-            self.terminal._append_output(
-                "注意：当前运行的是虚拟等待进程，可以手动停止\n"
-            )
+            self._append_terminal("已切换到运行模式，等待外部程序连接...\n")
+            self._append_terminal("模拟地址: localhost:50051\n")
+            self._append_terminal("请手动启动外部程序并连接到上述地址\n")
+            self._append_terminal("注意：当前运行的是虚拟等待进程，可以手动停止\n")
             logger.info("无外部程序模式已启动")
         else:
             logger.error("无外部程序模式启动失败")
@@ -193,59 +198,78 @@ class SimulationService(SimulationRequest):
                 resolved_command = sys.executable or command
             cmd = [resolved_command] + args
 
-            if sys.platform != "win32":
-                # Linux/macOS: 使用 PTY 提供真实终端环境
-                master_fd, slave_fd = pty.openpty()
-                self._pty_master_fd = master_fd
+            if self._redirect_to_widget:
+                if sys.platform != "win32":
+                    # Linux/macOS: 使用 PTY 提供真实终端环境
+                    master_fd, slave_fd = pty.openpty()
+                    self._pty_master_fd = master_fd
 
+                    self.sim_process = subprocess.Popen(
+                        cmd,
+                        stdin=slave_fd,
+                        stdout=slave_fd,
+                        stderr=slave_fd,
+                        env=os.environ.copy(),
+                        start_new_session=True,
+                    )
+                    os.close(slave_fd)
+                    terminal = self.terminal
+                    if terminal:
+                        terminal.set_pty_process(self.sim_process, master_fd)
+                else:
+                    # Windows: 使用 ConPTY (pywinpty) 提供真实终端，使 sshkeyboard/msvcrt 正常工作
+                    if not _WINPTY_AVAILABLE:
+                        raise RuntimeError(
+                            "pywinpty 未安装，请运行: pip install pywinpty"
+                        )
+                    self._pty_master_fd = None
+                    self._win_pty = _winpty.PtyProcess.spawn(cmd)
+                    self.sim_process = self._win_pty
+                    terminal = self.terminal
+                    if terminal:
+                        terminal.set_win_pty_process(self._win_pty)
+            else:
+                # 重定向输出到文件
+                log_file_path = get_user_log_folder() / "sim_output.log"
+
+                if self._log_file:
+                    self._log_file.close()
+                    self._log_file = None
+
+                self._log_file = open(log_file_path, "w", encoding="utf-8")
                 self.sim_process = subprocess.Popen(
                     cmd,
-                    stdin=slave_fd,
-                    stdout=slave_fd,
-                    stderr=slave_fd,
                     env=os.environ.copy(),
                     start_new_session=True,
+                    stdout=self._log_file,
+                    stderr=self._log_file,
                 )
-                os.close(slave_fd)
-                self.terminal.set_pty_process(self.sim_process, master_fd)
-            else:
-                # Windows: 使用 ConPTY (pywinpty) 提供真实终端，使 sshkeyboard/msvcrt 正常工作
-                if not _WINPTY_AVAILABLE:
-                    raise RuntimeError(
-                        "pywinpty 未安装，请运行: pip install pywinpty"
-                    )
-                self._pty_master_fd = None
-                self._win_pty = _winpty.PtyProcess.spawn(cmd)
-                self.sim_process = self._win_pty
-                self.terminal.set_win_pty_process(self._win_pty)
 
             # 在terminal_widget中显示启动信息
-            self.terminal._append_output(f"启动进程: {' '.join(cmd)}\n")
-            self.terminal._append_output(f"工作目录: {os.getcwd()}\n")
-            self.terminal._append_output("-" * 50 + "\n")
+            self._append_terminal(f"启动进程: {' '.join(cmd)}\n")
+            self._append_terminal(f"工作目录: {os.getcwd()}\n")
+            self._append_terminal("-" * 50 + "\n")
             logger.info("启动外部程序: %s", " ".join(cmd))
 
-            # 启动输出读取线程
-            if sys.platform != "win32":
-                self._start_pty_output_thread()
-            else:
-                self._start_winpty_output_thread()
+            if self._redirect_to_widget:
+                # 启动输出读取线程
+                if sys.platform != "win32":
+                    self._start_pty_output_thread()
+                else:
+                    self._start_winpty_output_thread()
 
             return True
 
         except Exception as e:
             logger.exception("启动外部程序失败: %s", e)
-            self.terminal._append_output(f"启动进程失败: {str(e)}\n")
+            self._append_terminal(f"启动进程失败: {str(e)}\n")
             return False
 
-    def _append_line_to_terminal(self, line: str):
-        # 使用信号槽机制确保在主线程中更新UI
-        QtCore.QMetaObject.invokeMethod(
-            self.terminal,
-            "_append_output_safe",
-            QtCore.Qt.ConnectionType.QueuedConnection,
-            QtCore.Q_ARG(str, line),
-        )
+    def _append_terminal(self, line: str):
+        terminal = self.terminal
+        if terminal:
+            terminal._append_output(line)
+        logger.info(line)
 
     def _start_pty_output_thread(self):
         """启动PTY输出读取线程"""
@@ -265,7 +289,7 @@ class SimulationService(SimulationRequest):
                             data = os.read(self._pty_master_fd, 4096)
                             if data:
                                 text = data.decode("utf-8", errors="replace")
-                                self._append_line_to_terminal(text)
+                                self._append_terminal(text)
                             else:
                                 break
                         except OSError:
@@ -275,12 +299,10 @@ class SimulationService(SimulationRequest):
                 if self.sim_process:
                     return_code = self.sim_process.poll()
                     if return_code is not None:
-                        self._append_line_to_terminal(
-                            f"\n进程退出，返回码: {return_code}\n"
-                        )
+                        self._append_terminal(f"\n进程退出，返回码: {return_code}\n")
 
             except Exception as e:
-                self._append_line_to_terminal(f"读取输出时出错: {str(e)}\n")
+                self._append_terminal(f"读取输出时出错: {str(e)}\n")
 
         self.output_thread = threading.Thread(target=read_pty_output, daemon=True)
         self.output_thread.start()
@@ -288,6 +310,7 @@ class SimulationService(SimulationRequest):
     def _start_winpty_output_thread(self):
         """启动 ConPTY 输出读取线程（Windows）"""
         import threading
+
         win_pty = self._win_pty
 
         def read_winpty_output():
@@ -296,16 +319,16 @@ class SimulationService(SimulationRequest):
                     try:
                         data = win_pty.read(4096)
                         if data:
-                            self._append_line_to_terminal(data)
+                            self._append_terminal(data)
                     except EOFError:
                         break
                     except Exception:
                         break
 
                 exit_code = win_pty.exitstatus
-                self._append_line_to_terminal(f"\n进程退出，返回码: {exit_code}\n")
+                self._append_terminal(f"\n进程退出，返回码: {exit_code}\n")
             except Exception as e:
-                self._append_line_to_terminal(f"读取输出时出错: {str(e)}\n")
+                self._append_terminal(f"读取输出时出错: {str(e)}\n")
 
         self.output_thread = threading.Thread(target=read_winpty_output, daemon=True)
         self.output_thread.start()
@@ -314,7 +337,26 @@ class SimulationService(SimulationRequest):
 
     @override
     async def start_simulation(self) -> None:
-        await asyncWrap(self.show_launch_dialog)
+
+        # 只有全屏模式才允许通过命令行参数直接启动场景，否则一律弹出选择界面
+        parser = create_argparser()
+        args, unknown = parser.parse_known_args()
+
+        full_screen = args.full_screen
+        if full_screen:
+            self._redirect_to_widget = False
+
+        sim_config_cli = getattr(args, "sim_config", None)
+        if full_screen and type(sim_config_cli) is str and sim_config_cli.strip():
+            if sim_config_cli == "external":
+                await self._on_no_external_program_async()
+            else:
+                await self._on_external_program_selected_async(sim_config_cli)
+
+            if self._sim_state != SimulationState.Running:
+                exit(0)
+        else:
+            await asyncWrap(self.show_launch_dialog)
 
     @override
     async def stop_simulation(self) -> None:
@@ -334,13 +376,13 @@ class SimulationService(SimulationRequest):
             self.sim_process_running = False
 
             if self.sim_process is not None:
-                self.terminal._append_output("\n" + "-" * 50 + "\n")
-                self.terminal._append_output("正在停止进程...\n")
+                self._append_terminal("\n" + "-" * 50 + "\n")
+                self._append_terminal("正在停止进程...\n")
 
                 if self._win_pty is not None:
                     try:
                         self._win_pty.terminate(force=True)
-                        self.terminal._append_output("进程已终止\n")
+                        self._append_terminal("进程已终止\n")
                     except Exception:
                         pass
                     self._win_pty = None
@@ -348,11 +390,11 @@ class SimulationService(SimulationRequest):
                     self.sim_process.terminate()
                     try:
                         self.sim_process.wait(timeout=5)
-                        self.terminal._append_output("进程已正常终止\n")
+                        self._append_terminal("进程已正常终止\n")
                     except subprocess.TimeoutExpired:
                         self.sim_process.kill()
                         self.sim_process.wait()
-                        self.terminal._append_output("进程已强制终止\n")
+                        self._append_terminal("进程已强制终止\n")
 
                 # 关闭PTY主端（Linux/macOS）
                 if self._pty_master_fd is not None:
@@ -363,7 +405,13 @@ class SimulationService(SimulationRequest):
                     self._pty_master_fd = None
 
                 self.sim_process = None
-                self.terminal.clear_pty_process()
+                terminal = self.terminal
+                if terminal:
+                    terminal.clear_pty_process()
+
+                if self._log_file:
+                    self._log_file.close()
+                    self._log_file = None
 
             await asyncio.sleep(0.5)
             await self.remote_scene.restore_state()
@@ -398,7 +446,9 @@ class SimulationService(SimulationRequest):
                             pass
                         self._pty_master_fd = None
                     self.sim_process = None
-                    self.terminal.clear_pty_process()
+                    terminal = self.terminal
+                    if terminal:
+                        terminal.clear_pty_process()
                     await self.remote_scene.set_sync_from_mujoco_to_scene(False)
                     await self.remote_scene.change_sim_state(self.sim_process_running)
                     await self._set_simulation_state(SimulationState.Failed)
