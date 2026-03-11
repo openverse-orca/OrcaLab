@@ -24,8 +24,22 @@ def create_argparser():
         "--init-config", action="store_true", help="初始化配置文件并退出"
     )
 
+    parser.add_argument("--verbose", action="store_true", help="输出所有信息到终端")
+
     parser.add_argument(
-        "--verbose", action="store_true", help="输出所有信息到终端"
+        "--scene", type=str, help="指定要加载的场景文件。不指定会弹出场景选择界面。"
     )
+    parser.add_argument(
+        "--layout",
+        type=str,
+        help="指定要加载的布局文件。'default', 'blank' 或者布局文件路径。不指定会加载默认布局。",
+    )
+    parser.add_argument(
+        "--sim-config",
+        type=str,
+        help="指定要加载的仿真配置名称，必须在配置文件中存在。如果是'external'则使用外部程序模式启动。\
+        不指定会弹出配置选择界面。这个参数只有在'--full-screen'模式下才会生效。",
+    )
+    parser.add_argument("--full-screen", action="store_true", help="以全屏模式启动应用")
 
     return parser

@@ -175,6 +175,8 @@ class MainWindow(
         else:
             logger.info("用户拒绝发送统计数据")
 
+        await asyncio.sleep(0.5)
+        
         logger.info("初始化引擎...")
         self._viewport_widget.init_viewport()
         self._viewport_widget.start_viewport_main_loop()
@@ -839,79 +841,17 @@ class MainWindow(
 
     async def load_scene_layout(self, filename):
         resolved = self._resolve_path(filename)
-        try:
-            with open(filename, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception as e:
-            logger.exception("读取场景布局文件失败: %s", e)
+        
+        helper = SceneLayoutHelper(self.local_scene)
+        if not await helper.load_scene_layout(self, filename):
             return
-
-        await self.clear_scene_layout(self.local_scene.root_actor)
-        errors = []
-        await self.create_actor_from_scene_layout(data, errors=errors)
-
-        if errors:
-            error_detail = "\n".join(errors)
-            logger.warning("加载场景布局时部分Actor创建失败:\n%s", error_detail)
-            QtCore.QTimer.singleShot(0, lambda: QtWidgets.QMessageBox.warning(
-                self,
-                "加载场景布局警告",
-                f"场景布局 '{filename}' 加载过程中部分Actor创建失败:\n\n{error_detail}",
-                QtWidgets.QMessageBox.StandardButton.Ok,
-            ))
 
         self.current_layout_path = resolved
         self._infer_scene_and_layout_names()
         self._mark_layout_clean()
-        self._update_title()
         self.undo_service.command_history = []
         self.undo_service.command_history_index = -1
 
-    async def clear_scene_layout(self, actor):
-        if isinstance(actor, GroupActor):
-            for child_actor in actor.children:
-                await self.clear_scene_layout(child_actor)
-        if actor != self.local_scene.root_actor:
-            await SceneEditRequestBus().delete_actor(actor)
-
-        await SceneEditRequestBus().set_selection([], undo=False)
-
-    async def create_actor_from_scene_layout(self, actor_data, parent: GroupActor = None, errors: List[str] = None):
-        if errors is None:
-            errors = []
-
-        name = actor_data["name"]
-        actor_type = actor_data.get("type", "BaseActor")
-        if actor_type == "AssetActor":
-            asset_path = actor_data.get("asset_path", "")
-            actor = AssetActor(name=name, asset_path=asset_path)
-        else:
-            actor = GroupActor(name=name)
-
-        transform_data = actor_data.get("transform", {})
-        position = np.array(ast.literal_eval(transform_data["position"]), dtype=float).reshape(3)
-        rotation = np.array(ast.literal_eval(transform_data["rotation"]), dtype=float)
-        scale = transform_data.get("scale", 1.0)
-        transform = Transform(position, rotation, scale)
-        actor.transform = transform
-
-        if name == "root":
-            actor = self.local_scene.root_actor
-        else:
-            try:
-                await SceneEditRequestBus().add_actor(actor=actor, parent_actor=parent)
-            except Exception as e:
-                error_msg = f"创建 Actor {name} 失败: {e}, asset_path: {actor.asset_path}"
-                logger.warning(error_msg)
-                errors.append(error_msg)
-                self.terminal_widget._append_output(f"{error_msg}\n")
-                self.terminal_widget._append_output(f"确认是否有未订阅资产包， 资产包是否已更新\n")
-
-        if isinstance(actor, GroupActor):
-            for child_data in actor_data.get("children", []):
-                await self.create_actor_from_scene_layout(child_data, actor, errors)
-        self._layout_modified = True
-        self._update_title()
         logger.debug("create_actor_from_scene_layout: 标记布局已修改")
 
     def prepare_edit_menu(self):
