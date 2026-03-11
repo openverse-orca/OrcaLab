@@ -33,6 +33,7 @@
 
     <file alias="grab.png">icons/opvs_grab.png</file>
     <file alias="physics.png">icons/opvs_physics.png</file>
+    <file alias="orcalab_logo.png">icons/orcalab_logo.png</file>
 
 
 </qresource>

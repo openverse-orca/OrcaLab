@@ -23,10 +23,17 @@ from orcalab.process_guard import ensure_single_instance
 import os
 
 # import PySide6.QtAsyncio as QtAsyncio
-from PySide6 import QtWidgets
+from PySide6 import QtWidgets, QtGui
+import orcalab.assets.rc_assets
 
 from qasync import QEventLoop
 from orcalab.python_project_installer import ensure_python_project_installed
+
+# This is needed to display the app icon on the taskbar on Windows
+if os.name == 'nt':
+    import ctypes
+    myappid = 'opvs.orca.orcalab.version' # Arbitrary string
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 # Global variable to store main window instance for cleanup
 _main_window = None
@@ -103,6 +110,7 @@ def main():
     register_signal_handlers()
 
     q_app = QtWidgets.QApplication(sys.argv)
+    q_app.setWindowIcon(QtGui.QIcon(":/icons/orcalab_logo.png"))
 
     # Ensure the external Python project (orcalab-pyside) is present and installed
     try:
