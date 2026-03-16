@@ -164,6 +164,27 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
     # SceneEditNotificationBus overrides
     #
 
+    def _compute_new_path(self, renamed_path: Path, new_name: str) -> Path | None:
+        """如果重命名操作影响了当前 actor 路径，返回更新后的路径，否则返回 None。"""
+        new_renamed = renamed_path.parent() / new_name
+        if self._actor_path == renamed_path:
+            return new_renamed
+        if self._actor_path.is_descendant_of(renamed_path):
+            suffix = self._actor_path.string()[len(renamed_path.string()):]
+            return Path(new_renamed.string() + suffix)
+        return None
+
+    @override
+    async def on_actor_renamed(self, actor_path: Path, new_name: str, source: str):
+        new_path = self._compute_new_path(actor_path, new_name)
+        if new_path is None:
+            return
+
+        self._actor_path = new_path
+        for edit in self._property_edits:
+            edit.context.actor_path = new_path
+            edit.context.key.actor_path = new_path
+
     @override
     async def on_property_changed(
         self,
