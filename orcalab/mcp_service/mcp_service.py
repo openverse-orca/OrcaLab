@@ -10,7 +10,7 @@ from fastmcp.utilities.types import Image
 from orcalab.config_service import ConfigService
 from orcalab.remote_scene import RemoteScene
 from scipy.spatial.transform import Rotation
-from orcalab.transform import Transform
+from orcalab.math import Transform
 from orcalab.metadata_service_bus import MetadataServiceRequestBus
 from orcalab.scene_edit_bus import SceneEditNotificationBus, SceneEditRequestBus
 from orcalab.actor import AssetActor, BaseActor, GroupActor
