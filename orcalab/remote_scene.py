@@ -485,6 +485,7 @@ class RemoteScene(SceneEditNotification):
         values = await self.get_properties(keys)
         for prop, value in zip(props, values):
             prop.set_value(value)
+            prop.set_original_value(value)
 
     ############################################################
     #

@@ -780,6 +780,7 @@ class MainWindow(
         if isinstance(actor, AssetActor):
             data["type"] = "AssetActor"
             data["asset_path"] = actor._asset_path
+            data["modified_properties"] = SceneLayoutHelper.collect_modified_properties(actor)
 
         if isinstance(actor, GroupActor):
             data["type"] = "GroupActor"
