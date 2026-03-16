@@ -255,29 +255,7 @@ class OrcaLabMCPServer:
     #     Returns:
     #         相机位置的json字符串格式
     #     '''
-    #     camera_name = "scene_camera"
-        
-    #     try:
-    #         actors = []
-    #         quat = Rotation.from_euler("xyz", [-15, 0, 0], degrees=True).as_quat()[[3, 0, 1, 2]]
-    #         await ApplicationRequestBus().add_item_to_scene_with_transform(
-    #             camera_name, 
-    #             f"prefabs/{camera_name}", 
-    #             parent_path=Path.root_path(), 
-    #             transform=Transform(position=np.array([0, -2.5, 2]), rotation=quat, scale=1.0), 
-    #             output=actors
-    #         )
-    #         if not actors:
-    #             error_msg = f"无法添加相机 {camera_name} 到场景，资产路径 prefabs/{camera_name} 可能不存在"
-    #             print(error_msg)
-    #             return json.dumps({"error": error_msg}, ensure_ascii=False)
-    #         actor = actors[0]
-    #         actor_transform = actor.transform
-    #         return json.dumps(actor_transform.to_dict(), ensure_ascii=False)
-    #     except Exception as e:
-    #         error_msg = f"添加相机失败: {str(e)}"
-    #         print(error_msg)
-    #         return json.dumps({"error": error_msg}, ensure_ascii=False)
+    #     pass
       
 
     # async def get_camera_png(self) -> Image:
@@ -288,104 +266,7 @@ class OrcaLabMCPServer:
     #     Returns:
     #         相机截图
     #     '''
-    #     # 截图服务只识别特定的相机名称，必须使用 "mujococamera1080"
-    #     camera_name = "mujococamera1080"
-    #     camera_actor = None
-        
-    #     # 首先尝试从场景中查找名为 "mujococamera1080" 的相机
-    #     actors: List[Dict[Path, BaseActor]] = []
-    #     self.scene_edit_bus.get_all_actors(actors)
-    #     if len(actors) > 0 and actors[0] is not None:
-    #         actors_dict: Dict[Path, BaseActor] = actors[0]
-    #         for path, actor in actors_dict.items():
-    #             if isinstance(actor, AssetActor) and actor.name == camera_name:
-    #                 camera_actor = actor
-    #                 break
-        
-    #     # 如果场景中没有名为 "mujococamera1080" 的相机，添加一个
-    #     if camera_actor is None:
-    #         try:
-    #             actors = []
-    #             quat = Rotation.from_euler("xyz", [0, 0, -90], degrees=True).as_quat()[[3, 0, 1, 2]]
-    #             await ApplicationRequestBus().add_item_to_scene_with_transform(
-    #                 camera_name, 
-    #                 f"prefabs/{camera_name}", 
-    #                 parent_path=Path.root_path(), 
-    #                 transform=Transform(position=np.array([6, 0, 1]), rotation=quat, scale=1.0), 
-    #                 output=actors
-    #             )
-    #             if not actors:
-    #                 raise Exception(f"无法添加相机 {camera_name} 到场景，资产路径 prefabs/{camera_name} 可能不存在")
-    #             camera_actor = actors[0]
-    #         except Exception as e:
-    #             raise Exception(f"添加相机失败: {str(e)}")
-        
-    #     # 创建临时目录和文件路径（参考 thumbnail_render_service.py）
-    #     # 使用用户目录下的 .orcalab/tmp 目录，而不是系统临时目录
-    #     temp_base_dir = os.path.join(os.path.expanduser("~"), ".orcalab", "tmp")
-    #     os.makedirs(temp_base_dir, exist_ok=True)
-        
-    #     # 使用时间戳确保文件名唯一
-    #     timestamp = int(time.time() * 1000)
-    #     png_name = f"camera_screenshot_{camera_name}.png"
-    #     png_path = os.path.join(temp_base_dir, png_name)
-        
-    #     try:
-    #         # 等待一小段时间，确保相机已完全初始化（参考 thumbnail_render_service.py）
-    #         await asyncio.sleep(0.1)
-            
-    #         # 获取相机截图（参考 thumbnail_render_service.py 的实现）
-    #         await SceneEditNotificationBus().get_camera_png(camera_name, temp_base_dir, png_name)
-            
-    #         # 等待一小段时间，让截图请求处理（参考 thumbnail_render_service.py:85）
-    #         await asyncio.sleep(0.01)
-            
-    #         # 使用重试机制等待文件生成（参考 thumbnail_render_service.py:99-112）
-    #         retry = 0
-    #         max_retries = 100  # 最多重试100次，每次0.1秒，总共10秒
-    #         last_error = None
-    #         while retry < max_retries:
-    #             if os.path.exists(png_path):
-    #                 try:
-    #                     # 尝试打开文件，确保文件已完全写入（参考 thumbnail_render_service.py:104）
-    #                     from PIL import Image as PILImage
-    #                     img = PILImage.open(png_path)
-    #                     img.close()  # 立即关闭，我们只需要验证文件可读
-                        
-    #                     # 文件已完全写入，读取图片数据
-    #                     with open(png_path, 'rb') as f:
-    #                         image_data = f.read()
-    #                         if len(image_data) > 0:  # 确保文件不为空
-    #                             print(f"[get_camera_png] 成功读取截图: {png_path}, 大小: {len(image_data)} bytes")
-    #                             # 创建 Image 对象（使用 format 参数而不是 mime_type）
-    #                             return Image(data=image_data, format="png")
-    #                         else:
-    #                             last_error = "文件为空"
-    #                 except Exception as e:
-    #                     # 文件可能还在写入中，继续重试
-    #                     last_error = str(e)
-    #                     retry += 1
-    #                     await asyncio.sleep(0.1)
-    #                     continue
-    #             else:
-    #                 await asyncio.sleep(0.1)
-    #                 retry += 1
-    #                 if retry % 10 == 0:  # 每1秒打印一次日志
-    #                     print(f"[get_camera_png] 等待文件生成... ({retry}/{max_retries}), 路径: {png_path}")
-            
-    #         # 如果重试后仍然失败，抛出异常
-    #         raise Exception(f"相机截图文件未生成: {png_path} (重试了 {max_retries} 次, 最后错误: {last_error})")
-            
-    #     finally:
-    #         # 清理临时文件
-    #         try:
-    #             if os.path.exists(png_path):
-    #                 os.remove(png_path)
-    #             # 删除我们添加的相机（如果存在）
-    #             if camera_actor is not None:
-    #                 await SceneEditRequestBus().delete_actor(camera_actor, undo=False, source="get_camera_png")
-    #         except Exception as e:
-    #             print(f"清理临时文件失败: {e}")
+    #    pass
 
     # async def get_scene_screenshot(self) -> Image:
     #     '''
@@ -543,82 +424,6 @@ class OrcaLabMCPServer:
             return json.dumps({"success": False, "message": f"改变Actor父级失败: {e}"}, ensure_ascii=False)
 
 
-    async def add_item_to_scene(self, asset_path: str, item_name: str = None) -> str:
-        '''
-        添加资产到场景（简化版）
-        Args:
-            asset_path: 资产在资产库中的路径
-            item_name: 可选，指定Actor名称
-        Returns:
-            操作结果的json字符串格式
-        '''
-        try:
-            # 使用 SceneEditRequestBus 直接添加 Actor，参考 main_window.py 的实现
-            from orcalab.actor_util import make_unique_name
-
-            parent_path = Path.root_path()
-            name = item_name if item_name else asset_path
-            # 确保名称唯一
-            name = make_unique_name(name, parent_path)
-
-            # 创建 AssetActor
-            actor = AssetActor(name=name, asset_path=asset_path)
-            # 添加到场景
-            await self.scene_edit_bus.add_actor(actor, parent_path, undo=True, source="mcp")
-
-            return json.dumps({
-                "success": True,
-                "message": f"成功添加资产 '{asset_path}' 到场景",
-                "actor_name": name,
-                "actor_path": asset_path
-            }, ensure_ascii=False)
-        except Exception as e:
-            return json.dumps({"success": False, "message": f"添加资产到场景失败: {e}"}, ensure_ascii=False)
-
-    async def add_item_to_scene_with_transform(self, asset_path: str, position: List[float], rotation: List[float], scale: float, item_name: str = None) -> str:
-        '''
-        添加资产到场景并设置变换
-        Args:
-            asset_path: 资产在资产库中的路径
-            position: 位置 [x, y, z]
-            rotation: 旋转 [w, x, y, z] (四元数)
-            scale: 缩放因子
-            item_name: 可选，指定Actor名称
-        Returns:
-            操作结果的json字符串格式
-        '''
-        try:
-            from orcalab.actor_util import make_unique_name
-
-            position_array = np.array(position, dtype=np.float64)
-            rotation_array = np.array(rotation, dtype=np.float64)
-            transform = Transform(position=position_array, rotation=rotation_array, scale=scale)
-
-            parent_path = Path.root_path()
-            name = item_name if item_name else asset_path
-            # 确保名称唯一
-            name = make_unique_name(name, parent_path)
-
-            # 创建 AssetActor 并设置变换
-            actor = AssetActor(name=name, asset_path=asset_path)
-            actor.transform = transform
-            # 添加到场景
-            await self.scene_edit_bus.add_actor(actor, parent_path, undo=True, source="mcp")
-
-            return json.dumps({
-                "success": True,
-                "message": f"成功添加资产 '{asset_path}' 到场景并设置变换",
-                "actor_name": name,
-                "actor_path": asset_path,
-                "transform": {
-                    "position": position,
-                    "rotation": rotation,
-                    "scale": scale
-                }
-            }, ensure_ascii=False)
-        except Exception as e:
-            return json.dumps({"success": False, "message": f"添加资产到场景失败: {e}"}, ensure_ascii=False)
-
     # ==================== 仿真状态类 API ====================
 
     def get_simulation_state(self) -> str:
@@ -754,6 +559,32 @@ class OrcaLabMCPServer:
         except Exception as e:
             return json.dumps({"success": False, "message": f"设置视口相机失败: {e}"}, ensure_ascii=False)
 
+    # ==================== 系统信息类 API ====================
+
+    def get_engine_info(self) -> str:
+        '''
+        获取引擎版本和基础信息
+        Args:
+            无需传递参数
+        Returns:
+            引擎版本和基础信息的json字符串格式，包括：
+            - engine_version: 引擎版本号
+            - app_version: OrcaLab应用版本号
+        '''
+        try:
+            # 安全地获取配置信息
+            config = getattr(self.config_service, 'config', {})
+            engine_version = config.get("orcalab", {}).get("version", "unknown")
+            app_version = self.config_service.app_version()
+            
+            info = {
+                "engine_version": engine_version,
+                "app_version": app_version,
+            }
+            return json.dumps(info, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"success": False, "message": f"获取引擎信息失败: {e}"}, ensure_ascii=False)
+
     def add_tools(self):
         # 资产元数据类
         self.mcp.tool(self.get_asset_map)
@@ -770,9 +601,7 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.delete_actor)
         self.mcp.tool(self.rename_actor)
         self.mcp.tool(self.reparent_actor)
-        self.mcp.tool(self.add_item_to_scene)
-        self.mcp.tool(self.add_item_to_scene_with_transform)
-
+        
         # 选择操作类
         self.mcp.tool(self.set_selection)
         self.mcp.tool(self.clear_selection)
@@ -803,6 +632,8 @@ class OrcaLabMCPServer:
         # 相机控制
         self.mcp.tool(self.set_viewport_camera)
 
+        # 系统信息类
+        self.mcp.tool(self.get_engine_info)
         
     async def run(self):
         await self.mcp.run_async(transport="http", port=self.port)
