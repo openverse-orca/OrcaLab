@@ -506,18 +506,25 @@ class RemoteScene(SceneEditNotification):
         return await self._service.get_pending_actor_transform(path, local)
 
     async def add_actor(self, actor: BaseActor, parent_path: Path):
+        print(f"Adding actor {actor.name} under {parent_path}")
         async with self._grpc_lock:
             if isinstance(actor, GroupActor):
                 await self._service.add_group_actor(actor, parent_path)
             elif isinstance(actor, AssetActor):
+                await self._service.custom_command("pause_render:true")
+                await asyncio.sleep(0.1)
                 await self._service.add_asset_actor(actor, parent_path)
+                await asyncio.sleep(0.1)
+                await self._service.custom_command("pause_render:false")
             else:
                 raise Exception(f"Unsupported actor type: {type(actor)}")
 
     async def set_actor_transform(self, path: Path, transform: Transform, local: bool):
+        print(f"Setting transform for actor {path}, local={local}: {transform}")
         await self._service.set_actor_transform(path, transform, local)
 
     async def publish_scene(self):
+        print("Publishing scene...")
         async with self._grpc_lock:
             await self._service.publish_scene()
 
@@ -530,6 +537,7 @@ class RemoteScene(SceneEditNotification):
             await self._service.set_sync_from_mujoco_to_scene(value)
 
     async def clear_scene(self):
+        print("Clearing scene...")
         async with self._grpc_lock:
             await self._service.clear_scene()
 
@@ -550,16 +558,23 @@ class RemoteScene(SceneEditNotification):
             return await self._service.get_actor_assets()
 
     async def save_state(self):
+        print("Saving state...")
         async with self._grpc_lock:
             await self._service.save_state()
 
     async def restore_state(self):
+        print("Restoring state...")
         async with self._grpc_lock:
             await self._service.restore_state()
 
     async def delete_actor(self, actor_path: Path):
+        print(f"Deleting actor {actor_path}")
         async with self._grpc_lock:
+            await self._service.custom_command("pause_render:true")
+            await asyncio.sleep(0.1)
             await self._service.delete_actor(actor_path)
+            await asyncio.sleep(0.1)
+            await self._service.custom_command("pause_render:false")
 
     async def rename_actor(self, actor_path: Path, new_name: str):
         await self._service.rename_actor(actor_path, new_name)
