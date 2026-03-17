@@ -81,6 +81,9 @@ async def main_async(q_app, fullscreen: bool):
     await main_window.cleanup()
 
 
+_ADMIN_ONLY_LEVELS = {"previewthumbnail_orcalab"}
+
+
 def select_scene_and_layout(
     config_service: ConfigService,
     levels: List[dict],
@@ -89,6 +92,31 @@ def select_scene_and_layout(
     layout_cli: str | None,
 ):
     layout_mode = "unset"
+
+    from orcalab.token_storage import TokenStorage
+    import requests as _requests
+
+    def _check_is_admin() -> bool:
+        token = TokenStorage.load_token()
+        if not token:
+            return False
+        base_url = config_service.datalink_base_url()
+        headers = {
+            "Authorization": f"Bearer {token['access_token']}",
+            "username": token["username"],
+            "Content-Type": "application/json",
+        }
+        try:
+            resp = _requests.get(f"{base_url}/is_admin/", headers=headers, timeout=10)
+            if resp.status_code != 200:
+                return False
+            return resp.json().get("isAdmin", False)
+        except Exception:
+            return False
+
+    if not _check_is_admin():
+        levels = [l for l in levels if l.get("name") not in _ADMIN_ONLY_LEVELS
+                  and l.get("path") not in _ADMIN_ONLY_LEVELS]
 
     # 1. 选择场景，优先级：命令行 > 场景选择界面
 
@@ -187,14 +215,16 @@ def main():
     args, unknown = parser.parse_known_args()
 
     console_level = logging.INFO
-    if getattr(args, "log_level", None):
+    if getattr(args, "log_level", logging.INFO):
         try:
             console_level = resolve_log_level(args.log_level)
         except ValueError as exc:
             print(exc, file=sys.stderr)
             sys.exit(2)
 
-    setup_logging(console_level=console_level)
+    logger = setup_logging(console_level=console_level)
+
+    logger.info("进程 PID: %d", os.getpid())
 
     workspace = pathlib.Path(args.workspace).resolve()
     logger.info("工作目录: %s", workspace)
