@@ -60,7 +60,27 @@ class OrcaLabMCPServer:
         output = []
         self.metadata_service_bus.get_asset_map(output)
         asset_map = output[0]
-        return json.dumps(asset_map, ensure_ascii=False)
+        # 去除分类为场景的资产信息，每个资产只返回 name / category / description / assetpath
+        def _category_str(val):  # category 可能是 str 或 list
+            if val is None:
+                return ""
+            if isinstance(val, list):
+                return "/".join(str(x) for x in val) if val else ""
+            return str(val)
+
+        result = {}
+        for path, info in asset_map.items():
+            cat = _category_str(info.get("category"))
+            if "scene" in cat.lower():
+                continue
+            result[path] = {
+                "name": info.get("name", ""),
+                "category": cat,
+                "description": info.get("description", ""),
+                "is3dgs": info.get("is3dgs", False),
+                "assetpath": path,
+            }
+        return json.dumps(result, ensure_ascii=False)
 
     def get_asset_info(self, asset_path: str) -> str:
         '''
@@ -108,7 +128,7 @@ class OrcaLabMCPServer:
 
     def get_actor_transform(self, actor_path: str) -> str:
         '''
-        获取Actor的变换
+        获取当前场景中Actor的变换信息
         Args:
             actor_path: Actor在场景中的路径
         Returns:
@@ -138,7 +158,7 @@ class OrcaLabMCPServer:
 
     async def set_actor_transform(self, actor_path: str, position: List[float], rotation: List[float], scale: float) -> str:
         '''
-        设置Actor的变换
+        设置当前场景中Actor的变换信息
         Args:
             actor_path: Actor在场景中的路径
             position: Actor的位置
@@ -154,12 +174,12 @@ class OrcaLabMCPServer:
         await self.scene_edit_bus.set_transform(Path(actor_path), transform, local=True, undo=True, source="mcp")
         return json.dumps({"success": True, "message": "成功设置Actor的变换"}, ensure_ascii=False)
 
-    async def add_actor(self, actor_name:str, actor_path: str, parent_path: str = None) -> str:
+    async def add_actor(self, actor_name:str, actor_path: str, parent_path: str = "/") -> str:
         '''
         添加Actor
         Args:
-            actor_name: Actor的名称
-            actor_path: Actor在资产库中的路径，通过get_asset_map 或者get_asset_info获取
+            actor_name: Actor的名称（可以自定义，不要使用中文，最好都用小写，符合python变量命名规范）
+            actor_path: Actor在资产库中的路径，通过get_asset_map 或者get_asset_info获取，注意资产路径需要去掉后缀spawnable（资产路径示例： assets/e071469a36d3c8aa/default_project/prefabs/remy)
             parent_path: Actor的父Actor在场景中的路径，默认为"/" 
             
         Returns:
