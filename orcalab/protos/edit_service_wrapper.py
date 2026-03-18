@@ -1,4 +1,3 @@
-import asyncio
 import grpc
 import numpy as np
 from dataclasses import dataclass, field
@@ -9,7 +8,7 @@ import orcalab.protos.edit_service_pb2 as edit_service_pb2
 
 from orcalab.math import Transform
 from orcalab.path import Path
-from orcalab.actor import BaseActor, GroupActor, AssetActor
+from orcalab.actor import GroupActor, AssetActor
 from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
@@ -17,6 +16,7 @@ from orcalab.actor_property import (
     ActorPropertyType,
     TreePropertyNode,
 )
+from orcalab.scene_edit_types import AddActorRequest
 from orcalab.ui.camera.camera_brief import CameraBrief
 
 Success = edit_service_pb2.StatusCode.Success
@@ -74,6 +74,12 @@ class EditServiceWrapper:
         if response.status_code != Success:
             print(f"[Error] {response.error_message}")
             raise Exception(f"Request failed. {response.error_message}")
+
+    def _check_response_no_exception(self, response) -> str:
+        if response.status_code != Success:
+            print(f"[Error] {response.error_message}")
+            return response.error_message
+        return ""
 
     async def aloha(self) -> bool:
         try:
@@ -420,6 +426,23 @@ class EditServiceWrapper:
             node.children.append(child_node)
         return node
 
+    def _parse_property_group_msg(self, pg_msg) -> ActorPropertyGroup:
+        pg = ActorPropertyGroup(
+            prefix=pg_msg.prefix, name=pg_msg.name, hint=pg_msg.hint
+        )
+
+        for prop_msg in pg_msg.properties:
+            prop = self._parse_property_msg(prop_msg)
+            if prop:
+                pg.properties.append(prop)
+
+        # 解析树形数据
+        for tree_node_msg in pg_msg.tree_data:
+            tree_node = self._parse_tree_node_msg(tree_node_msg)
+            pg.tree_data.append(tree_node)
+
+        return pg
+
     async def get_property_groups(self, actor_path: Path) -> List[ActorPropertyGroup]:
         request = edit_service_pb2.GetPropertyGroupsRequest()
         request.actor_path = actor_path.string()
@@ -429,23 +452,29 @@ class EditServiceWrapper:
         property_groups: List[ActorPropertyGroup] = []
 
         for pg_msg in response.property_groups:
-            pg = ActorPropertyGroup(
-                prefix=pg_msg.prefix, name=pg_msg.name, hint=pg_msg.hint
-            )
-
-            for prop_msg in pg_msg.properties:
-                prop = self._parse_property_msg(prop_msg)
-                if prop:
-                    pg.properties.append(prop)
-
-            # 解析树形数据
-            for tree_node_msg in pg_msg.tree_data:
-                tree_node = self._parse_tree_node_msg(tree_node_msg)
-                pg.tree_data.append(tree_node)
-
+            pg = self._parse_property_group_msg(pg_msg)
             property_groups.append(pg)
 
         return property_groups
+
+    async def get_property_groups_batch(
+        self, actor_paths: List[Path]
+    ) -> List[List[ActorPropertyGroup]]:
+        request = edit_service_pb2.GetPropertyGroupsBatchRequest()
+        for actor_path in actor_paths:
+            request.actor_paths.append(actor_path.string())
+        response = await self.stub.GetPropertyGroupsBatch(request)
+        self._check_response(response)
+
+        all_property_groups: List[List[ActorPropertyGroup]] = []
+        for pg_list_msg in response.property_group_lists:
+            property_groups: List[ActorPropertyGroup] = []
+            for pg_msg in pg_list_msg.elements:
+                pg = self._parse_property_group_msg(pg_msg)
+                property_groups.append(pg)
+            all_property_groups.append(property_groups)
+
+        return all_property_groups
 
     def _create_property_key_message(self, key: ActorPropertyKey):
         key_msg = edit_service_pb2.PropertyKey()
@@ -562,3 +591,48 @@ class EditServiceWrapper:
         request = edit_service_pb2.SetMoveRotateSensitivityRequest(move_sensitivity=move_sensitivity, rotate_sensitivity=rotate_sensitivity)
         response = await self.stub.SetMoveRotateSensitivity(request)
         self._check_response(response)
+
+    async def add_actor_batch(self, in_requests: List[AddActorRequest]) -> str:
+        requests = []
+        for in_request in in_requests:
+            actor = in_request.actor
+            parent_path = in_request.parent_path
+
+            request_union = edit_service_pb2.AddActorRequestUnion()
+            if isinstance(actor, GroupActor):
+                transform_msg = self._create_transform_message(actor.transform)
+                request = edit_service_pb2.AddGroupRequest(
+                    actor_name=actor.name,
+                    parent_actor_path=parent_path.string(),
+                    transform=transform_msg,
+                    space=edit_service_pb2.Space.Local,
+                )
+                request_union.group_actor.CopyFrom(request)
+            elif isinstance(actor, AssetActor):
+                transform_msg = self._create_transform_message(actor.transform)
+                request = edit_service_pb2.AddAssetActorRequest(
+                    actor_name=actor.name,
+                    spawnable_name=actor.asset_path,
+                    parent_actor_path=parent_path.string(),
+                    transform=transform_msg,
+                    space=edit_service_pb2.Space.Local,
+                )
+                request_union.asset_actor.CopyFrom(request)
+            else:
+                raise ValueError("Unsupported actor type.")
+            requests.append(request_union)
+
+        batch_request = edit_service_pb2.AddActorBatchRequest(requests=requests)
+        response = await self.stub.AddActorBatch(batch_request)
+        return self._check_response_no_exception(response)
+
+    async def delete_actor_batch(self, actor_paths: List[Path]) -> str:
+        paths = []
+        for p in actor_paths:
+            if not isinstance(p, Path):
+                raise Exception(f"Invalid path: {p}")
+            paths.append(p.string())
+
+        batch_request = edit_service_pb2.DeleteActorBatchRequest(actor_paths=paths)
+        response = await self.stub.DeleteActorBatch(batch_request)
+        return self._check_response_no_exception(response)

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 from orcalab.actor import BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyKey
@@ -58,6 +58,14 @@ class SceneEditRequest:
         actor: BaseActor | Path,
         new_parent: BaseActor | Path,
         row: int,
+        undo: bool = True,
+        source: str = "",
+    ):
+        pass
+
+    async def duplicate_actor(
+        self,
+        root_actor: BaseActor | Path,
         undo: bool = True,
         source: str = "",
     ):
@@ -143,6 +151,7 @@ class SceneEditRequest:
         """
         pass
 
+
 SceneEditRequestBus = create_event_bus(SceneEditRequest)
 
 
@@ -187,6 +196,12 @@ class SceneEditNotification:
         parent_actor_path: Path,
         source: str,
     ):
+        pass
+
+    async def before_actor_added_batch(self):
+        pass
+
+    async def on_actor_added_batch(self, error: str):
         pass
 
     async def before_actor_deleted(
@@ -257,7 +272,13 @@ class SceneEditNotification:
     async def get_camera_png(self, camera_name: str, png_path: str, png_name: str):
         pass
 
-    async def get_camera_data_png(self, camera_name: str, png_path: str, index: int, output: list[CameraDataPNGResult] = None) -> CameraDataPNGResult:
+    async def get_camera_data_png(
+        self,
+        camera_name: str,
+        png_path: str,
+        index: int,
+        output: list[CameraDataPNGResult] = None,
+    ) -> CameraDataPNGResult:
         pass
 
     async def get_actor_asset_aabb(self, actor_path: Path, output: List[float]):

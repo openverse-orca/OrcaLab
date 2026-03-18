@@ -17,6 +17,7 @@ from orcalab.undo_service.command import (
     ReparentActorCommand,
     SelectionCommand,
     TransformCommand,
+    DuplicateActorCommand,
 )
 
 from orcalab.undo_service.undo_service_bus import UndoRequest, UndoRequestBus
@@ -66,6 +67,7 @@ class UndoService(UndoRequest):
     async def undo(self):
         async with self._lock:
             if self.command_history_index < 0:
+                logger.debug("No command to undo.")
                 return
 
             command = self.command_history[self.command_history_index]
@@ -81,6 +83,7 @@ class UndoService(UndoRequest):
     async def redo(self):
         async with self._lock:
             if self.command_history_index + 1 >= len(self.command_history):
+                logger.debug("No command to redo.")
                 return
 
             command = self.command_history[self.command_history_index + 1]
@@ -134,6 +137,8 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().set_property(
                     command.property_key, command.old_value, undo=False
                 )
+            case DuplicateActorCommand():
+                await SceneEditRequestBus().delete_actor(command.new_path, undo=False)
             case _:
                 raise Exception("Unknown command type.")
 
@@ -175,6 +180,8 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().set_property(
                     command.property_key, command.new_value, undo=False
                 )
+            case DuplicateActorCommand():
+                await SceneEditRequestBus().duplicate_actor(command.source_path, undo=False)
             case _:
                 raise Exception("Unknown command type.")
 

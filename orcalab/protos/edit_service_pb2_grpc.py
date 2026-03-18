@@ -124,6 +124,16 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.ReParentActorRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.ReParentActorResponse.FromString,
                 _registered_method=True)
+        self.AddActorBatch = channel.unary_unary(
+                '/SceneEdit.GrpcService/AddActorBatch',
+                request_serializer=edit__service__pb2.AddActorBatchRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.AddActorBatchResponse.FromString,
+                _registered_method=True)
+        self.DeleteActorBatch = channel.unary_unary(
+                '/SceneEdit.GrpcService/DeleteActorBatch',
+                request_serializer=edit__service__pb2.DeleteActorBatchRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.DeleteActorBatchResponse.FromString,
+                _registered_method=True)
         self.GetWindowId = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetWindowId',
                 request_serializer=edit__service__pb2.GetWindowIdRequest.SerializeToString,
@@ -208,6 +218,11 @@ class GrpcServiceStub(object):
                 '/SceneEdit.GrpcService/GetPropertyGroups',
                 request_serializer=edit__service__pb2.GetPropertyGroupsRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetPropertyGroupsResponse.FromString,
+                _registered_method=True)
+        self.GetPropertyGroupsBatch = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetPropertyGroupsBatch',
+                request_serializer=edit__service__pb2.GetPropertyGroupsBatchRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetPropertyGroupsBatchResponse.FromString,
                 _registered_method=True)
         self.GetProperties = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetProperties',
@@ -362,6 +377,18 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def AddActorBatch(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteActorBatch(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetWindowId(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -459,6 +486,12 @@ class GrpcServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetPropertyGroups(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetPropertyGroupsBatch(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -605,6 +638,16 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     request_deserializer=edit__service__pb2.ReParentActorRequest.FromString,
                     response_serializer=edit__service__pb2.ReParentActorResponse.SerializeToString,
             ),
+            'AddActorBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.AddActorBatch,
+                    request_deserializer=edit__service__pb2.AddActorBatchRequest.FromString,
+                    response_serializer=edit__service__pb2.AddActorBatchResponse.SerializeToString,
+            ),
+            'DeleteActorBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteActorBatch,
+                    request_deserializer=edit__service__pb2.DeleteActorBatchRequest.FromString,
+                    response_serializer=edit__service__pb2.DeleteActorBatchResponse.SerializeToString,
+            ),
             'GetWindowId': grpc.unary_unary_rpc_method_handler(
                     servicer.GetWindowId,
                     request_deserializer=edit__service__pb2.GetWindowIdRequest.FromString,
@@ -689,6 +732,11 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.GetPropertyGroups,
                     request_deserializer=edit__service__pb2.GetPropertyGroupsRequest.FromString,
                     response_serializer=edit__service__pb2.GetPropertyGroupsResponse.SerializeToString,
+            ),
+            'GetPropertyGroupsBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetPropertyGroupsBatch,
+                    request_deserializer=edit__service__pb2.GetPropertyGroupsBatchRequest.FromString,
+                    response_serializer=edit__service__pb2.GetPropertyGroupsBatchResponse.SerializeToString,
             ),
             'GetProperties': grpc.unary_unary_rpc_method_handler(
                     servicer.GetProperties,
@@ -1228,6 +1276,60 @@ class GrpcService(object):
             _registered_method=True)
 
     @staticmethod
+    def AddActorBatch(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/AddActorBatch',
+            edit__service__pb2.AddActorBatchRequest.SerializeToString,
+            edit__service__pb2.AddActorBatchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteActorBatch(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/DeleteActorBatch',
+            edit__service__pb2.DeleteActorBatchRequest.SerializeToString,
+            edit__service__pb2.DeleteActorBatchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def GetWindowId(request,
             target,
             options=(),
@@ -1676,6 +1778,33 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/GetPropertyGroups',
             edit__service__pb2.GetPropertyGroupsRequest.SerializeToString,
             edit__service__pb2.GetPropertyGroupsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetPropertyGroupsBatch(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetPropertyGroupsBatch',
+            edit__service__pb2.GetPropertyGroupsBatchRequest.SerializeToString,
+            edit__service__pb2.GetPropertyGroupsBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,

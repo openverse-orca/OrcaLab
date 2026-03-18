@@ -1,4 +1,5 @@
-from typing import List, Tuple, Dict
+from typing import List, Sequence, Tuple, Dict
+from functools import cmp_to_key
 
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.actor_property import (
@@ -9,6 +10,7 @@ from orcalab.actor_property import (
     TreePropertyNode,
 )
 from orcalab.path import Path
+from orcalab.scene_edit_types import AddActorRequest
 
 
 class LocalScene:
@@ -31,14 +33,15 @@ class LocalScene:
     def pseudo_root_actor(self):
         return self.root_actor
 
-    @property
-    def selection(self) -> List[Path]:
-        return self._selection.copy()
+
 
     @property
     def actors(self) -> Dict[Path, BaseActor]:
         return self._actors.copy()
-
+    @property
+    def selection(self) -> List[Path]:
+        return self._selection.copy()
+    
     @selection.setter
     def selection(self, actors: List[Path]):
         paths = []
@@ -58,7 +61,8 @@ class LocalScene:
                 return path
         return None
 
-    def get_actor_and_path(self, actor: BaseActor | Path) -> Tuple[BaseActor, Path]:
+    def normalize_actor(self, actor: BaseActor | Path) -> Tuple[BaseActor, Path]:
+        """将输入的actor规范化为(BaseActor, Path)形式，输入可以是BaseActor对象或者Path对象"""
         if isinstance(actor, BaseActor):
             actor_path = self.get_actor_path(actor)
             if actor_path is None:
@@ -76,6 +80,10 @@ class LocalScene:
         else:
             raise Exception("Invalid actor.")
 
+    def get_actor_and_path(self, actor: BaseActor | Path) -> Tuple[BaseActor, Path]:
+        """Deprecated. Use normalize_actor instead"""
+        return self.normalize_actor(actor)
+
     def get_actor_and_path_list(
         self, actors: list[BaseActor | Path]
     ) -> Tuple[list[BaseActor], list[Path]]:
@@ -86,6 +94,40 @@ class LocalScene:
             actor_list.append(a)
             path_list.append(p)
         return actor_list, path_list
+
+    def normalize_actors(
+        self, actors: Sequence[BaseActor | Path]
+    ) -> Tuple[List[BaseActor], List[Path]]:
+        actor_list = []
+        path_list = []
+        for actor in actors:
+            a, p = self.normalize_actor(actor)
+            actor_list.append(a)
+            path_list.append(p)
+
+        def compare(
+            pair_1: Tuple[BaseActor, Path], pair_2: Tuple[BaseActor, Path]
+        ) -> int:
+            path_1 = pair_1[1]
+            path_2 = pair_2[1]
+
+            if path_1.is_descendant_of(path_2):
+                return -1
+            elif path_2.is_descendant_of(path_1):
+                return 1
+            else:
+                return 0
+
+        # 对路径进行排序，确保父节点在前，子节点在后
+        sorted_pairs = sorted(zip(actor_list, path_list), key=cmp_to_key(compare))
+
+        result_actor_list = []
+        result_path_list = []
+        for actor, path in sorted_pairs:
+            result_actor_list.append(actor)
+            result_path_list.append(path)
+
+        return result_actor_list, result_path_list
 
     def _replace_path(self, old_prefix: Path, new_prefix: Path):
         paths_to_update = [old_prefix]
@@ -133,11 +175,41 @@ class LocalScene:
         parent_actor, parent_path = self.get_actor_and_path(parent_path)
         assert isinstance(parent_actor, GroupActor)
 
-        # TODO: add group actor.
-
         actor.parent = parent_actor
         actor_path = parent_path / actor.name
         self._actors[actor_path] = actor
+
+    def add_actor1(self, request: AddActorRequest) -> str:
+        actor = request.actor
+        parent_path = request.parent_path
+
+        ok, err = self.can_add_actor(actor, parent_path)
+        if not ok:
+            return err
+
+        parent_actor, parent_path = self.normalize_actor(parent_path)
+        assert isinstance(parent_actor, GroupActor)
+        parent_actor.insert_child(request.child_pos, actor)
+        
+        actor_path = parent_path / actor.name
+        self._actors[actor_path] = actor
+
+        return ""
+
+    def add_actor_batch(self, requests: List[AddActorRequest]) -> str:
+        for request in requests:
+            result = self.add_actor1(request)
+            if result != "":
+                return result
+        return ""
+
+    def can_duplicate_actor(self, actor: BaseActor | Path) -> Tuple[bool, str]:
+        actor, actor_path = self.normalize_actor(actor)
+
+        if actor_path == actor_path.root_path():
+            return False, "Cannot duplicate pseudo root actor."
+
+        return True, ""
 
     def can_delete_actor(self, actor: BaseActor | Path) -> Tuple[bool, str]:
         _, _actor_path = self.get_actor_and_path(actor)
@@ -284,7 +356,6 @@ class LocalScene:
                         return actor, group, prop
 
         raise Exception("Property not found.")
-    
     def update_visible_recursive(self, actor: BaseActor, paths_to_update: List, visible: bool):
         if not isinstance(actor, GroupActor):
             return

@@ -26,9 +26,9 @@ class CommandGroup(BaseCommand):
 
 
 class SelectionCommand(BaseCommand):
-    def __init__(self):
-        self.old_selection = []
-        self.new_selection = []
+    def __init__(self, old_selection: list[Path], new_selection: list[Path]):
+        self.old_selection = old_selection
+        self.new_selection = new_selection
 
     def __repr__(self):
         return f"SelectionCommand(old_selection={self.old_selection}, new_selection={self.new_selection})"
@@ -101,3 +101,12 @@ class PropertyChangeCommand(BaseCommand):
 
     def __repr__(self):
         return f"PropertyChangeCommand(property_key={self.property_key})"
+
+
+class DuplicateActorCommand(BaseCommand):
+    def __init__(self, source_path: Path = Path(), new_path: Path = Path()):
+        self.source_path = source_path
+        self.new_path = new_path
+
+    def __repr__(self):
+        return f"DuplicateActorCommand(source_path={self.source_path}, new_path={self.new_path})"
