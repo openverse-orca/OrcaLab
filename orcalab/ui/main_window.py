@@ -102,6 +102,10 @@ class MainWindow(
         # 状态指示器（顶部蓝色条）
         self._status_indicator = None
 
+        # 场景布局加载中弹窗
+        self._scene_loading_dialog: QtWidgets.QDialog | None = None
+        self._scene_loading_in_progress = False
+
         # Let empty area can steal focus.
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
         self.setWindowTitle(f"{self._base_title}")
@@ -840,20 +844,78 @@ class MainWindow(
         self._update_title()
         logger.debug("open_scene_layout: 用户打开 path=%s", filename)
 
+    def _show_scene_loading_dialog(self):
+        """显示「场景加载中」弹窗并禁用主窗口操作。"""
+        self._scene_loading_in_progress = True
+        if self._scene_loading_dialog is None:
+            self._scene_loading_dialog = QtWidgets.QDialog(self)
+            self._scene_loading_dialog.installEventFilter(self)
+            self._scene_loading_dialog.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+            self._scene_loading_dialog.setWindowFlags(
+                QtCore.Qt.WindowType.Dialog
+                | QtCore.Qt.WindowType.MSWindowsFixedSizeDialogHint
+                & ~QtCore.Qt.WindowType.WindowCloseButtonHint
+            )
+            self._scene_loading_dialog.setWindowTitle("Orcalab")
+            self._scene_loading_dialog.setMinimumSize(220, 136)
+            layout = QtWidgets.QVBoxLayout(self._scene_loading_dialog)
+            layout.setContentsMargins(32, 32, 32, 32)
+            layout.addStretch()
+            row_label = QtWidgets.QHBoxLayout()
+            row_label.addStretch()
+            label = QtWidgets.QLabel("场景加载中", self._scene_loading_dialog)
+            label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            font = label.font()
+            font.setPointSize(10)
+            label.setFont(font)
+            row_label.addWidget(label)
+            row_label.addStretch()
+            layout.addLayout(row_label)
+            layout.addStretch()
+            self._scene_loading_dialog._label = label
+        self._scene_loading_dialog._label.setText("场景加载中")
+        self._scene_loading_dialog.resize(220, 136)
+        self._scene_loading_dialog.show()
+        self.setEnabled(False)
+
+    def _hide_scene_loading_dialog(self):
+        """关闭「场景加载中」弹窗并恢复主窗口操作。"""
+        self._scene_loading_in_progress = False
+        if self._scene_loading_dialog is not None:
+            self._scene_loading_dialog.close()
+        self.setEnabled(True)
+
+    def eventFilter(self, obj, event):
+        """布局加载期间禁止用户关闭弹窗，忽略关闭操作。"""
+        if (
+            obj is self._scene_loading_dialog
+            and event.type() == QtCore.QEvent.Type.Close
+            and self._scene_loading_in_progress
+        ):
+            event.ignore()
+            return True
+        return super().eventFilter(obj, event)
+
     async def load_scene_layout(self, filename):
         resolved = self._resolve_path(filename)
-        
-        helper = SceneLayoutHelper(self.local_scene)
-        if not await helper.load_scene_layout(self, filename):
-            return
+        show_loading = self.isVisible()
+        if show_loading:
+            self._show_scene_loading_dialog()
+        try:
+            helper = SceneLayoutHelper(self.local_scene)
+            if not await helper.load_scene_layout(self, filename):
+                return
 
-        self.current_layout_path = resolved
-        self._infer_scene_and_layout_names()
-        self._mark_layout_clean()
-        self.undo_service.command_history = []
-        self.undo_service.command_history_index = -1
+            self.current_layout_path = resolved
+            self._infer_scene_and_layout_names()
+            self._mark_layout_clean()
+            self.undo_service.command_history = []
+            self.undo_service.command_history_index = -1
 
-        logger.debug("create_actor_from_scene_layout: 标记布局已修改")
+            logger.debug("create_actor_from_scene_layout: 标记布局已修改")
+        finally:
+            if show_loading:
+                self._hide_scene_loading_dialog()
 
     def prepare_edit_menu(self):
         self.menu_edit.clear()
