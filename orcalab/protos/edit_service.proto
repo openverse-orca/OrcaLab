@@ -293,6 +293,7 @@ message CameraBrief {
     string name = 1;
     int32 index = 2;
     string source = 3;
+    string actor_path = 4;
 }
 message GetCamerasRequest {
 }
@@ -452,6 +453,33 @@ message CustomCommandResponse {
     string error_message = 2;
 }
 
+message SetVisiblityRequest {
+    bool visible = 1;
+    repeated string actor_paths = 2;
+}
+message SetVisiblityResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+message SetLockRequest {
+    bool locked = 1;
+    repeated string actor_paths = 2;
+}
+message SetLockResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+message SetMoveRotateSensitivityRequest {
+    float move_sensitivity = 1;
+    float rotate_sensitivity = 2;
+}
+message SetMoveRotateSensitivityResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
 
 service GrpcService {
     rpc Aloha(AlohaRequest) returns (AlohaResponse);
@@ -506,6 +534,11 @@ service GrpcService {
     rpc SetProperties(SetPropertiesRequest) returns (SetPropertiesResponse);
     rpc SetHighlightJoint(SetHighlightJointRequest) returns (SetHighlightJointResponse);
     rpc CustomCommand(CustomCommandRequest) returns (CustomCommandResponse);
+
+    rpc SetVisiblity(SetVisiblityRequest) returns (SetVisiblityResponse);
+    rpc SetLock(SetLockRequest) returns (SetLockResponse);
+
+    rpc SetMoveRotateSensitivity(SetMoveRotateSensitivityRequest) returns (SetMoveRotateSensitivityResponse);
 
     rpc PublishScene(PublishSceneRequest) returns (PublishSceneResponse);
 

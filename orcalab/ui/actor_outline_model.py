@@ -368,6 +368,30 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         print("after reparent")
         self.endResetModel()
 
+    @override
+    async def on_actor_visible_changed(
+        self,
+        actor_path: Path,
+        paths_to_update: list,
+        visible: bool,
+        source: str = ""
+    ):
+        actor, _ = self.local_scene.get_actor_and_path(actor_path)
+        index = self.get_index_from_actor(actor)
+        self.dataChanged.emit(index, index, [Qt.ItemDataRole.DecorationRole])
+
+    @override
+    async def on_actor_locked_changed(
+        self,
+        actor_path: Path,
+        paths_to_update: list,
+        locked: bool,
+        source: str = ""
+    ):
+        actor, _ = self.local_scene.get_actor_and_path(actor_path)
+        index = self.get_index_from_actor(actor)
+        self.dataChanged.emit(index, index, [Qt.ItemDataRole.DecorationRole])
+
 
 if __name__ == "__main__":
     import unittest

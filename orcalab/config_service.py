@@ -429,7 +429,28 @@ class ConfigService:
     def enable_debug_tool(self) -> bool:
         return self.config.get("orcalab", {}).get("debug_tool", False)
 
-    
+    def camera_move_sensitivity(self) -> float:
+        return float(self.config.get("orcalab", {}).get("camera_move_sensitivity", 1.0))
+
+    def set_camera_move_sensitivity(self, value: float) -> None:
+        self.config.setdefault("orcalab", {})["camera_move_sensitivity"] = value
+
+        def update_func(config):
+            config.setdefault("orcalab", {})["camera_move_sensitivity"] = value
+
+        self.set_user_config("orcalab", update_func)
+
+    def camera_rotation_sensitivity(self) -> float:
+        return float(self.config.get("orcalab", {}).get("camera_rotation_sensitivity", 1.0))
+
+    def set_camera_rotation_sensitivity(self, value: float) -> None:
+        self.config.setdefault("orcalab", {})["camera_rotation_sensitivity"] = value
+
+        def update_func(config):
+            config.setdefault("orcalab", {})["camera_rotation_sensitivity"] = value
+
+        self.set_user_config("orcalab", update_func)
+
     def set_user_config(self, key: str, cb):
         """更新用户配置文件中的指定键值对"""
         user_config = {}

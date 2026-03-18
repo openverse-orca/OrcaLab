@@ -3,3 +3,4 @@ class CameraBrief:
         self.name = name
         self.index = index
         self.source = "unknown"
+        self.actor_path = ""

@@ -229,6 +229,21 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.CustomCommandRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.CustomCommandResponse.FromString,
                 _registered_method=True)
+        self.SetVisiblity = channel.unary_unary(
+                '/SceneEdit.GrpcService/SetVisiblity',
+                request_serializer=edit__service__pb2.SetVisiblityRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.SetVisiblityResponse.FromString,
+                _registered_method=True)
+        self.SetLock = channel.unary_unary(
+                '/SceneEdit.GrpcService/SetLock',
+                request_serializer=edit__service__pb2.SetLockRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.SetLockResponse.FromString,
+                _registered_method=True)
+        self.SetMoveRotateSensitivity = channel.unary_unary(
+                '/SceneEdit.GrpcService/SetMoveRotateSensitivity',
+                request_serializer=edit__service__pb2.SetMoveRotateSensitivityRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.SetMoveRotateSensitivityResponse.FromString,
+                _registered_method=True)
         self.PublishScene = channel.unary_unary(
                 '/SceneEdit.GrpcService/PublishScene',
                 request_serializer=edit__service__pb2.PublishSceneRequest.SerializeToString,
@@ -473,6 +488,24 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SetVisiblity(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetLock(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetMoveRotateSensitivity(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def PublishScene(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -676,6 +709,21 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.CustomCommand,
                     request_deserializer=edit__service__pb2.CustomCommandRequest.FromString,
                     response_serializer=edit__service__pb2.CustomCommandResponse.SerializeToString,
+            ),
+            'SetVisiblity': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetVisiblity,
+                    request_deserializer=edit__service__pb2.SetVisiblityRequest.FromString,
+                    response_serializer=edit__service__pb2.SetVisiblityResponse.SerializeToString,
+            ),
+            'SetLock': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetLock,
+                    request_deserializer=edit__service__pb2.SetLockRequest.FromString,
+                    response_serializer=edit__service__pb2.SetLockResponse.SerializeToString,
+            ),
+            'SetMoveRotateSensitivity': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetMoveRotateSensitivity,
+                    request_deserializer=edit__service__pb2.SetMoveRotateSensitivityRequest.FromString,
+                    response_serializer=edit__service__pb2.SetMoveRotateSensitivityResponse.SerializeToString,
             ),
             'PublishScene': grpc.unary_unary_rpc_method_handler(
                     servicer.PublishScene,
@@ -1736,6 +1784,87 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/CustomCommand',
             edit__service__pb2.CustomCommandRequest.SerializeToString,
             edit__service__pb2.CustomCommandResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetVisiblity(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/SetVisiblity',
+            edit__service__pb2.SetVisiblityRequest.SerializeToString,
+            edit__service__pb2.SetVisiblityResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetLock(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/SetLock',
+            edit__service__pb2.SetLockRequest.SerializeToString,
+            edit__service__pb2.SetLockResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetMoveRotateSensitivity(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/SetMoveRotateSensitivity',
+            edit__service__pb2.SetMoveRotateSensitivityRequest.SerializeToString,
+            edit__service__pb2.SetMoveRotateSensitivityResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -295,6 +295,16 @@ class OrcaLabMCPServer:
             return json.dumps({"success": True, "message": "成功停止仿真"}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"success": False, "message": f"停止仿真失败: {e}"}, ensure_ascii=False)
+
+    # async def get_camera_position(self) -> str:
+    #     '''
+    #     获取相机位置
+    #     Args:
+    #         无需传递参数
+    #     Returns:
+    #         相机位置的json字符串格式
+    #     '''
+    #     pass
       
     async def get_viewport_camera_info(self, index: int = 0) -> str:
         '''
@@ -423,6 +433,15 @@ class OrcaLabMCPServer:
                 return json.dumps({"success": False, "message": "获取当前视口相机变换失败"}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"success": False, "message": f"获取当前视口相机变换失败: {e}"}, ensure_ascii=False)
+    # async def get_camera_png(self) -> Image:
+    #     '''
+    #     获取相机截图
+    #     Args:
+    #         无需传递参数
+    #     Returns:
+    #         相机截图
+    #     '''
+    #    pass
 
 
     # ==================== 撤销/重做类 API ====================

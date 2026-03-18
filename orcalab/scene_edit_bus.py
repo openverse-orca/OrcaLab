@@ -119,6 +119,22 @@ class SceneEditRequest:
     def get_selection(self, out: List[List[Path]]):
         pass
 
+    async def set_actor_visible(self,
+        actor: BaseActor | Path,
+        visible: bool,
+        undo: bool = False,
+        source: str = "",
+    ):
+        pass
+
+    async def set_actor_locked(self,
+        actor: BaseActor | Path,
+        locked: bool,
+        undo: bool = False,
+        source: str = "",
+    ):
+        pass
+
     async def set_highlight_joint(self, entity_id: int, highlight: bool) -> None:
         """Highlight or unhighlight a single joint in the viewport.
         Args:
@@ -245,6 +261,12 @@ class SceneEditNotification:
         pass
 
     async def get_actor_asset_aabb(self, actor_path: Path, output: List[float]):
+        pass
+
+    async def on_actor_visible_changed(self, actor_path: Path, paths_to_update: List[Path], visible: bool, source: str):
+        pass
+
+    async def on_actor_locked_changed(self, actor_path: Path, paths_to_update: List[Path], locked: bool, source: str):
         pass
 
 

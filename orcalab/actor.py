@@ -17,6 +17,10 @@ class BaseActor:
         self._world_transform = None
         self.name = name
         self.parent = parent
+        self._is_visible = True
+        self._is_locked = False
+        self._is_parent_visible = True
+        self._is_parent_locked = False
 
     def to_dict(self) -> dict:
         return {
@@ -28,6 +32,10 @@ class BaseActor:
             "world_transform.position": self.world_transform.position.tolist(),
             "world_transform.rotation": self.world_transform.rotation.tolist(),
             "world_transform.scale": self.world_transform.scale,
+            "is_visible": self.is_visible,
+            "is_locked": self.is_locked,
+            "is_parent_visible": self.is_parent_visible,
+            "is_parent_locked": self.is_parent_locked,
             "type": self.__class__.__name__,
         }
 
@@ -64,6 +72,46 @@ class BaseActor:
 
         self._parent = parent_actor
         self._world_transform = None  # Invalidate world transform cache
+
+    @property
+    def is_visible(self) -> bool:
+        return self._is_visible
+
+    @is_visible.setter
+    def is_visible(self, value: bool):
+        if not isinstance(value, bool):
+            raise TypeError("is_visible must be a bool.")
+        self._is_visible = value
+
+    @property
+    def is_locked(self) -> bool:
+        return self._is_locked
+
+    @is_locked.setter
+    def is_locked(self, value: bool):
+        if not isinstance(value, bool):
+            raise TypeError("is_locked must be a bool.")
+        self._is_locked = value
+
+    @property
+    def is_parent_visible(self) -> bool:
+        return self._is_parent_visible
+
+    @is_parent_visible.setter
+    def is_parent_visible(self, value: bool):
+        if not isinstance(value, bool):
+            raise TypeError("is_parent_visible must be a bool.")
+        self._is_parent_visible = value
+
+    @property
+    def is_parent_locked(self) -> bool:
+        return self._is_parent_locked
+
+    @is_parent_locked.setter
+    def is_parent_locked(self, value: bool):
+        if not isinstance(value, bool):
+            raise TypeError("is_parent_locked must be a bool.")
+        self._is_parent_locked = value
 
     @property
     def transform(self):

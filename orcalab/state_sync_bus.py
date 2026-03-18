@@ -6,6 +6,9 @@ class ManipulatorType(Enum):
     Translate = 0
     Rotate = 1
     Scale = 2
+    CameraTranslate = 3
+    CameraRotate = 4
+    CameraScale = 5
 
 
 class StateSyncRequest:
@@ -14,7 +17,6 @@ class StateSyncRequest:
 
     async def set_debug_draw(self, enabled: bool):
         pass
-
 
     async def set_runtime_grab(self, enabled: bool):
         pass
