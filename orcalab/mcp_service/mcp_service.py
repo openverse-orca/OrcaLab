@@ -174,31 +174,27 @@ class OrcaLabMCPServer:
         await self.scene_edit_bus.set_transform(Path(actor_path), transform, local=True, undo=True, source="mcp")
         return json.dumps({"success": True, "message": "成功设置Actor的变换"}, ensure_ascii=False)
 
-    async def add_actor(self, actor_name:str, actor_path: str, parent_path: str = "/") -> str:
+    async def add_actor(self, actor_name: str, actor_path: str = "", parent_path: str = "/", actor_type: str = "asset") -> str:
         '''
         添加Actor
         Args:
             actor_name: Actor的名称（可以自定义，不要使用中文，最好都用小写，符合python变量命名规范）
-            actor_path: Actor在资产库中的路径，通过get_asset_map 或者get_asset_info获取，注意资产路径需要去掉后缀spawnable（资产路径示例： assets/e071469a36d3c8aa/default_project/prefabs/remy)
-            parent_path: Actor的父Actor在场景中的路径，默认为"/" 
-            
+            actor_path: 当 actor_type 为 asset 时必填，资产库中的路径（通过 get_asset_map/get_asset_info 获取，需去掉 .spawnable 后缀）；为 group 时忽略
+            parent_path: Actor的父Actor在场景中的路径，默认为"/"
+            actor_type: "asset" 表示资产实例，"group" 表示空组（仅需 actor_name）
         Returns:
             添加Actor的结果的json字符串格式
         '''
-        print(f"add_actor: actor_name: {actor_name}, actor_path: {actor_path}, parent_path: {parent_path}")
-        actor, parent_actor = AssetActor(actor_name, actor_path), None
-        actors: List[Dict[Path, BaseActor]] = []
-        self.scene_edit_bus.get_all_actors(actors)
-        if len(actors) > 0 and actors[0] is not None:
-            actors: Dict[Path, BaseActor] = actors[0]
-            if Path(parent_path) in actors:
-                parent_actor = actors[Path(parent_path)]   
-       
+        if actor_type == "group":
+            actor = GroupActor(name=actor_name)
+        else:
+            if not (actor_path or "").strip():
+                return json.dumps({"success": False, "message": "添加资产类 Actor 时 actor_path 不能为空"}, ensure_ascii=False)
+            actor = AssetActor(actor_name, actor_path)
+
+        parent = Path(parent_path) if (parent_path and parent_path.strip()) else Path.root_path()
         try:
-            if parent_path is not None:
-                await self.scene_edit_bus.add_actor(actor, Path(parent_path), undo=True, source="mcp")
-            else:
-                await self.scene_edit_bus.add_actor(actor, Path.root_path(), undo=True, source="mcp")
+            await self.scene_edit_bus.add_actor(actor, parent, undo=True, source="mcp")
         except Exception as e:
             return json.dumps({"success": False, "message": f"添加Actor失败: {e}"}, ensure_ascii=False)
         return json.dumps({"success": True, "message": "成功添加Actor"}, ensure_ascii=False)
@@ -430,6 +426,7 @@ class OrcaLabMCPServer:
     async def reparent_actor(self, actor_path: str, new_parent_path: str, row: int = -1) -> str:
         '''
         改变Actor的父级（移动Actor到另一个父级下）
+        若 new_parent_path 对应的 Group 不存在，会先按路径逐级创建。
         Args:
             actor_path: Actor在场景中的路径
             new_parent_path: 新父级Actor的路径，使用 "/" 表示根节点
@@ -438,6 +435,23 @@ class OrcaLabMCPServer:
             改变父级操作的结果的json字符串格式
         '''
         try:
+            parent_path = Path((new_parent_path or "").strip() or "/")
+            # 若目标父路径不是根且不存在，则按级创建缺失的 Group
+            if parent_path != Path.root_path():
+                actors_out: List[Dict[Path, BaseActor]] = []
+                self.scene_edit_bus.get_all_actors(actors_out)
+                actors = actors_out[0] if actors_out and actors_out[0] is not None else {}
+                segments = [s for s in parent_path.string().strip("/").split("/") if s]
+                current = Path.root_path()
+                for seg in segments:
+                    current = current.append(seg)
+                    if current not in actors:
+                        await self.scene_edit_bus.add_actor(
+                            GroupActor(seg), current.parent(), undo=True, source="mcp"
+                        )
+                        actors_out = []
+                        self.scene_edit_bus.get_all_actors(actors_out)
+                        actors = actors_out[0] if actors_out and actors_out[0] is not None else {}
             await self.scene_edit_bus.reparent_actor(Path(actor_path), Path(new_parent_path), row, undo=True, source="mcp")
             return json.dumps({"success": True, "message": f"成功将Actor移动到 '{new_parent_path}' 下"}, ensure_ascii=False)
         except Exception as e:
