@@ -583,14 +583,42 @@ class OrcaLabMCPServer:
 
     def get_engine_info(self) -> str:
         '''
-        获取引擎版本和基础信息
+        获取引擎基础信息
         Args:
             无需传递参数
         Returns:
-            引擎版本和基础信息的json字符串格式，包括：
+            引擎基础信息的json字符串格式，包括：
             - engine_version: 引擎版本号
             - app_version: OrcaLab应用版本号
+            - keyboard_shortcuts: 快捷键信息列表
         '''
+        def _get_keyboard_shortcuts() -> List[Dict[str, str]]:
+            shortcuts = [
+                {"action": "新建布局", "shortcut": "Ctrl+N", "scope": "全局"},
+                {"action": "打开布局", "shortcut": "Ctrl+O", "scope": "全局"},
+                {"action": "保存布局", "shortcut": "Ctrl+S", "scope": "全局"},
+                {"action": "另存为", "shortcut": "Ctrl+Shift+S", "scope": "全局"},
+                {"action": "撤销", "shortcut": "Ctrl+Z", "scope": "全局"},
+                {"action": "重做", "shortcut": "Ctrl+Shift+Z", "scope": "全局"},
+                {"action": "平移操纵器", "shortcut": "1", "scope": "全局"},
+                {"action": "旋转操纵器", "shortcut": "2", "scope": "全局"},
+                {"action": "缩放操纵器", "shortcut": "3", "scope": "全局"},
+                {"action": "按住 Shift 可切换为世界坐标", "shortcut": "Shift + 1/2/3", "scope": "全局"},
+                {"action": "聚焦到选择物体", "shortcut": "Z", "scope": "全局"},
+                {"action": "相机向前移动", "shortcut": "按住鼠标右键 + W", "scope": "视窗"},
+                {"action": "相机向后移动", "shortcut": "按住鼠标右键 + S", "scope": "视窗"},
+                {"action": "相机向左移动", "shortcut": "按住鼠标右键 + A", "scope": "视窗"},
+                {"action": "相机向右移动", "shortcut": "按住鼠标右键 + D", "scope": "视窗"},
+                {"action": "相机向上移动", "shortcut": "按住鼠标右键 + E", "scope": "视窗"},
+                {"action": "相机向下移动", "shortcut": "按住鼠标右键 + Q", "scope": "视窗"},
+                {"action": "转动相机", "shortcut": "按住鼠标右键 + 移动鼠标", "scope": "视窗"},
+                {"action": "绕一点转动相机", "shortcut": "Alt + 按住鼠标左键 + 移动鼠标", "scope": "视窗"},
+                {"action": "切换选择的物体控制状态（仿真/用户控制）", "shortcut": "F3", "scope": "全局"},
+                {"action": "显示/隐藏物理碰撞和 Joint", "shortcut": "F4", "scope": "全局"},
+                {"action": "删除选择物体", "shortcut": "Delete", "scope": "全局"},
+            ]
+            return shortcuts
+
         try:
             # 安全地获取配置信息
             config = getattr(self.config_service, 'config', {})
@@ -600,6 +628,7 @@ class OrcaLabMCPServer:
             info = {
                 "engine_version": engine_version,
                 "app_version": app_version,
+                "keyboard_shortcuts": _get_keyboard_shortcuts(),
             }
             return json.dumps(info, ensure_ascii=False)
         except Exception as e:
