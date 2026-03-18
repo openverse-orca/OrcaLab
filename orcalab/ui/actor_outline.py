@@ -119,16 +119,17 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         self.setDragDropMode(QtWidgets.QAbstractItemView.DragDropMode.DragDrop)
         self.setDefaultDropAction(QtCore.Qt.DropAction.CopyAction)
 
-        self._change_from_inside = False
-        self._change_from_outside = False
         self._current_index = QtCore.QModelIndex()
         self._current_actor: BaseActor | None = None
 
-        self._brach_areas = {}
+        self._brach_areas: dict[QtCore.QModelIndex, QtCore.QRect] = {}
         self._left_mouse_pressed = False
         self._left_mouse_pressed_position: QtCore.QPoint | None = None
 
         self.reparent_mime = "application/x-orca-actor-reparent"
+
+        # 存储展开的Actor路径，刷新时保持展开状态。
+        self._temp_expaned_actor_paths = []
 
     def connect_bus(self):
         SceneEditNotificationBus.connect(self)
@@ -137,8 +138,9 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         SceneEditNotificationBus.disconnect(self)
 
     def set_actor_model(self, model: ActorOutlineModel):
+        connect(model.modelAboutToBeReset, self._before_reset_model)
+        connect(model.modelReset, self._after_reset_model)
         self.setModel(model)
-        self.selectionModel().selectionChanged.connect(self._on_selection_changed)
         connect(model.request_reparent, self._on_request_reparent)
 
     def actor_model(self) -> ActorOutlineModel:
@@ -154,10 +156,6 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         await SceneEditRequestBus().reparent_actor(
             actor_path, new_parent_path, index, undo=True, source="actor_outline"
         )
-
-    @QtCore.Slot()
-    def _on_selection_changed(self):
-        pass
 
     @override
     async def on_selection_changed(self, old_selection, new_selection, source=""):
@@ -175,10 +173,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         self.set_actor_selection(actors)
 
     def set_actor_selection(self, actors: list[BaseActor]):
-        if self._change_from_inside:
-            return
-
-        self._change_from_outside = True
+        """Update UI only."""
 
         selection_model = self.selectionModel()
         selection_model.clearSelection()
@@ -189,12 +184,9 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             if not index.isValid():
                 raise Exception("Invalid actor.")
 
-            selection_model.select(
-                index, QtCore.QItemSelectionModel.SelectionFlag.Select
-            )
+            flags = QtCore.QItemSelectionModel.SelectionFlag.ClearAndSelect
+            selection_model.select(index, flags)
             self.scrollTo(index)
-
-        self._change_from_outside = False
 
     @QtCore.Slot()
     def show_context_menu(self, position):
@@ -332,9 +324,8 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                 )
 
             else:
-                rect = self._brach_areas.get(index)
-
-                if rect and rect.contains(pos):
+                branch_area = self._brach_areas.get(index)
+                if branch_area and branch_area.contains(pos):
                     self.setExpanded(index, not self.isExpanded(index))
                 else:
                     self.set_actor_selection([actor])
@@ -354,7 +345,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         distance = (event.pos() - self._left_mouse_pressed_position).manhattanLength()
         if distance < QtWidgets.QApplication.startDragDistance():
             return
-        
+
         # important: must set before startDrag
         self._left_mouse_pressed = False
 
@@ -408,27 +399,76 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         )
         self.viewport().update(self.visualRect(index))
 
-    def _get_selection_actor_path(self) -> Path | None:
+    def _selected_actor_paths(self) -> list[Path]:
         indexes = self.selectedIndexes()
         if not indexes:
-            return None
+            return []
 
+        actor_paths = []
         actor_outline_model = self.actor_model()
-        actor = actor_outline_model.get_actor(indexes[0])
-        if actor is None:
-            return None
+        local_scene = actor_outline_model.local_scene
 
-        local_scene: LocalScene = actor_outline_model.local_scene
-        actor_path = local_scene.get_actor_path(actor)
-        return actor_path
+        for index in indexes:
+            actor = actor_outline_model.get_actor(index)
+            assert actor is not None
+            actor_path = local_scene.get_actor_path(actor)
+            assert actor_path is not None
+            actor_paths.append(actor_path)
+
+        return actor_paths
 
     def paintEvent(self, event):
-        self._brach_areas = {}
+        self._brach_areas.clear()
         return super().paintEvent(event)
 
     def drawBranches(self, painter, rect, index):
+        actor_outline_model = self.actor_model()
+        local_scene = actor_outline_model.local_scene
+
+        actor = actor_outline_model.get_actor(index)
+        actor_path = local_scene.get_actor_path(actor)
+        assert actor_path is not None
         self._brach_areas[index] = rect
+
         return super().drawBranches(painter, rect, index)
+
+    def _before_reset_model(self):
+        self._temp_expaned_actor_paths.clear()
+
+        model = self.actor_model()
+        local_scene = model.local_scene
+
+        def collect_expaneded_actors(parent: QtCore.QModelIndex):
+            for i in range(model.rowCount(parent)):
+                child = model.index(i, 0, parent)
+                if self.isExpanded(child):
+                    actor = model.get_actor(child)
+                    actor_path = local_scene.get_actor_path(actor)
+                    assert actor_path is not None
+                    self._temp_expaned_actor_paths.append(actor_path)
+                    # Recursively check children
+                    collect_expaneded_actors(child)
+
+        collect_expaneded_actors(QtCore.QModelIndex())
+
+    def _after_reset_model(self):
+
+        model = self.actor_model()
+        local_scene = model.local_scene
+
+        actors, actor_paths = local_scene.normalize_actors(local_scene.selection)
+        self.set_actor_selection(actors)
+
+        for actor_path in self._temp_expaned_actor_paths:
+            actor = local_scene.find_actor_by_path(actor_path)
+            if actor is not None:
+                index = model.get_index_from_actor(actor)
+                if index.isValid():
+                    QtCore.QTimer.singleShot(
+                        0, lambda index=index: self.setExpanded(index, True)
+                    )
+
+        self._temp_expaned_actor_paths.clear()
 
 
 if __name__ == "__main__":

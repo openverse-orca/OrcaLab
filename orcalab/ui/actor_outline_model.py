@@ -1,11 +1,14 @@
-from typing import override
+from typing import List, override
 
 from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt, QMimeData, Signal
 
 from orcalab.actor import BaseActor, GroupActor
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
-from orcalab.scene_edit_bus import SceneEditNotification, SceneEditNotificationBus
+from orcalab.scene_edit_bus import (
+    SceneEditNotification,
+    SceneEditNotificationBus,
+)
 
 
 class ReparentData:
@@ -391,6 +394,14 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         actor, _ = self.local_scene.get_actor_and_path(actor_path)
         index = self.get_index_from_actor(actor)
         self.dataChanged.emit(index, index, [Qt.ItemDataRole.DecorationRole])
+
+    @override
+    async def before_actor_added_batch(self):
+        self.beginResetModel()
+
+    @override
+    async def on_actor_added_batch(self, error: str):
+        self.endResetModel()
 
 
 if __name__ == "__main__":

@@ -110,6 +110,11 @@ class MainWindow(
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
         self.setWindowTitle(f"{self._base_title}")
 
+        # 在Viewport之前拦截事件。
+        qapp = QtCore.QCoreApplication.instance()
+        assert qapp is not None
+        qapp.installEventFilter(self)
+
     def connect_buses(self):
         super().connect_buses()
         ApplicationRequestBus.connect(self)
@@ -154,7 +159,7 @@ class MainWindow(
 
         self.undo_service.add_command = add_command_with_dirty
 
-        self.scene_edit_service = SceneEditService(self.local_scene)
+        self.scene_edit_service = SceneEditService(self.local_scene, self.remote_scene)
 
         self._viewport_widget = Viewport()
 
@@ -180,7 +185,7 @@ class MainWindow(
             logger.info("用户拒绝发送统计数据")
 
         await asyncio.sleep(0.5)
-        
+
         logger.info("初始化引擎...")
         self._viewport_widget.init_viewport()
         self._viewport_widget.start_viewport_main_loop()
@@ -622,20 +627,6 @@ class MainWindow(
         # 初始化状态指示器（Editor模式，隐藏）
         self._set_window_border_style(is_runtime=False)
 
-        # Window actions.
-
-        action_undo = QtGui.QAction("撤销", self)
-        action_undo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
-        action_undo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(action_undo.triggered, self.undo)
-
-        action_redo = QtGui.QAction("重做", self)
-        action_redo.setShortcut(QtGui.QKeySequence("Ctrl+Shift+Z"))
-        action_redo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(action_redo.triggered, self.redo)
-
-        self.addActions([action_undo, action_redo])
-
     async def start_sim(self):
         await SimulationRequestBus().start_simulation()
 
@@ -934,12 +925,27 @@ class MainWindow(
         action_undo = self.menu_edit.addAction("撤销")
         action_undo.setEnabled(can_undo())
         action_undo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
-        connect(action_undo.triggered, self.undo)
+        async def undo_warpper():
+            await self.undo("menu")
+        connect(action_undo.triggered, undo_warpper)
 
         action_redo = self.menu_edit.addAction("重做")
         action_redo.setEnabled(can_redo())
         action_redo.setShortcut(QtGui.QKeySequence("Ctrl+Shift+Z"))
-        connect(action_redo.triggered, self.redo)
+        async def redo_wrapper():
+            await self.redo("menu")
+        connect(action_redo.triggered, redo_wrapper)
+
+        self.menu_edit.addSeparator()
+
+        action_duplicate = self.menu_edit.addAction("复制")
+        action_duplicate.setEnabled(self.can_duplicate_selection())
+        action_duplicate.setShortcut(QtGui.QKeySequence("Ctrl+D"))
+        async def duplicate_wrapper():
+            await self.duplicate_selection("menu")
+        connect(action_duplicate.triggered, duplicate_wrapper)
+
+        self.menu_edit.addSeparator()
 
         action_settings = self.menu_edit.addAction("配置")
         connect(action_settings.triggered, self.open_settings)
@@ -1076,11 +1082,13 @@ class MainWindow(
 
         msg_box.exec()
 
-    async def undo(self):
+    async def undo(self, source:str = ""):
+        logger.debug("undo. source: %s", source)
         if can_undo():
             await self.undo_service.undo()
 
-    async def redo(self):
+    async def redo(self, source:str = ""):
+        logger.debug("redo. source: %s", source)
         if can_redo():
             await self.undo_service.redo()
 
@@ -1386,3 +1394,39 @@ class MainWindow(
 
     def open_settings(self):
         SettingsDialog(self, remote_scene=self.remote_scene).exec()
+    
+    def can_duplicate_selection(self) -> bool:
+        if not self.local_scene.selection:
+            return False
+
+        ok, err = self.local_scene.can_duplicate_actor(self.local_scene.selection[0])
+        return ok
+
+    async def duplicate_selection(self, source:str = ""):
+        logger.debug("duplicate_selection. source: %s", source)
+
+        selection = self.local_scene.selection.copy()
+        if not selection:
+            return
+
+        bus = SceneEditRequestBus()
+        await bus.duplicate_actor(selection[0])
+
+    @override
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if event.type() == QtCore.QEvent.Type.KeyPress:
+            assert isinstance(event, QtGui.QKeyEvent)
+            if event.key() == QtCore.Qt.Key.Key_Z:
+                if event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
+                    if event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
+                        asyncio.create_task(self.redo("main window"))
+                    else:
+                        asyncio.create_task(self.undo("main window"))
+                    return True
+
+            if event.key() == QtCore.Qt.Key.Key_D:
+                if event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
+                    asyncio.create_task(self.duplicate_selection("main window"))
+                    return True
+
+        return super().eventFilter(watched, event)

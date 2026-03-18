@@ -61,7 +61,7 @@ class MainWindowFullScreen(
     async def init(self):
         self.local_scene = LocalScene()
         self.remote_scene = RemoteScene(self.config_service)
-        self.scene_edit_service = SceneEditService(self.local_scene)
+        self.scene_edit_service = SceneEditService(self.local_scene, self.remote_scene)
         self.simulation_service = SimulationService()
 
         logger.info("开始初始化 UI…")

@@ -8,9 +8,8 @@ from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
     ActorPropertyKey,
-    TreePropertyNode,
 )
-from orcalab.actor_util import make_unique_name
+from orcalab.actor_util import collect_properties, make_unique_name
 from orcalab.application_util import get_local_scene
 from orcalab.config_service import ConfigService
 from orcalab.math import Transform
@@ -21,6 +20,7 @@ from orcalab.scene_edit_bus import (
     SceneEditNotification,
     SceneEditRequestBus,
 )
+from orcalab.scene_edit_types import AddActorRequest
 from orcalab.state_sync_bus import ManipulatorType, CameraMovementType, StateSyncNotificationBus
 from orcalab.ui.camera.camera_brief import CameraBrief
 from orcalab.ui.camera.camera_bus import CameraNotificationBus
@@ -215,7 +215,7 @@ class RemoteScene(SceneEditNotification):
             bus = StateSyncNotificationBus()
             bus.on_debug_draw_changed(enabled)
             return
-        
+
         prefix = "user_control:"
         if op.startswith(prefix):
             value = op[len(prefix) :]
@@ -466,58 +466,13 @@ class RemoteScene(SceneEditNotification):
             )
             sync_node(new_node, old_node)
 
-    def _collect_tree_property_keys(
-        self,
-        actor_path: Path,
-        group_prefix: str,
-        node: TreePropertyNode,
-        keys: List[ActorPropertyKey],
-        props: List[ActorProperty],
-    ):
-        """递归收集树形属性的子属性 key"""
-        for prop in node.properties:
-            full_name = f"{node.name}.{prop.name()}"
-            key = ActorPropertyKey(
-                actor_path,
-                group_prefix,
-                full_name,
-                prop.value_type(),
-            )
-            keys.append(key)
-            props.append(prop)
-
-        for child in node.children:
-            self._collect_tree_property_keys(
-                actor_path, group_prefix, child, keys, props
-            )
-
     async def _fetch_actor_proprerties(self, actor: AssetActor, actor_path: Path):
-        from orcalab.actor_property import ActorPropertyType
-
         property_groups = await self.get_property_groups(actor_path)
         actor.property_groups = property_groups
 
         keys: List[ActorPropertyKey] = []
         props: List[ActorProperty] = []
-        for group in property_groups:
-            for prop in group.properties:
-                # TREE 类型的属性没有直接值，跳过获取
-                if prop.value_type() == ActorPropertyType.TREE:
-                    continue
-                key = ActorPropertyKey(
-                    actor_path,
-                    group.prefix,
-                    prop.name(),
-                    prop.value_type(),
-                )
-                keys.append(key)
-                props.append(prop)
-
-            # 收集树形属性的子属性
-            for tree_node in group.tree_data:
-                self._collect_tree_property_keys(
-                    actor_path, group.prefix, tree_node, keys, props
-                )
+        collect_properties(keys, props, property_groups, actor_path)
 
         values = await self.get_properties(keys)
         for prop, value in zip(props, values):
@@ -628,6 +583,53 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
              await self._service.set_lock(locked, paths_to_update)
 
+    async def add_actor_batch(self, requests: List[AddActorRequest]) -> str:
+        print(f"add_actor_batch: {len(requests)} actors")
+        async with self._grpc_lock:
+            await self._service.custom_command("pause_render:true")
+            err = await self._service.add_actor_batch(requests)
+            await self._service.custom_command("pause_render:false")
+
+            if err:
+                return err
+            
+            # fetch properties for asset actors
+
+            actors: List[AssetActor] = []
+            actor_paths: List[Path] = []
+            for req in requests:
+                if not isinstance(req.actor, AssetActor):
+                    continue
+                actors.append(req.actor)
+                actor_paths.append(req.parent_path.append(req.actor.name))
+
+                property_groups_list = await self._service.get_property_groups_batch(
+                    actor_paths
+                )
+
+                keys: List[ActorPropertyKey] = []
+                props: List[ActorProperty] = []
+                for actor, actor_path, property_groups in zip(
+                    actors, actor_paths, property_groups_list
+                ):
+                    actor.property_groups = property_groups
+                    collect_properties(keys, props, property_groups, actor_path)
+
+                values = await self.get_properties(keys)
+                for prop, value in zip(props, values):
+                    prop.set_value(value)
+                    prop.set_original_value(value)
+
+            return ""
+
+    async def delete_actor_batch(self, actor_paths: List[Path]) -> str:
+        print(f"delete_actor_batch: {len(actor_paths)} actors")
+        async with self._grpc_lock:
+            await self._service.custom_command("pause_render:true")
+            err = await self._service.delete_actor_batch(actor_paths)
+            await self._service.custom_command("pause_render:false")
+            return err
+
     async def get_window_id(self):
         async with self._grpc_lock:
             await self._service.get_window_id()
@@ -674,9 +676,17 @@ class RemoteScene(SceneEditNotification):
                     retry -= 1
                     await asyncio.sleep(0.01)
 
-    async def get_camera_data_png(self, camera_name: str, png_path: str, index: int, output: list[CameraDataPNGResult] = None) -> CameraDataPNGResult:
+    async def get_camera_data_png(
+        self,
+        camera_name: str,
+        png_path: str,
+        index: int,
+        output: list[CameraDataPNGResult] = None,
+    ) -> CameraDataPNGResult:
         async with self._grpc_lock:
-            result = await self._service.get_camera_data_png(camera_name, png_path, index)
+            result = await self._service.get_camera_data_png(
+                camera_name, png_path, index
+            )
         if output is not None:
             output.append(result)
         return result
@@ -712,6 +722,11 @@ class RemoteScene(SceneEditNotification):
 
     async def get_property_groups(self, actor_path: Path) -> List[ActorPropertyGroup]:
         return await self._service.get_property_groups(actor_path)
+
+    async def get_property_groups_batch(
+        self, actor_paths: List[Path]
+    ) -> List[List[ActorPropertyGroup]]:
+        return await self._service.get_property_groups_batch(actor_paths)
 
     async def get_properties(self, keys: List[ActorPropertyKey]) -> List[Any]:
         return await self._service.get_properties(keys)

@@ -54,6 +54,38 @@ message AddGroupResponse {
 }
 
 
+
+message AddAssetActorRequest {
+    string spawnable_name = 1;
+    string actor_name = 2;
+    string parent_actor_path = 3;
+    Transform transform = 4;
+    Space space = 5;
+}
+message AddActorRequestUnion {
+    oneof asset_oneof {
+        AddAssetActorRequest asset_actor = 1;
+        AddGroupRequest group_actor = 2;
+    }
+}
+message AddActorBatchRequest {
+    repeated AddActorRequestUnion requests = 1;
+}
+message AddActorBatchResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+message DeleteActorBatchRequest {
+    repeated string actor_paths = 1;
+}
+message DeleteActorBatchResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+
+
 message SetActorTransformRequest {
     string actor_path = 1;
     Transform transform = 2;
@@ -429,6 +461,19 @@ message SetPropertiesResponse {
 }
 
 
+message PropertyGroupList {
+    repeated PropertyGroup elements = 1;
+}
+message GetPropertyGroupsBatchRequest {
+    repeated string actor_paths = 1;
+}
+message GetPropertyGroupsBatchResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    repeated PropertyGroupList property_group_lists = 3;
+}
+
+
 message PublishSceneRequest {
 }
 message PublishSceneResponse {
@@ -508,6 +553,9 @@ service GrpcService {
     rpc RenameActor(RenameActorRequest) returns (RenameActorResponse);
     rpc ReParentActor(ReParentActorRequest) returns (ReParentActorResponse);
 
+    rpc AddActorBatch(AddActorBatchRequest) returns (AddActorBatchResponse);
+    rpc DeleteActorBatch(DeleteActorBatchRequest) returns (DeleteActorBatchResponse);
+
     rpc GetWindowId(GetWindowIdRequest) returns (GetWindowIdResponse);
     rpc GetGeneratePos(GetGeneratePosRequest) returns (GetGeneratePosResponse);
 
@@ -530,8 +578,11 @@ service GrpcService {
     rpc GetCameraDataPNG(GetCameraDataPNGRequest) returns (GetCameraDataPNGResponse);
 
     rpc GetPropertyGroups(GetPropertyGroupsRequest) returns (GetPropertyGroupsResponse);
+    rpc GetPropertyGroupsBatch(GetPropertyGroupsBatchRequest) returns (GetPropertyGroupsBatchResponse);
     rpc GetProperties(GetPropertiesRequest) returns (GetPropertiesResponse);
     rpc SetProperties(SetPropertiesRequest) returns (SetPropertiesResponse);
+
+
     rpc SetHighlightJoint(SetHighlightJointRequest) returns (SetHighlightJointResponse);
     rpc CustomCommand(CustomCommandRequest) returns (CustomCommandResponse);
 
