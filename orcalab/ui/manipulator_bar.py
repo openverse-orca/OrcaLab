@@ -52,6 +52,21 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self.scale_button.setFixedSize(button_size)
         self.scale_button.icon_size = icon_size
 
+        self.camera_move_button = Button(icon=make_icon(":/icons/camera_translate.svg", icon_color))
+        self.camera_move_button.setToolTip("相机移动(快捷键:4)")
+        self.camera_move_button.setFixedSize(button_size)
+        self.camera_move_button.icon_size = icon_size
+
+        self.camera_rotate_button = Button(icon=make_icon(":/icons/camera_rotate.svg", icon_color))
+        self.camera_rotate_button.setToolTip("相机旋转(快捷键:5)")
+        self.camera_rotate_button.setFixedSize(button_size)
+        self.camera_rotate_button.icon_size = icon_size
+
+        self.camera_scale_button = Button(icon=make_icon(":/icons/camera_scale.svg", icon_color))
+        self.camera_scale_button.setToolTip("相机缩放(快捷键:6)")
+        self.camera_scale_button.setFixedSize(button_size)
+        self.camera_scale_button.icon_size = icon_size
+
         self.debug_button = Button(icon=make_icon(":/icons/physics.png", icon_color))
         self.debug_button.setToolTip("显示物理(F4)")
         self.debug_button.setFixedSize(button_size)
@@ -64,25 +79,33 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
 
         self.sep_1 = make_vertical_line(2)
         self.sep_2 = make_vertical_line(2)
+        self.sep_3 = make_vertical_line(2)
 
         self._layout.addWidget(self.move_button)
         self._layout.addWidget(self.rotate_button)
         self._layout.addWidget(self.scale_button)
         self._layout.addWidget(self.sep_1)
-        self._layout.addWidget(self.debug_button)
+        self._layout.addWidget(self.camera_move_button)
+        self._layout.addWidget(self.camera_rotate_button)
+        self._layout.addWidget(self.camera_scale_button)
         self._layout.addWidget(self.sep_2)
+        self._layout.addWidget(self.debug_button)
+        self._layout.addWidget(self.sep_3)
         self._layout.addWidget(self.runtime_grab_button)
 
         connect(self.move_button.mouse_pressed, self.set_translation)
         connect(self.rotate_button.mouse_pressed, self.set_rotation)
         connect(self.scale_button.mouse_pressed, self.set_scale)
+        connect(self.camera_move_button.mouse_pressed, self.set_camera_translation)
+        connect(self.camera_rotate_button.mouse_pressed, self.set_camera_rotation)
+        connect(self.camera_scale_button.mouse_pressed, self.set_camera_scale)
         connect(self.debug_button.mouse_pressed, self.set_debug_draw)
         connect(self.runtime_grab_button.mouse_pressed, self.set_runtime_grab)
 
-    def connect_buses(self):
+    def connect_bus(self):
         StateSyncNotificationBus.connect(self)
 
-    def disconnect_buses(self):
+    def disconnect_bus(self):
         StateSyncNotificationBus.disconnect(self)
 
     async def set_translation(self):
@@ -97,24 +120,46 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         bus = StateSyncRequestBus()
         await bus.set_manipulator_type(ManipulatorType.Scale)
 
+    async def set_camera_translation(self):
+        bus = StateSyncRequestBus()
+        await bus.set_manipulator_type(ManipulatorType.CameraTranslate)
+
+    async def set_camera_rotation(self):
+        bus = StateSyncRequestBus()
+        await bus.set_manipulator_type(ManipulatorType.CameraRotate)
+
+    async def set_camera_scale(self):
+        bus = StateSyncRequestBus()
+        await bus.set_manipulator_type(ManipulatorType.CameraScale)
+
     @override
     def on_manipulator_type_changed(self, type: ManipulatorType):
+        self.move_button.bg_color = self.bg_color
+        self.rotate_button.bg_color = self.bg_color
+        self.scale_button.bg_color = self.bg_color
+        self.camera_move_button.bg_color = self.bg_color
+        self.camera_rotate_button.bg_color = self.bg_color
+        self.camera_scale_button.bg_color = self.bg_color
+
         if type == ManipulatorType.Translate:
             self.move_button.bg_color = self.bg_color_selected
-            self.rotate_button.bg_color = self.bg_color
-            self.scale_button.bg_color = self.bg_color
         elif type == ManipulatorType.Rotate:
-            self.move_button.bg_color = self.bg_color
             self.rotate_button.bg_color = self.bg_color_selected
-            self.scale_button.bg_color = self.bg_color
         elif type == ManipulatorType.Scale:
-            self.move_button.bg_color = self.bg_color
-            self.rotate_button.bg_color = self.bg_color
             self.scale_button.bg_color = self.bg_color_selected
+        elif type == ManipulatorType.CameraTranslate:
+            self.camera_move_button.bg_color = self.bg_color_selected
+        elif type == ManipulatorType.CameraRotate:
+            self.camera_rotate_button.bg_color = self.bg_color_selected
+        elif type == ManipulatorType.CameraScale:
+            self.camera_scale_button.bg_color = self.bg_color_selected
 
         self.move_button.update()
         self.rotate_button.update()
         self.scale_button.update()
+        self.camera_move_button.update()
+        self.camera_rotate_button.update()
+        self.camera_scale_button.update()
 
     async def set_debug_draw(self):
         bus = StateSyncRequestBus()

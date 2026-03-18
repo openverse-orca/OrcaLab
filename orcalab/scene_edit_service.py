@@ -89,7 +89,7 @@ class SceneEditService(SceneEditRequest):
         if not ok:
             raise Exception(err)
 
-        _, parent_actor_path = self.local_scene.get_actor_and_path(parent_actor)
+        parent_actor, parent_actor_path = self.local_scene.get_actor_and_path(parent_actor)
 
         bus = SceneEditNotificationBus()
 
@@ -106,6 +106,14 @@ class SceneEditService(SceneEditRequest):
             self.local_scene.delete_actor(actor)
             await bus.on_actor_added_failed(actor, parent_actor_path, source)
             raise
+
+        actor.is_parent_visible = parent_actor.is_parent_visible and parent_actor.is_visible
+        actor.is_parent_locked = parent_actor.is_parent_locked or parent_actor.is_locked
+        
+        if actor.is_parent_visible == False:
+            await self.set_actor_visible(actor, False, False, "reparent")
+        if actor.is_parent_locked == True:
+            await self.set_actor_locked(actor, True, False, "reparent")
 
         if undo:
             if isinstance(actor, AssetActor):
@@ -244,6 +252,34 @@ class SceneEditService(SceneEditRequest):
 
         await bus.on_actor_reparented(actor_path, new_parent_path, row, source)
 
+        ### 重新判断隐藏
+        # 隐藏->可见
+        if actor.is_parent_visible == False:
+            if actor.is_visible == True and new_parent.is_visible == True and new_parent.is_parent_visible == True:
+                await self.set_actor_visible(actor, True, False, "reparent")
+        # 可见->隐藏
+        if actor.is_visible == True and actor.is_parent_visible == True:
+            if new_parent.is_visible == False or new_parent.is_parent_visible == False:
+                await self.set_actor_visible(actor, False, False, "reparent")
+
+        new_parent_visible = new_parent.is_visible and new_parent.is_parent_visible
+        if actor.is_parent_visible != new_parent_visible:
+            actor.is_parent_visible = new_parent_visible
+
+        ### 重新判断锁定
+        # 解锁
+        if actor.is_parent_locked == True:
+            if actor.is_locked == False and new_parent.is_locked == False and new_parent.is_parent_locked == False:
+                await self.set_actor_locked(actor, False, False, "reparent")
+        # 锁定
+        if actor.is_locked == False and actor.is_parent_locked == False:
+            if new_parent.is_locked == True or new_parent.is_parent_locked == True:
+                await self.set_actor_locked(actor, True, False, "reparent")
+
+        new_parent_locked = new_parent.is_locked or new_parent.is_parent_locked
+        if actor.is_parent_locked != new_parent_locked:
+            actor.is_parent_locked = new_parent_locked
+
         if undo:
             new_parent, new_parent_path = self.local_scene.get_actor_and_path(
                 new_parent
@@ -376,3 +412,35 @@ class SceneEditService(SceneEditRequest):
     def get_selection(self, out: List[List[Path]]):
         if out is not None:
             out.append(self.local_scene.selection)
+
+    @override
+    async def set_actor_visible(self, actor, visible, undo, source):
+        _actor, _actor_path = self.local_scene.get_actor_and_path(actor)
+        paths_to_update = []
+        
+        if source == "layout":
+            paths_to_update.append(_actor_path)
+            await SceneEditNotificationBus().on_actor_visible_changed(_actor_path, paths_to_update, visible, source)
+        if source == "actor_outline" or source == "reparent":
+            # if _actor.is_parent_visible == True:
+            if not isinstance(_actor, GroupActor):
+                paths_to_update.append(_actor_path) 
+            else:
+                self.local_scene.update_visible_recursive(_actor, paths_to_update, visible)
+            await SceneEditNotificationBus().on_actor_visible_changed(_actor_path, paths_to_update, visible, source)
+
+    @override
+    async def set_actor_locked(self, actor, locked, undo, source):
+        _actor, _actor_path = self.local_scene.get_actor_and_path(actor)
+        paths_to_update = []
+        
+        if source == "layout":
+            paths_to_update.append(_actor_path)
+            await SceneEditNotificationBus().on_actor_locked_changed(_actor_path, paths_to_update, locked, source)
+        if source == "actor_outline" or source == "reparent":
+            if _actor.is_parent_locked == False:
+                paths_to_update.append(_actor_path)
+                self.local_scene.update_locked_recursive(_actor, paths_to_update, locked)
+            for path in paths_to_update:
+                actor, _ = self.local_scene.get_actor_and_path(path)
+            await SceneEditNotificationBus().on_actor_locked_changed(_actor_path, paths_to_update, locked, source)

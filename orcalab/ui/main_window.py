@@ -22,6 +22,7 @@ from orcalab.remote_scene import RemoteScene
 from orcalab.report.ask_statistics_dialog import AskStatisticsDialog
 from orcalab.report.report import ask_user_consent, collect_user_env, send_report_directly
 from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
+from orcalab.setting.preferences_dialog import PreferencesDialog
 from orcalab.setting.settings_dialog import SettingsDialog
 from orcalab.simulation.simulation_bus import (
     SimulationRequestBus,
@@ -208,13 +209,14 @@ class MainWindow(
         self.actor_outline_widget.connect_bus()
         self.actor_outline_model.connect_bus()
         self.actor_editor_widget.connect_bus()
+        self.camera_selector_widget.connect_bus()
 
         self.undo_service.connect_bus()
         self.scene_edit_service.connect_bus()
         self.remote_scene.connect_bus()
         self.simulation_service.connect_bus()
 
-        self.manipulator_bar.connect_buses()
+        self.manipulator_bar.connect_bus()
 
         self.connect_buses()
 
@@ -259,6 +261,12 @@ class MainWindow(
         self.mcp_service = OrcaLabMCPServer(port=self.config_service.mcp_port())
         self.mcp_service.add_tools()
         self.mcp_service._task = asyncio.create_task(self.mcp_service.run())
+
+        # Reset camera's move & rotate sensitivity
+        await self.remote_scene.set_move_rotate_sensitivity(
+            move_sensitivity=self.config_service.camera_move_sensitivity(),
+            rotate_sensitivity=self.config_service.camera_rotation_sensitivity()
+        )
 
         # 发送匿名统计数据
         await self.send_statistics()
@@ -774,7 +782,11 @@ class MainWindow(
                 "position": compact_array(to_list(actor.transform.position)),
                 "rotation": compact_array(to_list(actor.transform.rotation)),
                 "scale": actor.transform.scale,
-            }
+            },
+            "is_visible": actor.is_visible,
+            "is_parent_visible": actor.is_parent_visible,
+            "is_locked": actor.is_locked,
+            "is_parent_locked": actor.is_parent_locked,
         }
 
         if actor.name == "root":
@@ -932,6 +944,9 @@ class MainWindow(
 
         action_settings = self.menu_edit.addAction("配置")
         connect(action_settings.triggered, self.open_settings)
+
+        action_preferences = self.menu_edit.addAction("偏好")
+        connect(action_preferences.triggered, self.open_preferences)
 
     def prepare_run_menu(self):
         self.menu_run.clear()
@@ -1286,6 +1301,12 @@ class MainWindow(
             await self.remote_scene.change_manipulator_type(2)
         elif type == ManipulatorType.Scale:
             await self.remote_scene.change_manipulator_type(3)
+        elif type == ManipulatorType.CameraTranslate:
+            await self.remote_scene.change_manipulator_type(4)
+        elif type == ManipulatorType.CameraRotate:
+            await self.remote_scene.change_manipulator_type(5)
+        elif type == ManipulatorType.CameraScale:
+            await self.remote_scene.change_manipulator_type(6)
 
     @override
     async def set_debug_draw(self, enabled: bool):
@@ -1365,3 +1386,7 @@ class MainWindow(
     def open_settings(self):
         # 打开设置窗口的逻辑
         SettingsDialog(self).exec()
+
+    def open_preferences(self):
+        # 打开偏好设置窗口（相机移动/旋转速度）
+        PreferencesDialog(self, remote_scene=self.remote_scene).exec()

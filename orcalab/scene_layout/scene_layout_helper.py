@@ -156,6 +156,11 @@ class SceneLayoutHelper:
         scale = transform_data.get("scale", 1.0)
         transform = Transform(position, rotation, scale)
 
+        is_visible = actor_data.get("is_visible", True)
+        is_parent_visible = actor_data.get("is_parent_visible", True)
+        is_locked = actor_data.get("is_locked", False)
+        is_parent_locked = actor_data.get("is_parent_locked", False)
+        
         if name == "root":
             actor = self.local_scene.root_actor
         else:
@@ -168,9 +173,21 @@ class SceneLayoutHelper:
 
             actor.transform = transform
 
+            actor.is_visible = is_visible
+            actor.is_parent_visible = is_parent_visible
+            actor.is_locked = is_locked
+            actor.is_parent_locked = is_parent_locked
+
             try:
                 assert parent is not None
                 await SceneEditRequestBus().add_actor(actor=actor, parent_actor=parent)
+
+                actor_path = self.local_scene.get_actor_path(actor)
+                if actor.is_visible == False or actor.is_parent_visible == False:
+                    await SceneEditRequestBus().set_actor_visible(actor_path, False, undo=False, source="layout")
+                if actor.is_locked or actor.is_parent_locked:
+                    await SceneEditRequestBus().set_actor_locked(actor_path, True, undo=False, source="layout")
+                
                 if isinstance(actor, AssetActor):
                     await self._apply_modified_properties(actor, actor_data)
             except Exception as e:

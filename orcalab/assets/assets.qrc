@@ -3,7 +3,7 @@
     <file alias="play.svg">icons/ic_fluent_play_20_filled_green.svg</file>
     <file alias="stop.svg">icons/ic_fluent_stop_20_filled_red.svg</file>
     <file alias="pause.svg">icons/ic_fluent_pause_20_filled.svg</file>
-    <file alias="eye-open.svg">icons/ic_fluent_eye_off_20_regular.svg</file>
+    <file alias="eye-open.svg">icons/ic_fluent_eye_20_regular.svg</file>
     <file alias="eye-close.svg">icons/ic_fluent_eye_off_20_regular.svg</file>
     <file alias="lock-open.svg">icons/ic_fluent_lock_open_20_regular.svg</file>
     <file alias="lock-close.svg">icons/ic_fluent_lock_closed_20_regular.svg</file>
@@ -30,6 +30,10 @@
     <file alias="scale.svg">icons/ic_fluent_scale_fill_20_filled.svg</file>
 
     <file alias="camera.svg">icons/ic_fluent_camera_20_regular.svg</file>
+
+    <file alias="camera_translate.svg">icons/camera_translate.svg</file>
+    <file alias="camera_rotate.svg">icons/camera_rotate.svg</file>
+    <file alias="camera_scale.svg">icons/camera_scale.svg</file>
 
     <file alias="grab.png">icons/opvs_grab.png</file>
     <file alias="physics.png">icons/opvs_physics.png</file>

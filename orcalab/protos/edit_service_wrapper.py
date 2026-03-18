@@ -334,7 +334,8 @@ class EditServiceWrapper:
         l = []
         for cam in response.cameras:
             camera_brief = CameraBrief(index=cam.index, name=cam.name)
-            camera_brief.source = cam.source
+            camera_brief.source = getattr(cam, "source", "") or ""
+            camera_brief.actor_path = getattr(cam, "actor_path", "") or ""
             l.append(camera_brief)
         return l
 
@@ -533,4 +534,31 @@ class EditServiceWrapper:
     async def custom_command(self, command: str):
         request = edit_service_pb2.CustomCommandRequest(command=command)
         response = await self.stub.CustomCommand(request)
+        self._check_response(response)
+
+    async def set_visiblity(self, visible: bool, actor_paths: List[Path]):
+        paths = []
+        for p in actor_paths:
+            if not isinstance(p, Path):
+                raise Exception(f"Invalid path: {p}")
+            paths.append(p.string())
+
+        request = edit_service_pb2.SetVisiblityRequest(visible=visible, actor_paths=paths)
+        response = await self.stub.SetVisiblity(request)
+        self._check_response(response)
+
+    async def set_lock(self, locked:bool, actor_paths: List[Path]):
+        paths = []
+        for p in actor_paths:
+            if not isinstance(p, Path):
+                raise Exception(f"Invalid path: {p}")
+            paths.append(p.string())
+
+        request = edit_service_pb2.SetLockRequest(locked=locked, actor_paths=paths)
+        response = await self.stub.SetLock(request)
+        self._check_response(response)
+
+    async def set_move_rotate_sensitivity(self, move_sensitivity: float, rotate_sensitivity: float):
+        request = edit_service_pb2.SetMoveRotateSensitivityRequest(move_sensitivity=move_sensitivity, rotate_sensitivity=rotate_sensitivity)
+        response = await self.stub.SetMoveRotateSensitivity(request)
         self._check_response(response)

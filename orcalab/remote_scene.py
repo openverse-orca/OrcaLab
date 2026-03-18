@@ -183,6 +183,12 @@ class RemoteScene(SceneEditNotification):
                 manipulator_type = ManipulatorType.Rotate
             elif value == "scale":
                 manipulator_type = ManipulatorType.Scale
+            elif value == "camera_translation":
+                manipulator_type = ManipulatorType.CameraTranslate
+            elif value == "camera_rotation":
+                manipulator_type = ManipulatorType.CameraRotate
+            elif value == "camera_scale":
+                manipulator_type = ManipulatorType.CameraScale
             else:
                 print(f"Unknown manipulator type: {value}")
                 return
@@ -331,6 +337,26 @@ class RemoteScene(SceneEditNotification):
         source: str,
     ):
         await self.reparent_actor(actor_path, new_parent_path)
+
+    @override
+    async def on_actor_visible_changed(
+        self,
+        actor_path: Path,
+        paths_to_update: list,
+        visible: bool,
+        source: str = ""
+    ):
+        await self.actor_visible_change(visible, paths_to_update)
+
+    @override
+    async def on_actor_locked_changed(
+        self,
+        actor_path: Path,
+        paths_to_update: list,
+        locked: bool,
+        source: str = ""
+    ):
+        await self.actor_locked_change(locked, paths_to_update)
 
     @override
     async def on_property_changed(
@@ -583,6 +609,14 @@ class RemoteScene(SceneEditNotification):
     async def reparent_actor(self, actor_path: Path, new_parent_path: Path):
         await self._service.reparent_actor(actor_path, new_parent_path)
 
+    async def actor_visible_change(self, visible: bool, paths_to_update: list):
+        async with self._grpc_lock:
+            await self._service.set_visiblity(visible, paths_to_update)
+
+    async def actor_locked_change(self, locked: bool, paths_to_update: list):
+        async with self._grpc_lock:
+             await self._service.set_lock(locked, paths_to_update)
+
     async def get_window_id(self):
         async with self._grpc_lock:
             await self._service.get_window_id()
@@ -675,3 +709,8 @@ class RemoteScene(SceneEditNotification):
     async def custom_command(self, command: str):
         async with self._grpc_lock:
             return await self._service.custom_command(command)
+        
+    async def set_move_rotate_sensitivity(self, move_sensitivity: float, rotate_sensitivity: float):
+        logger.info(f"Setting move rotate sensitivity: {move_sensitivity}, {rotate_sensitivity}")
+        async with self._grpc_lock:
+            return await self._service.set_move_rotate_sensitivity(move_sensitivity, rotate_sensitivity)

@@ -16,12 +16,74 @@ from orcalab.scene_edit_bus import (
 
 from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.rename_dialog import RenameDialog
+from orcalab.ui.icon_util import make_icon
+
+import logging
+logger = logging.getLogger(__name__)
+
+OUTLINE_BUTTON_SIZE = 20
+OUTLINE_BUTTON_GAP = 2
+
+# 每行右侧两个按钮的尺寸与间距（与 delegate 和 view 中计算一致）
+def _visibility_lock_button_rects(row_rect: QtCore.QRect) -> Tuple[QtCore.QRect, QtCore.QRect]:
+    
+    # 根据行矩形计算 可见 锁定 两个按钮的矩形（右对齐）
+    # OUTLINE_BUTTONS_WIDTH = OUTLINE_BUTTON_SIZE * 2 + OUTLINE_BUTTON_GAP
+    h = min(OUTLINE_BUTTON_SIZE, row_rect.height())
+    y = row_rect.top() + (row_rect.height() - h) // 2
+    right = row_rect.right()
+    lock_rect = QtCore.QRect(right - OUTLINE_BUTTON_SIZE, y, OUTLINE_BUTTON_SIZE, h)
+    eye_rect = QtCore.QRect(
+        right - OUTLINE_BUTTON_SIZE - OUTLINE_BUTTON_GAP - OUTLINE_BUTTON_SIZE, y,
+        OUTLINE_BUTTON_SIZE, h,
+    )
+    return eye_rect, lock_rect
 
 
 class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
 
     def __init__(self, /, parent=...):
         super().__init__(parent)
+        self._eye_visible_icon: QtGui.QIcon | None = None
+        self._eye_hidden_icon: QtGui.QIcon | None = None
+        self._lock_locked_icon: QtGui.QIcon | None = None
+        self._lock_unlocked_icon: QtGui.QIcon | None = None
+
+    def _ensure_icons(self, color: QtGui.QColor):
+        if self._eye_visible_icon is None:
+            self._eye_visible_icon = make_icon(":/icons/eye-open.svg", color)
+            self._eye_hidden_icon = make_icon(":/icons/eye-close.svg", color)
+            self._lock_locked_icon = make_icon(":/icons/lock-close.svg", color)
+            self._lock_unlocked_icon = make_icon(":/icons/lock-open.svg", color)
+
+    def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex):
+        if not index.isValid():
+            super().paint(painter, option, index)
+            return
+        actor = index.internalPointer()
+        if not isinstance(actor, BaseActor):
+            super().paint(painter, option, index)
+            return
+        color = option.palette.color(
+            QtGui.QPalette.ColorGroup.Active,
+            QtGui.QPalette.ColorRole.Text,
+        )
+        self._ensure_icons(color)
+        eye_rect, lock_rect = _visibility_lock_button_rects(option.rect)
+        text_rect = QtCore.QRect(option.rect)
+        text_rect.setRight(eye_rect.left() - OUTLINE_BUTTON_GAP)
+        # 绘制 actor 名称
+        text_option = QtWidgets.QStyleOptionViewItem(option)
+        text_option.rect = text_rect
+        super().paint(painter, text_option, index)
+        # 绘制可见按钮图标
+        eye_icon = self._eye_visible_icon if actor.is_visible else self._eye_hidden_icon
+        eye_pixmap = eye_icon.pixmap(QtCore.QSize(OUTLINE_BUTTON_SIZE, OUTLINE_BUTTON_SIZE))
+        painter.drawPixmap(eye_rect, eye_pixmap)
+        # 绘制锁定按钮图标
+        lock_icon = self._lock_locked_icon if actor.is_locked else self._lock_unlocked_icon
+        lock_pixmap = lock_icon.pixmap(QtCore.QSize(OUTLINE_BUTTON_SIZE, OUTLINE_BUTTON_SIZE))
+        painter.drawPixmap(lock_rect, lock_pixmap)
 
     # @typing.override
     # def createEditor(self, parent, option, index):
@@ -247,6 +309,17 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
             pos = event.position().toPoint()
             index = self.indexAt(pos)
+
+            if index.isValid():
+                row_rect = self.visualRect(index)
+                eye_rect, lock_rect = _visibility_lock_button_rects(row_rect)
+                if eye_rect.contains(pos):
+                    self._toggle_actor_visibile(index)
+                    return
+                if lock_rect.contains(pos):
+                    self._toggle_actor_locked(index)
+                    return
+
             actor, actor_path = self._get_actor_at_pos(pos)
 
             if actor_path == Path.root_path():
@@ -297,6 +370,43 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
         self._current_actor_path = None
         self._current_actor = None
+
+    def _toggle_actor_visibile(self, index: QtCore.QModelIndex):
+        actor_outline_model = self.actor_model()
+        actor = actor_outline_model.get_actor(index)
+        if actor is None:
+            return
+        local_scene: LocalScene = actor_outline_model.local_scene
+        actor_path = local_scene.get_actor_path(actor)
+        if actor_path is None:
+            return
+        
+        actor.is_visible = not actor.is_visible
+        if actor.is_parent_visible == True:
+            asyncio.create_task(
+                SceneEditRequestBus().set_actor_visible(
+                    actor_path, actor.is_visible, False, source="actor_outline"
+                )
+            )
+        self.viewport().update(self.visualRect(index))
+
+    def _toggle_actor_locked(self, index: QtCore.QModelIndex):
+        actor_outline_model = self.actor_model()
+        actor = actor_outline_model.get_actor(index)
+        if actor is None:
+            return
+        local_scene: LocalScene = actor_outline_model.local_scene
+        actor_path = local_scene.get_actor_path(actor)
+        if actor_path is None:
+            return
+
+        actor.is_locked = not actor.is_locked
+        asyncio.create_task(
+            SceneEditRequestBus().set_actor_locked(
+                actor_path, actor.is_locked, False, source="actor_outline"
+            )
+        )
+        self.viewport().update(self.visualRect(index))
 
     def _get_selection_actor_path(self) -> Path | None:
         indexes = self.selectedIndexes()

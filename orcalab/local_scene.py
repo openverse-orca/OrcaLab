@@ -284,4 +284,41 @@ class LocalScene:
                         return actor, group, prop
 
         raise Exception("Property not found.")
+    
+    def update_visible_recursive(self, actor: BaseActor, paths_to_update: List, visible: bool):
+        if not isinstance(actor, GroupActor):
+            return
 
+        for child in actor.children:
+            child_actor, child_path = self.get_actor_and_path(child)
+            if child_path is None:
+                continue
+            child_actor.is_parent_visible = visible
+
+            if visible:
+                if child_actor.is_visible:
+                    if isinstance(child_actor, AssetActor):
+                        paths_to_update.append(child_path)
+                    self.update_visible_recursive(child_actor, paths_to_update, visible)
+            else:
+                if isinstance(child_actor, AssetActor):
+                    paths_to_update.append(child_path)
+                self.update_visible_recursive(child_actor, paths_to_update, visible)
+
+    def update_locked_recursive(self, actor: BaseActor, paths_to_update: List, locked: bool):
+        if not isinstance(actor, GroupActor):
+            return
+
+        for child in actor.children:
+            child_actor, child_path = self.get_actor_and_path(child)
+            if child_path is None:
+                continue
+            child_actor.is_parent_locked = locked
+
+            if locked:
+                paths_to_update.append(child_path)
+                self.update_locked_recursive(child_actor, paths_to_update, locked)
+            else:
+                if not child_actor.is_locked:
+                    paths_to_update.append(child_path)
+                    self.update_locked_recursive(child_actor, paths_to_update, locked)
