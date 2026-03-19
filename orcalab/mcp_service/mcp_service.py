@@ -139,10 +139,10 @@ class OrcaLabMCPServer:
                     "name": "Actor名称",
                     "parent": "父Actor名称",
                     "transform.position": [x, y, z],
-                    "transform.rotation": [w, x, y, z],
+                    "transform.rotation": [roll, pitch, yaw],
                     "transform.scale": 缩放因子,
                     "world_transform.position": [x, y, z],
-                    "world_transform.rotation": [w, x, y, z],
+                    "world_transform.rotation": [roll, pitch, yaw],
                     "world_transform.scale": 缩放因子,
                     "type": "Actor类型",
                 }
@@ -154,7 +154,16 @@ class OrcaLabMCPServer:
         if len(actors) > 0 and actors[0] is not None:
             actors: Dict[Path, BaseActor] = actors[0]
             if Path(actor_path) in actors:
-                return json.dumps({actor_path: actors[Path(actor_path)].to_dict()}, ensure_ascii=False)
+                actor = actors[Path(actor_path)]
+                ad = actor.to_dict()
+                # 四元数为 (w,x,y,z)，scipy 使用 (x,y,z,w)
+                w, x, y, z = actor.transform.rotation[0], actor.transform.rotation[1], actor.transform.rotation[2], actor.transform.rotation[3]
+                r = Rotation.from_quat([x, y, z, w])
+                ad["transform.rotation"] = r.as_euler("xyz", degrees=True).tolist()
+                ww, xw, yw, zw = actor.world_transform.rotation[0], actor.world_transform.rotation[1], actor.world_transform.rotation[2], actor.world_transform.rotation[3]
+                rw = Rotation.from_quat([xw, yw, zw, ww])
+                ad["world_transform.rotation"] = rw.as_euler("xyz", degrees=True).tolist()
+                return json.dumps({actor_path: ad}, ensure_ascii=False)
         return json.dumps({}, ensure_ascii=False)
 
     async def set_actor_transform(self, actor_path: str, position: List[float], rotation: List[float], scale: float) -> str:
@@ -163,14 +172,19 @@ class OrcaLabMCPServer:
         Args:
             actor_path: Actor在场景中的路径
             position: Actor的位置
-            rotation: Actor的旋转
+            rotation: Actor的欧拉角旋转 [roll, pitch, yaw]
             scale: Actor的缩放
         Returns:
             设置Actor的变换的结果的json字符串格式
         '''
+        euler_angles = [rotation[0], rotation[1], rotation[2]]
+        r = Rotation.from_euler('xyz', euler_angles, degrees=True)
+        # scipy 返回 (x, y, z, w)，项目中使用 (w, x, y, z)
+        x, y, z, w = r.as_quat()
+        quat = [float(w), float(x), float(y), float(z)]
         # Convert lists to numpy arrays as required by Transform class
         position_array = np.array(position, dtype=np.float64)
-        rotation_array = np.array(rotation, dtype=np.float64)
+        rotation_array = np.array(quat, dtype=np.float64)
         transform = Transform(position=position_array, rotation=rotation_array, scale=scale)
         await self.scene_edit_bus.set_transform(Path(actor_path), transform, local=True, undo=True, source="mcp")
         return json.dumps({"success": True, "message": "成功设置Actor的变换"}, ensure_ascii=False)
@@ -662,14 +676,19 @@ class OrcaLabMCPServer:
         Args:
             actor_paths: Actor路径列表
             position: 位置 [x, y, z]
-            rotation: 旋转 [w, x, y, z] (四元数)
+            rotation: 旋转 [roll, pitch, yaw] (欧拉角)
             scale: 缩放因子
         Returns:
             批量设置变换的结果的json字符串格式
         '''
         try:
+            euler_angles = [rotation[0], rotation[1], rotation[2]]
+            r = Rotation.from_euler('xyz', euler_angles, degrees=True)
+            # scipy 返回 (x, y, z, w)，项目中使用 (w, x, y, z)
+            x, y, z, w = r.as_quat()
+            quat = [float(w), float(x), float(y), float(z)]
             position_array = np.array(position, dtype=np.float64)
-            rotation_array = np.array(rotation, dtype=np.float64)
+            rotation_array = np.array(quat, dtype=np.float64)
             transform = Transform(position=position_array, rotation=rotation_array, scale=scale)
 
             success_count = 0
