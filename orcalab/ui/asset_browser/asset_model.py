@@ -94,6 +94,12 @@ class AssetModel(ThumbnailModel):
         for asset in input:
             if include_lower in asset.name.lower():
                 result.append(asset)
+                continue
+            if asset.metadata is not None:
+                if (include_lower in asset.metadata['englishName'].lower()
+                or include_lower in asset.metadata['name']):
+                    result.append(asset)
+                    continue
 
         return result
 
@@ -106,5 +112,11 @@ class AssetModel(ThumbnailModel):
         for asset in input:
             if exclude_lower not in asset.name.lower():
                 result.append(asset)
+                continue
+            if asset.metadata is not None:
+                if (exclude_lower not in asset.metadata['englishName'].lower()
+                or exclude_lower not in asset.metadata['name']):
+                    result.append(asset)
+                    continue
 
         return result
