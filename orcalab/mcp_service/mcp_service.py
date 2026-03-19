@@ -50,6 +50,22 @@ class OrcaLabMCPServer:
         # Register tools immediately after MCP instance creation
         self.add_tools()
 
+    @staticmethod
+    def _quat_to_euler_list(quat) -> List[float]:
+        """四元数 (w,x,y,z) 转欧拉角 [roll, pitch, yaw] 角度制，顺序 xyz。"""
+        if hasattr(quat, "tolist"):
+            quat = quat.tolist()
+        w, x, y, z = float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])
+        r = Rotation.from_quat([x, y, z, w])
+        return r.as_euler("xyz", degrees=True).tolist()
+
+    @staticmethod
+    def _euler_to_quat_list(euler: List[float]) -> List[float]:
+        """欧拉角 [roll, pitch, yaw] 角度制 xyz 顺序 转四元数 (w,x,y,z)。"""
+        r = Rotation.from_euler("xyz", euler, degrees=True)
+        x, y, z, w = r.as_quat()
+        return [float(w), float(x), float(y), float(z)]
+
     def get_asset_map(self) -> str:
         '''
         获取所有已订阅资产的元数据信息
@@ -108,14 +124,15 @@ class OrcaLabMCPServer:
                     "name": "Actor名称",
                     "parent": "父Actor名称",
                     "transform.position": [x, y, z],
-                    "transform.rotation": [w, x, y, z],
+                    "transform.rotation": [roll, pitch, yaw],
                     "transform.scale": 缩放因子,
                     "world_transform.position": [x, y, z],
-                    "world_transform.rotation": [w, x, y, z],
+                    "world_transform.rotation": [roll, pitch, yaw],
                     "world_transform.scale": 缩放因子,
                     "type": "Actor类型",
                 }
             }
+            rotation 均为欧拉角 [roll, pitch, yaw]，单位度，顺序 xyz
         '''
         actors: List[Dict[Path, BaseActor]] = []
         self.scene_edit_bus.get_all_actors(actors)
@@ -123,7 +140,10 @@ class OrcaLabMCPServer:
             actors: Dict[Path, BaseActor] = actors[0]
             actors_dict = {}
             for path, actor in actors.items():
-                actors_dict[path.string()] = actor.to_dict()
+                ad = actor.to_dict()
+                ad["transform.rotation"] = self._quat_to_euler_list(actor.transform.rotation)
+                ad["world_transform.rotation"] = self._quat_to_euler_list(actor.world_transform.rotation)
+                actors_dict[path.string()] = ad
             return json.dumps(actors_dict)
         return json.dumps({})
 
@@ -156,13 +176,8 @@ class OrcaLabMCPServer:
             if Path(actor_path) in actors:
                 actor = actors[Path(actor_path)]
                 ad = actor.to_dict()
-                # 四元数为 (w,x,y,z)，scipy 使用 (x,y,z,w)
-                w, x, y, z = actor.transform.rotation[0], actor.transform.rotation[1], actor.transform.rotation[2], actor.transform.rotation[3]
-                r = Rotation.from_quat([x, y, z, w])
-                ad["transform.rotation"] = r.as_euler("xyz", degrees=True).tolist()
-                ww, xw, yw, zw = actor.world_transform.rotation[0], actor.world_transform.rotation[1], actor.world_transform.rotation[2], actor.world_transform.rotation[3]
-                rw = Rotation.from_quat([xw, yw, zw, ww])
-                ad["world_transform.rotation"] = rw.as_euler("xyz", degrees=True).tolist()
+                ad["transform.rotation"] = self._quat_to_euler_list(actor.transform.rotation)
+                ad["world_transform.rotation"] = self._quat_to_euler_list(actor.world_transform.rotation)
                 return json.dumps({actor_path: ad}, ensure_ascii=False)
         return json.dumps({}, ensure_ascii=False)
 
@@ -172,17 +187,12 @@ class OrcaLabMCPServer:
         Args:
             actor_path: Actor在场景中的路径
             position: Actor的位置
-            rotation: Actor的欧拉角旋转 [roll, pitch, yaw]
+            rotation: Actor的欧拉角旋转 [roll, pitch, yaw]，单位度，顺序 xyz
             scale: Actor的缩放
         Returns:
             设置Actor的变换的结果的json字符串格式
         '''
-        euler_angles = [rotation[0], rotation[1], rotation[2]]
-        r = Rotation.from_euler('xyz', euler_angles, degrees=True)
-        # scipy 返回 (x, y, z, w)，项目中使用 (w, x, y, z)
-        x, y, z, w = r.as_quat()
-        quat = [float(w), float(x), float(y), float(z)]
-        # Convert lists to numpy arrays as required by Transform class
+        quat = self._euler_to_quat_list(rotation)
         position_array = np.array(position, dtype=np.float64)
         rotation_array = np.array(quat, dtype=np.float64)
         transform = Transform(position=position_array, rotation=rotation_array, scale=scale)
@@ -247,7 +257,11 @@ class OrcaLabMCPServer:
                 actors: Dict[Path, BaseActor] = actors[0]
             for path in selection:
                 if path in actors:
-                    selection_dict[path.string()] = actors[path].to_dict()
+                    actor = actors[path]
+                    ad = actor.to_dict()
+                    ad["transform.rotation"] = self._quat_to_euler_list(actor.transform.rotation)
+                    ad["world_transform.rotation"] = self._quat_to_euler_list(actor.world_transform.rotation)
+                    selection_dict[path.string()] = ad
         return json.dumps(selection_dict, ensure_ascii=False)
 
     async def start_simulation(self) -> str:
@@ -277,16 +291,6 @@ class OrcaLabMCPServer:
             return json.dumps({"success": True, "message": "成功停止仿真"}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"success": False, "message": f"停止仿真失败: {e}"}, ensure_ascii=False)
-
-    # async def get_camera_position(self) -> str:
-    #     '''
-    #     获取相机位置
-    #     Args:
-    #         无需传递参数
-    #     Returns:
-    #         相机位置的json字符串格式
-    #     '''
-    #     pass
       
     async def get_viewport_camera_info(self, index: int = 0) -> str:
         '''
@@ -300,7 +304,7 @@ class OrcaLabMCPServer:
                 "message": "成功获取当前视口相机的信息",
                 "transform": {
                     "position": [x, y, z],
-                    "rotation": [w, x, y, z],
+                    "rotation": [roll, pitch, yaw],
                 },
                 "color_path": "color_path",
                 "depth_path": "depth_path",
@@ -316,7 +320,7 @@ class OrcaLabMCPServer:
                 transform = output[0]
             if transform is not None:
                 position = transform.position.tolist()
-                rotation = transform.rotation.tolist()
+                rotation = self._quat_to_euler_list(transform.rotation)
                 actor, output = [], []
                 await self.application_bus.add_item_to_scene_with_transform("AgentCamera", "prefabs/agentcamera", parent_path=Path.root_path(), transform=transform, output=actor)
                 if len(actor) > 0 and actor[0] is not None:
@@ -395,9 +399,11 @@ class OrcaLabMCPServer:
                 "message": "成功获取当前视口相机变换",
                 "transform": {
                     "position": [x, y, z],
-                    "rotation": [w, x, y, z],
+                    "rotation": [roll, pitch, yaw],
                     "scale": scale,
                 }
+            }
+            rotation 为欧拉角 [roll, pitch, yaw]，单位度
         '''
         try:
             output = []
@@ -406,22 +412,14 @@ class OrcaLabMCPServer:
                 transform : Transform = output[0]
                 return json.dumps({"success": True, "message": "成功获取当前视口相机变换", "transform": {
                     "position": transform.position.tolist(),
-                    "rotation": transform.rotation.tolist(),
+                    "rotation": self._quat_to_euler_list(transform.rotation),
                     "scale": transform.scale,
                 }}, ensure_ascii=False)
             else:
                 return json.dumps({"success": False, "message": "获取当前视口相机变换失败"}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"success": False, "message": f"获取当前视口相机变换失败: {e}"}, ensure_ascii=False)
-    # async def get_scene_screenshot(self) -> Image:
-    #     '''
-    #     获取场景截图
-    #     Args:
-    #         无需传递参数
-    #     Returns:
-    #         场景截图
-    #     '''
-    #     pass
+
 
     # ==================== 撤销/重做类 API ====================
 
@@ -682,11 +680,7 @@ class OrcaLabMCPServer:
             批量设置变换的结果的json字符串格式
         '''
         try:
-            euler_angles = [rotation[0], rotation[1], rotation[2]]
-            r = Rotation.from_euler('xyz', euler_angles, degrees=True)
-            # scipy 返回 (x, y, z, w)，项目中使用 (w, x, y, z)
-            x, y, z, w = r.as_quat()
-            quat = [float(w), float(x), float(y), float(z)]
+            quat = self._euler_to_quat_list(rotation)
             position_array = np.array(position, dtype=np.float64)
             rotation_array = np.array(quat, dtype=np.float64)
             transform = Transform(position=position_array, rotation=rotation_array, scale=scale)
@@ -822,7 +816,6 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.get_viewport_camera_info)
         self.mcp.tool(self.get_viewport_png)
         self.mcp.tool(self.get_viewport_transform)
-        # self.mcp.tool(self.get_scene_screenshot)
 
         # 场景编辑高级
         self.mcp.tool(self.get_actor_asset_aabb)
