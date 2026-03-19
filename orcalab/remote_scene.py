@@ -24,7 +24,7 @@ from orcalab.scene_edit_bus import (
 from orcalab.state_sync_bus import ManipulatorType, StateSyncNotificationBus
 from orcalab.ui.camera.camera_brief import CameraBrief
 from orcalab.ui.camera.camera_bus import CameraNotificationBus
-from orcalab.protos.edit_service_wrapper import EditServiceWrapper
+from orcalab.protos.edit_service_wrapper import CameraDataPNGResult, EditServiceWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -623,6 +623,13 @@ class RemoteScene(SceneEditNotification):
                     retry -= 1
                     await asyncio.sleep(0.01)
 
+    async def get_camera_data_png(self, camera_name: str, png_path: str, index: int, output: list[CameraDataPNGResult] = None) -> CameraDataPNGResult:
+        async with self._grpc_lock:
+            result = await self._service.get_camera_data_png(camera_name, png_path, index)
+        if output is not None:
+            output.append(result)
+        return result
+
     async def get_actor_asset_aabb(self, actor_path: Path, output: List[float]):
         async with self._grpc_lock:
             await self._service.get_actor_asset_aabb(actor_path, output)
@@ -647,6 +654,10 @@ class RemoteScene(SceneEditNotification):
     async def set_active_camera(self, camera_index: int) -> None:
         async with self._grpc_lock:
             await self._service.set_active_camera(camera_index)
+
+    async def get_viewport_camera_transform(self) -> Transform:
+        async with self._grpc_lock:
+            return await self._service.get_viewport_camera_transform()
 
     async def get_property_groups(self, actor_path: Path) -> List[ActorPropertyGroup]:
         return await self._service.get_property_groups(actor_path)

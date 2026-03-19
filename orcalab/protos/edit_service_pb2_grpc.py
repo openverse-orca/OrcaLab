@@ -194,6 +194,16 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.SetActiveCameraRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetActiveCameraResponse.FromString,
                 _registered_method=True)
+        self.GetViewportCameraTransform = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetViewportCameraTransform',
+                request_serializer=edit__service__pb2.GetViewportCameraTransformRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetViewportCameraTransformResponse.FromString,
+                _registered_method=True)
+        self.GetCameraDataPNG = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetCameraDataPNG',
+                request_serializer=edit__service__pb2.GetCameraDataPNGRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetCameraDataPNGResponse.FromString,
+                _registered_method=True)
         self.GetPropertyGroups = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetPropertyGroups',
                 request_serializer=edit__service__pb2.GetPropertyGroupsRequest.SerializeToString,
@@ -421,6 +431,18 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetViewportCameraTransform(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetCameraDataPNG(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetPropertyGroups(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -619,6 +641,16 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.SetActiveCamera,
                     request_deserializer=edit__service__pb2.SetActiveCameraRequest.FromString,
                     response_serializer=edit__service__pb2.SetActiveCameraResponse.SerializeToString,
+            ),
+            'GetViewportCameraTransform': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetViewportCameraTransform,
+                    request_deserializer=edit__service__pb2.GetViewportCameraTransformRequest.FromString,
+                    response_serializer=edit__service__pb2.GetViewportCameraTransformResponse.SerializeToString,
+            ),
+            'GetCameraDataPNG': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCameraDataPNG,
+                    request_deserializer=edit__service__pb2.GetCameraDataPNGRequest.FromString,
+                    response_serializer=edit__service__pb2.GetCameraDataPNGResponse.SerializeToString,
             ),
             'GetPropertyGroups': grpc.unary_unary_rpc_method_handler(
                     servicer.GetPropertyGroups,
@@ -1515,6 +1547,60 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/SetActiveCamera',
             edit__service__pb2.SetActiveCameraRequest.SerializeToString,
             edit__service__pb2.SetActiveCameraResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetViewportCameraTransform(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetViewportCameraTransform',
+            edit__service__pb2.GetViewportCameraTransformRequest.SerializeToString,
+            edit__service__pb2.GetViewportCameraTransformResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCameraDataPNG(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetCameraDataPNG',
+            edit__service__pb2.GetCameraDataPNGRequest.SerializeToString,
+            edit__service__pb2.GetCameraDataPNGResponse.FromString,
             options,
             channel_credentials,
             insecure,

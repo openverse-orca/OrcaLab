@@ -36,6 +36,7 @@ class OrcaLabMCPServer:
         self.config_service = ConfigService()
         self.metadata_service_bus = MetadataServiceRequestBus()
         self.scene_edit_bus = SceneEditRequestBus()
+        self.application_bus = ApplicationRequestBus()
         self.scene_edit_notification_bus = SceneEditNotificationBus()
         self.simulation_bus = SimulationRequestBus()
         self.undo_bus = UndoRequestBus()
@@ -273,17 +274,131 @@ class OrcaLabMCPServer:
     #     '''
     #     pass
       
+    async def get_viewport_camera_info(self, index: int = 0) -> str:
+        '''
+        获取当前视口相机的信息，包括Transform, RGB图，深度图，法线图，对象语义图
+        Args:
+            index: 当前获取的视口图片信息索引，与图片命名有关
+        Returns:
+            当前视口相机的信息的json字符串格式
+            {
+                "success": True,
+                "message": "成功获取当前视口相机的信息",
+                "transform": {
+                    "position": [x, y, z],
+                    "rotation": [w, x, y, z],
+                },
+                "color_path": "color_path",
+                "depth_path": "depth_path",
+                "normal_path": "normal_path",
+                "object_color_path": "object_color_path",
+            }
+        '''
+        try:
+            output = []
+            transform : Transform = None
+            await self.camera_bus.get_viewport_camera_transform(output)
+            if len(output) > 0 and output[0] is not None:
+                transform = output[0]
+            if transform is not None:
+                position = transform.position.tolist()
+                rotation = transform.rotation.tolist()
+                actor, output = [], []
+                await self.application_bus.add_item_to_scene_with_transform("AgentCamera", "prefabs/agentcamera", parent_path=Path.root_path(), transform=transform, output=actor)
+                if len(actor) > 0 and actor[0] is not None:
+                    actor = actor[0]
+                
+                viewport_image_path = os.path.join(os.path.expanduser("~"), ".orcalab", "viewport_image")
+                color_path = os.path.join(viewport_image_path, "color", f"AgentCamera_color_{index}.png")
+                depth_path = os.path.join(viewport_image_path, "depth", f"AgentCamera_depth_{index}.npy")
+                # normal_path = os.path.join(viewport_image_path, "normal", f"AgentCamera_normal_{index}.png")
+                object_color_path = os.path.join(viewport_image_path, "object_color", f"AgentCamera_object_color_{index}.png")
+                await self.scene_edit_notification_bus.get_camera_data_png("AgentCamera", viewport_image_path, index, output)
+                await asyncio.sleep(0.2)
+                await self.scene_edit_bus.delete_actor(actor, undo=True, source="mcp")
+                if len(output) > 0 and output[0] is not None:
+                    camera_data_png = output[0]
+                    color_path = color_path
+                    depth_path = depth_path
+                    # normal_path = normal_path
+                    object_color_path = object_color_path
+                return json.dumps({"success": True, 
+                                    "message": "成功获取当前视口相机的信息", 
+                                    "transform": {
+                                        "position": position,
+                                        "rotation": rotation,
+                                    },
+                                    "color_path": color_path,
+                                    "depth_path": depth_path,
+                                    # "normal_path": normal_path,
+                                    "object_color_path": object_color_path,
+                                    }, ensure_ascii=False)
+            else:
+                return json.dumps({"success": False, "message": "获取当前视口相机信息失败"}, ensure_ascii=False)
+        except Exception as e:
+            print(f"获取当前视口相机信息失败: {e}")
+            return json.dumps({"success": False, "message": f"获取当前视口相机信息失败: {e}"}, ensure_ascii=False)
+   
+    async def get_viewport_png(self, index: int) -> Image:
+        '''
+        获取相机截图
+        Args:
+            index: 当前获取的视口图片信息索引，与图片命名有关
+        Returns:
+            相机截图的Image对象，MCP客户端可直接渲染显示
+        '''
+        output = []
+        transform: Transform = None
+        await self.camera_bus.get_viewport_camera_transform(output)
+        if len(output) > 0 and output[0] is not None:
+            transform = output[0]
+        if transform is None:
+            raise RuntimeError("获取视口相机变换失败")
 
-    # async def get_camera_png(self) -> Image:
-    #     '''
-    #     获取相机截图
-    #     Args:
-    #         无需传递参数
-    #     Returns:
-    #         相机截图
-    #     '''
-    #    pass
+        actor = []
+        await self.application_bus.add_item_to_scene_with_transform("mujococamera1080", "prefabs/mujococamera1080", parent_path=Path.root_path(), transform=transform, output=actor)
+        if len(actor) > 0 and actor[0] is not None:
+            actor = actor[0]
 
+        viewport_image_path = os.path.join(os.path.expanduser("~"), ".orcalab")
+        color_path = os.path.join(viewport_image_path, f"viewport_color_{index}.png")
+        await self.scene_edit_notification_bus.get_camera_png("mujococamera1080", viewport_image_path, f"viewport_color_{index}.png")
+        await asyncio.sleep(0.2)
+        await self.scene_edit_bus.delete_actor(actor, undo=True, source="mcp")
+
+        return Image(path=color_path)
+
+
+    async def get_viewport_transform(self) -> str:
+        '''
+        获取当前视口相机的变换
+        Args:
+            无需传递参数
+        Returns:
+            当前视口相机的变换的json字符串格式
+            {
+                "success": True,
+                "message": "成功获取当前视口相机变换",
+                "transform": {
+                    "position": [x, y, z],
+                    "rotation": [w, x, y, z],
+                    "scale": scale,
+                }
+        '''
+        try:
+            output = []
+            await self.camera_bus.get_viewport_camera_transform(output)
+            if len(output) > 0 and output[0] is not None:
+                transform : Transform = output[0]
+                return json.dumps({"success": True, "message": "成功获取当前视口相机变换", "transform": {
+                    "position": transform.position.tolist(),
+                    "rotation": transform.rotation.tolist(),
+                    "scale": transform.scale,
+                }}, ensure_ascii=False)
+            else:
+                return json.dumps({"success": False, "message": "获取当前视口相机变换失败"}, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"success": False, "message": f"获取当前视口相机变换失败: {e}"}, ensure_ascii=False)
     # async def get_scene_screenshot(self) -> Image:
     #     '''
     #     获取场景截图
@@ -685,8 +800,9 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.set_actors_transform)
 
         # 视觉类
-        # self.mcp.tool(self.get_camera_position)
-        # self.mcp.tool(self.get_camera_png)
+        self.mcp.tool(self.get_viewport_camera_info)
+        self.mcp.tool(self.get_viewport_png)
+        self.mcp.tool(self.get_viewport_transform)
         # self.mcp.tool(self.get_scene_screenshot)
 
         # 场景编辑高级

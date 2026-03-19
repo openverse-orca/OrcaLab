@@ -318,6 +318,29 @@ message SetActiveCameraResponse {
     string error_message = 2;
 }
 
+message GetViewportCameraTransformRequest {
+}
+message GetViewportCameraTransformResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    Transform transform = 3;
+}
+
+message GetCameraDataPNGRequest {
+    string camera_name = 1;
+    string png_path = 2;
+    int64 index = 3;
+}
+message GetCameraDataPNGResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    Transform transform = 3;
+    bool has_color = 4;
+    bool has_depth = 5;
+    bool has_normal = 6;
+    bool has_object_color = 7;
+}
+
 // Actor Property related messages.
 
 enum PropertyType {
@@ -475,6 +498,8 @@ service GrpcService {
     rpc GetCameras(GetCamerasRequest) returns (GetCamerasResponse);
     rpc GetActiveCamera(GetActiveCameraRequest) returns (GetActiveCameraResponse);
     rpc SetActiveCamera(SetActiveCameraRequest) returns (SetActiveCameraResponse);
+    rpc GetViewportCameraTransform(GetViewportCameraTransformRequest) returns (GetViewportCameraTransformResponse);
+    rpc GetCameraDataPNG(GetCameraDataPNGRequest) returns (GetCameraDataPNGResponse);
 
     rpc GetPropertyGroups(GetPropertyGroupsRequest) returns (GetPropertyGroupsResponse);
     rpc GetProperties(GetPropertiesRequest) returns (GetPropertiesResponse);
@@ -483,4 +508,5 @@ service GrpcService {
     rpc CustomCommand(CustomCommandRequest) returns (CustomCommandResponse);
 
     rpc PublishScene(PublishSceneRequest) returns (PublishSceneResponse);
+
 }

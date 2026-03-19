@@ -1261,6 +1261,13 @@ class MainWindow(
         await self.remote_scene.set_active_camera(camera_index)
         CameraNotificationBus().on_viewport_camera_changed(camera_index)
 
+    @override
+    async def get_viewport_camera_transform(self, output: list[Transform]) -> Transform:
+        transform = await self.remote_scene.get_viewport_camera_transform()
+        if output is not None:
+            output.append(transform)
+        return transform
+        
     #
     # CameraNotificationBus overrides
     #
