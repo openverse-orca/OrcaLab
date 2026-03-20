@@ -5,6 +5,7 @@ from orcalab.actor_property import ActorPropertyKey
 from orcalab.math import Transform
 from orcalab.event_bus import create_event_bus
 from orcalab.path import Path
+from orcalab.protos.edit_service_wrapper import CameraDataPNGResult
 
 
 class SceneEditRequest:
@@ -238,6 +239,9 @@ class SceneEditNotification:
         pass
 
     async def get_camera_png(self, camera_name: str, png_path: str, png_name: str):
+        pass
+
+    async def get_camera_data_png(self, camera_name: str, png_path: str, index: int, output: list[CameraDataPNGResult] = None) -> CameraDataPNGResult:
         pass
 
     async def get_actor_asset_aabb(self, actor_path: Path, output: List[float]):

@@ -102,6 +102,10 @@ class MainWindow(
         # 状态指示器（顶部蓝色条）
         self._status_indicator = None
 
+        # 场景布局加载中弹窗
+        self._scene_loading_dialog: QtWidgets.QDialog | None = None
+        self._scene_loading_in_progress = False
+
         # Let empty area can steal focus.
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
         self.setWindowTitle(f"{self._base_title}")
@@ -175,6 +179,8 @@ class MainWindow(
         else:
             logger.info("用户拒绝发送统计数据")
 
+        await asyncio.sleep(0.5)
+        
         logger.info("初始化引擎...")
         self._viewport_widget.init_viewport()
         self._viewport_widget.start_viewport_main_loop()
@@ -778,6 +784,7 @@ class MainWindow(
         if isinstance(actor, AssetActor):
             data["type"] = "AssetActor"
             data["asset_path"] = actor._asset_path
+            data["modified_properties"] = SceneLayoutHelper.collect_modified_properties(actor)
 
         if isinstance(actor, GroupActor):
             data["type"] = "GroupActor"
@@ -837,82 +844,78 @@ class MainWindow(
         self._update_title()
         logger.debug("open_scene_layout: 用户打开 path=%s", filename)
 
+    def _show_scene_loading_dialog(self):
+        """显示「场景加载中」弹窗并禁用主窗口操作。"""
+        self._scene_loading_in_progress = True
+        if self._scene_loading_dialog is None:
+            self._scene_loading_dialog = QtWidgets.QDialog(self)
+            self._scene_loading_dialog.installEventFilter(self)
+            self._scene_loading_dialog.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+            self._scene_loading_dialog.setWindowFlags(
+                QtCore.Qt.WindowType.Dialog
+                | QtCore.Qt.WindowType.MSWindowsFixedSizeDialogHint
+                & ~QtCore.Qt.WindowType.WindowCloseButtonHint
+            )
+            self._scene_loading_dialog.setWindowTitle("Orcalab")
+            self._scene_loading_dialog.setMinimumSize(220, 136)
+            layout = QtWidgets.QVBoxLayout(self._scene_loading_dialog)
+            layout.setContentsMargins(32, 32, 32, 32)
+            layout.addStretch()
+            row_label = QtWidgets.QHBoxLayout()
+            row_label.addStretch()
+            label = QtWidgets.QLabel("场景加载中", self._scene_loading_dialog)
+            label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            font = label.font()
+            font.setPointSize(10)
+            label.setFont(font)
+            row_label.addWidget(label)
+            row_label.addStretch()
+            layout.addLayout(row_label)
+            layout.addStretch()
+            self._scene_loading_dialog._label = label
+        self._scene_loading_dialog._label.setText("场景加载中")
+        self._scene_loading_dialog.resize(220, 136)
+        self._scene_loading_dialog.show()
+        self.setEnabled(False)
+
+    def _hide_scene_loading_dialog(self):
+        """关闭「场景加载中」弹窗并恢复主窗口操作。"""
+        self._scene_loading_in_progress = False
+        if self._scene_loading_dialog is not None:
+            self._scene_loading_dialog.close()
+        self.setEnabled(True)
+
+    def eventFilter(self, obj, event):
+        """布局加载期间禁止用户关闭弹窗，忽略关闭操作。"""
+        if (
+            obj is self._scene_loading_dialog
+            and event.type() == QtCore.QEvent.Type.Close
+            and self._scene_loading_in_progress
+        ):
+            event.ignore()
+            return True
+        return super().eventFilter(obj, event)
+
     async def load_scene_layout(self, filename):
         resolved = self._resolve_path(filename)
+        show_loading = self.isVisible()
+        if show_loading:
+            self._show_scene_loading_dialog()
         try:
-            with open(filename, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception as e:
-            logger.exception("读取场景布局文件失败: %s", e)
-            return
+            helper = SceneLayoutHelper(self.local_scene)
+            if not await helper.load_scene_layout(self, filename):
+                return
 
-        await self.clear_scene_layout(self.local_scene.root_actor)
-        errors = []
-        await self.create_actor_from_scene_layout(data, errors=errors)
+            self.current_layout_path = resolved
+            self._infer_scene_and_layout_names()
+            self._mark_layout_clean()
+            self.undo_service.command_history = []
+            self.undo_service.command_history_index = -1
 
-        if errors:
-            error_detail = "\n".join(errors)
-            logger.warning("加载场景布局时部分Actor创建失败:\n%s", error_detail)
-            QtCore.QTimer.singleShot(0, lambda: QtWidgets.QMessageBox.warning(
-                self,
-                "加载场景布局警告",
-                f"场景布局 '{filename}' 加载过程中部分Actor创建失败:\n\n{error_detail}",
-                QtWidgets.QMessageBox.StandardButton.Ok,
-            ))
-
-        self.current_layout_path = resolved
-        self._infer_scene_and_layout_names()
-        self._mark_layout_clean()
-        self._update_title()
-        self.undo_service.command_history = []
-        self.undo_service.command_history_index = -1
-
-    async def clear_scene_layout(self, actor):
-        if isinstance(actor, GroupActor):
-            for child_actor in actor.children:
-                await self.clear_scene_layout(child_actor)
-        if actor != self.local_scene.root_actor:
-            await SceneEditRequestBus().delete_actor(actor)
-
-        await SceneEditRequestBus().set_selection([], undo=False)
-
-    async def create_actor_from_scene_layout(self, actor_data, parent: GroupActor = None, errors: List[str] = None):
-        if errors is None:
-            errors = []
-
-        name = actor_data["name"]
-        actor_type = actor_data.get("type", "BaseActor")
-        if actor_type == "AssetActor":
-            asset_path = actor_data.get("asset_path", "")
-            actor = AssetActor(name=name, asset_path=asset_path)
-        else:
-            actor = GroupActor(name=name)
-
-        transform_data = actor_data.get("transform", {})
-        position = np.array(ast.literal_eval(transform_data["position"]), dtype=float).reshape(3)
-        rotation = np.array(ast.literal_eval(transform_data["rotation"]), dtype=float)
-        scale = transform_data.get("scale", 1.0)
-        transform = Transform(position, rotation, scale)
-        actor.transform = transform
-
-        if name == "root":
-            actor = self.local_scene.root_actor
-        else:
-            try:
-                await SceneEditRequestBus().add_actor(actor=actor, parent_actor=parent)
-            except Exception as e:
-                error_msg = f"创建 Actor {name} 失败: {e}, asset_path: {actor.asset_path}"
-                logger.warning(error_msg)
-                errors.append(error_msg)
-                self.terminal_widget._append_output(f"{error_msg}\n")
-                self.terminal_widget._append_output(f"确认是否有未订阅资产包， 资产包是否已更新\n")
-
-        if isinstance(actor, GroupActor):
-            for child_data in actor_data.get("children", []):
-                await self.create_actor_from_scene_layout(child_data, actor, errors)
-        self._layout_modified = True
-        self._update_title()
-        logger.debug("create_actor_from_scene_layout: 标记布局已修改")
+            logger.debug("create_actor_from_scene_layout: 标记布局已修改")
+        finally:
+            if show_loading:
+                self._hide_scene_loading_dialog()
 
     def prepare_edit_menu(self):
         self.menu_edit.clear()
@@ -1258,6 +1261,13 @@ class MainWindow(
         await self.remote_scene.set_active_camera(camera_index)
         CameraNotificationBus().on_viewport_camera_changed(camera_index)
 
+    @override
+    async def get_viewport_camera_transform(self, output: list[Transform]) -> Transform:
+        transform = await self.remote_scene.get_viewport_camera_transform()
+        if output is not None:
+            output.append(transform)
+        return transform
+        
     #
     # CameraNotificationBus overrides
     #

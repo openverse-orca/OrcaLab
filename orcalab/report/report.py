@@ -216,6 +216,52 @@ def _get_python_packages() -> Dict[str, str]:
     return packages
 
 
+def _get_memory_info() -> Dict[str, object]:
+    """Return memory (DRAM) information: total and available in bytes."""
+    mem = {}
+    try:
+        import psutil
+
+        vmem = psutil.virtual_memory()
+        mem["total_bytes"] = vmem.total
+        mem["available_bytes"] = vmem.available
+        mem["used_bytes"] = vmem.used
+        mem["percent"] = vmem.percent
+    except Exception:
+        # Fallback for Windows using wmic
+        if sys.platform.startswith("win"):
+            try:
+                total = _run_cmd(
+                    ["wmic", "ComputerSystem", "get", "TotalPhysicalMemory"]
+                )
+                if total:
+                    lines = total.splitlines()
+                    for line in lines:
+                        if line.strip().isdigit():
+                            mem["total_bytes"] = int(line.strip())
+                            break
+            except Exception:
+                mem["total_bytes"] = None
+        else:
+            mem["total_bytes"] = None
+    return mem
+
+
+def _get_ip_info():
+    import requests
+
+    try:
+        response = requests.get("http://ip-api.com/json", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return data
+
+    except Exception:
+        return {}
+
+    return {}
+
+
 def collect_user_env(source: str) -> Dict[str, object]:
     token_data = TokenStorage.load_token()
     username = token_data.get("username", "") if token_data else ""
@@ -230,7 +276,9 @@ def collect_user_env(source: str) -> Dict[str, object]:
             "username": username,
             "system": _get_system_info(),
             "cpu": _get_cpu_info(),
+            "memory": _get_memory_info(),
             "gpus": _get_gpu_info(),
+            "ip": _get_ip_info(),
             "env": _get_env_vars(),
             "system_packages": _get_system_packages(),
             "python_packages": _get_python_packages(),
@@ -278,10 +326,28 @@ async def send_report_directly():
         "Content-Type": "application/json",
     }
 
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=data, headers=headers) as response:
-            print(f"Status: {response.status}")
-            print(await response.json())
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url, json=data, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
+                logger.info(
+                    "Statistics report sent, status=%s", response.status
+                )
+                try:
+                    await response.json()
+                except Exception:
+                    pass
+    except aiohttp.ClientError as e:
+        logger.warning(
+            "Failed to send statistics report (network): %s. OrcaLab will continue.",
+            e,
+        )
+    except OSError as e:
+        logger.warning(
+            "Failed to send statistics report (OS error): %s. OrcaLab will continue.",
+            e,
+        )
 
 
 if __name__ == "__main__":

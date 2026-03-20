@@ -20,7 +20,7 @@ from qasync import asyncWrap
 async def foo():
     def bloc_task():
         return dialog.exec()
-    
+  
     await asyncWrap(bloc_task)
 ```
 
@@ -55,15 +55,24 @@ some_signal.connect(bloc_task)
 ### 4. 依赖版本冲突
 
 使用虚拟环境隔离不同项目的依赖：
+
 ```bash
 python -m venv orca_env
 source orca_env/bin/activate
 pip install -e .
 ```
 
+### 5. 调试开关
+
+```python
+python orcalab/main.py --verbose  #终端输出详细的日志
+
+python orcalab/main.py --rhi-device-validation=verbose #viewport记录vulkan的输出，方便定位GPU Remove的问题
+```
+
 ## 更多问题？
 
 如有其他开发相关问题，请参考：
+
 - [开发安装指南](./DEVELOPMENT_INSTALLATION.md)
 - [场景布局说明](./scene_layout_overview.md)
-

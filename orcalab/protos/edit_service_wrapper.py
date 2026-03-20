@@ -1,6 +1,7 @@
 import asyncio
 import grpc
 import numpy as np
+from dataclasses import dataclass, field
 from typing import Any, List, Tuple
 
 import orcalab.protos.edit_service_pb2_grpc as edit_service_pb2_grpc
@@ -20,6 +21,15 @@ from orcalab.ui.camera.camera_brief import CameraBrief
 
 Success = edit_service_pb2.StatusCode.Success
 Error = edit_service_pb2.StatusCode.Error
+
+
+@dataclass
+class CameraDataPNGResult:
+    transform: Transform = field(default_factory=Transform)
+    has_color: bool = False
+    has_depth: bool = False
+    has_normal: bool = False
+    has_object_color: bool = False
 
 
 class EditServiceWrapper:
@@ -268,6 +278,25 @@ class EditServiceWrapper:
             return False
         return True
 
+    async def get_camera_data_png(
+        self, camera_name: str, png_path: str, index: int
+    ) -> CameraDataPNGResult:
+        request = edit_service_pb2.GetCameraDataPNGRequest(
+            camera_name=camera_name,
+            png_path=png_path,
+            index=index,
+        )
+        response = await self.stub.GetCameraDataPNG(request)
+        self._check_response(response)
+        result = CameraDataPNGResult(
+            transform=self._get_transform_from_message(response.transform),
+            has_color=response.has_color,
+            has_depth=response.has_depth,
+            has_normal=response.has_normal,
+            has_object_color=response.has_object_color,
+        )
+        return result
+
     async def get_actor_asset_aabb(self, actor_path: Path, output: List[float]):
         request = edit_service_pb2.GetActorAssetAabbRequest(
             actor_path=actor_path.string()
@@ -322,6 +351,12 @@ class EditServiceWrapper:
         request = edit_service_pb2.SetActiveCameraRequest(index=camera_index)
         response = await self.stub.SetActiveCamera(request)
         self._check_response(response)
+
+    async def get_viewport_camera_transform(self) -> Transform:
+        request = edit_service_pb2.GetViewportCameraTransformRequest()
+        response = await self.stub.GetViewportCameraTransform(request)
+        self._check_response(response)
+        return self._get_transform_from_message(response.transform)
 
     def _parse_property_msg(self, prop_msg) -> ActorProperty | None:
         """解析属性消息"""

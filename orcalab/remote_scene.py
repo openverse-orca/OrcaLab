@@ -24,7 +24,7 @@ from orcalab.scene_edit_bus import (
 from orcalab.state_sync_bus import ManipulatorType, StateSyncNotificationBus
 from orcalab.ui.camera.camera_brief import CameraBrief
 from orcalab.ui.camera.camera_bus import CameraNotificationBus
-from orcalab.protos.edit_service_wrapper import EditServiceWrapper
+from orcalab.protos.edit_service_wrapper import CameraDataPNGResult, EditServiceWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -485,6 +485,7 @@ class RemoteScene(SceneEditNotification):
         values = await self.get_properties(keys)
         for prop, value in zip(props, values):
             prop.set_value(value)
+            prop.set_original_value(value)
 
     ############################################################
     #
@@ -506,18 +507,25 @@ class RemoteScene(SceneEditNotification):
         return await self._service.get_pending_actor_transform(path, local)
 
     async def add_actor(self, actor: BaseActor, parent_path: Path):
+        print(f"Adding actor {actor.name} under {parent_path}")
         async with self._grpc_lock:
             if isinstance(actor, GroupActor):
                 await self._service.add_group_actor(actor, parent_path)
             elif isinstance(actor, AssetActor):
+                await self._service.custom_command("pause_render:true")
+                # await asyncio.sleep(0.1)
                 await self._service.add_asset_actor(actor, parent_path)
+                # await asyncio.sleep(0.1)
+                await self._service.custom_command("pause_render:false")
             else:
                 raise Exception(f"Unsupported actor type: {type(actor)}")
 
     async def set_actor_transform(self, path: Path, transform: Transform, local: bool):
+        print(f"Setting transform for actor {path}, local={local}: {transform}")
         await self._service.set_actor_transform(path, transform, local)
 
     async def publish_scene(self):
+        print("Publishing scene...")
         async with self._grpc_lock:
             await self._service.publish_scene()
 
@@ -530,6 +538,7 @@ class RemoteScene(SceneEditNotification):
             await self._service.set_sync_from_mujoco_to_scene(value)
 
     async def clear_scene(self):
+        print("Clearing scene...")
         async with self._grpc_lock:
             await self._service.clear_scene()
 
@@ -550,16 +559,23 @@ class RemoteScene(SceneEditNotification):
             return await self._service.get_actor_assets()
 
     async def save_state(self):
+        print("Saving state...")
         async with self._grpc_lock:
             await self._service.save_state()
 
     async def restore_state(self):
+        print("Restoring state...")
         async with self._grpc_lock:
             await self._service.restore_state()
 
     async def delete_actor(self, actor_path: Path):
+        print(f"Deleting actor {actor_path}")
         async with self._grpc_lock:
+            await self._service.custom_command("pause_render:true")
+            # await asyncio.sleep(0.1)
             await self._service.delete_actor(actor_path)
+            # await asyncio.sleep(0.1)
+            await self._service.custom_command("pause_render:false")
 
     async def rename_actor(self, actor_path: Path, new_name: str):
         await self._service.rename_actor(actor_path, new_name)
@@ -607,6 +623,13 @@ class RemoteScene(SceneEditNotification):
                     retry -= 1
                     await asyncio.sleep(0.01)
 
+    async def get_camera_data_png(self, camera_name: str, png_path: str, index: int, output: list[CameraDataPNGResult] = None) -> CameraDataPNGResult:
+        async with self._grpc_lock:
+            result = await self._service.get_camera_data_png(camera_name, png_path, index)
+        if output is not None:
+            output.append(result)
+        return result
+
     async def get_actor_asset_aabb(self, actor_path: Path, output: List[float]):
         async with self._grpc_lock:
             await self._service.get_actor_asset_aabb(actor_path, output)
@@ -631,6 +654,10 @@ class RemoteScene(SceneEditNotification):
     async def set_active_camera(self, camera_index: int) -> None:
         async with self._grpc_lock:
             await self._service.set_active_camera(camera_index)
+
+    async def get_viewport_camera_transform(self) -> Transform:
+        async with self._grpc_lock:
+            return await self._service.get_viewport_camera_transform()
 
     async def get_property_groups(self, actor_path: Path) -> List[ActorPropertyGroup]:
         return await self._service.get_property_groups(actor_path)
