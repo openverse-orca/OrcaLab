@@ -721,6 +721,78 @@ class OrcaLabMCPServer:
         except Exception as e:
             return json.dumps({"success": False, "message": f"设置视口相机失败: {e}"}, ensure_ascii=False)
 
+    async def add_viewport_camera(
+        self,
+        position: List[float] = None,
+        rotation: List[float] = None,
+        scale: float = 1.0,
+    ) -> str:
+        '''
+        按当前视口（或指定变换）向场景中添加 Agent 相机（AgentCamera / prefabs/agentcamera）
+        Args:
+            position: 可选，相机位置 [x, y, z]。不传则使用当前视口相机位置
+            rotation: 可选，相机欧拉角 [roll, pitch, yaw] 单位度。不传则使用当前视口相机旋转
+            scale: 可选，缩放，默认 1.0
+        Returns:
+            操作结果的 json 字符串，成功时包含 actor_path（相机在场景中的路径）
+        '''
+        camera_type = "AgentCamera"
+        prefab_path = "prefabs/agentcamera"
+        try:
+            if position is not None and rotation is not None:
+                quat = self._euler_to_quat_list(rotation)
+                transform = Transform(
+                    position=np.array(position, dtype=np.float64),
+                    rotation=np.array(quat, dtype=np.float64),
+                    scale=scale,
+                )
+            else:
+                output = []
+                await self.camera_bus.get_viewport_camera_transform(output)
+                if len(output) == 0 or output[0] is None:
+                    return json.dumps(
+                        {"success": False, "message": "获取视口相机变换失败，请显式传入 position 与 rotation"},
+                        ensure_ascii=False,
+                    )
+                transform = output[0]
+                if position is not None:
+                    transform = Transform(
+                        position=np.array(position, dtype=np.float64),
+                        rotation=transform.rotation,
+                        scale=transform.scale,
+                    )
+                elif rotation is not None:
+                    quat = self._euler_to_quat_list(rotation)
+                    transform = Transform(
+                        position=transform.position,
+                        rotation=np.array(quat, dtype=np.float64),
+                        scale=transform.scale,
+                    )
+                if scale != 1.0:
+                    transform = Transform(
+                        position=transform.position,
+                        rotation=transform.rotation,
+                        scale=scale,
+                    )
+            actor = []
+            await self.application_bus.add_item_to_scene_with_transform(
+                camera_type,
+                prefab_path,
+                parent_path=Path.root_path(),
+                transform=transform,
+                output=actor,
+            )
+            if len(actor) > 0 and actor[0] is not None:
+                added = actor[0]
+                path_str = (Path.root_path() / added.name).string()
+                return json.dumps(
+                    {"success": True, "message": "成功添加 AgentCamera", "actor_path": path_str},
+                    ensure_ascii=False,
+                )
+            return json.dumps({"success": False, "message": "添加 AgentCamera 失败，未返回 Actor"}, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"success": False, "message": f"添加 AgentCamera 失败: {e}"}, ensure_ascii=False)
+
     # ==================== 系统信息类 API ====================
 
     def get_engine_info(self) -> str:
@@ -822,6 +894,7 @@ class OrcaLabMCPServer:
 
         # 相机控制
         self.mcp.tool(self.set_viewport_camera)
+        self.mcp.tool(self.add_viewport_camera)
 
         # 系统信息类
         self.mcp.tool(self.get_engine_info)
