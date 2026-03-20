@@ -326,10 +326,28 @@ async def send_report_directly():
         "Content-Type": "application/json",
     }
 
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=data, headers=headers) as response:
-            print(f"Status: {response.status}")
-            print(await response.json())
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url, json=data, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
+                logger.info(
+                    "Statistics report sent, status=%s", response.status
+                )
+                try:
+                    await response.json()
+                except Exception:
+                    pass
+    except aiohttp.ClientError as e:
+        logger.warning(
+            "Failed to send statistics report (network): %s. OrcaLab will continue.",
+            e,
+        )
+    except OSError as e:
+        logger.warning(
+            "Failed to send statistics report (OS error): %s. OrcaLab will continue.",
+            e,
+        )
 
 
 if __name__ == "__main__":
