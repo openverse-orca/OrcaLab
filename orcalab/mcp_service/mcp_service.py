@@ -264,12 +264,12 @@ class OrcaLabMCPServer:
                     selection_dict[path.string()] = ad
         return json.dumps(selection_dict, ensure_ascii=False)
 
-    async def start_simulation(self, program_name: str = "run_sim_loop") -> str:
+    async def start_simulation(self, program_name: str = "external") -> str:
         '''
-        运行仿真（默认启动 Empty Loop Simulation，对应 orca.config.toml 中 external_programs 的 name = run_sim_loop）
+        运行仿真（默认启动 无仿真程序（手动启动））
         Args:
-            program_name: 配置文件里 [[external_programs.programs]] 的 name 字段；默认 run_sim_loop；
-                传 external 表示「无仿真程序（手动启动）」，与启动对话框中该选项行为一致
+            program_name: 配置文件里 [[external_programs.programs]] 的 name 字段；默认 external；
+                传 external 表示「无仿真程序」
         Returns:
             运行仿真的结果的json字符串格式
         '''
