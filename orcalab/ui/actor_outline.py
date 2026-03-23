@@ -53,7 +53,7 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
         if self._eye_visible_icon is None:
             self._eye_visible_icon = make_icon(":/icons/eye-open.svg", color)
             self._eye_hidden_icon = make_icon(":/icons/eye-close.svg", color)
-            self._lock_locked_icon = make_icon(":/icons/lock-close.svg", color)
+            self._lock_locked_icon = make_icon(":/icons/lock-close-filled.svg", color)
             self._lock_unlocked_icon = make_icon(":/icons/lock-open.svg", color)
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex):

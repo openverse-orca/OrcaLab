@@ -201,8 +201,7 @@ class RemoteScene(SceneEditNotification):
             elif value == "camera_scale":
                 camera_movement_type = CameraMovementType.CameraScale
             else:
-                print(f"Unknown camera movement type: {value}")
-                return
+                camera_movement_type = CameraMovementType.CameraNone
 
             bus = StateSyncNotificationBus()
             bus.on_camera_movement_type_changed(camera_movement_type)

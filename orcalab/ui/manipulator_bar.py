@@ -58,7 +58,7 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self.camera_move_button.setToolTip("相机移动(快捷键:4)")
         self.camera_move_button.setFixedSize(button_size)
         self.camera_move_button.icon_size = icon_size
-        self.camera_move_button.bg_color = self.bg_color_selected
+        self.camera_move_button.bg_color = self.bg_color
 
         self.camera_rotate_button = Button(icon=make_icon(":/icons/camera_rotate.svg", icon_color))
         self.camera_rotate_button.setToolTip("相机旋转(快捷键:5)")
