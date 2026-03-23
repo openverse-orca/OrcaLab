@@ -11,7 +11,7 @@ class SimulationState(Enum):
 
 
 class SimulationRequest:
-    async def start_simulation(self) -> None:
+    async def start_simulation(self, program_name: str | None = None) -> None:
         pass
 
     async def stop_simulation(self) -> None:
