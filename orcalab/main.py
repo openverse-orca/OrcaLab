@@ -40,6 +40,24 @@ _main_window = None
 logger = logging.getLogger("orcalab.main")
 
 
+def _start_force_exit_watchdog(timeout: int = 10) -> None:
+    """启动守护线程，若进程在 timeout 秒内未正常退出则强制终止。
+    
+    使用 os._exit() 绕过 Python 清理流程，防止卡死的后台线程（gRPC/网络IO等）
+    导致进程变成无法杀死的僵尸进程。
+    """
+    import threading
+    import time
+
+    def _watchdog():
+        time.sleep(timeout)
+        logger.warning("进程在 %s 秒内未正常退出，强制终止", timeout)
+        os._exit(0)
+
+    t = threading.Thread(target=_watchdog, daemon=True, name="force-exit-watchdog")
+    t.start()
+
+
 def signal_handler(signum, frame):
     """Handle system signals to ensure cleanup"""
     logger.info("Received signal %s, cleaning up...", signum)
@@ -305,6 +323,8 @@ def main():
         logger.exception("Application error: %s", e)
     finally:
         event_loop.close()
+
+    _start_force_exit_watchdog(timeout=10)
 
     # magic!
     # AttributeError: 'NoneType' object has no attribute 'POLLER'

@@ -30,6 +30,29 @@ def looks_like_orcalab_process(name: str, exe: str, cmdline: str) -> bool:
     return False
 
 
+def is_ghost_process(proc: psutil.Process) -> bool:
+    """判断进程是否为无法正常交互的僵尸/残留进程。
+    
+    exe 有路径但 cmdline 不可访问，说明进程已处于异常状态，无法干扰新实例。
+    """
+    try:
+        proc.exe()
+    except psutil.NoSuchProcess:
+        return True
+    except (psutil.AccessDenied, OSError):
+        pass
+
+    try:
+        cmdline = proc.cmdline()
+    except psutil.NoSuchProcess:
+        return True
+    except (psutil.AccessDenied, OSError):
+        # cmdline 不可读取，进程已无法正常运行
+        return True
+
+    return not cmdline
+
+
 def find_other_orcalab_processes() -> List[psutil.Process]:
     """查找当前之外仍在运行的 OrcaLab 进程"""
     current_pid = os.getpid()
@@ -56,6 +79,10 @@ def find_other_orcalab_processes() -> List[psutil.Process]:
             cmdline = " ".join(str(part).lower() for part in info.get("cmdline") or [])
 
             if not looks_like_orcalab_process(name, exe, cmdline):
+                continue
+
+            if is_ghost_process(proc):
+                logger.warning("跳过僵尸进程 PID=%s（无 exe/cmdline，无法干扰新实例）", proc.pid)
                 continue
 
             processes.append(proc)
@@ -110,12 +137,27 @@ def ensure_single_instance():
             proc.wait(timeout=5)
         except psutil.NoSuchProcess:
             logger.info("进程 PID=%s 已结束", proc.pid)
-        except (psutil.TimeoutExpired, psutil.AccessDenied) as exc:
-            logger.warning("终止进程 PID=%s 失败: %s", proc.pid, exc)
-            failed.append(proc.pid)
+            continue
+        except psutil.TimeoutExpired:
+            logger.warning("进程 PID=%s terminate 超时，尝试强制 kill", proc.pid)
+        except psutil.AccessDenied as exc:
+            logger.warning("进程 PID=%s terminate 权限不足，尝试强制 kill: %s", proc.pid, exc)
         except Exception as exc:  # noqa: BLE001
             logger.exception("终止进程 PID=%s 时出现异常: %s", proc.pid, exc)
             failed.append(proc.pid)
+            continue
+
+        try:
+            proc.kill()
+            proc.wait(timeout=5)
+        except psutil.NoSuchProcess:
+            logger.info("进程 PID=%s 已结束", proc.pid)
+        except Exception as exc:  # noqa: BLE001
+            if is_ghost_process(proc):
+                logger.warning("进程 PID=%s 无法终止但已是僵尸进程，忽略: %s", proc.pid, exc)
+            else:
+                logger.warning("强制 kill 进程 PID=%s 失败: %s", proc.pid, exc)
+                failed.append(proc.pid)
 
     if failed:
         error_box = QtWidgets.QMessageBox()
