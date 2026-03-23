@@ -1,47 +1,42 @@
 import asyncio
-from typing import override
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from orcalab.config_service import ConfigService
-from orcalab.pyside_util import connect
 from orcalab.remote_scene import RemoteScene
 from orcalab.ui.checkbox import CheckBox
-from orcalab.ui.edit.float_edit import FloatEdit
-from orcalab.ui.property_edit.base_property_edit import get_property_edit_style_sheet
 from orcalab.ui.text_label import TextLabel
 from orcalab.ui.theme_service import ThemeService
 
 # 设置行内部水平边距；统计区与底部按钮使用相同值，与标题/正文左缘对齐
 _SETTING_BLOCK_H_MARGIN = 12
 
+_MOVE_SENS_RANGE = (0.1, 5.0)
+_ROT_SENS_RANGE = (0.1, 15.0)
 
-class _RangedFloatEdit(FloatEdit):
-    """与属性面板 FloatEdit 一致交互，并限制在 [min_value, max_value]，数值保留一位小数。"""
 
-    def __init__(
-        self,
-        min_value: float,
-        max_value: float,
-        step: float,
-        parent: QtWidgets.QWidget | None = None,
-    ):
-        super().__init__(parent, step)
-        self._min_value = min_value
-        self._max_value = max_value
-        self.setValidator(
-            QtGui.QDoubleValidator(self._min_value, self._max_value, 1, self)
-        )
+def _sensitivity_line_edit(lo: float, hi: float, value: float) -> QtWidgets.QLineEdit:
+    """带边框的数值框，仅能通过键盘手动输入（无步进/滚轮改值）。"""
+    edit = QtWidgets.QLineEdit()
+    edit.setObjectName("OrcaSettingsNumericField")
+    edit.setValidator(QtGui.QDoubleValidator(lo, hi, 1, edit))
+    edit.setText(f"{value:.1f}")
+    edit.setFixedWidth(96)
+    return edit
 
-    @override
-    def _value_to_text(self, value: float) -> str:
-        return f"{value:.1f}"
 
-    @override
-    def _set_value_only(self, value: float) -> bool:
-        rounded = round(float(value), 1)
-        clamped = max(self._min_value, min(self._max_value, rounded))
-        return super()._set_value_only(clamped)
+def _read_sensitivity_line(
+    edit: QtWidgets.QLineEdit, fallback: float, lo: float, hi: float
+) -> float:
+    t = edit.text().strip().replace(",", ".")
+    if not t:
+        v = fallback
+    else:
+        try:
+            v = float(t)
+        except ValueError:
+            v = fallback
+    return round(max(lo, min(hi, v)), 1)
 
 
 class _SettingHoverBlock(QtWidgets.QWidget):
@@ -85,6 +80,8 @@ def _vscode_style_setting_row(
     description: str,
     control: QtWidgets.QWidget,
     hover_background: str,
+    *,
+    style_description: bool = True,
 ) -> QtWidgets.QWidget:
     block = _SettingHoverBlock(hover_background)
     layout = QtWidgets.QVBoxLayout(block)
@@ -95,7 +92,8 @@ def _vscode_style_setting_row(
     title_label.setStyleSheet("font-size: 13px; font-weight: 600;")
 
     desc_label = TextLabel(description)
-    desc_label.setStyleSheet("color: #888888; font-size: 12px;")
+    if style_description:
+        desc_label.setStyleSheet("color: #888888; font-size: 12px;")
 
     control_row = QtWidgets.QHBoxLayout()
     control_row.setContentsMargins(0, 8, 0, 0)
@@ -127,9 +125,33 @@ class SettingsDialog(QtWidgets.QDialog):
         root_layout.setContentsMargins(24, 24, 24, 20)
 
         config = ConfigService()
-        prop_style = get_property_edit_style_sheet()
 
-        # —— 统计数据（水平内边距与下方设置行一致）——
+        # —— 相机灵敏度：每项三行垂直（标题 / 说明 / 输入）—
+        self.move_value_edit = _sensitivity_line_edit(
+            *_MOVE_SENS_RANGE, config.camera_move_sensitivity()
+        )
+        root_layout.addWidget(
+            _vscode_style_setting_row(
+                "相机移动灵敏度",
+                "控制相机平移时的移动速度",
+                self.move_value_edit,
+                self._setting_row_hover_bg,
+            )
+        )
+
+        self.rotation_value_edit = _sensitivity_line_edit(
+            *_ROT_SENS_RANGE, config.camera_rotation_sensitivity()
+        )
+        root_layout.addWidget(
+            _vscode_style_setting_row(
+                "相机旋转灵敏度",
+                "控制相机旋转时的旋转速度",
+                self.rotation_value_edit,
+                self._setting_row_hover_bg,
+            )
+        )
+
+        # —— 统计数据：紧挨相机区块下方，间隔由 root_layout.spacing() 控制 ——
         stats_desc = TextLabel("发送用统计数据可以帮助改进OrcaLab。")
         stats_checkbox = CheckBox()
         stats_row = QtWidgets.QHBoxLayout()
@@ -146,40 +168,18 @@ class SettingsDialog(QtWidgets.QDialog):
 
         root_layout.addLayout(stats_row)
 
-        # —— 相机灵敏度：每项三行垂直（标题 / 说明 / 输入）——
-        camera_section = QtWidgets.QWidget()
-        camera_layout = QtWidgets.QVBoxLayout(camera_section)
-        camera_layout.setSpacing(22)
+        # self.checkbox = CheckBox()
+        # self.checkbox.set_checked(config.send_statistics() == "true")
+        # root_layout.addWidget(
+        #     _vscode_style_setting_row(
+        #         "统计数据",
+        #         "发送用统计数据可以帮助改进OrcaLab。",
+        #         self.checkbox,
+        #         self._setting_row_hover_bg,
+        #         style_description=False,
+        #     )
+        # )
 
-        self.move_value_edit = _RangedFloatEdit(0.1, 5.0, 0.1)
-        self.move_value_edit.set_value(config.camera_move_sensitivity())
-        self.move_value_edit.setStyleSheet(prop_style)
-        self.move_value_edit.setFixedWidth(160)
-
-        camera_layout.addWidget(
-            _vscode_style_setting_row(
-                "相机移动灵敏度",
-                "控制相机平移时的移动速度",
-                self.move_value_edit,
-                self._setting_row_hover_bg,
-            )
-        )
-
-        self.rotation_value_edit = _RangedFloatEdit(0.1, 15.0, 0.1)
-        self.rotation_value_edit.set_value(config.camera_rotation_sensitivity())
-        self.rotation_value_edit.setStyleSheet(prop_style)
-        self.rotation_value_edit.setFixedWidth(160)
-
-        camera_layout.addWidget(
-            _vscode_style_setting_row(
-                "相机旋转灵敏度",
-                "控制相机旋转时的旋转速度",
-                self.rotation_value_edit,
-                self._setting_row_hover_bg,
-            )
-        )
-
-        root_layout.addWidget(camera_section)
         root_layout.addStretch()
 
         button_layout = QtWidgets.QHBoxLayout()
@@ -204,7 +204,7 @@ class SettingsDialog(QtWidgets.QDialog):
 
         root_layout.addLayout(button_layout)
 
-        self.resize(520, 420)
+        self.resize(1024, 720)
 
     def _apply_theme(self):
         theme = ThemeService()
@@ -214,12 +214,27 @@ class SettingsDialog(QtWidgets.QDialog):
         button_bg = theme.get_color_hex("button_bg")
         button_bg_hover = theme.get_color_hex("button_bg_hover")
         button_bg_pressed = theme.get_color_hex("button_bg_pressed")
+        field_focus_border = theme.get_color_hex("button_bg_selected")
 
         self.setStyleSheet(
             f"""
             QDialog {{
                 background-color: {bg_color};
                 color: {text_color};
+            }}
+            QLineEdit#OrcaSettingsNumericField {{
+                border: 1px solid {split_line_color};
+                border-radius: 3px;
+                padding: 3px 6px;
+                background-color: {button_bg};
+                color: {text_color};
+                font-size: 12px;
+            }}
+            QLineEdit#OrcaSettingsNumericField:focus {{
+                border: 1px solid {field_focus_border};
+            }}
+            QLineEdit#OrcaSettingsNumericField:disabled {{
+                color: {theme.get_color_hex("text_disable")};
             }}
             QPushButton {{
                 background-color: {button_bg};
@@ -246,8 +261,16 @@ class SettingsDialog(QtWidgets.QDialog):
 
     def accept(self):
         config = ConfigService()
-        move = self.move_value_edit.value()
-        rot = self.rotation_value_edit.value()
+        move = _read_sensitivity_line(
+            self.move_value_edit,
+            config.camera_move_sensitivity(),
+            *_MOVE_SENS_RANGE,
+        )
+        rot = _read_sensitivity_line(
+            self.rotation_value_edit,
+            config.camera_rotation_sensitivity(),
+            *_ROT_SENS_RANGE,
+        )
         config.set_camera_move_sensitivity(move)
         config.set_camera_rotation_sensitivity(rot)
         config.set_send_statistics("true" if self.checkbox.checked() else "false")

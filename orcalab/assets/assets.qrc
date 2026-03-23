@@ -7,6 +7,7 @@
     <file alias="eye-close.svg">icons/ic_fluent_eye_off_20_regular.svg</file>
     <file alias="lock-open.svg">icons/ic_fluent_lock_open_20_regular.svg</file>
     <file alias="lock-close.svg">icons/ic_fluent_lock_closed_20_regular.svg</file>
+    <file alias="lock-close-filled.svg">icons/ic_fluent_lock_closed_20_filled.svg</file>
 
     <file alias="box.svg">icons/ic_fluent_box_20_regular.svg</file>
     <file alias="chat_sparkle.svg">icons/ic_fluent_chat_sparkle_20_regular.svg</file>

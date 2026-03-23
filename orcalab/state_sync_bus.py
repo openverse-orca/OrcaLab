@@ -6,14 +6,12 @@ class ManipulatorType(Enum):
     Translate = 0
     Rotate = 1
     Scale = 2
-    CameraTranslate = 3
-    CameraRotate = 4
-    CameraScale = 5
 
 class CameraMovementType(Enum):
     CameraTranslate = 0
     CameraRotate = 1
     CameraScale = 2
+    CameraNone = 3
 
 
 class StateSyncRequest:
