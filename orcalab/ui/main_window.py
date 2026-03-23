@@ -22,7 +22,6 @@ from orcalab.remote_scene import RemoteScene
 from orcalab.report.ask_statistics_dialog import AskStatisticsDialog
 from orcalab.report.report import ask_user_consent, collect_user_env, send_report_directly
 from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
-from orcalab.setting.preferences_dialog import PreferencesDialog
 from orcalab.setting.settings_dialog import SettingsDialog
 from orcalab.simulation.simulation_bus import (
     SimulationRequestBus,
@@ -31,7 +30,7 @@ from orcalab.simulation.simulation_bus import (
     SimulationState,
 )
 from orcalab.simulation.simulation_service import SimulationService
-from orcalab.state_sync_bus import ManipulatorType, StateSyncRequest, StateSyncRequestBus
+from orcalab.state_sync_bus import ManipulatorType,CameraMovementType, StateSyncRequest, StateSyncRequestBus
 from orcalab.ui.actor_editor import ActorEditor
 from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.actor_outline_model import ActorOutlineModel
@@ -945,9 +944,6 @@ class MainWindow(
         action_settings = self.menu_edit.addAction("配置")
         connect(action_settings.triggered, self.open_settings)
 
-        action_preferences = self.menu_edit.addAction("偏好")
-        connect(action_preferences.triggered, self.open_preferences)
-
     def prepare_run_menu(self):
         self.menu_run.clear()
 
@@ -1295,18 +1291,23 @@ class MainWindow(
     #
     @override
     async def set_manipulator_type(self, type: ManipulatorType) -> None:
-        if type == ManipulatorType.Translate:
-            await self.remote_scene.change_manipulator_type(1)
-        elif type == ManipulatorType.Rotate:
-            await self.remote_scene.change_manipulator_type(2)
-        elif type == ManipulatorType.Scale:
-            await self.remote_scene.change_manipulator_type(3)
-        elif type == ManipulatorType.CameraTranslate:
-            await self.remote_scene.change_manipulator_type(4)
-        elif type == ManipulatorType.CameraRotate:
-            await self.remote_scene.change_manipulator_type(5)
-        elif type == ManipulatorType.CameraScale:
-            await self.remote_scene.change_manipulator_type(6)
+        await self.remote_scene.change_manipulator_type(type)
+        # if type == ManipulatorType.Translate:
+        #     await self.remote_scene.change_manipulator_type(1)
+        # elif type == ManipulatorType.Rotate:
+        #     await self.remote_scene.change_manipulator_type(2)
+        # elif type == ManipulatorType.Scale:
+        #     await self.remote_scene.change_manipulator_type(3)
+        # elif type == ManipulatorType.CameraTranslate:
+        #     await self.remote_scene.change_manipulator_type(4)
+        # elif type == ManipulatorType.CameraRotate:
+        #     await self.remote_scene.change_manipulator_type(5)
+        # elif type == ManipulatorType.CameraScale:
+        #     await self.remote_scene.change_manipulator_type(6)
+
+    @override
+    async def set_camera_movement_type(self, type: CameraMovementType) -> None:
+        await self.remote_scene.change_camera_movement_type(type)
 
     @override
     async def set_debug_draw(self, enabled: bool):
@@ -1384,9 +1385,4 @@ class MainWindow(
         await self.remote_scene.custom_command(f"user_env_report:{json.dumps(data)}")
 
     def open_settings(self):
-        # 打开设置窗口的逻辑
-        SettingsDialog(self).exec()
-
-    def open_preferences(self):
-        # 打开偏好设置窗口（相机移动/旋转速度）
-        PreferencesDialog(self, remote_scene=self.remote_scene).exec()
+        SettingsDialog(self, remote_scene=self.remote_scene).exec()

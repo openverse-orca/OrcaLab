@@ -21,7 +21,7 @@ from orcalab.scene_edit_bus import (
     SceneEditNotification,
     SceneEditRequestBus,
 )
-from orcalab.state_sync_bus import ManipulatorType, StateSyncNotificationBus
+from orcalab.state_sync_bus import ManipulatorType, CameraMovementType, StateSyncNotificationBus
 from orcalab.ui.camera.camera_brief import CameraBrief
 from orcalab.ui.camera.camera_bus import CameraNotificationBus
 from orcalab.protos.edit_service_wrapper import CameraDataPNGResult, EditServiceWrapper
@@ -183,18 +183,29 @@ class RemoteScene(SceneEditNotification):
                 manipulator_type = ManipulatorType.Rotate
             elif value == "scale":
                 manipulator_type = ManipulatorType.Scale
-            elif value == "camera_translation":
-                manipulator_type = ManipulatorType.CameraTranslate
-            elif value == "camera_rotation":
-                manipulator_type = ManipulatorType.CameraRotate
-            elif value == "camera_scale":
-                manipulator_type = ManipulatorType.CameraScale
             else:
                 print(f"Unknown manipulator type: {value}")
                 return
 
             bus = StateSyncNotificationBus()
             bus.on_manipulator_type_changed(manipulator_type)
+            return
+        
+        prefix = "camera_movement_type:"
+        if op.startswith(prefix):
+            value = op[len(prefix) :]
+            if value == "camera_translation":
+                camera_movement_type = CameraMovementType.CameraTranslate
+            elif value == "camera_rotation":
+                camera_movement_type = CameraMovementType.CameraRotate
+            elif value == "camera_scale":
+                camera_movement_type = CameraMovementType.CameraScale
+            else:
+                print(f"Unknown camera movement type: {value}")
+                return
+
+            bus = StateSyncNotificationBus()
+            bus.on_camera_movement_type_changed(camera_movement_type)
             return
 
         prefix = "debug_draw:"
@@ -637,9 +648,15 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             return await self._service.change_sim_state(sim_process_running)
 
-    async def change_manipulator_type(self, manipulator_type: int) -> bool:
+    async def change_manipulator_type(self, manipulator_type: ManipulatorType) -> bool:
+        cmd = f"change_manipulator_type:{manipulator_type.name.lower()}"
         async with self._grpc_lock:
-            return await self._service.change_manipulator_type(manipulator_type)
+            return await self._service.custom_command(cmd)
+
+    async def change_camera_movement_type(self, camera_movement_type: CameraMovementType) -> bool:
+        cmd = f"change_camera_movement_type:{camera_movement_type.name.lower()}"
+        async with self._grpc_lock:
+            return await self._service.custom_command(cmd)
 
     async def get_camera_png(self, camera_name: str, png_path: str, png_name: str):
         async with self._grpc_lock:

@@ -10,9 +10,17 @@ class ManipulatorType(Enum):
     CameraRotate = 4
     CameraScale = 5
 
+class CameraMovementType(Enum):
+    CameraTranslate = 0
+    CameraRotate = 1
+    CameraScale = 2
+
 
 class StateSyncRequest:
     async def set_manipulator_type(self, type: ManipulatorType):
+        pass
+
+    async def set_camera_movement_type(self, type: CameraMovementType):
         pass
 
     async def set_debug_draw(self, enabled: bool):
@@ -28,6 +36,9 @@ StateSyncRequestBus = create_event_bus(StateSyncRequest)
 class StateSyncNotification:
 
     def on_manipulator_type_changed(self, type: ManipulatorType):
+        pass
+
+    def on_camera_movement_type_changed(self, type: CameraMovementType):
         pass
 
     def on_debug_draw_changed(self, enabled: bool):

@@ -3,6 +3,7 @@ from typing import override
 from PySide6 import QtCore, QtWidgets, QtGui
 from orcalab.state_sync_bus import (
     ManipulatorType,
+    CameraMovementType,
     StateSyncRequestBus,
     StateSyncNotification,
     StateSyncNotificationBus,
@@ -41,6 +42,7 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self.move_button.setToolTip("移动(快捷键:1)")
         self.move_button.setFixedSize(button_size)
         self.move_button.icon_size = icon_size
+        self.move_button.bg_color = self.bg_color_selected
 
         self.rotate_button = Button(icon=make_icon(":/icons/rotate.svg", icon_color))
         self.rotate_button.setToolTip("旋转(快捷键:2)")
@@ -56,6 +58,7 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self.camera_move_button.setToolTip("相机移动(快捷键:4)")
         self.camera_move_button.setFixedSize(button_size)
         self.camera_move_button.icon_size = icon_size
+        self.camera_move_button.bg_color = self.bg_color_selected
 
         self.camera_rotate_button = Button(icon=make_icon(":/icons/camera_rotate.svg", icon_color))
         self.camera_rotate_button.setToolTip("相机旋转(快捷键:5)")
@@ -122,24 +125,21 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
 
     async def set_camera_translation(self):
         bus = StateSyncRequestBus()
-        await bus.set_manipulator_type(ManipulatorType.CameraTranslate)
+        await bus.set_camera_movement_type(CameraMovementType.CameraTranslate)
 
     async def set_camera_rotation(self):
         bus = StateSyncRequestBus()
-        await bus.set_manipulator_type(ManipulatorType.CameraRotate)
+        await bus.set_camera_movement_type(CameraMovementType.CameraRotate)
 
     async def set_camera_scale(self):
         bus = StateSyncRequestBus()
-        await bus.set_manipulator_type(ManipulatorType.CameraScale)
+        await bus.set_camera_movement_type(CameraMovementType.CameraScale)
 
     @override
     def on_manipulator_type_changed(self, type: ManipulatorType):
         self.move_button.bg_color = self.bg_color
         self.rotate_button.bg_color = self.bg_color
         self.scale_button.bg_color = self.bg_color
-        self.camera_move_button.bg_color = self.bg_color
-        self.camera_rotate_button.bg_color = self.bg_color
-        self.camera_scale_button.bg_color = self.bg_color
 
         if type == ManipulatorType.Translate:
             self.move_button.bg_color = self.bg_color_selected
@@ -147,16 +147,24 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
             self.rotate_button.bg_color = self.bg_color_selected
         elif type == ManipulatorType.Scale:
             self.scale_button.bg_color = self.bg_color_selected
-        elif type == ManipulatorType.CameraTranslate:
-            self.camera_move_button.bg_color = self.bg_color_selected
-        elif type == ManipulatorType.CameraRotate:
-            self.camera_rotate_button.bg_color = self.bg_color_selected
-        elif type == ManipulatorType.CameraScale:
-            self.camera_scale_button.bg_color = self.bg_color_selected
 
         self.move_button.update()
         self.rotate_button.update()
         self.scale_button.update()
+
+    @override
+    def on_camera_movement_type_changed(self, type: CameraMovementType):
+        self.camera_move_button.bg_color = self.bg_color
+        self.camera_rotate_button.bg_color = self.bg_color
+        self.camera_scale_button.bg_color = self.bg_color
+
+        if type == CameraMovementType.CameraTranslate:
+            self.camera_move_button.bg_color = self.bg_color_selected
+        elif type == CameraMovementType.CameraRotate:
+            self.camera_rotate_button.bg_color = self.bg_color_selected
+        elif type == CameraMovementType.CameraScale:
+            self.camera_scale_button.bg_color = self.bg_color_selected
+
         self.camera_move_button.update()
         self.camera_rotate_button.update()
         self.camera_scale_button.update()
