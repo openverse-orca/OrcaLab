@@ -1,8 +1,6 @@
 import logging
 from typing import Any, List, Tuple
 
-from sympy import group
-
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.actor_property import (
     ActorProperty,
