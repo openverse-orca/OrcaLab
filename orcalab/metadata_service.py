@@ -24,8 +24,15 @@ class MetadataService(MetadataServiceRequest):
 
         if not self._metadata_path.exists():
             return
-        with open(self._metadata_path, 'r', encoding='utf-8') as f:
-            self._metadata = json.load(f)
+        raw = self._metadata_path.read_bytes()
+        for enc in ('utf-8-sig', 'utf-8', 'gbk', 'latin-1'):
+            try:
+                self._metadata = json.loads(raw.decode(enc))
+                break
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+        else:
+            self._metadata = {}
         self._build_asset_map()
 
     @override
