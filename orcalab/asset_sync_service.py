@@ -274,8 +274,15 @@ class AssetSyncService:
         if not metadata_path.exists():
             with open(metadata_path, 'w', encoding='utf-8') as f:
                 json.dump({}, f)
-        with open(metadata_path, 'r', encoding='utf-8') as f:
-            metadata = json.load(f)
+        raw = metadata_path.read_bytes()
+        for enc in ('utf-8-sig', 'utf-8', 'gbk', 'latin-1'):
+            try:
+                metadata = json.loads(raw.decode(enc))
+                break
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+        else:
+            metadata = {}
         
         # 清理已删除的元数据
         for to_delete_pak in to_delete:
