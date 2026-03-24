@@ -8,6 +8,16 @@ from orcalab.config_service import ConfigService
 from orcalab.cli_options import create_argparser
 
 
+def _try_mcp_subcommand_argv(argv_tail: list[str]) -> list[str] | None:
+    """若 argv_tail 在可选 --verbose/-v 之后以 mcp 开头，则返回 mcp 子命令参数；否则 None。"""
+    i = 0
+    while i < len(argv_tail) and argv_tail[i] in ("--verbose", "-v"):
+        i += 1
+    if i < len(argv_tail) and argv_tail[i] == "mcp":
+        return argv_tail[i + 1 :]
+    return None
+
+
 def create_config_file(workspace: pathlib.Path):
     this_dir = pathlib.Path(__file__).parent.resolve()
 
@@ -57,6 +67,12 @@ def launch_orcalab_gui(verbose: bool = False):
 def main():
     verbose = False
     try:
+        mcp_argv = _try_mcp_subcommand_argv(sys.argv[1:])
+        if mcp_argv is not None:
+            from orcalab.mcp_service.mcp_client import mcp_main
+
+            sys.exit(mcp_main(mcp_argv))
+
         parser = create_argparser()
         args, unknown = parser.parse_known_args()
         verbose = args.verbose

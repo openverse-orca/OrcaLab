@@ -4,7 +4,10 @@ import argparse
 def create_argparser():
     parser = argparse.ArgumentParser(
         prog="orcalab",
-        description=("OrcaLab 启动器\n\n"),
+        description=(
+            "OrcaLab 启动器\n\n"
+            "已运行图形界面时，可用「orcalab mcp …」在终端调用 MCP 工具（参见 orcalab mcp -h）。\n\n"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         allow_abbrev=False,  # 禁用前缀匹配
     )
