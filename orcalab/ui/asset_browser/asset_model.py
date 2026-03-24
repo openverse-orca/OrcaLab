@@ -85,38 +85,21 @@ class AssetModel(ThumbnailModel):
                     result.append(asset)
         return result
 
+    def _matches_filter(self, asset: AssetInfo, keyword: str) -> bool:
+        if keyword in asset.name.lower():
+            return True
+        return (asset.metadata is not None
+                and (keyword in asset.metadata['englishName'].lower()
+                     or keyword in asset.metadata['name']))
+
     def _apply_include_filter(self, input: List[AssetInfo]):
         if not self.include_filter:
             return input
-
-        result: List[AssetInfo] = []
-        include_lower = self.include_filter.lower()
-        for asset in input:
-            if include_lower in asset.name.lower():
-                result.append(asset)
-                continue
-            if asset.metadata is not None:
-                if (include_lower in asset.metadata['englishName'].lower()
-                or include_lower in asset.metadata['name']):
-                    result.append(asset)
-                    continue
-
-        return result
+        keyword = self.include_filter.lower()
+        return [a for a in input if self._matches_filter(a, keyword)]
 
     def _apply_exclude_filter(self, input: List[AssetInfo]):
         if not self.exclude_filter:
             return input
-
-        result: List[AssetInfo] = []
-        exclude_lower = self.exclude_filter.lower()
-        for asset in input:
-            if exclude_lower not in asset.name.lower():
-                result.append(asset)
-                continue
-            if asset.metadata is not None:
-                if (exclude_lower not in asset.metadata['englishName'].lower()
-                or exclude_lower not in asset.metadata['name']):
-                    result.append(asset)
-                    continue
-
-        return result
+        keyword = self.exclude_filter.lower()
+        return [a for a in input if not self._matches_filter(a, keyword)]
