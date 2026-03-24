@@ -47,8 +47,6 @@ class OrcaLabMCPServer:
         self.copilot_service = CopilotService()
         self.mcp = FastMCP("OrcaLab MCP Server")
         self._task = None
-        # Register tools immediately after MCP instance creation
-        self.add_tools()
 
     @staticmethod
     def _quat_to_euler_list(quat) -> List[float]:
