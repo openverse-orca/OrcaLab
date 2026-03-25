@@ -47,58 +47,102 @@ def _parse_arguments(json_arg: str | None) -> dict:
     return json.loads(raw)
 
 
-def _brief_doc(description: str | None, max_len: int = 240) -> str:
+def _doc_for_list(description: str | None) -> str:
+    """保留 Args / Returns 等全文，换行与连续空白压成单空格，便于 JSON 单行展示。"""
     if not description:
         return ""
-    line = description.strip().splitlines()[0].strip()
-    if len(line) > max_len:
-        return line[: max_len - 1] + "…"
-    return line
+    return " ".join(description.split())
 
 
-def _param_type(spec: dict[str, Any]) -> str | None:
+def _format_schema_default(val: Any) -> str:
+    if val is None:
+        return "None"
+    if isinstance(val, bool):
+        return "True" if val else "False"
+    if isinstance(val, (int, float)):
+        return repr(val)
+    if isinstance(val, str):
+        return json.dumps(val, ensure_ascii=False)
+    return json.dumps(val, ensure_ascii=False)
+
+
+def _json_schema_to_py_type(spec: dict[str, Any]) -> str:
+    if not isinstance(spec, dict):
+        return "Any"
+    if "$ref" in spec:
+        return "Any"
+    if "anyOf" in spec and isinstance(spec["anyOf"], list):
+        non_null: list[dict[str, Any]] = [
+            s for s in spec["anyOf"] if isinstance(s, dict) and s.get("type") != "null"
+        ]
+        if len(non_null) == 1:
+            return f"{_json_schema_to_py_type(non_null[0])} | None"
+        return "Any"
     t = spec.get("type")
-    if t is None:
-        return None
+    if t == "string":
+        return "str"
+    if t == "integer":
+        return "int"
+    if t == "number":
+        return "float"
+    if t == "boolean":
+        return "bool"
+    if t == "array":
+        items = spec.get("items")
+        if isinstance(items, dict):
+            return f"list[{_json_schema_to_py_type(items)}]"
+        return "list[Any]"
+    if t == "object":
+        return "dict[str, Any]"
     if isinstance(t, list):
-        return "|".join(str(x) for x in t)
-    return str(t)
+        non_null = [x for x in t if x != "null"]
+        if len(non_null) == 1:
+            return f"{_json_schema_to_py_type({'type': non_null[0]})} | None"
+    return "Any"
 
 
-def _tool_parameters_summary(input_schema: dict[str, Any] | None) -> list[dict[str, Any]]:
-    if not input_schema or not isinstance(input_schema, dict):
-        return []
-    props = input_schema.get("properties")
-    if not isinstance(props, dict):
-        return []
-    required = set(input_schema.get("required") or [])
-    rows: list[dict[str, Any]] = []
+def _format_param(pname: str, spec: dict[str, Any], is_required: bool) -> str:
+    ann = _json_schema_to_py_type(spec)
+    if "default" in spec:
+        return f"{pname}: {ann} = {_format_schema_default(spec['default'])}"
+    if not is_required:
+        if ann.endswith(" | None"):
+            return f"{pname}: {ann} = None"
+        return f"{pname}: {ann} | None = None"
+    return f"{pname}: {ann}"
+
+
+def _build_function_signature(tool) -> str:
+    schema = tool.inputSchema if isinstance(getattr(tool, "inputSchema", None), dict) else {}
+    props = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+    required = set(schema.get("required") or [])
+    parts: list[str] = []
     for pname in props:
-        spec = props[pname]
-        if not isinstance(spec, dict):
-            spec = {}
-        row: dict[str, Any] = {
-            "name": pname,
-            "required": pname in required,
-            "type": _param_type(spec),
-        }
-        desc = (spec.get("description") or "").strip()
-        if desc:
-            first = desc.splitlines()[0].strip()
-            if len(first) > 120:
-                first = first[:119] + "…"
-            row["description"] = first
-        rows.append(row)
+        pspec = props[pname]
+        if not isinstance(pspec, dict):
+            pspec = {}
+        parts.append(_format_param(pname, pspec, pname in required))
+
+    out_schema = getattr(tool, "outputSchema", None)
+    ret = "str"
+    if isinstance(out_schema, dict) and out_schema:
+        blob = json.dumps(out_schema, ensure_ascii=False).lower()
+        if "image" in blob:
+            ret = "Image"
+
+    return f"{tool.name}({', '.join(parts)}) -> {ret}"
+
+
+def _tools_list_as_json_list(tools: list) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for t in tools:
+        rows.append(
+            {
+                "function": _build_function_signature(t),
+                "description": _doc_for_list(getattr(t, "description", None)),
+            }
+        )
     return rows
-
-
-def _compact_tool_list_item(t) -> dict[str, Any]:
-    schema = t.inputSchema if isinstance(getattr(t, "inputSchema", None), dict) else {}
-    return {
-        "name": t.name,
-        "description": _brief_doc(getattr(t, "description", None)),
-        "parameters": _tool_parameters_summary(schema),
-    }
 
 
 async def _async_main(url: str, tool: str, json_arg: str | None) -> int:
@@ -106,8 +150,8 @@ async def _async_main(url: str, tool: str, json_arg: str | None) -> int:
         client = Client(url)
         async with client:
             tools = await client.list_tools()
-            data = [_compact_tool_list_item(t) for t in tools]
-        print(json.dumps(data, ensure_ascii=False, indent=2))
+        payload = _tools_list_as_json_list(tools)
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
 
     arguments = _parse_arguments(json_arg)
