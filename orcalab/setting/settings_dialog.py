@@ -11,8 +11,8 @@ from orcalab.ui.theme_service import ThemeService
 # 设置行内部水平边距；统计区与底部按钮使用相同值，与标题/正文左缘对齐
 _SETTING_BLOCK_H_MARGIN = 12
 
-_MOVE_SENS_RANGE = (0.1, 5.0)
-_ROT_SENS_RANGE = (0.1, 15.0)
+_MOVE_SENS_RANGE = (0.1, 10.0)
+_ROT_SENS_RANGE = (0.1, 10.0)
 
 
 def _sensitivity_line_edit(lo: float, hi: float, value: float) -> QtWidgets.QLineEdit:
@@ -133,7 +133,7 @@ class SettingsDialog(QtWidgets.QDialog):
         root_layout.addWidget(
             _vscode_style_setting_row(
                 "相机移动灵敏度",
-                "控制相机平移时的移动速度",
+                "控制相机平移时的移动速度 (范围: 0.1-10)",
                 self.move_value_edit,
                 self._setting_row_hover_bg,
             )
@@ -145,7 +145,7 @@ class SettingsDialog(QtWidgets.QDialog):
         root_layout.addWidget(
             _vscode_style_setting_row(
                 "相机旋转灵敏度",
-                "控制相机旋转时的旋转速度",
+                "控制相机旋转时的旋转速度 (范围: 0.1-10)",
                 self.rotation_value_edit,
                 self._setting_row_hover_bg,
             )
