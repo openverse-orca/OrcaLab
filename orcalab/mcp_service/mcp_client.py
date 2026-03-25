@@ -6,6 +6,7 @@ import argparse
 import json
 import pathlib
 import sys
+from typing import Any
 
 from fastmcp import Client
 
@@ -46,12 +47,66 @@ def _parse_arguments(json_arg: str | None) -> dict:
     return json.loads(raw)
 
 
+def _brief_doc(description: str | None, max_len: int = 240) -> str:
+    if not description:
+        return ""
+    line = description.strip().splitlines()[0].strip()
+    if len(line) > max_len:
+        return line[: max_len - 1] + "…"
+    return line
+
+
+def _param_type(spec: dict[str, Any]) -> str | None:
+    t = spec.get("type")
+    if t is None:
+        return None
+    if isinstance(t, list):
+        return "|".join(str(x) for x in t)
+    return str(t)
+
+
+def _tool_parameters_summary(input_schema: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not input_schema or not isinstance(input_schema, dict):
+        return []
+    props = input_schema.get("properties")
+    if not isinstance(props, dict):
+        return []
+    required = set(input_schema.get("required") or [])
+    rows: list[dict[str, Any]] = []
+    for pname in props:
+        spec = props[pname]
+        if not isinstance(spec, dict):
+            spec = {}
+        row: dict[str, Any] = {
+            "name": pname,
+            "required": pname in required,
+            "type": _param_type(spec),
+        }
+        desc = (spec.get("description") or "").strip()
+        if desc:
+            first = desc.splitlines()[0].strip()
+            if len(first) > 120:
+                first = first[:119] + "…"
+            row["description"] = first
+        rows.append(row)
+    return rows
+
+
+def _compact_tool_list_item(t) -> dict[str, Any]:
+    schema = t.inputSchema if isinstance(getattr(t, "inputSchema", None), dict) else {}
+    return {
+        "name": t.name,
+        "description": _brief_doc(getattr(t, "description", None)),
+        "parameters": _tool_parameters_summary(schema),
+    }
+
+
 async def _async_main(url: str, tool: str, json_arg: str | None) -> int:
     if tool == "list":
         client = Client(url)
         async with client:
             tools = await client.list_tools()
-            data = [t.model_dump(exclude_none=True) for t in tools]
+            data = [_compact_tool_list_item(t) for t in tools]
         print(json.dumps(data, ensure_ascii=False, indent=2))
         return 0
 
