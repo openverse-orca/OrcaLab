@@ -39,30 +39,30 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.AlohaRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.AlohaResponse.FromString,
                 _registered_method=True)
-        self.AddActor = channel.unary_unary(
-                '/SceneEdit.GrpcService/AddActor',
-                request_serializer=edit__service__pb2.AddActorRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.AddActorResponse.FromString,
+        self.AddActorBatch = channel.unary_unary(
+                '/SceneEdit.GrpcService/AddActorBatch',
+                request_serializer=edit__service__pb2.AddActorBatchRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.AddActorBatchResponse.FromString,
                 _registered_method=True)
-        self.AddGroup = channel.unary_unary(
-                '/SceneEdit.GrpcService/AddGroup',
-                request_serializer=edit__service__pb2.AddGroupRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.AddGroupResponse.FromString,
-                _registered_method=True)
-        self.SetActorTransform = channel.unary_unary(
-                '/SceneEdit.GrpcService/SetActorTransform',
-                request_serializer=edit__service__pb2.SetActorTransformRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.SetActorTransformResponse.FromString,
+        self.DeleteActorBatch = channel.unary_unary(
+                '/SceneEdit.GrpcService/DeleteActorBatch',
+                request_serializer=edit__service__pb2.DeleteActorBatchRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.DeleteActorBatchResponse.FromString,
                 _registered_method=True)
         self.GetPendingOperations = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetPendingOperations',
                 request_serializer=edit__service__pb2.GetPendingOperationsRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetPendingOperationsResponse.FromString,
                 _registered_method=True)
-        self.GetPendingActorTransform = channel.unary_unary(
-                '/SceneEdit.GrpcService/GetPendingActorTransform',
-                request_serializer=edit__service__pb2.GetPendingActorTransformRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.GetPendingActorTransformResponse.FromString,
+        self.GetPendingActorTransformBatch = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetPendingActorTransformBatch',
+                request_serializer=edit__service__pb2.GetPendingActorTransformBatchRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetPendingActorTransformBatchResponse.FromString,
+                _registered_method=True)
+        self.SetActorTransformBatch = channel.unary_unary(
+                '/SceneEdit.GrpcService/SetActorTransformBatch',
+                request_serializer=edit__service__pb2.SetActorTransformBatchRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.SetActorTransformBatchResponse.FromString,
                 _registered_method=True)
         self.GetSyncFromMujocoToScene = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetSyncFromMujocoToScene',
@@ -109,11 +109,6 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.RestoreStateRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.RestoreStateResponse.FromString,
                 _registered_method=True)
-        self.DeleteActor = channel.unary_unary(
-                '/SceneEdit.GrpcService/DeleteActor',
-                request_serializer=edit__service__pb2.DeleteActorRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.DeleteActorResponse.FromString,
-                _registered_method=True)
         self.RenameActor = channel.unary_unary(
                 '/SceneEdit.GrpcService/RenameActor',
                 request_serializer=edit__service__pb2.RenameActorRequest.SerializeToString,
@@ -123,16 +118,6 @@ class GrpcServiceStub(object):
                 '/SceneEdit.GrpcService/ReParentActor',
                 request_serializer=edit__service__pb2.ReParentActorRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.ReParentActorResponse.FromString,
-                _registered_method=True)
-        self.AddActorBatch = channel.unary_unary(
-                '/SceneEdit.GrpcService/AddActorBatch',
-                request_serializer=edit__service__pb2.AddActorBatchRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.AddActorBatchResponse.FromString,
-                _registered_method=True)
-        self.DeleteActorBatch = channel.unary_unary(
-                '/SceneEdit.GrpcService/DeleteActorBatch',
-                request_serializer=edit__service__pb2.DeleteActorBatchRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.DeleteActorBatchResponse.FromString,
                 _registered_method=True)
         self.GetWindowId = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetWindowId',
@@ -275,19 +260,13 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def AddActor(self, request, context):
+    def AddActorBatch(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def AddGroup(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SetActorTransform(self, request, context):
+    def DeleteActorBatch(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -299,7 +278,13 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetPendingActorTransform(self, request, context):
+    def GetPendingActorTransformBatch(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetActorTransformBatch(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -359,12 +344,6 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def DeleteActor(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def RenameActor(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -372,18 +351,6 @@ class GrpcServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def ReParentActor(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def AddActorBatch(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def DeleteActorBatch(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -553,30 +520,30 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     request_deserializer=edit__service__pb2.AlohaRequest.FromString,
                     response_serializer=edit__service__pb2.AlohaResponse.SerializeToString,
             ),
-            'AddActor': grpc.unary_unary_rpc_method_handler(
-                    servicer.AddActor,
-                    request_deserializer=edit__service__pb2.AddActorRequest.FromString,
-                    response_serializer=edit__service__pb2.AddActorResponse.SerializeToString,
+            'AddActorBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.AddActorBatch,
+                    request_deserializer=edit__service__pb2.AddActorBatchRequest.FromString,
+                    response_serializer=edit__service__pb2.AddActorBatchResponse.SerializeToString,
             ),
-            'AddGroup': grpc.unary_unary_rpc_method_handler(
-                    servicer.AddGroup,
-                    request_deserializer=edit__service__pb2.AddGroupRequest.FromString,
-                    response_serializer=edit__service__pb2.AddGroupResponse.SerializeToString,
-            ),
-            'SetActorTransform': grpc.unary_unary_rpc_method_handler(
-                    servicer.SetActorTransform,
-                    request_deserializer=edit__service__pb2.SetActorTransformRequest.FromString,
-                    response_serializer=edit__service__pb2.SetActorTransformResponse.SerializeToString,
+            'DeleteActorBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteActorBatch,
+                    request_deserializer=edit__service__pb2.DeleteActorBatchRequest.FromString,
+                    response_serializer=edit__service__pb2.DeleteActorBatchResponse.SerializeToString,
             ),
             'GetPendingOperations': grpc.unary_unary_rpc_method_handler(
                     servicer.GetPendingOperations,
                     request_deserializer=edit__service__pb2.GetPendingOperationsRequest.FromString,
                     response_serializer=edit__service__pb2.GetPendingOperationsResponse.SerializeToString,
             ),
-            'GetPendingActorTransform': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetPendingActorTransform,
-                    request_deserializer=edit__service__pb2.GetPendingActorTransformRequest.FromString,
-                    response_serializer=edit__service__pb2.GetPendingActorTransformResponse.SerializeToString,
+            'GetPendingActorTransformBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetPendingActorTransformBatch,
+                    request_deserializer=edit__service__pb2.GetPendingActorTransformBatchRequest.FromString,
+                    response_serializer=edit__service__pb2.GetPendingActorTransformBatchResponse.SerializeToString,
+            ),
+            'SetActorTransformBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetActorTransformBatch,
+                    request_deserializer=edit__service__pb2.SetActorTransformBatchRequest.FromString,
+                    response_serializer=edit__service__pb2.SetActorTransformBatchResponse.SerializeToString,
             ),
             'GetSyncFromMujocoToScene': grpc.unary_unary_rpc_method_handler(
                     servicer.GetSyncFromMujocoToScene,
@@ -623,11 +590,6 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     request_deserializer=edit__service__pb2.RestoreStateRequest.FromString,
                     response_serializer=edit__service__pb2.RestoreStateResponse.SerializeToString,
             ),
-            'DeleteActor': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteActor,
-                    request_deserializer=edit__service__pb2.DeleteActorRequest.FromString,
-                    response_serializer=edit__service__pb2.DeleteActorResponse.SerializeToString,
-            ),
             'RenameActor': grpc.unary_unary_rpc_method_handler(
                     servicer.RenameActor,
                     request_deserializer=edit__service__pb2.RenameActorRequest.FromString,
@@ -637,16 +599,6 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.ReParentActor,
                     request_deserializer=edit__service__pb2.ReParentActorRequest.FromString,
                     response_serializer=edit__service__pb2.ReParentActorResponse.SerializeToString,
-            ),
-            'AddActorBatch': grpc.unary_unary_rpc_method_handler(
-                    servicer.AddActorBatch,
-                    request_deserializer=edit__service__pb2.AddActorBatchRequest.FromString,
-                    response_serializer=edit__service__pb2.AddActorBatchResponse.SerializeToString,
-            ),
-            'DeleteActorBatch': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteActorBatch,
-                    request_deserializer=edit__service__pb2.DeleteActorBatchRequest.FromString,
-                    response_serializer=edit__service__pb2.DeleteActorBatchResponse.SerializeToString,
             ),
             'GetWindowId': grpc.unary_unary_rpc_method_handler(
                     servicer.GetWindowId,
@@ -817,7 +769,7 @@ class GrpcService(object):
             _registered_method=True)
 
     @staticmethod
-    def AddActor(request,
+    def AddActorBatch(request,
             target,
             options=(),
             channel_credentials=None,
@@ -830,9 +782,9 @@ class GrpcService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/SceneEdit.GrpcService/AddActor',
-            edit__service__pb2.AddActorRequest.SerializeToString,
-            edit__service__pb2.AddActorResponse.FromString,
+            '/SceneEdit.GrpcService/AddActorBatch',
+            edit__service__pb2.AddActorBatchRequest.SerializeToString,
+            edit__service__pb2.AddActorBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -844,7 +796,7 @@ class GrpcService(object):
             _registered_method=True)
 
     @staticmethod
-    def AddGroup(request,
+    def DeleteActorBatch(request,
             target,
             options=(),
             channel_credentials=None,
@@ -857,36 +809,9 @@ class GrpcService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/SceneEdit.GrpcService/AddGroup',
-            edit__service__pb2.AddGroupRequest.SerializeToString,
-            edit__service__pb2.AddGroupResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def SetActorTransform(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/SceneEdit.GrpcService/SetActorTransform',
-            edit__service__pb2.SetActorTransformRequest.SerializeToString,
-            edit__service__pb2.SetActorTransformResponse.FromString,
+            '/SceneEdit.GrpcService/DeleteActorBatch',
+            edit__service__pb2.DeleteActorBatchRequest.SerializeToString,
+            edit__service__pb2.DeleteActorBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -925,7 +850,7 @@ class GrpcService(object):
             _registered_method=True)
 
     @staticmethod
-    def GetPendingActorTransform(request,
+    def GetPendingActorTransformBatch(request,
             target,
             options=(),
             channel_credentials=None,
@@ -938,9 +863,36 @@ class GrpcService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/SceneEdit.GrpcService/GetPendingActorTransform',
-            edit__service__pb2.GetPendingActorTransformRequest.SerializeToString,
-            edit__service__pb2.GetPendingActorTransformResponse.FromString,
+            '/SceneEdit.GrpcService/GetPendingActorTransformBatch',
+            edit__service__pb2.GetPendingActorTransformBatchRequest.SerializeToString,
+            edit__service__pb2.GetPendingActorTransformBatchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetActorTransformBatch(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/SetActorTransformBatch',
+            edit__service__pb2.SetActorTransformBatchRequest.SerializeToString,
+            edit__service__pb2.SetActorTransformBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1195,33 +1147,6 @@ class GrpcService(object):
             _registered_method=True)
 
     @staticmethod
-    def DeleteActor(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/SceneEdit.GrpcService/DeleteActor',
-            edit__service__pb2.DeleteActorRequest.SerializeToString,
-            edit__service__pb2.DeleteActorResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
     def RenameActor(request,
             target,
             options=(),
@@ -1265,60 +1190,6 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/ReParentActor',
             edit__service__pb2.ReParentActorRequest.SerializeToString,
             edit__service__pb2.ReParentActorResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def AddActorBatch(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/SceneEdit.GrpcService/AddActorBatch',
-            edit__service__pb2.AddActorBatchRequest.SerializeToString,
-            edit__service__pb2.AddActorBatchResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def DeleteActorBatch(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/SceneEdit.GrpcService/DeleteActorBatch',
-            edit__service__pb2.DeleteActorBatchRequest.SerializeToString,
-            edit__service__pb2.DeleteActorBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,

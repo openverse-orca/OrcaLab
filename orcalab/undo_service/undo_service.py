@@ -3,14 +3,15 @@ from copy import deepcopy
 from typing import override, List
 import logging
 from orcalab.actor import BaseActor, GroupActor, AssetActor
+from orcalab.actor_util import clone_actor_basic
 from orcalab.application_util import get_local_scene
 from orcalab.path import Path
 
+from orcalab.scene_edit_types import AddActorRequest
 from orcalab.undo_service.command import (
     BaseCommand,
     CommandGroup,
-    CreateActorCommand,
-    CreateGroupCommand,
+    AddActorCommand,
     DeleteActorCommand,
     PropertyChangeCommand,
     RenameActorCommand,
@@ -110,14 +111,15 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().set_selection(
                     command.old_selection, undo=False
                 )
-            case CreateGroupCommand():
-                await SceneEditRequestBus().delete_actor(command.path, undo=False)
-            case CreateActorCommand():
-                await SceneEditRequestBus().delete_actor(command.path, undo=False)
+            case AddActorCommand():
+                paths: List[Path] = []
+                for request in command.requests:
+                    paths.append(request.parent_path / request.actor.name)
+                await SceneEditRequestBus().delete_actors(paths, undo=False)
             case DeleteActorCommand():
-                actor = command.actor
-                parent_path = command.path.parent()
-                await self.undo_delete_recursive(actor, parent_path)
+                await self.undo_delete_actors(
+                    command.actors, command.parent_paths, command.rows
+                )
             case RenameActorCommand():
                 actor = self._get_actor(command.new_path)
                 await SceneEditRequestBus().rename_actor(
@@ -130,8 +132,10 @@ class UndoService(UndoRequest):
                     actor, old_parent_path, command.old_row, undo=False
                 )
             case TransformCommand():
-                await SceneEditRequestBus().set_transform(
-                    command.actor_path, command.old_transform, command.local, undo=False
+                await SceneEditRequestBus().set_transform_batch(
+                    command.actor_paths,
+                    command.old_transforms,
+                    undo=False,
                 )
             case PropertyChangeCommand():
                 await SceneEditRequestBus().set_property(
@@ -151,17 +155,15 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().set_selection(
                     command.new_selection, undo=False
                 )
-            case CreateGroupCommand():
-                parent = command.path.parent()
-                name = command.path.name()
-                actor = GroupActor(name=name)
-                await SceneEditRequestBus().add_actor(actor, parent, undo=False)
-            case CreateActorCommand():
-                parent = command.path.parent()
-                actor = deepcopy(command.actor)
-                await SceneEditRequestBus().add_actor(actor, parent, undo=False)
+            case AddActorCommand():
+                await SceneEditRequestBus().add_actors(command.requests, undo=False)
             case DeleteActorCommand():
-                await SceneEditRequestBus().delete_actor(command.path, undo=False)
+                actor_paths: List[Path] = []
+                for actor, parent_path, row in zip(
+                    command.actors, command.parent_paths, command.rows
+                ):
+                    actor_paths.append(parent_path / actor.name)
+                await SceneEditRequestBus().delete_actors(actor_paths, undo=False)
             case RenameActorCommand():
                 actor = self._get_actor(command.old_path)
                 name = command.new_path.name()
@@ -173,29 +175,44 @@ class UndoService(UndoRequest):
                     actor, new_parent_path, command.new_row, undo=False
                 )
             case TransformCommand():
-                await SceneEditRequestBus().set_transform(
-                    command.actor_path, command.new_transform, command.local, undo=False
+                await SceneEditRequestBus().set_transform_batch(
+                    command.actor_paths,
+                    command.new_transforms,
+                    undo=False,
                 )
             case PropertyChangeCommand():
                 await SceneEditRequestBus().set_property(
                     command.property_key, command.new_value, undo=False
                 )
             case DuplicateActorCommand():
-                await SceneEditRequestBus().duplicate_actor(command.source_path, undo=False)
+                await SceneEditRequestBus().duplicate_actor(
+                    command.source_path, undo=False
+                )
             case _:
                 raise Exception("Unknown command type.")
 
-    # Rebuild actor and its children recursively
-    async def undo_delete_recursive(self, actor: BaseActor, parent_path: Path):
+    async def undo_delete_actors(
+        self, actors: List[BaseActor], parent_paths: List[Path], rows: List[int]
+    ):
+        request: List[AddActorRequest] = []
+
+        for actor, parent_path, row in zip(actors, parent_paths, rows):
+            self.undo_delete_actor(request, actor, parent_path, row)
+
+        await SceneEditRequestBus().add_actors(request, undo=False)
+
+    def undo_delete_actor(
+        self,
+        request: List[AddActorRequest],
+        actor: BaseActor,
+        parent_path: Path,
+        row: int,
+    ):
+        """Recursively add actor and its children."""
+        new_actor = clone_actor_basic(actor)
+        request.append(AddActorRequest(new_actor, parent_path, row, actor))
+
         if isinstance(actor, GroupActor):
-            new_actor = GroupActor(name=actor.name)
-            new_actor.transform = actor.transform
-
-            await SceneEditRequestBus().add_actor(new_actor, parent_path, undo=False)
-
-            this_path = parent_path / actor.name
+            this_path = parent_path / new_actor.name
             for child in actor.children:
-                await self.undo_delete_recursive(child, this_path)
-        else:
-            new_actor = deepcopy(actor)
-            await SceneEditRequestBus().add_actor(new_actor, parent_path, undo=False)
+                self.undo_delete_actor(request, child, this_path, -1)

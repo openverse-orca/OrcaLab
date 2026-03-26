@@ -92,6 +92,68 @@ class EditServiceWrapper:
         except Exception as e:
             return False
 
+    async def add_actor_batch(
+        self, in_requests: List[AddActorRequest], stop_on_error
+    ) -> Tuple[bool, List[str]]:
+        requests = []
+        for in_request in in_requests:
+            actor = in_request.actor
+            parent_path = in_request.parent_path
+
+            request_union = edit_service_pb2.AddActorRequestUnion()
+            if isinstance(actor, GroupActor):
+                transform_msg = self._create_transform_message(actor.transform)
+                request = edit_service_pb2.AddGroupRequest(
+                    actor_name=actor.name,
+                    parent_actor_path=parent_path.string(),
+                    transform=transform_msg,
+                    space=edit_service_pb2.Space.Local,
+                )
+                request_union.group_actor.CopyFrom(request)
+            elif isinstance(actor, AssetActor):
+                transform_msg = self._create_transform_message(actor.transform)
+                request = edit_service_pb2.AddAssetActorRequest(
+                    actor_name=actor.name,
+                    spawnable_name=actor.asset_path,
+                    parent_actor_path=parent_path.string(),
+                    transform=transform_msg,
+                    space=edit_service_pb2.Space.Local,
+                )
+                request_union.asset_actor.CopyFrom(request)
+            else:
+                raise ValueError("Unsupported actor type.")
+            requests.append(request_union)
+
+        batch_request = edit_service_pb2.AddActorBatchRequest(requests=requests)
+        response = await self.stub.AddActorBatch(batch_request)
+        if response.status_code != Success:
+            print(f"Errors occur during add_actor_batch()")
+            for req, error in zip(in_requests, response.errors):
+                if error:
+                    print(
+                        f"    Error adding {req.actor.name} under {req.parent_path}: {error}"
+                    )
+            return False, response.errors
+        return True, response.errors
+
+    async def delete_actor_batch(self, actor_paths: List[Path]) -> Tuple[bool, List[str]]:
+        paths = []
+        for p in actor_paths:
+            if not isinstance(p, Path):
+                raise Exception(f"Invalid path: {p}")
+            paths.append(p.string())
+
+        batch_request = edit_service_pb2.DeleteActorBatchRequest(actor_paths=paths)
+        response = await self.stub.DeleteActorBatch(batch_request)
+
+        if response.status_code != Success:
+            print(f"Errors occur during delete_actor_batch()")
+            for path, error in zip(actor_paths, response.errors):
+                if error:
+                    print(f"    Error deleting {path}: {error}")
+            return False, response.errors
+        return True, response.errors
+
     async def query_pending_operation_loop(self) -> List[str]:
         request = edit_service_pb2.GetPendingOperationsRequest()
         response = await self.stub.GetPendingOperations(request)
@@ -108,44 +170,35 @@ class EditServiceWrapper:
         self._check_response(response)
         return self._get_transform_from_message(response.transform)
 
-    async def add_group_actor(self, actor: GroupActor, parent_path: Path):
-        assert isinstance(actor, GroupActor), "actor must be a GroupActor"
-        transform_msg = self._create_transform_message(actor.transform)
-        request = edit_service_pb2.AddGroupRequest(
-            actor_name=actor.name,
-            parent_actor_path=parent_path.string(),
-            transform=transform_msg,
-            space=edit_service_pb2.Space.Local,
+    async def get_pending_actor_transform_batch(
+        self, paths: List[Path]
+    ) -> List[Transform]:
+        request = edit_service_pb2.GetPendingActorTransformBatchRequest(
+            actor_paths=[p.string() for p in paths]
         )
-        response = await self.stub.AddGroup(request)
-
+        response = await self.stub.GetPendingActorTransformBatch(request)
         self._check_response(response)
+        transforms = []
+        for transform_msg in response.transforms:
+            transform = self._get_transform_from_message(transform_msg)
+            transforms.append(transform)
+        assert len(transforms) == len(
+            paths
+        ), "Response transforms length does not match request paths length."
+        return transforms
 
-    async def add_asset_actor(self, actor: AssetActor, parent_path: Path):
-        assert isinstance(actor, AssetActor), "actor must be an AssetActor"
-        transform_msg = self._create_transform_message(actor.transform)
+    async def set_actor_transform_batch(
+        self, paths: List[Path], transforms: List[Transform]
+    ):
+        if len(paths) != len(transforms):
+            raise ValueError("Paths and transforms must have the same length.")
+        request = edit_service_pb2.SetActorTransformBatchRequest()
+        for path, transform in zip(paths, transforms):
+            transform_msg = self._create_transform_message(transform)
+            request.actor_paths.append(path.string())
+            request.transforms.append(transform_msg)
 
-        request = edit_service_pb2.AddActorRequest(
-            actor_name=actor.name,
-            spawnable_name=actor.asset_path,
-            parent_actor_path=parent_path.string(),
-            transform=transform_msg,
-            space=edit_service_pb2.Space.Local,
-        )
-        response = await self.stub.AddActor(request)
-
-        self._check_response(response)
-
-    async def set_actor_transform(self, path: Path, transform: Transform, local: bool):
-        transform_msg = self._create_transform_message(transform)
-        space = edit_service_pb2.Space.Local if local else edit_service_pb2.Space.World
-        request = edit_service_pb2.SetActorTransformRequest(
-            actor_path=path.string(),
-            transform=transform_msg,
-            space=space,
-        )
-
-        response = await self.stub.SetActorTransform(request)
+        response = await self.stub.SetActorTransformBatch(request)
         self._check_response(response)
 
     async def publish_scene(self):
@@ -207,11 +260,6 @@ class EditServiceWrapper:
     async def restore_state(self):
         request = edit_service_pb2.RestoreStateRequest()
         response = await self.stub.RestoreState(request)
-        self._check_response(response)
-
-    async def delete_actor(self, actor_path: Path):
-        request = edit_service_pb2.DeleteActorRequest(actor_path=actor_path.string())
-        response = await self.stub.DeleteActor(request)
         self._check_response(response)
 
     async def rename_actor(self, actor_path: Path, new_name: str):
@@ -572,11 +620,13 @@ class EditServiceWrapper:
                 raise Exception(f"Invalid path: {p}")
             paths.append(p.string())
 
-        request = edit_service_pb2.SetVisiblityRequest(visible=visible, actor_paths=paths)
+        request = edit_service_pb2.SetVisiblityRequest(
+            visible=visible, actor_paths=paths
+        )
         response = await self.stub.SetVisiblity(request)
         self._check_response(response)
 
-    async def set_lock(self, locked:bool, actor_paths: List[Path]):
+    async def set_lock(self, locked: bool, actor_paths: List[Path]):
         paths = []
         for p in actor_paths:
             if not isinstance(p, Path):
@@ -587,52 +637,11 @@ class EditServiceWrapper:
         response = await self.stub.SetLock(request)
         self._check_response(response)
 
-    async def set_move_rotate_sensitivity(self, move_sensitivity: float, rotate_sensitivity: float):
-        request = edit_service_pb2.SetMoveRotateSensitivityRequest(move_sensitivity=move_sensitivity, rotate_sensitivity=rotate_sensitivity)
+    async def set_move_rotate_sensitivity(
+        self, move_sensitivity: float, rotate_sensitivity: float
+    ):
+        request = edit_service_pb2.SetMoveRotateSensitivityRequest(
+            move_sensitivity=move_sensitivity, rotate_sensitivity=rotate_sensitivity
+        )
         response = await self.stub.SetMoveRotateSensitivity(request)
         self._check_response(response)
-
-    async def add_actor_batch(self, in_requests: List[AddActorRequest]) -> str:
-        requests = []
-        for in_request in in_requests:
-            actor = in_request.actor
-            parent_path = in_request.parent_path
-
-            request_union = edit_service_pb2.AddActorRequestUnion()
-            if isinstance(actor, GroupActor):
-                transform_msg = self._create_transform_message(actor.transform)
-                request = edit_service_pb2.AddGroupRequest(
-                    actor_name=actor.name,
-                    parent_actor_path=parent_path.string(),
-                    transform=transform_msg,
-                    space=edit_service_pb2.Space.Local,
-                )
-                request_union.group_actor.CopyFrom(request)
-            elif isinstance(actor, AssetActor):
-                transform_msg = self._create_transform_message(actor.transform)
-                request = edit_service_pb2.AddAssetActorRequest(
-                    actor_name=actor.name,
-                    spawnable_name=actor.asset_path,
-                    parent_actor_path=parent_path.string(),
-                    transform=transform_msg,
-                    space=edit_service_pb2.Space.Local,
-                )
-                request_union.asset_actor.CopyFrom(request)
-            else:
-                raise ValueError("Unsupported actor type.")
-            requests.append(request_union)
-
-        batch_request = edit_service_pb2.AddActorBatchRequest(requests=requests)
-        response = await self.stub.AddActorBatch(batch_request)
-        return self._check_response_no_exception(response)
-
-    async def delete_actor_batch(self, actor_paths: List[Path]) -> str:
-        paths = []
-        for p in actor_paths:
-            if not isinstance(p, Path):
-                raise Exception(f"Invalid path: {p}")
-            paths.append(p.string())
-
-        batch_request = edit_service_pb2.DeleteActorBatchRequest(actor_paths=paths)
-        response = await self.stub.DeleteActorBatch(batch_request)
-        return self._check_response_no_exception(response)

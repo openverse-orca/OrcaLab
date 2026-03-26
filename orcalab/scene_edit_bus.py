@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence
 
 from orcalab.actor import BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyKey
@@ -6,6 +6,7 @@ from orcalab.math import Transform
 from orcalab.event_bus import create_event_bus
 from orcalab.path import Path
 from orcalab.protos.edit_service_wrapper import CameraDataPNGResult
+from orcalab.scene_edit_types import AddActorRequest
 
 
 class SceneEditRequest:
@@ -33,12 +34,28 @@ class SceneEditRequest:
     ):
         pass
 
+    async def add_actors(
+        self,
+        requests: List[AddActorRequest],
+        undo: bool = True,
+        source: str = "",
+    ):
+        pass
+
     def can_delete_actor(self, out: List[bool], actor: BaseActor | Path):
         pass
 
     async def delete_actor(
         self,
         actor: BaseActor | Path,
+        undo: bool = True,
+        source: str = "",
+    ):
+        pass
+
+    async def delete_actors(
+        self,
+        actors: Sequence[BaseActor | Path],
         undo: bool = True,
         source: str = "",
     ):
@@ -102,17 +119,26 @@ class SceneEditRequest:
     def end_change_property(self, property_key: ActorPropertyKey):
         pass
 
-    def start_change_transform(self, actor: BaseActor | Path):
-        pass
-
-    def end_change_transform(self, actor: BaseActor | Path):
-        pass
-
     async def set_transform(
         self,
         actor: BaseActor | Path,
         transform: Transform,
         local: bool,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+        pass
+
+    async def start_change_transform_batch(self, actors: Sequence[BaseActor | Path]):
+        pass
+
+    async def end_change_transform_batch(self, actors: Sequence[BaseActor | Path]):
+        pass
+
+    async def set_transform_batch(
+        self,
+        actors: Sequence[BaseActor | Path],
+        transforms: Sequence[Transform],
         undo: bool = True,
         source: str = "",
     ) -> None:
@@ -127,7 +153,8 @@ class SceneEditRequest:
     def get_selection(self, out: List[List[Path]]):
         pass
 
-    async def set_actor_visible(self,
+    async def set_actor_visible(
+        self,
         actor: BaseActor | Path,
         visible: bool,
         undo: bool = False,
@@ -135,7 +162,8 @@ class SceneEditRequest:
     ):
         pass
 
-    async def set_actor_locked(self,
+    async def set_actor_locked(
+        self,
         actor: BaseActor | Path,
         locked: bool,
         undo: bool = False,
@@ -165,11 +193,11 @@ class SceneEditNotification:
     ) -> None:
         pass
 
-    async def on_transform_changed(
+    async def on_transforms_changed(
         self,
-        actor_path: Path,
-        transform: Transform,
-        local: bool,
+        actor_paths: List[Path],
+        old_transforms: List[Transform],
+        new_transforms: List[Transform],
         source: str,
     ) -> None:
         pass
@@ -204,18 +232,10 @@ class SceneEditNotification:
     async def on_actor_added_batch(self, error: str):
         pass
 
-    async def before_actor_deleted(
-        self,
-        actor_path: Path,
-        source: str,
-    ):
+    async def before_actors_deleted(self, actor_paths: List[Path], source: str):
         pass
 
-    async def on_actor_deleted(
-        self,
-        actor_path: Path,
-        source: str,
-    ):
+    async def on_actors_deleted(self, actor_paths: List[Path], source: str):
         pass
 
     async def before_actor_renamed(
@@ -284,10 +304,14 @@ class SceneEditNotification:
     async def get_actor_asset_aabb(self, actor_path: Path, output: List[float]):
         pass
 
-    async def on_actor_visible_changed(self, actor_path: Path, paths_to_update: List[Path], visible: bool, source: str):
+    async def on_actor_visible_changed(
+        self, actor_path: Path, paths_to_update: List[Path], visible: bool, source: str
+    ):
         pass
 
-    async def on_actor_locked_changed(self, actor_path: Path, paths_to_update: List[Path], locked: bool, source: str):
+    async def on_actor_locked_changed(
+        self, actor_path: Path, paths_to_update: List[Path], locked: bool, source: str
+    ):
         pass
 
 

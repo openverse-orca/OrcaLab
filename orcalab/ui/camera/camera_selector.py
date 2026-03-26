@@ -191,7 +191,7 @@ class CameraSelector(QtWidgets.QTreeView, CameraNotification, SceneEditNotificat
 
     def _get_selected_camera_index(self) -> int:
         indexes = self.selectionModel().selectedIndexes()
-        if not indexes:
+        if not indexes: # TODO: 这里不要使用异常
             raise ValueError("No camera is currently selected")
         idx = indexes[0]
         item = self._model.itemFromIndex(idx)

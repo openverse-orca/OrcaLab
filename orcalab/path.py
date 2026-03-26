@@ -69,12 +69,23 @@ class Path:
         return hash(self._p)
 
     def __eq__(self, other):
+        if not isinstance(other, Path):
+            return False
         return self._p == other._p
 
     def __ne__(self, other):
         # Not strictly necessary, but to avoid having both x==y and x!=y
         # True at the same time
         return not (self == other)
+
+    def __lt__(self, other):
+        """
+        Path按照字符串排序，因此/a/b在/a/c之前，/a在/a/b之前。同时也能确保父节点在子节点之前。
+        """
+        if not isinstance(other, Path):
+            raise TypeError("other must be an instance of Path.")
+
+        return self._p < other._p
 
     @classmethod
     def is_valid_name(cls, name: str) -> bool:

@@ -309,24 +309,12 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         self.endResetModel()
 
     @override
-    async def before_actor_deleted(
-        self,
-        actor_path: Path,
-        source: str,
-    ):
-        actor, _ = self.local_scene.get_actor_and_path(actor_path)
-        index = self.get_index_from_actor(actor)
-        parent_index = index.parent()
-
-        self.beginRemoveRows(parent_index, index.row(), index.row())
+    async def before_actors_deleted(self, actor_paths: List[Path], source: str):
+        self.beginResetModel()
 
     @override
-    async def on_actor_deleted(
-        self,
-        actor_path: Path,
-        source: str,
-    ):
-        self.endRemoveRows()
+    async def on_actors_deleted(self, actor_paths: List[Path], source: str):
+        self.endResetModel()
 
     @override
     async def before_actor_renamed(
@@ -373,11 +361,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
 
     @override
     async def on_actor_visible_changed(
-        self,
-        actor_path: Path,
-        paths_to_update: list,
-        visible: bool,
-        source: str = ""
+        self, actor_path: Path, paths_to_update: list, visible: bool, source: str = ""
     ):
         actor, _ = self.local_scene.get_actor_and_path(actor_path)
         index = self.get_index_from_actor(actor)
@@ -385,11 +369,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
 
     @override
     async def on_actor_locked_changed(
-        self,
-        actor_path: Path,
-        paths_to_update: list,
-        locked: bool,
-        source: str = ""
+        self, actor_path: Path, paths_to_update: list, locked: bool, source: str = ""
     ):
         actor, _ = self.local_scene.get_actor_and_path(actor_path)
         index = self.get_index_from_actor(actor)

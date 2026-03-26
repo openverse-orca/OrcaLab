@@ -1,9 +1,10 @@
 from copy import deepcopy
-from typing import Any
+from typing import Any, List
 from orcalab.actor import BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyKey
 from orcalab.math import Transform
 from orcalab.path import Path
+from orcalab.scene_edit_types import AddActorRequest
 
 
 # 不要存Actor对象，只存Path。
@@ -34,32 +35,22 @@ class SelectionCommand(BaseCommand):
         return f"SelectionCommand(old_selection={self.old_selection}, new_selection={self.new_selection})"
 
 
-class CreateGroupCommand(BaseCommand):
-    def __init__(self, path: Path):
-        self.path = path
+class AddActorCommand(BaseCommand):
+    def __init__(self, requests: List[AddActorRequest]):
+        self.requests = requests
 
     def __repr__(self):
-        return f"CreateGroupCommand(path={self.path})"
-
-
-class CreateActorCommand(BaseCommand):
-    def __init__(self, actor: BaseActor, path: Path, row: int):
-        self.actor = actor
-        self.path = path
-        self.row = row
-
-    def __repr__(self):
-        return f"CreteActorCommand(path={self.path})"
+        return f"AddActorCommand({len(self.requests)} requests)"
 
 
 class DeleteActorCommand(BaseCommand):
-    def __init__(self, actor: BaseActor, path: Path, row: int):
-        self.actor = actor
-        self.path = path
-        self.row = row
+    def __init__(self, actors: List[BaseActor], paths: List[Path], rows: List[int]):
+        self.actors = actors
+        self.parent_paths = paths
+        self.rows = rows
 
     def __repr__(self):
-        return f"DeleteActorCommand(path={self.path})"
+        return f"DeleteActorCommand(paths={self.parent_paths})"
 
 
 class RenameActorCommand(BaseCommand):
@@ -83,14 +74,20 @@ class ReparentActorCommand(BaseCommand):
 
 
 class TransformCommand(BaseCommand):
-    def __init__(self):
-        self.actor_path: Path = Path()
-        self.old_transform = Transform()
-        self.new_transform = Transform()
-        self.local = True
+    def __init__(
+        self,
+        actor_paths: List[Path],
+        old_transforms: List[Transform],
+        new_transforms: List[Transform],
+        local: bool,
+    ):
+        self.actor_paths: List[Path] = actor_paths
+        self.old_transforms: List[Transform] = old_transforms
+        self.new_transforms: List[Transform] = new_transforms
+        self.local = local
 
     def __repr__(self):
-        return f"TransformCommand(actor_path={self.actor_path})"
+        return f"TransformCommand(actor_paths={self.actor_paths})"
 
 
 class PropertyChangeCommand(BaseCommand):
