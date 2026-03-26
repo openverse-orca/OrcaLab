@@ -925,6 +925,7 @@ class MainWindow(
         action_undo = self.menu_edit.addAction("撤销")
         action_undo.setEnabled(can_undo())
         action_undo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
+        action_undo.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
         async def undo_warpper():
             await self.undo("menu")
         connect(action_undo.triggered, undo_warpper)
@@ -932,6 +933,7 @@ class MainWindow(
         action_redo = self.menu_edit.addAction("重做")
         action_redo.setEnabled(can_redo())
         action_redo.setShortcut(QtGui.QKeySequence("Ctrl+Shift+Z"))
+        action_redo.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
         async def redo_wrapper():
             await self.redo("menu")
         connect(action_redo.triggered, redo_wrapper)
@@ -941,6 +943,7 @@ class MainWindow(
         action_duplicate = self.menu_edit.addAction("复制")
         action_duplicate.setEnabled(self.can_duplicate_selection())
         action_duplicate.setShortcut(QtGui.QKeySequence("Ctrl+D"))
+        action_duplicate.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
         async def duplicate_wrapper():
             await self.duplicate_selection("menu")
         connect(action_duplicate.triggered, duplicate_wrapper)
@@ -1417,15 +1420,15 @@ class MainWindow(
         if event.type() == QtCore.QEvent.Type.KeyPress:
             assert isinstance(event, QtGui.QKeyEvent)
             if event.key() == QtCore.Qt.Key.Key_Z:
-                if event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
-                    if event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
+                if event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier and not event.isAutoRepeat():
+                    if event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier and not event.isAutoRepeat():
                         asyncio.create_task(self.redo("main window"))
                     else:
                         asyncio.create_task(self.undo("main window"))
                     return True
 
             if event.key() == QtCore.Qt.Key.Key_D:
-                if event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
+                if event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier and not event.isAutoRepeat():
                     asyncio.create_task(self.duplicate_selection("main window"))
                     return True
 
