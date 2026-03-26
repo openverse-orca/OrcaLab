@@ -162,10 +162,10 @@ class ConfigService:
 
         logger.debug("加载的配置: %s", self.config)
 
-        # 进行版本校验
-        if not self._validate_config_version(shared_config):
-            logger.error("版本校验失败，程序将退出")
-            sys.exit(1)
+        # # 进行版本校验
+        # if not self._validate_config_version(shared_config):
+        #     logger.error("版本校验失败，程序将退出")
+        #     sys.exit(1)
 
     def _normalize_levels(self):
         """确保 levels 配置为包含 name/path 的列表，并移除重复项"""

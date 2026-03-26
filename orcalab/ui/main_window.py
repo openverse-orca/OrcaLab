@@ -110,11 +110,6 @@ class MainWindow(
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
         self.setWindowTitle(f"{self._base_title}")
 
-        # 在Viewport之前拦截事件。
-        qapp = QtCore.QCoreApplication.instance()
-        assert qapp is not None
-        qapp.installEventFilter(self)
-
     def connect_buses(self):
         super().connect_buses()
         ApplicationRequestBus.connect(self)
@@ -275,6 +270,12 @@ class MainWindow(
 
         # 发送匿名统计数据
         await self.send_statistics()
+
+        # 在Viewport之前拦截事件。
+        # Note: filters invoked in reverse order of installation, so we install it last.
+        qapp = QtCore.QCoreApplication.instance()
+        assert qapp is not None
+        qapp.installEventFilter(self)
 
     def stop_viewport_main_loop(self):
         """停止viewport主循环"""
@@ -949,6 +950,15 @@ class MainWindow(
             await self.duplicate_selection("menu")
         connect(action_duplicate.triggered, duplicate_wrapper)
 
+
+        action_delete = self.menu_edit.addAction("删除")
+        action_delete.setEnabled(self.can_delete_selection())
+        action_delete.setShortcut(QtGui.QKeySequence("Delete"))
+        action_delete.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
+        async def delete_wrapper():
+            await self.delete_selection("menu")
+        connect(action_delete.triggered, delete_wrapper)
+
         self.menu_edit.addSeparator()
 
         action_settings = self.menu_edit.addAction("配置")
@@ -1416,21 +1426,45 @@ class MainWindow(
         bus = SceneEditRequestBus()
         await bus.duplicate_actor(selection[0])
 
+    def can_delete_selection(self) -> bool:
+        if not self.local_scene.selection:
+            return False
+
+        ok, err = self.local_scene.can_delete_actors(self.local_scene.selection)
+        return ok
+
+    async def delete_selection(self, source:str = ""):
+        logger.debug("delete_selection. source: %s", source)
+
+        selection = self.local_scene.selection.copy()
+        if not selection:
+            return
+
+        bus = SceneEditRequestBus()
+        await bus.delete_actor(selection[0])
+
     @override
     def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
         if event.type() == QtCore.QEvent.Type.KeyPress:
             assert isinstance(event, QtGui.QKeyEvent)
+            ctrl = event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier
+            shift = event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
+            
             if event.key() == QtCore.Qt.Key.Key_Z:
-                if event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier and not event.isAutoRepeat():
-                    if event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier and not event.isAutoRepeat():
+                if ctrl and not event.isAutoRepeat():
+                    if shift and not event.isAutoRepeat():
                         asyncio.create_task(self.redo("main window"))
                     else:
                         asyncio.create_task(self.undo("main window"))
                     return True
 
             if event.key() == QtCore.Qt.Key.Key_D:
-                if event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier and not event.isAutoRepeat():
+                if ctrl and not event.isAutoRepeat():
                     asyncio.create_task(self.duplicate_selection("main window"))
                     return True
+                
+            if event.key() == QtCore.Qt.Key.Key_Delete and not event.isAutoRepeat():
+                asyncio.create_task(self.delete_selection("main window"))
+                return True
 
         return super().eventFilter(watched, event)

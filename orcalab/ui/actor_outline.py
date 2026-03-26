@@ -115,6 +115,9 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         self.setDragDropMode(QtWidgets.QAbstractItemView.DragDropMode.DragDrop)
         self.setDefaultDropAction(QtCore.Qt.DropAction.CopyAction)
 
+        # 允许多选
+        self.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
+
         self._current_index = QtCore.QModelIndex()
         self._current_actor: BaseActor | None = None
 
@@ -155,6 +158,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
     @override
     async def on_selection_changed(self, old_selection, new_selection, source=""):
+        # TODO: Set to focus actor.
         if source == "actor_outline":
             return
 
@@ -180,7 +184,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             if not index.isValid():
                 raise Exception("Invalid actor.")
 
-            flags = QtCore.QItemSelectionModel.SelectionFlag.ClearAndSelect
+            flags = QtCore.QItemSelectionModel.SelectionFlag.Select | QtCore.QItemSelectionModel.SelectionFlag.Rows
             selection_model.select(index, flags)
             self.scrollTo(index)
 

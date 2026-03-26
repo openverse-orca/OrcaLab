@@ -1,3 +1,4 @@
+from copy import deepcopy
 import logging
 from typing import Any, List, Tuple
 
@@ -247,3 +248,35 @@ def collect_properties_duplicate_data(
                 keys.append(key)
                 props.append(dst_prop)
                 values.append(src_prop.value())
+
+
+def sort_actors_with_data[T](
+    actor_paths: List[Path], datas: List[T]
+) -> Tuple[List[Path], List[T]]:
+    if len(actor_paths) != len(datas):
+        raise Exception("actor_paths and datas must have the same length")
+
+    if len(actor_paths) == 0:
+        return [], []
+
+    def _key(pair: Tuple[Path, T]):
+        return pair[0]
+
+    sorted_pairs = sorted(zip(actor_paths, datas), key=_key)
+    sorted_actor_paths, sorted_datas = zip(*sorted_pairs)
+    return list(sorted_actor_paths), list(sorted_datas)
+
+
+def clone_actor_basic[T](actor: T) -> T:
+    """Clone actor without parent-child relationships."""
+    if isinstance(actor, GroupActor):
+        new_actor = GroupActor(actor.name)
+    elif isinstance(actor, AssetActor):
+        new_actor = AssetActor(actor.name, actor.asset_path)
+        new_actor.property_groups = deepcopy(actor.property_groups)
+    else:
+        raise Exception("Unsupported actor type")
+
+    new_actor.transform = actor.transform
+
+    return new_actor  # type: ignore

@@ -22,7 +22,6 @@ message Transform {
 message AlohaRequest {
     int32 value = 1;
 }
-
 message AlohaResponse {
     StatusCode status_code = 1;
     string error_message = 2;
@@ -30,31 +29,12 @@ message AlohaResponse {
 }
 
 
-message AddActorRequest {
-    string spawnable_name = 1;      // Actor 使用的 spawnable 名字
-    string actor_name = 2;          // Actor Entity 的名字
-    string parent_actor_path = 3;   // Parent Actor 的路径
-    Transform transform = 4;
-    Space space = 5;
-}
-message AddActorResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-}
-
 message AddGroupRequest {
     string actor_name = 2;          // Actor Entity 的名字
     string parent_actor_path = 3;   // Parent Actor 的路径
     Transform transform = 4;
     Space space = 5;
 }
-message AddGroupResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-}
-
-
-
 message AddAssetActorRequest {
     string spawnable_name = 1;
     string actor_name = 2;
@@ -70,11 +50,15 @@ message AddActorRequestUnion {
 }
 message AddActorBatchRequest {
     repeated AddActorRequestUnion requests = 1;
+    bool stop_on_error = 2;
 }
 message AddActorBatchResponse {
     StatusCode status_code = 1;
     string error_message = 2;
+    repeated string errors = 3;
 }
+
+
 
 message DeleteActorBatchRequest {
     repeated string actor_paths = 1;
@@ -82,6 +66,7 @@ message DeleteActorBatchRequest {
 message DeleteActorBatchResponse {
     StatusCode status_code = 1;
     string error_message = 2;
+    repeated string errors = 3;
 }
 
 
@@ -92,6 +77,16 @@ message SetActorTransformRequest {
     Space space = 3;
 }
 message SetActorTransformResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+// In local space.
+message SetActorTransformBatchRequest {
+    repeated string actor_paths = 1;
+    repeated Transform transforms = 2;
+}
+message SetActorTransformBatchResponse {
     StatusCode status_code = 1;
     string error_message = 2;
 }
@@ -116,6 +111,14 @@ message GetPendingActorTransformResponse {
     Transform transform = 3;
 }
 
+message GetPendingActorTransformBatchRequest {
+    repeated string actor_paths = 3;
+}
+message GetPendingActorTransformBatchResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    repeated Transform transforms = 3;
+}
 
 message GetSyncFromMujocoToSceneRequest {
 }
@@ -529,12 +532,12 @@ message SetMoveRotateSensitivityResponse {
 service GrpcService {
     rpc Aloha(AlohaRequest) returns (AlohaResponse);
     
-    rpc AddActor(AddActorRequest) returns (AddActorResponse);
-    rpc AddGroup(AddGroupRequest) returns (AddGroupResponse);
-    rpc SetActorTransform(SetActorTransformRequest) returns (SetActorTransformResponse);
+    rpc AddActorBatch(AddActorBatchRequest) returns (AddActorBatchResponse);
+    rpc DeleteActorBatch(DeleteActorBatchRequest) returns (DeleteActorBatchResponse);
 
     rpc GetPendingOperations(GetPendingOperationsRequest) returns (GetPendingOperationsResponse);
-    rpc GetPendingActorTransform(GetPendingActorTransformRequest) returns (GetPendingActorTransformResponse);
+    rpc GetPendingActorTransformBatch(GetPendingActorTransformBatchRequest) returns (GetPendingActorTransformBatchResponse);
+    rpc SetActorTransformBatch(SetActorTransformBatchRequest) returns (SetActorTransformBatchResponse);
 
     rpc GetSyncFromMujocoToScene(GetSyncFromMujocoToSceneRequest) returns (GetSyncFromMujocoToSceneResponse);
     rpc SetSyncFromMujocoToScene(SetSyncFromMujocoToSceneRequest) returns (SetSyncFromMujocoToSceneResponse);
@@ -549,12 +552,8 @@ service GrpcService {
     rpc SaveState(SaveStateRequest) returns (SaveStateResponse);
     rpc RestoreState(RestoreStateRequest) returns (RestoreStateResponse);
 
-    rpc DeleteActor(DeleteActorRequest) returns (DeleteActorResponse);
     rpc RenameActor(RenameActorRequest) returns (RenameActorResponse);
     rpc ReParentActor(ReParentActorRequest) returns (ReParentActorResponse);
-
-    rpc AddActorBatch(AddActorBatchRequest) returns (AddActorBatchResponse);
-    rpc DeleteActorBatch(DeleteActorBatchRequest) returns (DeleteActorBatchResponse);
 
     rpc GetWindowId(GetWindowIdRequest) returns (GetWindowIdResponse);
     rpc GetGeneratePos(GetGeneratePosRequest) returns (GetGeneratePosResponse);

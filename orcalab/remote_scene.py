@@ -21,12 +21,25 @@ from orcalab.scene_edit_bus import (
     SceneEditRequestBus,
 )
 from orcalab.scene_edit_types import AddActorRequest
-from orcalab.state_sync_bus import ManipulatorType, CameraMovementType, StateSyncNotificationBus
+from orcalab.state_sync_bus import (
+    ManipulatorType,
+    CameraMovementType,
+    StateSyncNotificationBus,
+)
 from orcalab.ui.camera.camera_brief import CameraBrief
 from orcalab.ui.camera.camera_bus import CameraNotificationBus
 from orcalab.protos.edit_service_wrapper import CameraDataPNGResult, EditServiceWrapper
 
 logger = logging.getLogger(__name__)
+
+
+class _TrasformChangeList:
+    def __init__(self):
+        self.actor_paths: List[Path] = []
+        self.transforms: List[Transform] = []
+
+    def __repr__(self) -> str:
+        return f"_TrasformChangeList({self.actor_paths})"
 
 
 class RemoteScene(SceneEditNotification):
@@ -40,8 +53,6 @@ class RemoteScene(SceneEditNotification):
 
         self.in_query = False
         self.shutdown = False
-
-        self.current_transform: Transform | None = None
 
         self._grpc_lock = asyncio.Lock()
         self._service = EditServiceWrapper()
@@ -92,42 +103,30 @@ class RemoteScene(SceneEditNotification):
         if not self.shutdown:
             asyncio.create_task(self._query_pending_operation_loop())
 
-    async def _process_pending_operation(self, op: str):
+    async def _process_pending_operation(self, op: str | _TrasformChangeList):
         print(op)
-        prefix = "start_local_transform_change:"
-        if op.startswith(prefix):
-            actor_path = Path(op[len(prefix) :])
-            self._start_transform_change(actor_path, local=True)
+
+        if isinstance(op, _TrasformChangeList):
+            transforms = await self._service.get_pending_actor_transform_batch(
+                op.actor_paths
+            )
+            # Transform on backend will be updated by SceneEditService.
+            await SceneEditRequestBus().set_transform_batch(
+                op.actor_paths,
+                transforms,
+                undo=False,
+                source="remote_scene",
+            )
             return
 
-        prefix = "end_local_transform_change:"
-        if op.startswith(prefix):
-            actor_path = Path(op[len(prefix) :])
-            await self._end_transform_change(actor_path, local=True)
+        assert isinstance(op, str)
+
+        if op == "start_transform_change":
+            await SceneEditRequestBus().start_change_transform_batch([])
             return
 
-        prefix = "start_world_transform_change:"
-        if op.startswith(prefix):
-            actor_path = Path(op[len(prefix) :])
-            self._start_transform_change(actor_path, local=False)
-            return
-
-        prefix = "end_world_transform_change:"
-        if op.startswith(prefix):
-            actor_path = Path(op[len(prefix) :])
-            await self._end_transform_change(actor_path, local=False)
-            return
-
-        prefix = "local_transform_change:"
-        if op.startswith(prefix):
-            actor_path = Path(op[len(prefix) :])
-            await self._fetch_and_set_transform(actor_path, local=True)
-            return
-
-        prefix = "world_transform_change:"
-        if op.startswith(prefix):
-            actor_path = Path(op[len(prefix) :])
-            await self._fetch_and_set_transform(actor_path, local=False)
+        if op == "end_transform_change":
+            await SceneEditRequestBus().end_change_transform_batch([])
             return
 
         prefix = "actor_delete:"
@@ -190,7 +189,7 @@ class RemoteScene(SceneEditNotification):
             bus = StateSyncNotificationBus()
             bus.on_manipulator_type_changed(manipulator_type)
             return
-        
+
         prefix = "camera_movement_type:"
         if op.startswith(prefix):
             value = op[len(prefix) :]
@@ -225,109 +224,61 @@ class RemoteScene(SceneEditNotification):
 
         print(f"Unknown pending operation: {op}")
 
-    def _optimize_operation(self, operations: List[str]) -> List[str]:
-        result = []
+    def _is_transform_change(self, op: str) -> bool:
+        return op.startswith("transform_change:")
 
-        size = len(operations)
+    def _parse_path(self, op: str) -> str:
+        prefix = "transform_change:"
+        if op.startswith(prefix):
+            return op[len(prefix) :]
+        return ""
 
-        def _is_transform_change(op: str) -> bool:
-            return op.startswith("local_transform_change:") or op.startswith(
-                "world_transform_change:"
-            )
+    def _merge_transform_change(
+        self, operations: List[str], start: int, end: int
+    ) -> _TrasformChangeList:
+        if start >= end:
+            return _TrasformChangeList()
 
-        for i in range(size):
+        path_set = set()
+        result = _TrasformChangeList()
+
+        for i in range(start, end):
             op = operations[i]
+            if self._is_transform_change(op):
+                actor_path = self._parse_path(op)
+                if actor_path in path_set:
+                    continue
 
-            if _is_transform_change(op):
-                # Skip intermediate transform changes.
-                if i + 1 < size:
-                    next_op = operations[i + 1]
-                    if _is_transform_change(next_op):
-                        continue
-
-            result.append(op)
+                path_set.add(actor_path)
+                result.actor_paths.append(Path(actor_path))
 
         return result
 
-    def _start_transform_change(self, actor_path: Path, local: bool):
-        SceneEditRequestBus().start_change_transform(actor_path)
+    def _optimize_operation(
+        self, operations: List[str]
+    ) -> List[str | _TrasformChangeList]:
+        result = []
 
-        local_scene = get_local_scene()
-        actor = local_scene.find_actor_by_path(actor_path)
-        assert actor is not None
+        size = len(operations)
+        i = 0
 
-        if local:
-            self.current_transform = actor.transform
-        else:
-            self.current_transform = actor.world_transform
+        while i < size:
+            op = operations[i]
 
-    async def _end_transform_change(self, actor_path: Path, local: bool):
-        assert isinstance(self.current_transform, Transform)
-        await SceneEditRequestBus().set_transform(
-            actor_path,
-            self.current_transform,
-            local=local,
-            undo=True,
-            source="remote_scene",
-        )
+            if self._is_transform_change(op):
+                # Merge consecutive transform changes for the same actor.
+                j = i + 1
+                while j < size and self._is_transform_change(operations[j]):
+                    j += 1
 
-        SceneEditRequestBus().end_change_transform(actor_path)
+                merged_ops = self._merge_transform_change(operations, i, j)
+                result.append(merged_ops)
+                i = j
+            else:
+                result.append(op)
+                i += 1
 
-        self.current_transform = None
-
-    async def _fetch_and_set_transform(self, actor_path: Path, local: bool):
-        self.current_transform = await self.get_pending_actor_transform(
-            actor_path, local=True
-        )
-
-        await SceneEditRequestBus().set_transform(
-            actor_path,
-            self.current_transform,
-            local=True,
-            undo=False,
-            source="remote_scene",
-        )
-
-        # Transform on viewport will be updated by on_transform_changed.
-
-    @override
-    async def on_transform_changed(
-        self,
-        actor_path: Path,
-        transform: Transform,
-        local: bool,
-        source: str,
-    ):
-        # We still need to set the transform to viewport, even if source is "remote_scene".
-        # This is by design.
-        await self.set_actor_transform(actor_path, transform, local)
-
-    @override
-    async def on_selection_changed(self, old_selection, new_selection, source=""):
-        if source == "remote_scene":
-            return
-
-        await self.set_selection(new_selection)
-
-    @override
-    async def on_actor_added(
-        self,
-        actor: BaseActor,
-        parent_actor_path: Path,
-        source: str,
-    ):
-        await self.add_actor(actor, parent_actor_path)
-        actor_path = parent_actor_path.append(actor.name)
-        if isinstance(actor, AssetActor):
-            await self._fetch_actor_proprerties(actor, actor_path)
-
-    @override
-    async def on_actor_deleted(
-        self,
-        actor_path: Path,
-        source: str,
-    ):
-        await self.delete_actor(actor_path)
+        return result
 
     @override
     async def on_actor_renamed(
@@ -350,21 +301,13 @@ class RemoteScene(SceneEditNotification):
 
     @override
     async def on_actor_visible_changed(
-        self,
-        actor_path: Path,
-        paths_to_update: list,
-        visible: bool,
-        source: str = ""
+        self, actor_path: Path, paths_to_update: list, visible: bool, source: str = ""
     ):
         await self.actor_visible_change(visible, paths_to_update)
 
     @override
     async def on_actor_locked_changed(
-        self,
-        actor_path: Path,
-        paths_to_update: list,
-        locked: bool,
-        source: str = ""
+        self, actor_path: Path, paths_to_update: list, locked: bool, source: str = ""
     ):
         await self.actor_locked_change(locked, paths_to_update)
 
@@ -490,6 +433,62 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             return await self._service.aloha()
 
+    async def add_actor_batch(
+        self, requests: List[AddActorRequest], stop_on_error: bool
+    ) -> Tuple[bool, List[str]]:
+        print(f"add_actor_batch: {len(requests)} actors")
+        async with self._grpc_lock:
+            await self._service.custom_command("pause_render:true")
+            success, errors = await self._service.add_actor_batch(
+                requests, stop_on_error
+            )
+            await self._service.custom_command("pause_render:false")
+
+            if not success and stop_on_error:
+                raise Exception("Failed to add actors")
+
+            # fetch properties for asset actors
+
+            actors: List[AssetActor] = []
+            actor_paths: List[Path] = []
+            for req, error in zip(requests, errors):
+                if error:
+                    continue
+
+                if not isinstance(req.actor, AssetActor):
+                    continue
+                actors.append(req.actor)
+                actor_paths.append(req.parent_path.append(req.actor.name))
+
+                property_groups_list = await self._service.get_property_groups_batch(
+                    actor_paths
+                )
+
+                keys: List[ActorPropertyKey] = []
+                props: List[ActorProperty] = []
+                for actor, actor_path, property_groups in zip(
+                    actors, actor_paths, property_groups_list
+                ):
+                    actor.property_groups = property_groups
+                    collect_properties(keys, props, property_groups, actor_path)
+
+                values = await self.get_properties(keys)
+                for prop, value in zip(props, values):
+                    prop.set_value(value)
+                    prop.set_original_value(value)
+
+            return success, errors
+
+    async def delete_actor_batch(self, actor_paths: List[Path]) -> None:
+        print(f"delete_actor_batch: {len(actor_paths)} actors")
+        async with self._grpc_lock:
+            await self._service.custom_command("pause_render:true")
+            success, errors = await self._service.delete_actor_batch(actor_paths)
+            await self._service.custom_command("pause_render:false")
+
+            if not success:
+                raise Exception("Failed to delete actors")
+
     async def query_pending_operation_loop(self) -> List[str]:
         async with self._grpc_lock:
             return await self._service.query_pending_operation_loop()
@@ -497,26 +496,14 @@ class RemoteScene(SceneEditNotification):
     async def get_pending_actor_transform(self, path: Path, local: bool) -> Transform:
         return await self._service.get_pending_actor_transform(path, local)
 
-    async def add_actor(self, actor: BaseActor, parent_path: Path):
-        print(f"Adding actor {actor.name} under {parent_path}")
-        async with self._grpc_lock:
-            if isinstance(actor, GroupActor):
-                await self._service.add_group_actor(actor, parent_path)
-            elif isinstance(actor, AssetActor):
-                await self._service.custom_command("pause_render:true")
-                # await asyncio.sleep(0.1)
-                await self._service.add_asset_actor(actor, parent_path)
-                # await asyncio.sleep(0.1)
-                await self._service.custom_command("pause_render:false")
-            else:
-                raise Exception(f"Unsupported actor type: {type(actor)}")
-
-    async def set_actor_transform(self, path: Path, transform: Transform, local: bool):
-        print(f"Setting transform for actor {path}, local={local}: {transform}")
-        await self._service.set_actor_transform(path, transform, local)
+    async def set_actor_transform_batch(
+        self, paths: List[Path], transforms: List[Transform]
+    ):
+        logger.debug(f"Setting transform batch for {len(paths)} actors")
+        await self._service.set_actor_transform_batch(paths, transforms)
 
     async def publish_scene(self):
-        print("Publishing scene...")
+        logger.debug("Publishing scene...")
         async with self._grpc_lock:
             await self._service.publish_scene()
 
@@ -529,7 +516,7 @@ class RemoteScene(SceneEditNotification):
             await self._service.set_sync_from_mujoco_to_scene(value)
 
     async def clear_scene(self):
-        print("Clearing scene...")
+        logger.debug("Clearing scene...")
         async with self._grpc_lock:
             await self._service.clear_scene()
 
@@ -559,15 +546,6 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             await self._service.restore_state()
 
-    async def delete_actor(self, actor_path: Path):
-        print(f"Deleting actor {actor_path}")
-        async with self._grpc_lock:
-            await self._service.custom_command("pause_render:true")
-            # await asyncio.sleep(0.1)
-            await self._service.delete_actor(actor_path)
-            # await asyncio.sleep(0.1)
-            await self._service.custom_command("pause_render:false")
-
     async def rename_actor(self, actor_path: Path, new_name: str):
         await self._service.rename_actor(actor_path, new_name)
 
@@ -580,54 +558,7 @@ class RemoteScene(SceneEditNotification):
 
     async def actor_locked_change(self, locked: bool, paths_to_update: list):
         async with self._grpc_lock:
-             await self._service.set_lock(locked, paths_to_update)
-
-    async def add_actor_batch(self, requests: List[AddActorRequest]) -> str:
-        print(f"add_actor_batch: {len(requests)} actors")
-        async with self._grpc_lock:
-            await self._service.custom_command("pause_render:true")
-            err = await self._service.add_actor_batch(requests)
-            await self._service.custom_command("pause_render:false")
-
-            if err:
-                return err
-            
-            # fetch properties for asset actors
-
-            actors: List[AssetActor] = []
-            actor_paths: List[Path] = []
-            for req in requests:
-                if not isinstance(req.actor, AssetActor):
-                    continue
-                actors.append(req.actor)
-                actor_paths.append(req.parent_path.append(req.actor.name))
-
-                property_groups_list = await self._service.get_property_groups_batch(
-                    actor_paths
-                )
-
-                keys: List[ActorPropertyKey] = []
-                props: List[ActorProperty] = []
-                for actor, actor_path, property_groups in zip(
-                    actors, actor_paths, property_groups_list
-                ):
-                    actor.property_groups = property_groups
-                    collect_properties(keys, props, property_groups, actor_path)
-
-                values = await self.get_properties(keys)
-                for prop, value in zip(props, values):
-                    prop.set_value(value)
-                    prop.set_original_value(value)
-
-            return ""
-
-    async def delete_actor_batch(self, actor_paths: List[Path]) -> str:
-        print(f"delete_actor_batch: {len(actor_paths)} actors")
-        async with self._grpc_lock:
-            await self._service.custom_command("pause_render:true")
-            err = await self._service.delete_actor_batch(actor_paths)
-            await self._service.custom_command("pause_render:false")
-            return err
+            await self._service.set_lock(locked, paths_to_update)
 
     async def get_window_id(self):
         async with self._grpc_lock:
@@ -654,7 +585,9 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             return await self._service.custom_command(cmd)
 
-    async def change_camera_movement_type(self, camera_movement_type: CameraMovementType) -> bool:
+    async def change_camera_movement_type(
+        self, camera_movement_type: CameraMovementType
+    ) -> bool:
         cmd = f"change_camera_movement_type:{camera_movement_type.name.lower()}"
         async with self._grpc_lock:
             return await self._service.custom_command(cmd)
@@ -740,8 +673,14 @@ class RemoteScene(SceneEditNotification):
     async def custom_command(self, command: str):
         async with self._grpc_lock:
             return await self._service.custom_command(command)
-        
-    async def set_move_rotate_sensitivity(self, move_sensitivity: float, rotate_sensitivity: float):
-        logger.info(f"Setting move rotate sensitivity: {move_sensitivity}, {rotate_sensitivity}")
+
+    async def set_move_rotate_sensitivity(
+        self, move_sensitivity: float, rotate_sensitivity: float
+    ):
+        logger.info(
+            f"Setting move rotate sensitivity: {move_sensitivity}, {rotate_sensitivity}"
+        )
         async with self._grpc_lock:
-            return await self._service.set_move_rotate_sensitivity(move_sensitivity, rotate_sensitivity)
+            return await self._service.set_move_rotate_sensitivity(
+                move_sensitivity, rotate_sensitivity
+            )

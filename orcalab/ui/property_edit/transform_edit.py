@@ -1,11 +1,12 @@
 import asyncio
-from typing import override
+from typing import List, Sequence, override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 import numpy as np
 
 from orcalab.actor import BaseActor
 from orcalab.application_util import get_local_scene
+from orcalab.path import Path
 from orcalab.pyside_util import connect
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
@@ -162,19 +163,18 @@ class TransformEdit(StyledWidget, SceneEditNotification):
         undo = not self._dragging
         await self._do_set_transform_async(self.get_transform(), undo)
 
-    def _on_start_drag(self):
+    async def _on_start_drag(self):
         if self._dragging:
             raise RuntimeError("A dragging is already in progress")
 
         self._dragging = True
-        SceneEditRequestBus().start_change_transform(self._actor)
+        await SceneEditRequestBus().start_change_transform_batch([self._actor])
 
     async def _on_stop_drag(self):
         if not self._dragging:
             raise RuntimeError("No dragging in progress")
 
-        await self._do_set_transform_async(self.get_transform(), undo=True)
-        SceneEditRequestBus().end_change_transform(self._actor)
+        await SceneEditRequestBus().end_change_transform_batch([self._actor])
         self._dragging = False
 
     def get_transform(self):
@@ -228,14 +228,20 @@ class TransformEdit(StyledWidget, SceneEditNotification):
             self.expand()
 
     @override
-    async def on_transform_changed(self, actor_path, transform, local, source):
+    async def on_transforms_changed(
+        self,
+        actor_paths: List[Path],
+        old_transforms: List[Transform],
+        new_transforms: List[Transform],
+        source: str,
+    ) -> None:
         if self._actor is None:
             return
 
         if source == "ui":
             return
 
-        if self._actor_path != actor_path:
-            return
-
-        self.set_transform(transform)
+        for path, new_transform in zip(actor_paths, new_transforms):
+            if self._actor_path == path:
+                self.set_transform(new_transform)
+                break

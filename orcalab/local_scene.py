@@ -33,22 +33,25 @@ class LocalScene:
     def pseudo_root_actor(self):
         return self.root_actor
 
-
-
     @property
     def actors(self) -> Dict[Path, BaseActor]:
         return self._actors.copy()
+
     @property
     def selection(self) -> List[Path]:
+        """返回当前选中Actor的路径列表，路径列表是有序的，按照路径字符串的字典序排序"""
         return self._selection.copy()
-    
+
     @selection.setter
     def selection(self, actors: List[Path]):
         paths = []
         for actor in actors:
             actor, path = self.get_actor_and_path(actor)
             paths.append(path)
-        self._selection = paths
+
+        # 确保路径列表是有序的，按照路径字符串的字典序排序
+        sorted_paths = sorted(paths)
+        self._selection = sorted_paths
 
     def find_actor_by_path(self, path: Path) -> BaseActor | None:
         if path in self._actors:
@@ -98,36 +101,15 @@ class LocalScene:
     def normalize_actors(
         self, actors: Sequence[BaseActor | Path]
     ) -> Tuple[List[BaseActor], List[Path]]:
-        actor_list = []
-        path_list = []
+        """将输入的actor列表规范化为(BaseActor, Path)列表，输入可以是BaseActor对象或者Path对象的混合列表"""
+        actor_list: List[BaseActor] = []
+        path_list: List[Path] = []
         for actor in actors:
             a, p = self.normalize_actor(actor)
             actor_list.append(a)
             path_list.append(p)
 
-        def compare(
-            pair_1: Tuple[BaseActor, Path], pair_2: Tuple[BaseActor, Path]
-        ) -> int:
-            path_1 = pair_1[1]
-            path_2 = pair_2[1]
-
-            if path_1.is_descendant_of(path_2):
-                return -1
-            elif path_2.is_descendant_of(path_1):
-                return 1
-            else:
-                return 0
-
-        # 对路径进行排序，确保父节点在前，子节点在后
-        sorted_pairs = sorted(zip(actor_list, path_list), key=cmp_to_key(compare))
-
-        result_actor_list = []
-        result_path_list = []
-        for actor, path in sorted_pairs:
-            result_actor_list.append(actor)
-            result_path_list.append(path)
-
-        return result_actor_list, result_path_list
+        return actor_list, path_list
 
     def _replace_path(self, old_prefix: Path, new_prefix: Path):
         paths_to_update = [old_prefix]
@@ -142,7 +124,7 @@ class LocalScene:
             self._actors[updated_path] = self._actors[p]
             del self._actors[p]
 
-    def _remove_path(self, prefix: Path):
+    def _remove_paths(self, prefix: Path):
         paths_to_delete = [prefix]
         for p in self._actors.keys():
             if p.is_descendant_of(prefix):
@@ -165,6 +147,35 @@ class LocalScene:
         for child in parent_actor.children:
             if child.name == actor.name:
                 return False, "Name already exists under parent."
+        return True, ""
+
+    def can_add_actors(self, requests: Sequence[AddActorRequest]) -> Tuple[bool, str]:
+        """Simulate adding actors."""
+
+        actor_list: List[Path] = []
+        for path in self._actors.keys():
+            actor_list.append(path)
+
+        for request in requests:
+            actor = request.actor
+            parent_path = request.parent_path
+
+            if not isinstance(actor, BaseActor):
+                return False, "Invalid actor."
+
+            if request.actor_template is not None:
+                same_type = type(request.actor_template) is type(request.actor)
+                if not same_type:
+                    return False, "Actor template type does not match actor type."
+
+            if parent_path not in actor_list:
+                return False, f"Parent {parent_path} does not exist during add."
+
+            # TODO: 这里没有考虑同一批次中多个Actor添加到同一个父节点导致的名字冲突问题，后续可以补充
+
+            new_actor_path = parent_path / actor.name
+            actor_list.append(new_actor_path)
+
         return True, ""
 
     def add_actor(self, actor: BaseActor, parent_path: Path):
@@ -190,13 +201,17 @@ class LocalScene:
         parent_actor, parent_path = self.normalize_actor(parent_path)
         assert isinstance(parent_actor, GroupActor)
         parent_actor.insert_child(request.child_pos, actor)
-        
+
         actor_path = parent_path / actor.name
         self._actors[actor_path] = actor
 
         return ""
 
     def add_actor_batch(self, requests: List[AddActorRequest]) -> str:
+        ok, err = self.can_add_actors(requests)
+        if not ok:
+            return err
+
         for request in requests:
             result = self.add_actor1(request)
             if result != "":
@@ -211,26 +226,19 @@ class LocalScene:
 
         return True, ""
 
-    def can_delete_actor(self, actor: BaseActor | Path) -> Tuple[bool, str]:
-        _, _actor_path = self.get_actor_and_path(actor)
-
-        if _actor_path == _actor_path.root_path():
-            return False, "Cannot delete pseudo root actor."
-
+    def can_delete_actors(self, actors: Sequence[BaseActor | Path]) -> Tuple[bool, str]:
+        _, _actor_paths = self.normalize_actors(actors)
+        for actor_path in _actor_paths:
+            if actor_path.is_root():
+                return False, f"Cannot delete root actor"
         return True, ""
 
-    def delete_actor(self, actor: BaseActor):
-        ok, err = self.can_delete_actor(actor)
-        if not ok:
-            raise Exception(err)
-
-        actor, actor_path = self.get_actor_and_path(actor)
-
-        # Properly remove from parent's children list
-        if actor.parent is not None:
-            actor.parent.remove_child(actor)
-
-        self._remove_path(actor_path)
+    def delete_actors(self, actors: List[BaseActor]):
+        _actors, _actor_paths = self.normalize_actors(actors)
+        for actor, path in zip(_actors, _actor_paths):
+            if actor.parent is not None:
+                actor.parent.remove_child(actor)
+            self._remove_paths(path)
 
     def can_rename_actor(
         self, actor: BaseActor | Path, new_name: str
@@ -356,7 +364,10 @@ class LocalScene:
                         return actor, group, prop
 
         raise Exception("Property not found.")
-    def update_visible_recursive(self, actor: BaseActor, paths_to_update: List, visible: bool):
+
+    def update_visible_recursive(
+        self, actor: BaseActor, paths_to_update: List, visible: bool
+    ):
         if not isinstance(actor, GroupActor):
             return
 
@@ -376,7 +387,9 @@ class LocalScene:
                     paths_to_update.append(child_path)
                 self.update_visible_recursive(child_actor, paths_to_update, visible)
 
-    def update_locked_recursive(self, actor: BaseActor, paths_to_update: List, locked: bool):
+    def update_locked_recursive(
+        self, actor: BaseActor, paths_to_update: List, locked: bool
+    ):
         if not isinstance(actor, GroupActor):
             return
 

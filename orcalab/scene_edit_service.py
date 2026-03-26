@@ -1,8 +1,7 @@
 from copy import deepcopy
-from typing import Any, Dict, List, Tuple, override
+from typing import Any, Dict, List, Sequence, Tuple, override
 import logging
 import itertools
-
 
 from orcalab.actor import BaseActor, GroupActor, AssetActor
 from orcalab.actor_property import (
@@ -11,6 +10,7 @@ from orcalab.actor_property import (
 )
 from orcalab.actor_util import (
     ActorIterator,
+    clone_actor_basic,
     collect_properties_duplicate_data,
     make_unique_name1,
 )
@@ -27,8 +27,7 @@ from orcalab.scene_edit_bus import (
 from orcalab.scene_edit_types import AddActorRequest
 from orcalab.undo_service.command import (
     CommandGroup,
-    CreateGroupCommand,
-    CreateActorCommand,
+    AddActorCommand,
     DeleteActorCommand,
     DuplicateActorCommand,
     PropertyChangeCommand,
@@ -49,10 +48,7 @@ class SceneEditService(SceneEditRequest):
         self.local_scene = local_scene
         self.remote_scene = remote_scene
 
-        # For transform change tracking
-        self.actor_in_editing: Path | None = None
-        self.old_local_transform: Transform | None = None
-        self.old_world_transform: Transform | None = None
+        self.old_transforms: Dict[Path, Transform] = {}
 
         # For property change tracking
         self.property_key: ActorPropertyKey | None = None
@@ -71,14 +67,15 @@ class SceneEditService(SceneEditRequest):
         undo: bool = True,
         source: str = "",
     ) -> None:
-
-        actors, actor_paths = self.local_scene.normalize_actors(selection)
+        actor_paths = sorted(selection)
 
         if actor_paths == self.local_scene.selection:
             return
 
         old_selection = deepcopy(self.local_scene.selection)
         self.local_scene.selection = actor_paths
+
+        await self.remote_scene.set_selection(actor_paths)
 
         await SceneEditNotificationBus().on_selection_changed(
             old_selection, actor_paths, source
@@ -96,42 +93,55 @@ class SceneEditService(SceneEditRequest):
         undo: bool = True,
         source: str = "",
     ):
-        ok, err = self.local_scene.can_add_actor(actor, parent_actor)
+        _, parent_actor_path = self.local_scene.normalize_actor(parent_actor)
+        request = AddActorRequest(actor, parent_actor_path, -1)
+        await self.add_actors([request], undo, source)
+
+    @override
+    async def add_actors(
+        self,
+        requests: List[AddActorRequest],
+        undo: bool = True,
+        source: str = "",
+    ):
+
+        ok, err = self.local_scene.can_add_actors(requests)
         if not ok:
             raise Exception(err)
 
-        parent_actor, parent_actor_path = self.local_scene.get_actor_and_path(parent_actor)
-
         bus = SceneEditNotificationBus()
 
-        await bus.before_actor_added(actor, parent_actor_path, source)
+        await bus.before_actor_added_batch()
+        err = self.local_scene.add_actor_batch(requests)
+        if err == "":
+            suceess, errors = await self.remote_scene.add_actor_batch(requests, True)
+        await bus.on_actor_added_batch("")
 
-        self.local_scene.add_actor(actor, parent_actor_path)
+        # TODO: report errors
+        # try:
+        #     await bus.on_actor_added(actor, parent_actor_path, source)
+        # except Exception as e:
+        #     # on_actor_added failed (e.g. remote scene sync failed)
+        #     # Need to rollback: delete actor from local scene and notify
+        #     self.local_scene.delete_actor(actor)
+        #     await bus.on_actor_added_failed(actor, parent_actor_path, source)
+        #     raise
 
-        try:
-            await bus.on_actor_added(actor, parent_actor_path, source)
-        except Exception as e:
-            # on_actor_added failed (e.g. remote scene sync failed)
-            # Need to rollback: delete actor from local scene and notify
-            self.local_scene.delete_actor(actor)
-            await bus.on_actor_added_failed(actor, parent_actor_path, source)
-            raise
+        # TODO: set visibility and lock state of actors after adding
 
-        actor.is_parent_visible = parent_actor.is_parent_visible and parent_actor.is_visible
-        actor.is_parent_locked = parent_actor.is_parent_locked or parent_actor.is_locked
-        
-        if actor.is_parent_visible == False:
-            await self.set_actor_visible(actor, False, False, "reparent")
-        if actor.is_parent_locked == True:
-            await self.set_actor_locked(actor, True, False, "reparent")
+        # actor.is_parent_visible = (
+        #     parent_actor.is_parent_visible and parent_actor.is_visible
+        # )
+        # actor.is_parent_locked = parent_actor.is_parent_locked or parent_actor.is_locked
+
+        # if actor.is_parent_visible == False:
+        #     await self.set_actor_visible(actor, False, False, "reparent")
+        # if actor.is_parent_locked == True:
+        #     await self.set_actor_locked(actor, True, False, "reparent")
 
         if undo:
-            if isinstance(actor, AssetActor):
-                command = CreateActorCommand(actor, parent_actor_path / actor.name, -1)
-                UndoRequestBus().add_command(command)
-            else:
-                command = CreateGroupCommand(parent_actor_path / actor.name)
-                UndoRequestBus().add_command(command)
+            command = AddActorCommand(requests)
+            UndoRequestBus().add_command(command)
 
     @override
     async def delete_actor(
@@ -140,36 +150,87 @@ class SceneEditService(SceneEditRequest):
         undo: bool = True,
         source: str = "",
     ):
-        ok, err = self.local_scene.can_delete_actor(actor)
+        await self.delete_actors([actor], undo, source)
+
+    def clean_paths(self, paths: List[Path]) -> List[Path]:
+        """Remove paths that are dupilicate or descendants of other paths."""
+        deduplicated_paths = list(set(paths))
+        sorted_paths = sorted(deduplicated_paths)
+        cleaned_paths = []
+
+        def has_parent_in_list(path: Path, path_list: List[Path]) -> bool:
+            for p in path_list:
+                if path.is_descendant_of(p):
+                    return True
+            return False
+
+        for path in sorted_paths:
+            if not has_parent_in_list(path, cleaned_paths):
+                cleaned_paths.append(path)
+
+        return cleaned_paths
+
+    @override
+    async def delete_actors(
+        self,
+        actors: Sequence[BaseActor | Path],
+        undo: bool = True,
+        source: str = "",
+    ):
+
+        _, _actor_paths = self.local_scene.normalize_actors(actors)
+        clean_actor_paths = self.clean_paths(_actor_paths)
+        _actors, _actor_paths = self.local_scene.normalize_actors(clean_actor_paths)
+
+        ok, err = self.local_scene.can_delete_actors(_actor_paths)
         if not ok:
             logger.error("Cannot delete actor: %s", err)
             return
 
-        _actor, _actor_path = self.local_scene.get_actor_and_path(actor)
-
         edit_actor_paths: List[Path] = []
         self.get_editing_actor_path(edit_actor_paths)
-        if _actor_path in edit_actor_paths:
-            logger.error("Cannot delete actor being edited: %s", _actor_path)
-            return
 
-        parent_actor = _actor.parent
-        assert isinstance(parent_actor, GroupActor)
+        for _actor_path in _actor_paths:
+            if _actor_path.is_root():
+                logger.error("Cannot delete root actor: %s", _actor_path)
+                return
 
-        index = parent_actor.children.index(_actor)
-        assert index != -1
+            if _actor_path in edit_actor_paths:
+                logger.error("Cannot delete actor in editing: %s", _actor_path)
+                return
+
+        parent_paths = []
+        indexes = []
+
+        for _actor in _actors:
+            parent_actor = _actor.parent
+            assert isinstance(parent_actor, GroupActor)
+            index = parent_actor.children.index(_actor)
+            assert index != -1
+
+            parent_actor_path = self.local_scene.get_actor_path(parent_actor)
+            assert parent_actor_path is not None
+
+            parent_paths.append(parent_actor_path)
+            indexes.append(index)
 
         bus = SceneEditNotificationBus()
 
-        await bus.before_actor_deleted(_actor_path, source)
+        await bus.before_actors_deleted(_actor_paths, source)
 
         command_group = CommandGroup()
-        in_selection = _actor_path in self.local_scene.selection
+        in_selection = False
+
+        for _actor_path in _actor_paths:
+            if _actor_path in self.local_scene.selection:
+                in_selection = True
+                break
 
         if in_selection:
             old_selection = deepcopy(self.local_scene.selection)
             new_selection = deepcopy(self.local_scene.selection)
-            new_selection.remove(_actor_path)
+            for _actor_path in _actor_paths:
+                new_selection.remove(_actor_path)
             deselect_command = SelectionCommand(old_selection, new_selection)
 
             await self.set_selection(
@@ -177,12 +238,13 @@ class SceneEditService(SceneEditRequest):
             )
             command_group.commands.append(deselect_command)
 
-        delete_command = DeleteActorCommand(_actor, _actor_path, index)
+        delete_command = DeleteActorCommand(_actors, parent_paths, indexes)
         command_group.commands.append(delete_command)
 
-        self.local_scene.delete_actor(_actor)
+        self.local_scene.delete_actors(_actors)
+        await self.remote_scene.delete_actor_batch(_actor_paths)
 
-        await bus.on_actor_deleted(_actor_path, source)
+        await bus.on_actors_deleted(_actor_paths, source)
 
         if undo:
             UndoRequestBus().add_command(command_group)
@@ -266,7 +328,11 @@ class SceneEditService(SceneEditRequest):
         ### 重新判断隐藏
         # 隐藏->可见
         if actor.is_parent_visible == False:
-            if actor.is_visible == True and new_parent.is_visible == True and new_parent.is_parent_visible == True:
+            if (
+                actor.is_visible == True
+                and new_parent.is_visible == True
+                and new_parent.is_parent_visible == True
+            ):
                 await self.set_actor_visible(actor, True, False, "reparent")
         # 可见->隐藏
         if actor.is_visible == True and actor.is_parent_visible == True:
@@ -280,7 +346,11 @@ class SceneEditService(SceneEditRequest):
         ### 重新判断锁定
         # 解锁
         if actor.is_parent_locked == True:
-            if actor.is_locked == False and new_parent.is_locked == False and new_parent.is_parent_locked == False:
+            if (
+                actor.is_locked == False
+                and new_parent.is_locked == False
+                and new_parent.is_parent_locked == False
+            ):
                 await self.set_actor_locked(actor, False, False, "reparent")
         # 锁定
         if actor.is_locked == False and actor.is_parent_locked == False:
@@ -345,20 +415,6 @@ class SceneEditService(SceneEditRequest):
             parent_map[parent_path].append((actor, path))
         return parent_map
 
-    def clone_actor_basic(self, actor: BaseActor) -> BaseActor:
-        """Clone actor without parent-child relationships."""
-        if isinstance(actor, GroupActor):
-            new_actor = GroupActor(actor.name)
-        elif isinstance(actor, AssetActor):
-            new_actor = AssetActor(actor.name, actor.asset_path)
-            new_actor.property_groups = deepcopy(actor.property_groups)
-        else:
-            raise Exception("Unsupported actor type")
-
-        new_actor.transform = actor.transform
-
-        return new_actor
-
     @override
     async def duplicate_actor(
         self, root_actor: BaseActor | Path, undo: bool = True, source: str = ""
@@ -383,7 +439,7 @@ class SceneEditService(SceneEditRequest):
         bus = SceneEditNotificationBus()
 
         requests: List[AddActorRequest] = []
-        new_root_actor = self.clone_actor_basic(root_actor)
+        new_root_actor = clone_actor_basic(root_actor)
         new_root_actor.name = new_name
         new_root_actor_path = root_actor_parent_path / new_name
         requests.append(
@@ -404,7 +460,7 @@ class SceneEditService(SceneEditRequest):
 
         for actor in ActorIterator(root_actor, include_root=False):
             actor, actor_path = self.local_scene.normalize_actor(actor)
-            new_actor = self.clone_actor_basic(actor)
+            new_actor = clone_actor_basic(actor)
             dst_path = actor_path.replace_parent(root_actor_path, new_root_actor_path)
             new_parent_path = dst_path.parent()
             assert new_parent_path is not None
@@ -413,8 +469,8 @@ class SceneEditService(SceneEditRequest):
         await bus.before_actor_added_batch()
         err = self.local_scene.add_actor_batch(requests)
         if err == "":
-            err = await self.remote_scene.add_actor_batch(requests)
-        await bus.on_actor_added_batch(err)
+            suceess, errors = await self.remote_scene.add_actor_batch(requests, True)
+        await bus.on_actor_added_batch("")
 
         await self.set_selection(new_selection, undo=False, source=source)
 
@@ -490,68 +546,113 @@ class SceneEditService(SceneEditRequest):
         self.property_key = None
 
     @override
-    def start_change_transform(self, actor: BaseActor | Path):
-        _actor, _actor_path = self.local_scene.get_actor_and_path(actor)
-
-        # TODO: uncomment these asserts after fixing transform editing issue
-        # assert self.actor_in_editing is None
-
-        self.actor_in_editing = _actor_path
-        self.old_local_transform = _actor.transform
-        self.old_world_transform = _actor.world_transform
-
-    @override
-    def end_change_transform(self, actor: BaseActor | Path):
-        _, _actor_path = self.local_scene.get_actor_and_path(actor)
-
-        # TODO: uncomment these asserts after fixing transform editing issue
-        # assert self.actor_in_editing is not None
-        # assert self.actor_in_editing == _actor_path
-
-        self.actor_in_editing = None
-        self.old_local_transform = None
-        self.old_world_transform = None
-
-    @override
     async def set_transform(self, actor, transform, local, undo=True, source=""):
+        """Leave for compatibility. Use set_transform_batch instead."""
         _actor, _actor_path = self.local_scene.get_actor_and_path(actor)
-        if local:
-            if self.old_local_transform is None:
-                old_transform = _actor.transform
-            else:
-                assert self.actor_in_editing == _actor_path
-                old_transform = self.old_local_transform
+        _transform = deepcopy(transform)
 
-            _actor.transform = transform
+        if not local:
+            parent = _actor.parent
+            if parent is not None:
+                parent_world_transform = parent.world_transform
+                _transform = parent_world_transform.inverse() * transform
+
+        await self.set_transform_batch([_actor_path], [_transform], undo, source)
+
+    @override
+    async def start_change_transform_batch(self, actors: Sequence[BaseActor | Path]):
+        if len(actors) == 0:
+            _actors, _actor_paths = self.local_scene.normalize_actors(
+                self.local_scene.selection
+            )
         else:
-            if self.old_world_transform is None:
-                old_transform = _actor.world_transform
-            else:
-                assert self.actor_in_editing == _actor_path
-                old_transform = self.old_world_transform
+            _actors, _actor_paths = self.local_scene.normalize_actors(actors)
 
-            _actor.world_transform = transform
+        self.old_transforms.clear()
+        for _actor, _actor_path in zip(_actors, _actor_paths):
+            self.old_transforms[_actor_path] = _actor.transform
+
+        logger.debug(f"start_change_transform_batch: {_actor_paths}")
+
+    @override
+    async def end_change_transform_batch(self, actors: Sequence[BaseActor | Path]):
+        if len(actors) == 0:
+            _actors, _actor_paths = self.local_scene.normalize_actors(
+                self.local_scene.selection
+            )
+        else:
+            _actors, _actor_paths = self.local_scene.normalize_actors(actors)
+
+        transforms = []
+        for _actor, _actor_path in zip(_actors, _actor_paths):
+            transforms.append(_actor.transform)
+
+        await self.set_transform_batch(_actors, transforms, undo=True, source="")
+
+        self.old_transforms.clear()
+
+        logger.debug(f"end_change_transform_batch: {_actor_paths}")
+
+    @override
+    async def set_transform_batch(
+        self,
+        actors: Sequence[BaseActor | Path],
+        transforms: Sequence[Transform],
+        undo: bool = True,
+        source: str = "",
+    ):
+        _actors, _actor_paths = self.local_scene.normalize_actors(actors)
+        old_transforms = []
+        new_transforms = []
+
+        # update fronend values
+        for _actor, _path, _transform in zip(_actors, _actor_paths, transforms):
+            if len(self.old_transforms) == 0:
+                old_transform = _actor.transform
+                new_transform = _transform
+                _actor.transform = new_transform
+
+                old_transforms.append(old_transform)
+                new_transforms.append(new_transform)
+            else:
+                # we are in dragging.
+                old_transform = self.old_transforms.get(_path)
+                if old_transform is None:
+                    logger.warning(
+                        f"Old transform for actor {_path} not found in old_transforms dict."
+                    )
+                    continue
+                new_transform = _transform
+                _actor.transform = new_transform
+
+                old_transforms.append(old_transform)
+                new_transforms.append(new_transform)
+
+        # update backend values
+        await self.remote_scene.set_actor_transform_batch(_actor_paths, new_transforms)
 
         # Notify.
-        await SceneEditNotificationBus().on_transform_changed(
-            _actor_path,
-            transform,
-            local,
+        await SceneEditNotificationBus().on_transforms_changed(
+            _actor_paths,
+            old_transforms,
+            new_transforms,
             source,
         )
 
         if undo:
-            command = TransformCommand()
-            command.actor_path = _actor_path
-            command.old_transform = old_transform
-            command.new_transform = transform
-            command.local = local
+            command = TransformCommand(
+                _actor_paths, old_transforms, new_transforms, local=True
+            )
             UndoRequestBus().add_command(command)
+
+        logger.debug(f"set_transform_batch: {_actor_paths}")
+        logger.debug(f"set_transform_batch: {new_transforms}")
 
     @override
     def get_editing_actor_path(self, out: List[Path]):
-        if self.actor_in_editing is not None:
-            out.append(self.actor_in_editing)
+        if self.old_transforms:
+            for path in self.old_transforms.keys():
+                out.append(path)
 
         if self.property_key is not None:
             out.append(self.property_key.actor_path)
@@ -570,30 +671,42 @@ class SceneEditService(SceneEditRequest):
     async def set_actor_visible(self, actor, visible, undo, source):
         _actor, _actor_path = self.local_scene.get_actor_and_path(actor)
         paths_to_update = []
-        
+
         if source == "layout":
             paths_to_update.append(_actor_path)
-            await SceneEditNotificationBus().on_actor_visible_changed(_actor_path, paths_to_update, visible, source)
+            await SceneEditNotificationBus().on_actor_visible_changed(
+                _actor_path, paths_to_update, visible, source
+            )
         if source == "actor_outline" or source == "reparent":
             # if _actor.is_parent_visible == True:
             if not isinstance(_actor, GroupActor):
-                paths_to_update.append(_actor_path) 
+                paths_to_update.append(_actor_path)
             else:
-                self.local_scene.update_visible_recursive(_actor, paths_to_update, visible)
-            await SceneEditNotificationBus().on_actor_visible_changed(_actor_path, paths_to_update, visible, source)
+                self.local_scene.update_visible_recursive(
+                    _actor, paths_to_update, visible
+                )
+            await SceneEditNotificationBus().on_actor_visible_changed(
+                _actor_path, paths_to_update, visible, source
+            )
 
     @override
     async def set_actor_locked(self, actor, locked, undo, source):
         _actor, _actor_path = self.local_scene.get_actor_and_path(actor)
         paths_to_update = []
-        
+
         if source == "layout":
             paths_to_update.append(_actor_path)
-            await SceneEditNotificationBus().on_actor_locked_changed(_actor_path, paths_to_update, locked, source)
+            await SceneEditNotificationBus().on_actor_locked_changed(
+                _actor_path, paths_to_update, locked, source
+            )
         if source == "actor_outline" or source == "reparent":
             if _actor.is_parent_locked == False:
                 paths_to_update.append(_actor_path)
-                self.local_scene.update_locked_recursive(_actor, paths_to_update, locked)
+                self.local_scene.update_locked_recursive(
+                    _actor, paths_to_update, locked
+                )
             for path in paths_to_update:
                 actor, _ = self.local_scene.get_actor_and_path(path)
-            await SceneEditNotificationBus().on_actor_locked_changed(_actor_path, paths_to_update, locked, source)
+            await SceneEditNotificationBus().on_actor_locked_changed(
+                _actor_path, paths_to_update, locked, source
+            )
