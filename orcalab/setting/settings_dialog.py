@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Callable
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -15,11 +16,31 @@ _MOVE_SENS_RANGE = (0.1, 10.0)
 _ROT_SENS_RANGE = (0.1, 10.0)
 
 
-def _sensitivity_line_edit(lo: float, hi: float, value: float) -> QtWidgets.QLineEdit:
-    """带边框的数值框，仅能通过键盘手动输入（无步进/滚轮改值）。"""
-    edit = QtWidgets.QLineEdit()
+class _SettingsNumericLineEdit(QtWidgets.QLineEdit):
+    def __init__(self, parent: QtWidgets.QWidget | None = None):
+        super().__init__(parent)
+        self._commit_normalize: Callable[[], None] | None = None
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+        if event.key() in (
+            QtCore.Qt.Key.Key_Return,
+            QtCore.Qt.Key.Key_Enter,
+        ):
+            if self._commit_normalize is not None:
+                self._commit_normalize()
+            self.clearFocus()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
+def _sensitivity_line_edit(lo: float, hi: float, value: float) -> _SettingsNumericLineEdit:
+    edit = _SettingsNumericLineEdit()
     edit.setObjectName("OrcaSettingsNumericField")
-    edit.setValidator(QtGui.QDoubleValidator(lo, hi, 1, edit))
+
+    v = QtGui.QDoubleValidator(-1e9, 1e9, 10, edit)
+    v.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
+    edit.setValidator(v)
     edit.setText(f"{value:.1f}")
     edit.setFixedWidth(96)
     return edit
@@ -39,9 +60,16 @@ def _read_sensitivity_line(
     return round(max(lo, min(hi, v)), 1)
 
 
-class _SettingHoverBlock(QtWidgets.QWidget):
-    """整块设置区域悬停时背景变浅（子控件上悬停也生效）。"""
+def _normalize_sensitivity_line_edit(
+    edit: QtWidgets.QLineEdit, fallback: float, lo: float, hi: float
+) -> None:
+    clamped = _read_sensitivity_line(edit, fallback, lo, hi)
+    new_text = f"{clamped:.1f}"
+    if edit.text() != new_text:
+        edit.setText(new_text)
 
+
+class _SettingHoverBlock(QtWidgets.QWidget):
     def __init__(self, hover_bg_hex: str, parent: QtWidgets.QWidget | None = None):
         super().__init__(parent)
         self._hover_bg = hover_bg_hex
@@ -130,6 +158,13 @@ class SettingsDialog(QtWidgets.QDialog):
         self.move_value_edit = _sensitivity_line_edit(
             *_MOVE_SENS_RANGE, config.camera_move_sensitivity()
         )
+        _norm_move = lambda: _normalize_sensitivity_line_edit(
+            self.move_value_edit,
+            ConfigService().camera_move_sensitivity(),
+            *_MOVE_SENS_RANGE,
+        )
+        self.move_value_edit._commit_normalize = _norm_move
+        self.move_value_edit.editingFinished.connect(_norm_move)
         root_layout.addWidget(
             _vscode_style_setting_row(
                 "相机移动灵敏度",
@@ -142,6 +177,13 @@ class SettingsDialog(QtWidgets.QDialog):
         self.rotation_value_edit = _sensitivity_line_edit(
             *_ROT_SENS_RANGE, config.camera_rotation_sensitivity()
         )
+        _norm_rot = lambda: _normalize_sensitivity_line_edit(
+            self.rotation_value_edit,
+            ConfigService().camera_rotation_sensitivity(),
+            *_ROT_SENS_RANGE,
+        )
+        self.rotation_value_edit._commit_normalize = _norm_rot
+        self.rotation_value_edit.editingFinished.connect(_norm_rot)
         root_layout.addWidget(
             _vscode_style_setting_row(
                 "相机旋转灵敏度",
