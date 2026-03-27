@@ -19,6 +19,11 @@ from orcalab.logging_util import setup_logging, resolve_log_level
 from orcalab.default_layout import prepare_default_layout
 from orcalab.process_guard import ensure_single_instance
 from orcalab.ui.main_window_full_screen import MainWindowFullScreen
+from orcalab.report.abnormal_exit_report import (
+    save_abnormal_exit_report_local,
+    schedule_abnormal_exit_report,
+    take_pending_abnormal_exit_report,
+)
 import os
 
 # import PySide6.QtAsyncio as QtAsyncio
@@ -93,12 +98,22 @@ async def main_async(q_app, fullscreen: bool):
     _main_window = main_window  # Store reference for signal handlers
     await main_window.init()
 
+    # 若上一次异常退出，将报告写入本地 crash_reports（暂不上传服务端）
+    if take_pending_abnormal_exit_report():
+        cfg = ConfigService()
+        try:
+            save_abnormal_exit_report_local(cfg)
+        except Exception:
+            logger.exception("写入 crash_reports 失败")
+
     await app_close_event.wait()
 
     # Clean up resources before exiting
     logger.info("Application is closing, cleaning up resources...")
     await main_window.cleanup()
 
+    # Application is closed normally
+    ConfigService().mark_orcalab_closed_cleanly()
 
 _ADMIN_ONLY_LEVELS = {"previewthumbnail_orcalab"}
 
@@ -253,6 +268,11 @@ def main():
     current_dir = pathlib.Path(__file__).parent.resolve()
     project_root = current_dir.parent  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root, workspace)
+
+    if config_service.had_previous_abnormal_exit():
+        logger.warning("检测到上次 OrcaLab 未正常退出")
+        schedule_abnormal_exit_report()
+    config_service.mark_orcalab_started()
 
     check_project_folder()
 

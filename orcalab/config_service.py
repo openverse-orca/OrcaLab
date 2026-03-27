@@ -471,7 +471,30 @@ class ConfigService:
         
     def send_statistics(self) -> str:
         return self.config.get("orcalab", {}).get("send_statistics", "unset")
-    
+
+    def had_previous_abnormal_exit(self) -> bool:
+        pending = bool(
+            self.config.get("orcalab", {}).get("abnormal_exit_pending", False)
+        )
+        logger.info("上次运行是否异常退出：%s", pending)
+        return pending
+
+    def mark_orcalab_started(self) -> None:
+        self.config.setdefault("orcalab", {})["abnormal_exit_pending"] = True
+
+        def update_func(config):
+            config.setdefault("orcalab", {})["abnormal_exit_pending"] = True
+
+        self.set_user_config("orcalab", update_func)
+
+    def mark_orcalab_closed_cleanly(self) -> None:
+        self.config.setdefault("orcalab", {})["abnormal_exit_pending"] = False
+
+        def update_func(config):
+            config.setdefault("orcalab", {})["abnormal_exit_pending"] = False
+
+        self.set_user_config("orcalab", update_func)
+
     def set_send_statistics(self, value: str):
         self.config.setdefault("orcalab", {})["send_statistics"] = value
 
