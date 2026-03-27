@@ -194,7 +194,7 @@ class SettingsDialog(QtWidgets.QDialog):
         )
 
         # —— 统计数据：紧挨相机区块下方，间隔由 root_layout.spacing() 控制 ——
-        stats_desc = TextLabel("发送用统计数据可以帮助改进OrcaLab。")
+        stats_desc = TextLabel("发送用户环境统计数据可以帮助改进OrcaLab。")
         stats_checkbox = CheckBox()
         stats_row = QtWidgets.QHBoxLayout()
         stats_row.setContentsMargins(
@@ -215,7 +215,7 @@ class SettingsDialog(QtWidgets.QDialog):
         # root_layout.addWidget(
         #     _vscode_style_setting_row(
         #         "统计数据",
-        #         "发送用统计数据可以帮助改进OrcaLab。",
+        #         "发送用户环境统计数据可以帮助改进OrcaLab。",
         #         self.checkbox,
         #         self._setting_row_hover_bg,
         #         style_description=False,
