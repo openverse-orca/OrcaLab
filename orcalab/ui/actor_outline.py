@@ -21,22 +21,17 @@ from orcalab.ui.icon_util import make_icon
 import logging
 logger = logging.getLogger(__name__)
 
-OUTLINE_BUTTON_SIZE = 20
 OUTLINE_BUTTON_GAP = 2
 
 # 每行右侧两个按钮的尺寸与间距（与 delegate 和 view 中计算一致）
 def _visibility_lock_button_rects(row_rect: QtCore.QRect) -> Tuple[QtCore.QRect, QtCore.QRect]:
-    
-    # 根据行矩形计算 可见 锁定 两个按钮的矩形（右对齐）
-    # OUTLINE_BUTTONS_WIDTH = OUTLINE_BUTTON_SIZE * 2 + OUTLINE_BUTTON_GAP
-    h = min(OUTLINE_BUTTON_SIZE, row_rect.height())
+    h = row_rect.height()
     y = row_rect.top() + (row_rect.height() - h) // 2
-    right = row_rect.right()
-    lock_rect = QtCore.QRect(right - OUTLINE_BUTTON_SIZE, y, OUTLINE_BUTTON_SIZE, h)
-    eye_rect = QtCore.QRect(
-        right - OUTLINE_BUTTON_SIZE - OUTLINE_BUTTON_GAP - OUTLINE_BUTTON_SIZE, y,
-        OUTLINE_BUTTON_SIZE, h,
-    )
+    r = row_rect.right()
+
+    lock_rect = QtCore.QRect(r - h, y, h, h)
+    eye_rect = QtCore.QRect(r - 2 * h - OUTLINE_BUTTON_GAP, y, h, h)
+
     return eye_rect, lock_rect
 
 
@@ -72,17 +67,18 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
         eye_rect, lock_rect = _visibility_lock_button_rects(option.rect)
         text_rect = QtCore.QRect(option.rect)
         text_rect.setRight(eye_rect.left() - OUTLINE_BUTTON_GAP)
+        h = option.rect.height()
         # 绘制 actor 名称
         text_option = QtWidgets.QStyleOptionViewItem(option)
         text_option.rect = text_rect
         super().paint(painter, text_option, index)
         # 绘制可见按钮图标
         eye_icon = self._eye_visible_icon if actor.is_visible else self._eye_hidden_icon
-        eye_pixmap = eye_icon.pixmap(QtCore.QSize(OUTLINE_BUTTON_SIZE, OUTLINE_BUTTON_SIZE))
+        eye_pixmap = eye_icon.pixmap(QtCore.QSize(h, h))
         painter.drawPixmap(eye_rect, eye_pixmap)
         # 绘制锁定按钮图标
         lock_icon = self._lock_locked_icon if actor.is_locked else self._lock_unlocked_icon
-        lock_pixmap = lock_icon.pixmap(QtCore.QSize(OUTLINE_BUTTON_SIZE, OUTLINE_BUTTON_SIZE))
+        lock_pixmap = lock_icon.pixmap(QtCore.QSize(h, h))
         painter.drawPixmap(lock_rect, lock_pixmap)
 
     # @typing.override
