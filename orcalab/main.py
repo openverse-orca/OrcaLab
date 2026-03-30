@@ -22,11 +22,12 @@ from orcalab.ui.main_window_full_screen import MainWindowFullScreen
 import os
 
 # import PySide6.QtAsyncio as QtAsyncio
-from PySide6 import QtWidgets, QtGui
+from PySide6 import QtWidgets
 import orcalab.assets.rc_assets
 
 from qasync import QEventLoop
 from orcalab.python_project_installer import ensure_python_project_installed
+from orcalab.ui.icon_util import app_window_icon
 
 # This is needed to display the app icon on the taskbar on Windows
 if os.name == 'nt':
@@ -261,7 +262,7 @@ def main():
     register_signal_handlers()
 
     q_app = QtWidgets.QApplication(sys.argv)
-    q_app.setWindowIcon(QtGui.QIcon(":/icons/orcalab_logo.png"))
+    q_app.setWindowIcon(app_window_icon())
 
     # Ensure the external Python project (orcalab-pyside) is present and installed
     try:

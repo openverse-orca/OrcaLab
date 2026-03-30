@@ -45,7 +45,7 @@ from orcalab.ui.camera.camera_bus import (
 )
 from orcalab.ui.camera.camera_selector import CameraSelector
 from orcalab.ui.copilot import CopilotPanel
-from orcalab.ui.icon_util import make_icon
+from orcalab.ui.icon_util import make_icon, schedule_windows_taskbar_icon_refresh
 from orcalab.ui.theme_service import ThemeService
 from orcalab.ui.tool_bar import ToolBar
 from orcalab.ui.manipulator_bar import ManipulatorBar
@@ -177,6 +177,7 @@ class MainWindow(
         # self.move(center - rect.center())
         self.restore_default_layout()
         self.showMaximized()
+        schedule_windows_taskbar_icon_refresh(self)
 
         if await ask_user_consent():
             logger.info("用户允许发送统计数据")
