@@ -63,7 +63,7 @@ class HttpService(HttpServiceRequest):
                 metadata = metadata_published + metadata_unpublished
                 metadata = json.dumps(metadata, ensure_ascii=False, indent=2)
                 if output is not None:
-                    output.extend(metadata)
+                    output.append(metadata)
                 return metadata
 
     @require_online
@@ -194,6 +194,38 @@ class HttpService(HttpServiceRequest):
                     return None
                 asset_metadata = await response.json()
                 return json.dumps(asset_metadata, ensure_ascii=False, indent=2)
+
+    @require_online
+    @override
+    async def post_asset_subscribe(self, asset_package_id: str, output: List[str] = None) -> str:
+        asset_package_id = (asset_package_id or "").strip()
+        if not asset_package_id:
+            msg = json.dumps({"success": False, "message": "asset_package_id 为空"}, ensure_ascii=False)
+            if output is not None:
+                output.append(msg)
+            return msg
+
+        url = f"{self.base_url}/asset/{asset_package_id}/subscribe/"
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=self._get_headers(), json={}) as response:
+                body = await response.text()
+                try:
+                    body_json = json.loads(body) if body.strip() else {}
+                except json.JSONDecodeError:
+                    body_json = {"raw": body}
+                ok = response.status in (200, 201, 204)
+                msg = json.dumps(
+                    {
+                        "success": ok,
+                        "http_status": response.status,
+                        "package_id": asset_package_id,
+                        "body": body_json,
+                    },
+                    ensure_ascii=False,
+                )
+                if output is not None:
+                    output.append(msg)
+                return msg
 
     @override
     def is_admin(self) -> bool:
