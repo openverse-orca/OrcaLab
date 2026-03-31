@@ -29,6 +29,7 @@ from orcalab.asset_service_bus import AssetServiceRequestBus
 from orcalab.http_service.http_bus import HttpServiceRequestBus
 from orcalab.ui.panel_bus import PanelRequestBus
 from orcalab.copilot.service import CopilotService
+from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
 
 class OrcaLabMCPServer:
     def __init__(self, port):
@@ -63,6 +64,59 @@ class OrcaLabMCPServer:
         r = Rotation.from_euler("xyz", euler, degrees=True)
         x, y, z, w = r.as_quat()
         return [float(w), float(x), float(y), float(z)]
+
+    @staticmethod
+    def _mcp_layout_dir() -> str:
+        return os.path.join(os.path.expanduser("~"), ".orcalab", "mcp_layout")
+
+    @staticmethod
+    def _normalize_layout_name(layout_name: str) -> str:
+        # 仅允许文件名，避免路径穿越；强制 .json 后缀
+        base = os.path.basename((layout_name or "").strip())
+        if not base:
+            raise ValueError("layout_name 不能为空")
+        if not base.lower().endswith(".json"):
+            base += ".json"
+        return base
+
+    @staticmethod
+    def _actor_to_layout_dict(local_scene, actor: AssetActor | GroupActor) -> dict:
+        def _to_list(v):
+            return v.tolist() if hasattr(v, "tolist") else v
+
+        def _compact_array(arr):
+            return "[" + ",".join(str(x) for x in arr) + "]"
+
+        actor_path = local_scene.get_actor_path(actor)
+        path_str = actor_path._p if actor_path is not None else "/"
+        data = {
+            "name": actor.name,
+            "path": path_str,
+            "transform": {
+                "position": _compact_array(_to_list(actor.transform.position)),
+                "rotation": _compact_array(_to_list(actor.transform.rotation)),
+                "scale": actor.transform.scale,
+            },
+            "is_visible": actor.is_visible,
+            "is_parent_visible": actor.is_parent_visible,
+            "is_locked": actor.is_locked,
+            "is_parent_locked": actor.is_parent_locked,
+        }
+
+        if actor.name == "root":
+            data = {"version": "1.0", **data}
+
+        if isinstance(actor, AssetActor):
+            data["type"] = "AssetActor"
+            data["asset_path"] = getattr(actor, "_asset_path", getattr(actor, "asset_path", ""))
+            data["modified_properties"] = SceneLayoutHelper.collect_modified_properties(actor)
+        elif isinstance(actor, GroupActor):
+            data["type"] = "GroupActor"
+            data["children"] = [
+                OrcaLabMCPServer._actor_to_layout_dict(local_scene, child) for child in actor.children
+            ]
+
+        return data
 
     def get_asset_map(self) -> str:
         '''
@@ -960,6 +1014,84 @@ class OrcaLabMCPServer:
         except Exception as e:
             return json.dumps({"success": False, "message": f"获取引擎信息失败: {e}"}, ensure_ascii=False)
 
+    # ==================== 布局类 API ====================
+    def save_layout(self, layout_name: str) -> str:
+        '''
+        保存布局
+        Args:
+            layout_name: 布局文件名（可不带 .json）
+        Returns:
+            保存布局的结果的json字符串格式
+        '''
+        try:
+            file_name = self._normalize_layout_name(layout_name)
+            save_dir = self._mcp_layout_dir()
+            os.makedirs(save_dir, exist_ok=True)
+            save_path = os.path.join(save_dir, file_name)
+
+            local_scene_out = []
+            self.application_bus.get_local_scene(local_scene_out)
+            if not local_scene_out or local_scene_out[0] is None:
+                return json.dumps({"success": False, "message": "获取本地场景失败"}, ensure_ascii=False)
+
+            local_scene = local_scene_out[0]
+            root = local_scene.root_actor
+            scene_layout_dict = self._actor_to_layout_dict(local_scene, root)
+            with open(save_path, "w", encoding="utf-8") as f:
+                json.dump(scene_layout_dict, f, ensure_ascii=False, indent=4)
+
+            return json.dumps(
+                {
+                    "success": True,
+                    "message": f"布局已保存: {file_name}",
+                    "layout_path": save_path,
+                },
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps({"success": False, "message": f"保存布局失败: {e}"}, ensure_ascii=False)
+
+    async def load_layout(self, layout_name: str) -> str:
+        '''
+        加载布局
+        Args:
+            layout_name: 布局文件名（可不带 .json）
+        Returns:
+            加载布局的结果的json字符串格式
+        '''
+        try:
+            file_name = self._normalize_layout_name(layout_name)
+            load_path = os.path.join(self._mcp_layout_dir(), file_name)
+            if not os.path.exists(load_path):
+                return json.dumps(
+                    {"success": False, "message": f"布局文件不存在: {load_path}"},
+                    ensure_ascii=False,
+                )
+
+            local_scene_out = []
+            self.application_bus.get_local_scene(local_scene_out)
+            if not local_scene_out or local_scene_out[0] is None:
+                return json.dumps({"success": False, "message": "获取本地场景失败"}, ensure_ascii=False)
+
+            helper = SceneLayoutHelper(local_scene_out[0])
+            ok = await helper.load_scene_layout(None, load_path)
+            if not ok:
+                return json.dumps(
+                    {"success": False, "message": f"加载布局失败: {file_name}"},
+                    ensure_ascii=False,
+                )
+
+            return json.dumps(
+                {
+                    "success": True,
+                    "message": f"布局已加载: {file_name}",
+                    "layout_path": load_path,
+                },
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps({"success": False, "message": f"加载布局失败: {e}"}, ensure_ascii=False)
+
     def add_tools(self):
         # 资产元数据类
         self.mcp.tool(self.get_asset_map)
@@ -1009,7 +1141,11 @@ class OrcaLabMCPServer:
 
         # 系统信息类
         self.mcp.tool(self.get_engine_info)
-        
+
+        # 布局类
+        self.mcp.tool(self.save_layout)
+        self.mcp.tool(self.load_layout)
+
     async def run(self):
         await self.mcp.run_async(transport="http", port=self.port)
 
