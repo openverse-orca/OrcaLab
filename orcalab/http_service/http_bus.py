@@ -19,6 +19,9 @@ class HttpServiceRequest:
     
     async def get_image_url(self, asset_id: str) -> str:
         pass
+
+    async def post_asset_subscribe(self, asset_package_id: str, output: List[str] = None) -> str:
+        pass
     
     def is_admin(self) -> bool:
         pass

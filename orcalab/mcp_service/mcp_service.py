@@ -110,6 +110,115 @@ class OrcaLabMCPServer:
         asset_info = output[0]
         return json.dumps(asset_info, ensure_ascii=False)
 
+    @staticmethod
+    def _find_first_package_match_by_asset_name(
+        metadata_rows: list, asset_name: str
+    ) -> tuple[dict | None, str | None]:
+        needle = asset_name.strip().lower()
+        if not needle:
+            return None, None
+        for item in metadata_rows:
+            if not isinstance(item, dict):
+                continue
+            name_l = (item.get("name") or "").lower()
+            path_l = (item.get("assetPath") or "").lower()
+            if needle not in name_l and needle not in path_l:
+                continue
+            pkg_id = item.get("parentPackageId") or item.get("id")
+            if pkg_id:
+                return item, str(pkg_id)
+        return None, None
+
+    async def subscribe_asset_package_by_asset_name(self, asset_name: str) -> str:
+        '''
+        根据资产名称在元数据中搜索，并订阅第一个匹配项所属的资产包。
+        Args:
+            asset_name: 资产显示名或路径片段（不区分大小写，匹配 name 或 assetPath 子串）。
+        Returns:
+            操作结果的 json 字符串，含 success、所选资产包 id、匹配条目及订阅接口返回。
+        '''
+        try:
+            name = asset_name.strip()
+            if not name:
+                return json.dumps(
+                    {"success": False, "message": "asset_name 不能为空"},
+                    ensure_ascii=False,
+                )
+
+            meta_out: list[str] = []
+            await self.http_service_bus.get_all_metadata(meta_out)
+            if not meta_out:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": "无法获取远程元数据（请确认已登录 DataLink 且网络正常）",
+                    },
+                    ensure_ascii=False,
+                )
+
+            metadata_list = json.loads(meta_out[0])
+            if not isinstance(metadata_list, list):
+                return json.dumps(
+                    {"success": False, "message": "元数据格式异常：非列表"},
+                    ensure_ascii=False,
+                )
+
+            matched, package_id = self._find_first_package_match_by_asset_name(metadata_list, name)
+            if not matched or not package_id:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": f"未找到名称或路径包含「{name}」的资产",
+                    },
+                    ensure_ascii=False,
+                )
+
+            sub_out: list[str] = []
+            await self.http_service_bus.post_asset_subscribe(package_id, sub_out)
+            if not sub_out:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "package_id": package_id,
+                        "matched_asset": {
+                            "id": matched.get("id"),
+                            "name": matched.get("name"),
+                            "assetPath": matched.get("assetPath"),
+                            "parentPackageId": matched.get("parentPackageId"),
+                        },
+                        "message": "订阅请求未执行（请确认已登录 DataLink 且在线）",
+                    },
+                    ensure_ascii=False,
+                )
+            sub_result = json.loads(sub_out[0])
+
+            merged = {
+                "success": bool(sub_result.get("success")),
+                "package_id": package_id,
+                "matched_asset": {
+                    "id": matched.get("id"),
+                    "name": matched.get("name"),
+                    "assetPath": matched.get("assetPath"),
+                    "parentPackageId": matched.get("parentPackageId"),
+                },
+                "subscribe": sub_result,
+            }
+            if merged["success"]:
+                merged["message"] = f"已请求订阅资产包 {package_id}（匹配资产: {matched.get('name', '')}）"
+            else:
+                merged["message"] = sub_result.get("body") or sub_result.get("message") or "订阅请求失败"
+            return json.dumps(merged, ensure_ascii=False)
+        except json.JSONDecodeError as e:
+            return json.dumps(
+                {"success": False, "message": f"解析元数据或订阅结果失败: {e}"},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"订阅资产包失败: {e}"},
+                ensure_ascii=False,
+            )
+
     def get_all_actors(self) -> str:
         '''
         获取当前场景中可操作的Actor的信息
@@ -855,6 +964,7 @@ class OrcaLabMCPServer:
         # 资产元数据类
         self.mcp.tool(self.get_asset_map)
         self.mcp.tool(self.get_asset_info)
+        self.mcp.tool(self.subscribe_asset_package_by_asset_name)
 
         # Actor 查询类
         self.mcp.tool(self.get_all_actors)
