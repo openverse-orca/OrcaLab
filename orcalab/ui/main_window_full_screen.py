@@ -74,6 +74,7 @@ class MainWindowFullScreen(
         layout.setSpacing(0)
 
         self._viewport_widget = Viewport()
+        await asyncio.sleep(0.5)
         layout.addWidget(self._viewport_widget)
 
         rect = self.screen().availableGeometry()
