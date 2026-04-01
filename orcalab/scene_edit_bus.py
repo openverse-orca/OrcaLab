@@ -17,12 +17,14 @@ class SceneEditRequest:
         undo: bool = True,
         source: str = "",
     ) -> None:
-        """Set the current selection.
-        Args:
-            selection (List[Path]): The new selection. A list of actor paths. An empty list clears the selection.
-            undo (bool): Whether this action should be undoable.
-            source (str): The source of the selection change. Useful for avoiding feedback loops.
-        """
+        pass
+
+    async def set_active_actor(
+        self,
+        actor: BaseActor | Path | None,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
         pass
 
     async def add_actor(
@@ -40,9 +42,6 @@ class SceneEditRequest:
         undo: bool = True,
         source: str = "",
     ):
-        pass
-
-    def can_delete_actor(self, out: List[bool], actor: BaseActor | Path):
         pass
 
     async def delete_actor(
@@ -80,9 +79,29 @@ class SceneEditRequest:
     ):
         pass
 
-    async def duplicate_actor(
+    async def reparent_actors(
         self,
-        root_actor: BaseActor | Path,
+        actors: Sequence[BaseActor | Path],
+        new_parent: BaseActor | Path,
+        row: int,
+        undo: bool = True,
+        source: str = "",
+    ):
+        pass
+
+    async def move_actors(
+        self,
+        old_actors: Sequence[BaseActor | Path],
+        new_parent_paths: List[Path],
+        insert_positions: List[int],
+        undo: bool = True,
+        source: str = "",
+    ):
+        pass
+
+    async def duplicate_actors(
+        self,
+        actors: Sequence[BaseActor | Path],
         undo: bool = True,
         source: str = "",
     ):
@@ -193,6 +212,14 @@ class SceneEditNotification:
     ) -> None:
         pass
 
+    async def on_active_actor_changed(
+        self,
+        old_active_actor: Path | None,
+        new_active_actor: Path | None,
+        source: str = "",
+    ) -> None:
+        pass
+
     async def on_transforms_changed(
         self,
         actor_paths: List[Path],
@@ -254,22 +281,10 @@ class SceneEditNotification:
     ):
         pass
 
-    async def before_actor_reparented(
-        self,
-        actor_path: Path,
-        new_parent_path: Path,
-        row: int,
-        source: str,
-    ):
+    async def before_actor_reparented(self):
         pass
 
-    async def on_actor_reparented(
-        self,
-        actor_path: Path,
-        new_parent_path: Path,
-        row: int,
-        source: str,
-    ):
+    async def on_actor_reparented(self):
         pass
 
     async def on_property_changed(

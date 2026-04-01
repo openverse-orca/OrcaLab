@@ -1,5 +1,4 @@
 from typing import List, Sequence, Tuple, Dict
-from functools import cmp_to_key
 
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.actor_property import (
@@ -20,6 +19,7 @@ class LocalScene:
         self._actors: Dict[Path, BaseActor] = {}
         self._actors[Path.root_path()] = self.root_actor
         self._selection: List[Path] = []
+        self._active_actor: Path | None = None
 
     def __contains__(self, path: Path) -> bool:
         return path in self._actors
@@ -52,6 +52,15 @@ class LocalScene:
         # 确保路径列表是有序的，按照路径字符串的字典序排序
         sorted_paths = sorted(paths)
         self._selection = sorted_paths
+
+    @property
+    def active_actor(self) -> Path | None:
+        """返回当前激活Actor的路径，如果没有激活Actor则返回None"""
+        return self._active_actor
+
+    @active_actor.setter
+    def active_actor(self, actor_path: Path | None):
+        self._active_actor = actor_path
 
     def find_actor_by_path(self, path: Path) -> BaseActor | None:
         if path in self._actors:
@@ -112,6 +121,9 @@ class LocalScene:
         return actor_list, path_list
 
     def _replace_path(self, old_prefix: Path, new_prefix: Path):
+        if old_prefix == new_prefix:
+            return
+
         paths_to_update = [old_prefix]
         for p in self._actors.keys():
             if p.is_descendant_of(old_prefix):
@@ -218,17 +230,20 @@ class LocalScene:
                 return result
         return ""
 
-    def can_duplicate_actor(self, actor: BaseActor | Path) -> Tuple[bool, str]:
-        actor, actor_path = self.normalize_actor(actor)
+    def can_duplicate_actors(
+        self, actors: Sequence[BaseActor | Path]
+    ) -> Tuple[bool, str]:
+        _, actor_paths = self.normalize_actors(actors)
 
-        if actor_path == actor_path.root_path():
-            return False, "Cannot duplicate pseudo root actor."
+        for actor_path in actor_paths:
+            if actor_path == actor_path.root_path():
+                return False, "Cannot duplicate pseudo root actor."
 
         return True, ""
 
     def can_delete_actors(self, actors: Sequence[BaseActor | Path]) -> Tuple[bool, str]:
-        _, _actor_paths = self.normalize_actors(actors)
-        for actor_path in _actor_paths:
+        _, actor_paths = self.normalize_actors(actors)
+        for actor_path in actor_paths:
             if actor_path.is_root():
                 return False, f"Cannot delete root actor"
         return True, ""
@@ -273,47 +288,70 @@ class LocalScene:
 
         self._replace_path(actor_path, new_actor_path)
 
-    def can_reparent_actor(
-        self, actor: BaseActor | Path, new_parent: BaseActor | Path
-    ) -> Tuple[bool, str]:
-        actor, actor_path = self.get_actor_and_path(actor)
-        new_parent, new_parent_path = self.get_actor_and_path(new_parent)
+    def can_move_actors(
+        self,
+        old_actors: Sequence[BaseActor | Path],
+        new_parent_paths: List[Path],
+        new_rows: List[int],
+        undo: bool = True,
+        source: str = "",
+    ):
+        if not old_actors:
+            return False, "No actors to move."
 
-        if actor_path == actor_path.root_path():
-            return False, "Cannot reparent pseudo root actor."
+        if len(old_actors) != len(new_parent_paths) != len(new_rows):
+            return False, "Inconsistent lengths of input lists."
 
-        if not isinstance(new_parent, GroupActor):
-            return False, "New parent must be a GroupActor."
+        _old_actors, _old_actor_paths = self.normalize_actors(old_actors)
+        _new_parent_actors, _new_parent_paths = self.normalize_actors(new_parent_paths)
+        for actor_path, new_parent_path, new_parent in zip(
+            _old_actor_paths, _new_parent_paths, _new_parent_actors
+        ):
+            if not isinstance(new_parent, GroupActor):
+                return False, "New parent must be a GroupActor."
 
-        if actor == new_parent:
-            return False, "Cannot reparent to itself."
+            if actor_path == actor_path.root_path():
+                return False, "Cannot reparent pseudo root actor."
 
-        if new_parent_path.is_descendant_of(actor_path):
-            return False, "Cannot reparent to its descendant."
+            if actor_path == new_parent_path:
+                return False, "Cannot reparent to itself."
 
-        for child in new_parent.children:
-            if child.name == actor.name:
-                return False, "Name already exists under new parent."
+            if new_parent_path.is_descendant_of(actor_path):
+                return False, "Cannot reparent to its descendant."
+
+            for child in new_parent.children:
+                if child.name == actor_path.name:
+                    return False, "Name already exists under new parent."
+
+        # TODO: 检查多个移动操作不会导致冲突
 
         return True, ""
 
-    def reparent_actor(
-        self, actor: BaseActor | Path, new_parent: GroupActor | Path, insert_index: int
+    def move_actors(
+        self,
+        old_actors: Sequence[BaseActor | Path],
+        new_parent_paths: List[Path],
+        new_rows: List[int],
+        undo: bool = True,
+        source: str = "",
     ):
-        ok, err = self.can_reparent_actor(actor, new_parent)
+        ok, err = self.can_move_actors(
+            old_actors, new_parent_paths, new_rows, undo, source
+        )
         if not ok:
             raise Exception(err)
 
-        actor, actor_path = self.get_actor_and_path(actor)
-        _new_parent, _new_parent_path = self.get_actor_and_path(new_parent)
-        assert isinstance(_new_parent, GroupActor)
+        _old_actors, _old_actor_paths = self.normalize_actors(old_actors)
+        _new_parent, _new_parent_path = self.normalize_actors(new_parent_paths)
 
-        actor.parent = None
-        _new_parent.insert_child(insert_index, actor)
-
-        new_actor_path = _new_parent_path / actor.name
-
-        self._replace_path(actor_path, new_actor_path)
+        for actor, actor_path, new_parent, new_parent_path, new_row in zip(
+            _old_actors, _old_actor_paths, _new_parent, _new_parent_path, new_rows
+        ):
+            assert isinstance(new_parent, GroupActor)
+            actor.parent = None
+            new_parent.insert_child(new_row, actor)
+            new_actor_path = new_parent_path / actor.name
+            self._replace_path(actor_path, new_actor_path)
 
     def _find_property_in_tree(
         self,

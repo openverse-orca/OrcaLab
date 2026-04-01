@@ -1,17 +1,15 @@
+import asyncio
 from copy import deepcopy
 from typing import Any, Dict, List, Sequence, Tuple, override
 import logging
-import itertools
 
-from orcalab.actor import BaseActor, GroupActor, AssetActor
+from orcalab.actor import BaseActor, GroupActor
 from orcalab.actor_property import (
-    ActorProperty,
     ActorPropertyKey,
 )
 from orcalab.actor_util import (
     ActorIterator,
     clone_actor_basic,
-    collect_properties_duplicate_data,
     make_unique_name1,
 )
 from orcalab.local_scene import LocalScene
@@ -26,13 +24,14 @@ from orcalab.scene_edit_bus import (
 
 from orcalab.scene_edit_types import AddActorRequest
 from orcalab.undo_service.command import (
+    ActiveActorCommand,
     CommandGroup,
     AddActorCommand,
     DeleteActorCommand,
-    DuplicateActorCommand,
+    DuplicateActorsCommand,
+    MoveActorCommand,
     PropertyChangeCommand,
     RenameActorCommand,
-    ReparentActorCommand,
     SelectionCommand,
     TransformCommand,
 )
@@ -54,6 +53,9 @@ class SceneEditService(SceneEditRequest):
         self.property_key: ActorPropertyKey | None = None
         self.old_property_value: Any = None
 
+        # 防止多个编辑操作中的异步操作交叉导致状态混乱。
+        self._edit_lock = asyncio.Lock()
+
     def connect_bus(self):
         SceneEditRequestBus.connect(self)
 
@@ -67,6 +69,20 @@ class SceneEditService(SceneEditRequest):
         undo: bool = True,
         source: str = "",
     ) -> None:
+        # 有些操作中会修改选择状态，会导致额外的历史记录。
+        # 这里直接忽略从后端的同步消息
+        if self._edit_lock.locked() and source == "remote_scene":
+            return
+
+        async with self._edit_lock:
+            await self._set_selection(selection, undo, source)
+
+    async def _set_selection(
+        self,
+        selection: List[Path],
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
         actor_paths = sorted(selection)
 
         if actor_paths == self.local_scene.selection:
@@ -75,7 +91,8 @@ class SceneEditService(SceneEditRequest):
         old_selection = deepcopy(self.local_scene.selection)
         self.local_scene.selection = actor_paths
 
-        await self.remote_scene.set_selection(actor_paths)
+        if source != "remote_scene":
+            await self.remote_scene.set_selection(actor_paths)
 
         await SceneEditNotificationBus().on_selection_changed(
             old_selection, actor_paths, source
@@ -84,6 +101,41 @@ class SceneEditService(SceneEditRequest):
         if undo:
             cmd = SelectionCommand(old_selection, actor_paths)
             UndoRequestBus().add_command(cmd)
+
+    @override
+    async def set_active_actor(
+        self,
+        actor: BaseActor | Path | None,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+        if self._edit_lock.locked() and source == "remote_scene":
+            return
+
+        async with self._edit_lock:
+            await self._set_active_actor(actor, undo, source)
+
+    async def _set_active_actor(
+        self,
+        actor: BaseActor | Path | None,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+
+        actor_path = None
+        if actor is not None:
+            _, actor_path = self.local_scene.normalize_actor(actor)
+
+        old_actor_path = self.local_scene.active_actor
+        if actor_path == old_actor_path:
+            return
+
+        self.local_scene.active_actor = actor_path
+        if source != "remote_scene":
+            await self.remote_scene.set_active_actor(actor_path)
+
+        bus = SceneEditNotificationBus()
+        await bus.on_active_actor_changed(old_actor_path, actor_path, source)
 
     @override
     async def add_actor(
@@ -104,7 +156,15 @@ class SceneEditService(SceneEditRequest):
         undo: bool = True,
         source: str = "",
     ):
+        async with self._edit_lock:
+            await self._add_actors(requests, undo, source)
 
+    async def _add_actors(
+        self,
+        requests: List[AddActorRequest],
+        undo: bool = True,
+        source: str = "",
+    ):
         ok, err = self.local_scene.can_add_actors(requests)
         if not ok:
             raise Exception(err)
@@ -143,15 +203,6 @@ class SceneEditService(SceneEditRequest):
             command = AddActorCommand(requests)
             UndoRequestBus().add_command(command)
 
-    @override
-    async def delete_actor(
-        self,
-        actor: BaseActor | Path,
-        undo: bool = True,
-        source: str = "",
-    ):
-        await self.delete_actors([actor], undo, source)
-
     def clean_paths(self, paths: List[Path]) -> List[Path]:
         """Remove paths that are dupilicate or descendants of other paths."""
         deduplicated_paths = list(set(paths))
@@ -170,6 +221,23 @@ class SceneEditService(SceneEditRequest):
 
         return cleaned_paths
 
+    def normalize_and_clean_actors(
+        self, actors: Sequence[BaseActor | Path]
+    ) -> Tuple[List[BaseActor], List[Path]]:
+        """Remove actors that are dupilicate or descendants of other actors."""
+        _, _actor_paths = self.local_scene.normalize_actors(actors)
+        clean_actor_paths = self.clean_paths(_actor_paths)
+        return self.local_scene.normalize_actors(clean_actor_paths)
+
+    @override
+    async def delete_actor(
+        self,
+        actor: BaseActor | Path,
+        undo: bool = True,
+        source: str = "",
+    ):
+        await self.delete_actors([actor], undo, source)
+
     @override
     async def delete_actors(
         self,
@@ -177,10 +245,16 @@ class SceneEditService(SceneEditRequest):
         undo: bool = True,
         source: str = "",
     ):
+        async with self._edit_lock:
+            await self._delete_actors(actors, undo, source)
 
-        _, _actor_paths = self.local_scene.normalize_actors(actors)
-        clean_actor_paths = self.clean_paths(_actor_paths)
-        _actors, _actor_paths = self.local_scene.normalize_actors(clean_actor_paths)
+    async def _delete_actors(
+        self,
+        actors: Sequence[BaseActor | Path],
+        undo: bool = True,
+        source: str = "",
+    ):
+        _actors, _actor_paths = self.normalize_and_clean_actors(actors)
 
         ok, err = self.local_scene.can_delete_actors(_actor_paths)
         if not ok:
@@ -233,10 +307,19 @@ class SceneEditService(SceneEditRequest):
                 new_selection.remove(_actor_path)
             deselect_command = SelectionCommand(old_selection, new_selection)
 
-            await self.set_selection(
+            await self._set_selection(
                 deselect_command.new_selection, undo=False, source=source
             )
             command_group.commands.append(deselect_command)
+
+        if self.local_scene.active_actor in _actor_paths:
+            old_active_actor = self.local_scene.active_actor
+            new_active_actor = None
+            active_actor_command = ActiveActorCommand(
+                old_active_actor, new_active_actor
+            )
+            command_group.commands.append(active_actor_command)
+            await self._set_active_actor(new_active_actor, undo=False, source=source)
 
         delete_command = DeleteActorCommand(_actors, parent_paths, indexes)
         command_group.commands.append(delete_command)
@@ -251,6 +334,16 @@ class SceneEditService(SceneEditRequest):
 
     @override
     async def rename_actor(
+        self,
+        actor: BaseActor,
+        new_name: str,
+        undo: bool = True,
+        source: str = "",
+    ):
+        async with self._edit_lock:
+            await self._rename_actor(actor, new_name, undo, source)
+
+    async def _rename_actor(
         self,
         actor: BaseActor,
         new_name: str,
@@ -272,33 +365,65 @@ class SceneEditService(SceneEditRequest):
 
         self.local_scene.rename_actor(actor, new_name)
 
-        new_actor_path = actor_path.parent() / new_name
+        actor_parent = actor_path.parent()
+        assert actor_parent is not None
+        new_actor_path = actor_parent / new_name
 
         command_group = CommandGroup()
-        in_selection = actor_path in self.local_scene.selection
+        deselect_command: SelectionCommand | None = None
+        select_command: SelectionCommand | None = None
+        deactive_command: ActiveActorCommand | None = None
+        active_command: ActiveActorCommand | None = None
 
-        if in_selection:
+        if actor_path in self.local_scene.selection:
             old_selection = deepcopy(self.local_scene.selection)
             new_selection = deepcopy(self.local_scene.selection)
             new_selection.remove(actor_path)
-            deselect_command = SelectionCommand(old_selection, new_selection)
-            command_group.commands.append(deselect_command)
+            new_selection.append(new_actor_path)
+            deselect_command = SelectionCommand(old_selection, [])
+            select_command = SelectionCommand([], new_selection)
+
+        if actor_path == self.local_scene.active_actor:
+            old_active_actor = self.local_scene.active_actor
+            new_active_actor = new_actor_path
+            deactive_command = ActiveActorCommand(old_active_actor, None)
+            active_command = ActiveActorCommand(None, new_active_actor)
 
         await bus.on_actor_renamed(actor_path, new_name, source)
+
+        if deselect_command is not None:
+            await self._set_selection(deselect_command.new_selection, False, source)
+
+        if deactive_command is not None:
+            await self._set_active_actor(
+                deactive_command.new_active_actor, False, source
+            )
 
         rename_command = RenameActorCommand()
         rename_command.old_path = actor_path
         rename_command.new_path = new_actor_path
-        command_group.commands.append(rename_command)
 
-        if in_selection:
-            old_selection = deepcopy(deselect_command.new_selection)
-            new_selection = deepcopy(deselect_command.new_selection)
-            new_selection.append(new_actor_path)
-            select_command = SelectionCommand(old_selection, new_selection)
-            command_group.commands.append(select_command)
+        if active_command is not None:
+            await self._set_active_actor(active_command.new_active_actor, False, source)
+
+        if select_command is not None:
+            await self._set_selection(select_command.new_selection, False, source)
 
         if undo:
+            if deselect_command is not None:
+                command_group.commands.append(deselect_command)
+
+            if deactive_command is not None:
+                command_group.commands.append(deactive_command)
+
+            command_group.commands.append(rename_command)
+
+            if active_command is not None:
+                command_group.commands.append(active_command)
+
+            if select_command is not None:
+                command_group.commands.append(select_command)
+
             UndoRequestBus().add_command(command_group)
 
     @override
@@ -310,98 +435,103 @@ class SceneEditService(SceneEditRequest):
         undo: bool = True,
         source: str = "",
     ):
-        ok, err = self.local_scene.can_reparent_actor(actor, new_parent)
+        _actor, _actor_path = self.local_scene.normalize_actor(actor)
+        _new_parent, _new_parent_path = self.local_scene.normalize_actor(new_parent)
+
+        old_parent = _actor.parent
+        assert isinstance(old_parent, GroupActor)
+        index = old_parent.children.index(_actor)
+
+        async with self._edit_lock:
+            await self._move_actors([actor], [_new_parent_path], [row], undo, source)
+
+    @override
+    async def move_actors(
+        self,
+        old_actors: Sequence[BaseActor | Path],
+        new_parent_paths: List[Path],
+        insert_positions: List[int],
+        undo: bool = True,
+        source: str = "",
+    ):
+        async with self._edit_lock:
+            await self._move_actors(
+                old_actors, new_parent_paths, insert_positions, undo, source
+            )
+
+    async def _move_actors(
+        self,
+        old_actors: Sequence[BaseActor | Path],
+        new_parent_paths: List[Path],
+        insert_positions: List[int],
+        undo: bool = True,
+        source: str = "",
+    ):
+        ok, err = self.local_scene.can_move_actors(
+            old_actors, new_parent_paths, insert_positions
+        )
         if not ok:
             raise Exception(err)
 
-        actor, actor_path = self.local_scene.get_actor_and_path(actor)
-        new_parent, new_parent_path = self.local_scene.get_actor_and_path(new_parent)
+        _old_actros, _old_actor_paths = self.normalize_and_clean_actors(old_actors)
+        old_positions = []
+        for _actor in _old_actros:
+            parent = _actor.parent
+            assert isinstance(parent, GroupActor)
+            index = parent.children.index(_actor)
+            old_positions.append(index)
+
+        command_group = CommandGroup()
+
+        active_command: ActiveActorCommand | None = None
+
+        old_selection = self.local_scene.selection
+        new_selection = deepcopy(old_selection)
+
+        for _actor_path, _new_parent_path in zip(_old_actor_paths, new_parent_paths):
+            if _actor_path in self.local_scene.selection:
+                new_selection.remove(_actor_path)
+                new_selection.append(_new_parent_path.append(_actor_path.name()))
+
+            if self.local_scene.active_actor in _old_actor_paths:
+                old_active_actor = self.local_scene.active_actor
+                new_active_actor = _new_parent_path / _actor_path.name()
+                active_command = ActiveActorCommand(old_active_actor, new_active_actor)
+
+        deselect_command = SelectionCommand(old_selection, [])
+        select_command = SelectionCommand([], new_selection)
+
+        move_command = MoveActorCommand(
+            _old_actor_paths, old_positions, new_parent_paths, insert_positions
+        )
+
+        command_group.commands.append(deselect_command)
 
         bus = SceneEditNotificationBus()
 
-        await bus.before_actor_reparented(actor_path, new_parent_path, row, source)
+        # Clear selection
+        await self._set_selection([], undo=False, source=source)
 
-        self.local_scene.reparent_actor(actor, new_parent, row)
+        if active_command is not None:
+            await self._set_active_actor(
+                active_command.new_active_actor, undo=False, source=source
+            )
 
-        await bus.on_actor_reparented(actor_path, new_parent_path, row, source)
-
-        ### 重新判断隐藏
-        # 隐藏->可见
-        if actor.is_parent_visible == False:
-            if (
-                actor.is_visible == True
-                and new_parent.is_visible == True
-                and new_parent.is_parent_visible == True
-            ):
-                await self.set_actor_visible(actor, True, False, "reparent")
-        # 可见->隐藏
-        if actor.is_visible == True and actor.is_parent_visible == True:
-            if new_parent.is_visible == False or new_parent.is_parent_visible == False:
-                await self.set_actor_visible(actor, False, False, "reparent")
-
-        new_parent_visible = new_parent.is_visible and new_parent.is_parent_visible
-        if actor.is_parent_visible != new_parent_visible:
-            actor.is_parent_visible = new_parent_visible
-
-        ### 重新判断锁定
-        # 解锁
-        if actor.is_parent_locked == True:
-            if (
-                actor.is_locked == False
-                and new_parent.is_locked == False
-                and new_parent.is_parent_locked == False
-            ):
-                await self.set_actor_locked(actor, False, False, "reparent")
-        # 锁定
-        if actor.is_locked == False and actor.is_parent_locked == False:
-            if new_parent.is_locked == True or new_parent.is_parent_locked == True:
-                await self.set_actor_locked(actor, True, False, "reparent")
-
-        new_parent_locked = new_parent.is_locked or new_parent.is_parent_locked
-        if actor.is_parent_locked != new_parent_locked:
-            actor.is_parent_locked = new_parent_locked
+        # Move
+        await bus.before_actor_reparented()
+        self.local_scene.move_actors(old_actors, new_parent_paths, insert_positions)
+        await self.remote_scene.move_actor_batch(_old_actor_paths, new_parent_paths)
+        await bus.on_actor_reparented()
+        # Set selection to new paths
+        await self._set_selection(new_selection, undo=False, source=source)
 
         if undo:
-            new_parent, new_parent_path = self.local_scene.get_actor_and_path(
-                new_parent
-            )
-            old_parent = actor.parent
-            old_index = old_parent.children.index(actor)
-            assert old_index != -1
-
-            command = ReparentActorCommand()
-            command.old_path = actor_path
-            command.old_row = old_index
-            command.new_path = new_parent_path / actor.name
-            command.new_row = row
-
-            UndoRequestBus().add_command(command)
-
-    def _can_duplicate_actors(
-        self, actor_pairs: List[Tuple[BaseActor, Path]]
-    ) -> Tuple[bool, str]:
-
-        def has_relationship(path1: Path, path2: Path) -> bool:
-            return path1.is_descendant_of(path2) or path2.is_descendant_of(path1)
-
-        for pair1, pair2 in itertools.combinations(actor_pairs, 2):
-            actor1, actor_path1 = pair1
-            actor2, actor_path2 = pair2
-            if actor_path1.is_root():
-                return False, f"Cannot duplicate root actor: {actor_path1}"
-            if actor_path2.is_root():
-                return False, f"Cannot duplicate root actor: {actor_path2}"
-
-            if actor_path1 == actor_path2:
-                return False, f"Duplicate actors with same path: {actor_path1}"
-
-            if has_relationship(actor_path1, actor_path2):
-                return (
-                    False,
-                    f"Cannot duplicate related actors: {actor_path1} and {actor_path2}",
-                )
-
-        return True, ""
+            command_group.commands.append(deselect_command)
+            if active_command is not None:
+                command_group.commands.append(active_command)
+            command_group.commands.append(move_command)
+            command_group.commands.append(select_command)
+            UndoRequestBus().add_command(command_group)
 
     def _split_actor_pairs_by_parent(
         self, actor_pairs: List[Tuple[BaseActor, Path]]
@@ -415,30 +545,34 @@ class SceneEditService(SceneEditRequest):
             parent_map[parent_path].append((actor, path))
         return parent_map
 
-    @override
-    async def duplicate_actor(
-        self, root_actor: BaseActor | Path, undo: bool = True, source: str = ""
+    def _duplicate_process_add_request(
+        self,
+        requests: List[AddActorRequest],
+        root_actor_path: Path,
+        existing_names: List[str],
+        child_positions: List[int],
     ):
-        root_actor, root_actor_path = self.local_scene.normalize_actor(root_actor)
-        assert root_actor_path.is_root() == False, "Cannot duplicate root actor"
+        root_actor, root_actor_path = self.local_scene.normalize_actor(root_actor_path)
 
         root_actor_parent_path = root_actor_path.parent()
         assert root_actor_parent_path is not None
 
         root_actor_parent, _ = self.local_scene.normalize_actor(root_actor_parent_path)
-        assert isinstance(
-            root_actor_parent, GroupActor
-        ), "Parent actor must be a GroupActor"
+        assert isinstance(root_actor_parent, GroupActor)
 
-        existing_names = [child.name for child in root_actor_parent.children]
         new_name = make_unique_name1(existing_names, root_actor.name)
 
         child_pos = root_actor_parent.children.index(root_actor)
         assert child_pos != -1
 
-        bus = SceneEditNotificationBus()
+        # 计算插入位置时需要考虑之前已经插入的同级别 actor 对原位置的影响
+        offset = 1
+        for pos in child_positions:
+            if pos < child_pos:
+                offset += 1
+        insert_pos = child_pos + offset
+        child_positions.append(child_pos)
 
-        requests: List[AddActorRequest] = []
         new_root_actor = clone_actor_basic(root_actor)
         new_root_actor.name = new_name
         new_root_actor_path = root_actor_parent_path / new_name
@@ -446,17 +580,10 @@ class SceneEditService(SceneEditRequest):
             AddActorRequest(
                 new_root_actor,
                 root_actor_parent_path,
-                child_pos + 1,
+                insert_pos,
                 root_actor,
             )
         )
-
-        command_group = CommandGroup()
-        duplicate_command = DuplicateActorCommand(root_actor_path, new_root_actor_path)
-
-        old_selection = deepcopy(self.local_scene.selection)
-        new_selection = [new_root_actor_path]
-        select_command = SelectionCommand(old_selection, new_selection)
 
         for actor in ActorIterator(root_actor, include_root=False):
             actor, actor_path = self.local_scene.normalize_actor(actor)
@@ -466,39 +593,67 @@ class SceneEditService(SceneEditRequest):
             assert new_parent_path is not None
             requests.append(AddActorRequest(new_actor, new_parent_path, -1, actor))
 
+        return new_root_actor_path
+
+    @override
+    async def duplicate_actors(
+        self, actors: Sequence[BaseActor | Path], undo: bool = True, source: str = ""
+    ):
+        async with self._edit_lock:
+            await self._duplicate_actors(actors, undo, source)
+
+    async def _duplicate_actors(
+        self, actors: Sequence[BaseActor | Path], undo: bool = True, source: str = ""
+    ):
+        _, actor_paths = self.normalize_and_clean_actors(actors)
+
+        for path in actor_paths:
+            if path.is_root():
+                logger.error("Cannot duplicate root actor", path)
+                return
+
+        # 按照父路径对 actor 进行分组
+        parent_dict: Dict[Path, List[Path]] = {}
+        for path in actor_paths:
+            parent_path = path.parent()
+            assert parent_path is not None
+            if parent_path not in parent_dict:
+                parent_dict[parent_path] = []
+            parent_dict[parent_path].append(path)
+
+        requests: List[AddActorRequest] = []
+        new_actor_paths: List[Path] = []
+        for parent_path, paths in parent_dict.items():
+            exsiting_names = []
+            parent_actor, _ = self.local_scene.normalize_actor(parent_path)
+            assert isinstance(parent_actor, GroupActor)
+            for child in parent_actor.children:
+                exsiting_names.append(child.name)
+
+            child_positions: List[int] = []
+            for path in paths:
+                new_actor_path = self._duplicate_process_add_request(
+                    requests, path, exsiting_names, child_positions
+                )
+                new_actor_paths.append(new_actor_path)
+                exsiting_names.append(new_actor_path.name())
+
+        bus = SceneEditNotificationBus()
+
+        command_group = CommandGroup()
+        duplicate_command = DuplicateActorsCommand(actor_paths, new_actor_paths)
+
+        old_selection = deepcopy(self.local_scene.selection)
+        new_selection = new_actor_paths
+        select_command = SelectionCommand(old_selection, new_selection)
+
         await bus.before_actor_added_batch()
         err = self.local_scene.add_actor_batch(requests)
         if err == "":
             suceess, errors = await self.remote_scene.add_actor_batch(requests, True)
         await bus.on_actor_added_batch("")
 
-        await self.set_selection(new_selection, undo=False, source=source)
-
-        # batch set properties of duplicated actors on backend.
-
-        keys: List[ActorPropertyKey] = []
-        props: List[ActorProperty] = []
-        values: List[Any] = []
-
-        for request in requests:
-            if isinstance(request.actor, AssetActor):
-                assert isinstance(request.actor_template, AssetActor)
-                dst_path = request.parent_path / request.actor.name
-                dst_property_groups = request.actor.property_groups
-                src_property_groups = request.actor_template.property_groups
-                collect_properties_duplicate_data(
-                    keys,
-                    props,
-                    values,
-                    src_property_groups,
-                    dst_property_groups,
-                    dst_path,
-                )
-
-        await self.remote_scene.set_properties(keys, values)
-        for key, prop, value in zip(keys, props, values):
-            prop.set_value(value)
-            await bus.on_property_changed(key, value, source)
+        await self._set_selection(new_selection, undo=False, source=source)
 
         if undo:
             command_group.commands.append(duplicate_command)

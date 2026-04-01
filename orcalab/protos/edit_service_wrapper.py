@@ -136,7 +136,9 @@ class EditServiceWrapper:
             return False, response.errors
         return True, response.errors
 
-    async def delete_actor_batch(self, actor_paths: List[Path]) -> Tuple[bool, List[str]]:
+    async def delete_actor_batch(
+        self, actor_paths: List[Path]
+    ) -> Tuple[bool, List[str]]:
         paths = []
         for p in actor_paths:
             if not isinstance(p, Path):
@@ -270,13 +272,17 @@ class EditServiceWrapper:
         response = await self.stub.RenameActor(request)
         self._check_response(response)
 
-    async def reparent_actor(self, actor_path: Path, new_parent_path: Path):
-        request = edit_service_pb2.ReParentActorRequest(
-            actor_path=actor_path.string(),
-            new_parent_path=new_parent_path.string(),
+    async def move_actor_batch(
+        self, actor_paths: List[Path], new_parent_paths: List[Path]
+    ):
+        actor_paths_str = [p.string() for p in actor_paths]
+        new_parent_paths_str = [p.string() for p in new_parent_paths]
+        request = edit_service_pb2.MoveActorBatchRequest(
+            actor_paths=actor_paths_str,
+            new_parent_paths=new_parent_paths_str,
         )
 
-        response = await self.stub.ReParentActor(request)
+        response = await self.stub.MoveActorBatch(request)
         self._check_response(response)
 
     async def get_window_id(self):

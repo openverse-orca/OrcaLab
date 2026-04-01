@@ -9,7 +9,11 @@ from orcalab.actor_property import (
     ActorPropertyGroup,
     ActorPropertyKey,
 )
-from orcalab.actor_util import collect_properties, make_unique_name
+from orcalab.actor_util import (
+    collect_properties,
+    collect_properties_duplicate_data,
+    make_unique_name,
+)
 from orcalab.application_util import get_local_scene
 from orcalab.config_service import ConfigService
 from orcalab.math import Transform
@@ -104,7 +108,7 @@ class RemoteScene(SceneEditNotification):
             asyncio.create_task(self._query_pending_operation_loop())
 
     async def _process_pending_operation(self, op: str | _TrasformChangeList):
-        print(op)
+        logger.debug(f"op: {op}")
 
         if isinstance(op, _TrasformChangeList):
             transforms = await self._service.get_pending_actor_transform_batch(
@@ -133,7 +137,7 @@ class RemoteScene(SceneEditNotification):
         if op.startswith(prefix):
             actor_path = Path(op[len(prefix) :])
             await SceneEditRequestBus().delete_actor(
-                actor_path, undo=True, source="remote"
+                actor_path, undo=True, source="remote_scene"
             )
             return
 
@@ -145,6 +149,15 @@ class RemoteScene(SceneEditNotification):
                 paths.append(Path(p))
 
             await SceneEditRequestBus().set_selection(paths, source="remote_scene")
+            return
+
+        prefix = "active_actor_change:"
+        if op.startswith(prefix):
+            actor_path_str = op[len(prefix) :]
+            actor_path = Path(actor_path_str) if actor_path_str else None
+            await SceneEditRequestBus().set_active_actor(
+                actor_path, source="remote_scene"
+            )
             return
 
         # TODO: refactor using e-bus
@@ -290,16 +303,6 @@ class RemoteScene(SceneEditNotification):
         await self.rename_actor(actor_path, new_name)
 
     @override
-    async def on_actor_reparented(
-        self,
-        actor_path: Path,
-        new_parent_path: Path,
-        row: int,
-        source: str,
-    ):
-        await self.reparent_actor(actor_path, new_parent_path)
-
-    @override
     async def on_actor_visible_changed(
         self, actor_path: Path, paths_to_update: list, visible: bool, source: str = ""
     ):
@@ -433,6 +436,76 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             return await self._service.aloha()
 
+    async def _fetch_and_set_properties(
+        self, requests: List[AddActorRequest], errors: List[str]
+    ):
+        actors: List[AssetActor] = []
+        actor_paths: List[Path] = []
+
+        for req, error in zip(requests, errors):
+            if error:
+                continue
+
+            if not isinstance(req.actor, AssetActor):
+                continue
+
+            actors.append(req.actor)
+            actor_paths.append(req.parent_path.append(req.actor.name))
+
+        if not actors:
+            return
+
+        property_groups_list = await self._service.get_property_groups_batch(
+            actor_paths
+        )
+
+        keys: List[ActorPropertyKey] = []
+        props: List[ActorProperty] = []
+        for actor, actor_path, property_groups in zip(
+            actors, actor_paths, property_groups_list
+        ):
+            actor.property_groups = property_groups
+            collect_properties(keys, props, property_groups, actor_path)
+
+        values = await self.get_properties(keys)
+        for prop, value in zip(props, values):
+            prop.set_value(value)
+            prop.set_original_value(value)
+
+    async def _apply_properties_from_template(
+        self, requests: List[AddActorRequest], errors: List[str]
+    ):
+        keys: List[ActorPropertyKey] = []
+        props: List[ActorProperty] = []
+        values: List[Any] = []
+
+        for request, error in zip(requests, errors):
+            if error:
+                continue
+
+            if not isinstance(request.actor, AssetActor):
+                continue
+
+            if request.actor_template is None:
+                continue
+
+            assert isinstance(request.actor_template, AssetActor)
+            dst_path = request.parent_path / request.actor.name
+            dst_property_groups = request.actor.property_groups
+            src_property_groups = request.actor_template.property_groups
+            collect_properties_duplicate_data(
+                keys,
+                props,
+                values,
+                src_property_groups,
+                dst_property_groups,
+                dst_path,
+            )
+
+        await self._service.set_properties(keys, values)
+        for key, prop, value in zip(keys, props, values):
+            prop.set_value(value)
+
     async def add_actor_batch(
         self, requests: List[AddActorRequest], stop_on_error: bool
     ) -> Tuple[bool, List[str]]:
@@ -447,35 +520,12 @@ class RemoteScene(SceneEditNotification):
             if not success and stop_on_error:
                 raise Exception("Failed to add actors")
 
-            # fetch properties for asset actors
+            await self._fetch_and_set_properties(requests, errors)
+            await self._apply_properties_from_template(requests, errors)
 
-            actors: List[AssetActor] = []
-            actor_paths: List[Path] = []
-            for req, error in zip(requests, errors):
-                if error:
-                    continue
-
-                if not isinstance(req.actor, AssetActor):
-                    continue
-                actors.append(req.actor)
-                actor_paths.append(req.parent_path.append(req.actor.name))
-
-                property_groups_list = await self._service.get_property_groups_batch(
-                    actor_paths
-                )
-
-                keys: List[ActorPropertyKey] = []
-                props: List[ActorProperty] = []
-                for actor, actor_path, property_groups in zip(
-                    actors, actor_paths, property_groups_list
-                ):
-                    actor.property_groups = property_groups
-                    collect_properties(keys, props, property_groups, actor_path)
-
-                values = await self.get_properties(keys)
-                for prop, value in zip(props, values):
-                    prop.set_value(value)
-                    prop.set_original_value(value)
+            # 因为Readonly可能更新，所以我们再次全量更新。
+            # TODO: 只针对Readonly属性进行更新，避免不必要的性能开销
+            await self._fetch_and_set_properties(requests, errors)
 
             return success, errors
 
@@ -547,10 +597,14 @@ class RemoteScene(SceneEditNotification):
             await self._service.restore_state()
 
     async def rename_actor(self, actor_path: Path, new_name: str):
-        await self._service.rename_actor(actor_path, new_name)
+        async with self._grpc_lock:
+            await self._service.rename_actor(actor_path, new_name)
 
-    async def reparent_actor(self, actor_path: Path, new_parent_path: Path):
-        await self._service.reparent_actor(actor_path, new_parent_path)
+    async def move_actor_batch(
+        self, actor_paths: List[Path], new_parent_paths: List[Path]
+    ):
+        async with self._grpc_lock:
+            await self._service.move_actor_batch(actor_paths, new_parent_paths)
 
     async def actor_visible_change(self, visible: bool, paths_to_update: list):
         async with self._grpc_lock:
@@ -683,4 +737,10 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             return await self._service.set_move_rotate_sensitivity(
                 move_sensitivity, rotate_sensitivity
+            )
+
+    async def set_active_actor(self, actor: Path | None):
+        async with self._grpc_lock:
+            await self._service.custom_command(
+                f"set_active_actor:{actor.string() if actor else ''}"
             )

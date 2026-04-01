@@ -3,6 +3,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.actor import BaseActor, GroupActor, AssetActor
 from orcalab.application_util import get_local_scene
+from orcalab.path import Path
 from orcalab.ui.property_edit.property_group_edit import PropertyGroupEdit
 from orcalab.ui.property_edit.transform_edit import TransformEdit
 
@@ -105,13 +106,18 @@ class ActorEditor(QtWidgets.QScrollArea, SceneEditNotification):
         # self._layout.addStretch(1)
 
     @override
-    async def on_selection_changed(self, old_selection, new_selection, source=""):
-        if new_selection == []:
+    async def on_active_actor_changed(
+        self,
+        old_active_actor: Path | None,
+        new_active_actor: Path | None,
+        source: str = "",
+    ) -> None:
+        if new_active_actor is None:
             if self._actor is not None:
                 self.set_actor(None)
         else:
             local_scene = get_local_scene()
-            actor = local_scene.find_actor_by_path(new_selection[0])
+            actor = local_scene.find_actor_by_path(new_active_actor)
             assert actor is not None
             if actor != self._actor:
                 self.set_actor(actor)

@@ -163,31 +163,32 @@ class CameraSelector(QtWidgets.QTreeView, CameraNotification, SceneEditNotificat
                     briefs.append(brief)
         return briefs
 
-    @override
-    async def on_actor_reparented(
-        self,
-        actor_path: Path,
-        new_parent_path: Path,
-        row: int,
-        source: str,
-    ) -> None:
-        briefs = self._collect_all_camera_briefs()
-        if not briefs:
-            return
-        old_prefix = actor_path.string()
-        new_actor_path = new_parent_path.append(actor_path.name())
-        new_prefix = new_actor_path.string()
-        for b in briefs:
-            ap = (b.actor_path or "").strip()
-            if ap == old_prefix:
-                b.actor_path = new_prefix
-            elif ap.startswith(old_prefix + "/"):
-                b.actor_path = new_prefix + ap[len(old_prefix) :]
-        try:
-            viewport_index = self._get_selected_camera_index()
-        except ValueError:
-            viewport_index = self._last_viewport_camera_index
-        self.set_cameras(briefs, viewport_index)
+    # TODO: 全量刷新
+    # @override
+    # async def on_actor_reparented(
+    #     self,
+    #     actor_path: Path,
+    #     new_parent_path: Path,
+    #     row: int,
+    #     source: str,
+    # ) -> None:
+    #     briefs = self._collect_all_camera_briefs()
+    #     if not briefs:
+    #         return
+    #     old_prefix = actor_path.string()
+    #     new_actor_path = new_parent_path.append(actor_path.name())
+    #     new_prefix = new_actor_path.string()
+    #     for b in briefs:
+    #         ap = (b.actor_path or "").strip()
+    #         if ap == old_prefix:
+    #             b.actor_path = new_prefix
+    #         elif ap.startswith(old_prefix + "/"):
+    #             b.actor_path = new_prefix + ap[len(old_prefix) :]
+    #     try:
+    #         viewport_index = self._get_selected_camera_index()
+    #     except ValueError:
+    #         viewport_index = self._last_viewport_camera_index
+    #     self.set_cameras(briefs, viewport_index)
 
     def _get_selected_camera_index(self) -> int:
         indexes = self.selectionModel().selectedIndexes()

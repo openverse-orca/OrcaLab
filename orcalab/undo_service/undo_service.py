@@ -9,16 +9,17 @@ from orcalab.path import Path
 
 from orcalab.scene_edit_types import AddActorRequest
 from orcalab.undo_service.command import (
+    ActiveActorCommand,
     BaseCommand,
     CommandGroup,
     AddActorCommand,
     DeleteActorCommand,
+    MoveActorCommand,
     PropertyChangeCommand,
     RenameActorCommand,
-    ReparentActorCommand,
     SelectionCommand,
     TransformCommand,
-    DuplicateActorCommand,
+    DuplicateActorsCommand,
 )
 
 from orcalab.undo_service.undo_service_bus import UndoRequest, UndoRequestBus
@@ -111,6 +112,10 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().set_selection(
                     command.old_selection, undo=False
                 )
+            case ActiveActorCommand():
+                await SceneEditRequestBus().set_active_actor(
+                    command.old_active_actor, undo=False
+                )
             case AddActorCommand():
                 paths: List[Path] = []
                 for request in command.requests:
@@ -125,12 +130,21 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().rename_actor(
                     actor, command.old_path.name(), undo=False
                 )
-            case ReparentActorCommand():
-                actor = self._get_actor(command.new_path)
-                old_parent_path = command.old_path.parent()
-                await SceneEditRequestBus().reparent_actor(
-                    actor, old_parent_path, command.old_row, undo=False
+            case MoveActorCommand():
+                actor_paths: List[Path] = []
+                new_parent_paths: List[Path] = []
+                for actor_path, new_parent_path in zip(
+                    command.actor_paths, command.new_parent_paths
+                ):
+                    actor_paths.append(new_parent_path / actor_path.name())
+                    new_parent_path = actor_path.parent()
+                    assert new_parent_path is not None
+                    new_parent_paths.append(new_parent_path)
+
+                await SceneEditRequestBus().move_actors(
+                    actor_paths, new_parent_paths, command.old_rows, undo=False
                 )
+
             case TransformCommand():
                 await SceneEditRequestBus().set_transform_batch(
                     command.actor_paths,
@@ -141,8 +155,8 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().set_property(
                     command.property_key, command.old_value, undo=False
                 )
-            case DuplicateActorCommand():
-                await SceneEditRequestBus().delete_actor(command.new_path, undo=False)
+            case DuplicateActorsCommand():
+                await SceneEditRequestBus().delete_actors(command.new_paths, undo=False)
             case _:
                 raise Exception("Unknown command type.")
 
@@ -154,6 +168,10 @@ class UndoService(UndoRequest):
             case SelectionCommand():
                 await SceneEditRequestBus().set_selection(
                     command.new_selection, undo=False
+                )
+            case ActiveActorCommand():
+                await SceneEditRequestBus().set_active_actor(
+                    command.new_active_actor, undo=False
                 )
             case AddActorCommand():
                 await SceneEditRequestBus().add_actors(command.requests, undo=False)
@@ -168,11 +186,12 @@ class UndoService(UndoRequest):
                 actor = self._get_actor(command.old_path)
                 name = command.new_path.name()
                 await SceneEditRequestBus().rename_actor(actor, name, undo=False)
-            case ReparentActorCommand():
-                actor = self._get_actor(command.old_path)
-                new_parent_path = command.new_path.parent()
-                await SceneEditRequestBus().reparent_actor(
-                    actor, new_parent_path, command.new_row, undo=False
+            case MoveActorCommand():
+                await SceneEditRequestBus().move_actors(
+                    command.actor_paths,
+                    command.new_parent_paths,
+                    command.new_rows,
+                    undo=False,
                 )
             case TransformCommand():
                 await SceneEditRequestBus().set_transform_batch(
@@ -184,9 +203,9 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().set_property(
                     command.property_key, command.new_value, undo=False
                 )
-            case DuplicateActorCommand():
-                await SceneEditRequestBus().duplicate_actor(
-                    command.source_path, undo=False
+            case DuplicateActorsCommand():
+                await SceneEditRequestBus().duplicate_actors(
+                    command.source_paths, undo=False
                 )
             case _:
                 raise Exception("Unknown command type.")
