@@ -9,6 +9,7 @@
 
 from PySide6 import QtWidgets, QtCore, QtGui
 from typing import Dict, List, Optional
+import threading
 import time
 
 from numpy import int64
@@ -149,10 +150,16 @@ class SyncProgressWindow(QtWidgets.QDialog):
     _complete_signal = QtCore.Signal(bool, str)  # success, message
     _start_signal = QtCore.Signal()
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, cancel_event: Optional[threading.Event] = None):
         super().__init__(parent)
+        self._cancel_event = cancel_event
+        self._sync_finished = False
         self.setWindowFlag(QtCore.Qt.WindowType.WindowMinMaxButtonsHint, True)
-        self.setWindowFlags(QtCore.Qt.WindowType.Window) # Ubuntu 下修复无法最大化的问题
+        self.setWindowFlags(
+            QtCore.Qt.WindowType.Window
+            | QtCore.Qt.WindowType.WindowCloseButtonHint
+            | QtCore.Qt.WindowType.WindowMinMaxButtonsHint
+        )  # Ubuntu 下修复无法最大化；显式保留关闭按钮
         self.asset_widgets: Dict[str, AssetItemWidget] = {}
         self.start_time = None
         self.countdown_seconds = 0
@@ -214,6 +221,11 @@ class SyncProgressWindow(QtWidgets.QDialog):
         bottom_layout.addWidget(self.status_label)
         
         bottom_layout.addStretch()
+        
+        # 同步进行中可停止（取消下载并退出或离线启动）
+        self.stop_button = QtWidgets.QPushButton("停止同步")
+        self.stop_button.clicked.connect(self._prompt_stop_sync)
+        bottom_layout.addWidget(self.stop_button)
         
         # 退出按钮（初始隐藏，仅在失败时显示）
         self.exit_button = QtWidgets.QPushButton("退出")
@@ -313,6 +325,12 @@ class SyncProgressWindow(QtWidgets.QDialog):
     
     def _complete_impl(self, success: bool, message: str):
         """内部实现：完成同步"""
+        self._sync_finished = True
+        self.stop_button.setVisible(False)
+        
+        if (not success and message == "用户已取消" and self.user_choice in ("exit", "offline")):
+            return
+        
         elapsed = time.time() - self.start_time if self.start_time else 0
         
         if success:
@@ -395,3 +413,33 @@ class SyncProgressWindow(QtWidgets.QDialog):
             del self.asset_widgets[asset_id]
             self.update_stats()
 
+    def _prompt_stop_sync(self):
+        if self._sync_finished:
+            return
+        msg = QtWidgets.QMessageBox(self)
+        msg.setWindowTitle("停止同步")
+        msg.setText("同步尚未完成，是否停止同步？")
+        msg.setInformativeText(
+            "退出程序：结束 OrcaLab\n离线继续：使用本地已有资产包启动"
+        )
+        msg.addButton("继续同步", QtWidgets.QMessageBox.ButtonRole.RejectRole)
+        btn_offline = msg.addButton("离线继续", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+        btn_exit = msg.addButton("退出程序", QtWidgets.QMessageBox.ButtonRole.DestructiveRole)
+        msg.exec()
+        if msg.clickedButton() == btn_exit:
+            if self._cancel_event:
+                self._cancel_event.set()
+            self.user_choice = "exit"
+            self.reject()
+        elif msg.clickedButton() == btn_offline:
+            if self._cancel_event:
+                self._cancel_event.set()
+            self.user_choice = "offline"
+            self.accept()
+
+    def closeEvent(self, event: QtGui.QCloseEvent):
+        if self._sync_finished:
+            super().closeEvent(event)
+            return
+        event.ignore()
+        self._prompt_stop_sync()

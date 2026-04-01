@@ -10,6 +10,7 @@ OrcaLab 资产同步服务
 
 import json
 import sys
+import threading
 from numpy import int64
 import requests
 import pathlib
@@ -83,7 +84,7 @@ class AssetSyncService:
     
     def __init__(self, username: str, access_token: str, base_url: str, cache_folder: pathlib.Path, 
                  config_paks: List[str], pak_urls: List[str] = None, timeout: int = 60, callbacks: Optional[AssetSyncCallbacks] = None,
-                 verbose: bool = False):
+                 verbose: bool = False, cancel_event: Optional[threading.Event] = None):
         """
         初始化资产同步服务
         
@@ -105,6 +106,7 @@ class AssetSyncService:
         self.timeout = timeout
         self.callbacks = callbacks or AssetSyncCallbacks()
         self.verbose = verbose
+        self._cancel_event = cancel_event
         
         # 提取配置paks的文件名（用于后续比对）
         self.config_pak_names = set()
@@ -126,6 +128,9 @@ class AssetSyncService:
                 len(self.config_pak_names),
                 len(self.pak_url_names),
             )
+    
+    def _cancelled(self) -> bool:
+        return self._cancel_event is not None and self._cancel_event.is_set()
     
     def log(self, message: str):
         """简化日志输出"""
@@ -329,6 +334,9 @@ class AssetSyncService:
 
             updated_count = 0
             for sub_metadata in remote_metadata:
+                if self._cancelled():
+                    self.log("元数据同步已取消")
+                    return
                 if sub_metadata['id'] in to_update_metadata:
                     for key, value in sub_metadata.items():
                         if sub_metadata['id'] not in metadata.keys():
@@ -367,7 +375,7 @@ class AssetSyncService:
             
             # 流式下载
             response = requests.get(download_url, stream=True, timeout=self.timeout * 2)
-            
+
             if response.status_code != 200:
                 self.log(f"❌ 下载失败: HTTP {response.status_code}")
                 self.callbacks.on_download_complete(package_id, False, f"HTTP {response.status_code}")
@@ -380,6 +388,12 @@ class AssetSyncService:
             
             with open(temp_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
+                    if self._cancelled():
+                        self.log(f"下载已取消: {file_name}")
+                        if temp_path.exists():
+                            temp_path.unlink()
+                        self.callbacks.on_download_complete(package_id, False, "已取消")
+                        return False
                     if chunk:
                         f.write(chunk)
                         downloaded_size += len(chunk)
@@ -392,6 +406,13 @@ class AssetSyncService:
                             speed = (downloaded_size / (1024 * 1024)) / elapsed if elapsed > 0 else 0
                             self.callbacks.on_download_progress(package_id, progress, speed)
                             last_update_time = current_time
+            
+            if self._cancelled():
+                self.log(f"下载已取消: {file_name}")
+                if temp_path.exists():
+                    temp_path.unlink()
+                self.callbacks.on_download_complete(package_id, False, "已取消")
+                return False
             
             # 最终进度更新
             if total_size > 0:
@@ -452,6 +473,11 @@ class AssetSyncService:
             self.callbacks.on_complete(False, "连接资产库失败，进入离线模式")
             return False
         
+        if self._cancelled():
+            self.log("同步已由用户取消")
+            self.callbacks.on_complete(False, "用户已取消")
+            return False
+        
         # 收集订阅列表中的文件名
         subscribed_file_names = set()
         if packages:
@@ -477,11 +503,20 @@ class AssetSyncService:
         # 2. 检查本地文件
         missing_packages, to_delete = self.check_local_packages(packages, incompatible_packages)
         
+        if self._cancelled():
+            self.log("同步已由用户取消")
+            self.callbacks.on_complete(False, "用户已取消")
+            return False
+        
         # 3. 下载缺失的资产包
         success_count = 0
         fail_count = 0
         
         for pkg in missing_packages:
+            if self._cancelled():
+                self.log("同步已由用户取消（跳过剩余下载与清理）")
+                self.callbacks.on_complete(False, "用户已取消")
+                return False
             package_id = pkg['id']
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
             
@@ -502,8 +537,18 @@ class AssetSyncService:
             else:
                 fail_count += 1
         
+        if self._cancelled():
+            self.log("同步已由用户取消（跳过元数据与本地清理）")
+            self.callbacks.on_complete(False, "用户已取消")
+            return False
+        
         # check metadata
         self.check_metadata(packages, to_delete, missing_packages)
+
+        if self._cancelled():
+            self.log("同步已由用户取消（跳过本地清理）")
+            self.callbacks.on_complete(False, "用户已取消")
+            return False
 
         # 4. 清理不需要的文件
         self.clean_unsubscribed_packages(to_delete)
@@ -516,7 +561,8 @@ class AssetSyncService:
         return True
 
 
-def sync_assets(config_service, callbacks: Optional[AssetSyncCallbacks] = None, verbose: bool = False) -> bool:
+def sync_assets(config_service, callbacks: Optional[AssetSyncCallbacks] = None, verbose: bool = False,
+                cancel_event: Optional[threading.Event] = None) -> bool:
     """
     资产同步入口函数
     
@@ -524,6 +570,7 @@ def sync_assets(config_service, callbacks: Optional[AssetSyncCallbacks] = None, 
         config_service: 配置服务实例
         callbacks: 回调接口
         verbose: 是否输出详细日志
+        cancel_event: 若设置 is_set()，同步逻辑将尽快中止
     
     Returns:
         同步是否成功
@@ -563,7 +610,8 @@ def sync_assets(config_service, callbacks: Optional[AssetSyncCallbacks] = None, 
         pak_urls=pak_urls,
         timeout=timeout,
         callbacks=callbacks,
-        verbose=verbose
+        verbose=verbose,
+        cancel_event=cancel_event,
     )
     
     return sync_service.sync_packages(init_paks=init_paks)

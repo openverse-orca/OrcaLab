@@ -197,19 +197,27 @@ def run_asset_sync_ui(config_service) -> bool:
         username = config_service.datalink_username()
         token = config_service.datalink_token()
     
+    # 与进度窗口共用：停止同步时 set()，让后台线程尽快退出，避免 exec 返回后 join 长时间阻塞
+    cancel_event = threading.Event()
+
     # 创建同步进度窗口
-    sync_window = SyncProgressWindow()
-    
+    sync_window = SyncProgressWindow(cancel_event=cancel_event)
+
     # 创建回调
     callbacks = SyncCallbacksImpl(sync_window)
-    
+
     # 在后台线程执行同步
     sync_result = [True]  # 使用列表来存储结果，因为需要在闭包中修改
     token_expired = [False]
     connection_failed = [False]
-    
+
     def run_sync():
-        result = sync_assets(config_service, callbacks=callbacks, verbose=False)
+        result = sync_assets(
+            config_service,
+            callbacks=callbacks,
+            verbose=False,
+            cancel_event=cancel_event,
+        )
         if result == 'TOKEN_EXPIRED':
             token_expired[0] = True
             sync_result[0] = False
