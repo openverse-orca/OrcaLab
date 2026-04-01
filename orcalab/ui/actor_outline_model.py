@@ -1,4 +1,5 @@
-from typing import List, override
+import asyncio
+from typing import List, Tuple, override
 
 from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt, QMimeData, Signal
 
@@ -8,18 +9,29 @@ from orcalab.path import Path
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
     SceneEditNotificationBus,
+    SceneEditRequestBus,
 )
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ReparentData:
-    def __init__(self):
+    def __init__(
+        self,
+        actors: List[BaseActor],
+        actor_paths: List[Path],
+        parent: BaseActor,
+        parent_path: Path,
+    ):
         # actor to be reparented
-        self.actor: BaseActor = None
-        self.actor_path: Path = None
+        self.actors = actors
+        self.actor_paths = actor_paths
 
         # new parent
-        self.parent: BaseActor = None
-        self.parent_path: Path = None
+        self.parent = parent
+        self.parent_path = parent_path
 
 
 class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
@@ -134,7 +146,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         actor = self.get_actor(index)
 
         if index.column() == 0:
-            if role == Qt.DisplayRole:
+            if role == Qt.ItemDataRole.DisplayRole:
                 return actor.name
 
         return None
@@ -165,22 +177,48 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         self.endResetModel()
 
     def supportedDropActions(self):
-        return Qt.CopyAction | Qt.MoveAction
+        return Qt.DropAction.CopyAction | Qt.DropAction.MoveAction
 
     def supportedDragActions(self):
-        return Qt.CopyAction
+        return Qt.DropAction.CopyAction
 
-    def dropMimeData(self, data, action, row, column, parent):
-        print("drop")
+    def dropMimeData(self, data: QMimeData, action, row, column, parent):
+        logger.debug("drop")
         if data.hasFormat(self.reparent_mime):
-            reparent_data = ReparentData()
-            if not self.prepare_reparent_data(
-                reparent_data, data, action, row, column, parent
-            ):
-                return False
-            self.request_reparent.emit(
-                reparent_data.actor_path, reparent_data.parent_path, row
+            ok, reparent_data = self.prepare_reparent_data(
+                data,
+                action,
+                row,
+                column,
+                parent,
             )
+
+            if not ok:
+                return False
+
+            assert reparent_data is not None
+
+            # This signal is used for debug only now.
+            self.request_reparent.emit("", reparent_data.parent_path, row)
+
+
+            new_parent_paths: List[Path] = [reparent_data.parent_path] * len(reparent_data.actor_paths)
+            insert_positions: List[int] = [row] * len(reparent_data.actor_paths)
+
+            async def _do_reparent():
+                await SceneEditRequestBus().move_actors(
+                    reparent_data.actor_paths,
+                    new_parent_paths,
+                    insert_positions,
+                    undo=True,
+                    source="actor_outline",
+                )
+
+            logger.debug(
+                f"reparent {reparent_data.actor_paths} to {reparent_data.parent_path} at {row}"
+            )
+            asyncio.create_task(_do_reparent())
+
             return True
 
         if data.hasFormat("application/x-orca-asset"):
@@ -201,28 +239,35 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
 
         return False
 
-    def canDropMimeData(self, data, action, row, column, parent):
+    def canDropMimeData(self, data: QMimeData, action, row, column, parent):
         if data.hasFormat("application/x-orca-asset"):
             parent_actor = self.get_actor(parent)
             if not isinstance(parent_actor, GroupActor):
                 return False
             return True
+
         if data.hasFormat(self.reparent_mime):
-            reparent_data = ReparentData()
-            return self.prepare_reparent_data(
-                reparent_data, data, action, row, column, parent
+            ok, reparent_data = self.prepare_reparent_data(
+                data,
+                action,
+                row,
+                column,
+                parent,
             )
+            return ok
+
         return False
 
+    @override
     def mimeData(self, indexes):
         if len(indexes) == 0:
-            return None
+            return QMimeData()
 
         actor = self.get_actor(indexes[0])
 
         actor_path = self.local_scene.get_actor_path(actor)
         if actor_path is None:
-            return None
+            return QMimeData()
 
         mime_data = QMimeData()
         mime_data.setData(self.reparent_mime, actor_path.string().encode("utf-8"))
@@ -233,46 +278,60 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
 
     def prepare_reparent_data(
         self,
-        reparent_data: ReparentData,
         mime_data: QMimeData,
         action,
         row,
         column,
         parent: QModelIndex,
-    ) -> bool:
+    ) -> Tuple[bool, ReparentData | None]:
         if not mime_data.hasFormat(self.reparent_mime):
-            return False
+            return False, None
 
-        if action not in [Qt.CopyAction, Qt.MoveAction]:
-            return False
+        if action not in [Qt.DropAction.CopyAction, Qt.DropAction.MoveAction]:
+            return False, None
 
         if column > 0:
-            return False
+            return False, None
 
         parent_actor = self.get_actor(parent)
 
         parent_actor_path = self.local_scene.get_actor_path(parent_actor)
         if parent_actor_path is None:
-            return False
+            return False, None
 
-        actor_path_bytes = mime_data.data(self.reparent_mime)
-        actor_path_str = actor_path_bytes.data().decode("utf-8")
+        data_str = mime_data.data(self.reparent_mime).data().decode("utf-8")
 
-        actor_path = Path(actor_path_str)
-        actor = self.local_scene.find_actor_by_path(actor_path)
+        path_strs = data_str.split(";")
+        actors: List[BaseActor] = []
+        actor_paths: List[Path] = []
+        new_parent_paths: List[Path] = []
+        insert_positions: List[int] = []
+        for path_str in path_strs:
+            if not path_str:
+                continue
+
+            actor_path = Path(path_str)
+            actor = self.local_scene.find_actor_by_path(actor_path)
+            if actor is None:
+                continue
+
+            actors.append(actor)
+            actor_paths.append(actor_path)
+            new_parent_paths.append(parent_actor_path)
+            insert_positions.append(row)
+
+        ok, err = self.local_scene.can_move_actors(
+            actors, new_parent_paths, insert_positions
+        )
+        if not ok:
+            return False, None
 
         # print(f"drop {parent_actor_path}, row: {row}, col:{column}")
 
-        ok, err = self.local_scene.can_reparent_actor(actor, parent_actor)
-        if not ok:
-            return False
+        if len(actors) == 0:
+            return False, None
 
-        reparent_data.actor = actor
-        reparent_data.actor_path = actor_path
-        reparent_data.parent = parent_actor
-        reparent_data.parent_path = parent_actor_path
-
-        return True
+        return True, ReparentData(actors, actor_paths, parent_actor, parent_actor_path)
 
     @override
     async def before_actor_added(
@@ -338,25 +397,11 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         self.dataChanged.emit(index, index)
 
     @override
-    async def before_actor_reparented(
-        self,
-        actor_path: Path,
-        new_parent_path: Path,
-        row: int,
-        source: str,
-    ):
-        print("before reparent")
+    async def before_actor_reparented(self):
         self.beginResetModel()
 
     @override
-    async def on_actor_reparented(
-        self,
-        actor_path: Path,
-        new_parent_path: Path,
-        row: int,
-        source: str,
-    ):
-        print("after reparent")
+    async def on_actor_reparented(self):
         self.endResetModel()
 
     @override

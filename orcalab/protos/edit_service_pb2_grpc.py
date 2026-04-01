@@ -114,10 +114,10 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.RenameActorRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.RenameActorResponse.FromString,
                 _registered_method=True)
-        self.ReParentActor = channel.unary_unary(
-                '/SceneEdit.GrpcService/ReParentActor',
-                request_serializer=edit__service__pb2.ReParentActorRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.ReParentActorResponse.FromString,
+        self.MoveActorBatch = channel.unary_unary(
+                '/SceneEdit.GrpcService/MoveActorBatch',
+                request_serializer=edit__service__pb2.MoveActorBatchRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.MoveActorBatchResponse.FromString,
                 _registered_method=True)
         self.GetWindowId = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetWindowId',
@@ -350,7 +350,7 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def ReParentActor(self, request, context):
+    def MoveActorBatch(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -595,10 +595,10 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     request_deserializer=edit__service__pb2.RenameActorRequest.FromString,
                     response_serializer=edit__service__pb2.RenameActorResponse.SerializeToString,
             ),
-            'ReParentActor': grpc.unary_unary_rpc_method_handler(
-                    servicer.ReParentActor,
-                    request_deserializer=edit__service__pb2.ReParentActorRequest.FromString,
-                    response_serializer=edit__service__pb2.ReParentActorResponse.SerializeToString,
+            'MoveActorBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.MoveActorBatch,
+                    request_deserializer=edit__service__pb2.MoveActorBatchRequest.FromString,
+                    response_serializer=edit__service__pb2.MoveActorBatchResponse.SerializeToString,
             ),
             'GetWindowId': grpc.unary_unary_rpc_method_handler(
                     servicer.GetWindowId,
@@ -1174,7 +1174,7 @@ class GrpcService(object):
             _registered_method=True)
 
     @staticmethod
-    def ReParentActor(request,
+    def MoveActorBatch(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1187,9 +1187,9 @@ class GrpcService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/SceneEdit.GrpcService/ReParentActor',
-            edit__service__pb2.ReParentActorRequest.SerializeToString,
-            edit__service__pb2.ReParentActorResponse.FromString,
+            '/SceneEdit.GrpcService/MoveActorBatch',
+            edit__service__pb2.MoveActorBatchRequest.SerializeToString,
+            edit__service__pb2.MoveActorBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,

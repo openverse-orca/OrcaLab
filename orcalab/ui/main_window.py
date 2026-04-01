@@ -1413,7 +1413,7 @@ class MainWindow(
         if not self.local_scene.selection:
             return False
 
-        ok, err = self.local_scene.can_duplicate_actor(self.local_scene.selection[0])
+        ok, err = self.local_scene.can_duplicate_actors(self.local_scene.selection)
         return ok
 
     async def duplicate_selection(self, source:str = ""):
@@ -1424,7 +1424,7 @@ class MainWindow(
             return
 
         bus = SceneEditRequestBus()
-        await bus.duplicate_actor(selection[0])
+        await bus.duplicate_actors(selection)
 
     def can_delete_selection(self) -> bool:
         if not self.local_scene.selection:
@@ -1436,12 +1436,12 @@ class MainWindow(
     async def delete_selection(self, source:str = ""):
         logger.debug("delete_selection. source: %s", source)
 
-        selection = self.local_scene.selection.copy()
+        selection = self.local_scene.selection
         if not selection:
             return
 
         bus = SceneEditRequestBus()
-        await bus.delete_actor(selection[0])
+        await bus.delete_actors(selection)
 
     @override
     def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:

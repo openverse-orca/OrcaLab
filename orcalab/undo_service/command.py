@@ -35,6 +35,15 @@ class SelectionCommand(BaseCommand):
         return f"SelectionCommand(old_selection={self.old_selection}, new_selection={self.new_selection})"
 
 
+class ActiveActorCommand(BaseCommand):
+    def __init__(self, old_active_actor: Path | None, new_active_actor: Path | None):
+        self.old_active_actor = old_active_actor
+        self.new_active_actor = new_active_actor
+
+    def __repr__(self):
+        return f"ActiveActorCommand(old_active_actor={self.old_active_actor}, new_active_actor={self.new_active_actor})"
+
+
 class AddActorCommand(BaseCommand):
     def __init__(self, requests: List[AddActorRequest]):
         self.requests = requests
@@ -62,15 +71,21 @@ class RenameActorCommand(BaseCommand):
         return f"RenameActorCommand(old_path={self.old_path}, new_path={self.new_path})"
 
 
-class ReparentActorCommand(BaseCommand):
-    def __init__(self):
-        self.old_path = Path()
-        self.old_row = -1
-        self.new_path = Path()
-        self.new_row = -1
+class MoveActorCommand(BaseCommand):
+    def __init__(
+        self,
+        actor_paths: List[Path],
+        old_rows: List[int],
+        new_parent_paths: List[Path],
+        new_rows: List[int],
+    ):
+        self.actor_paths = actor_paths
+        self.old_rows = old_rows
+        self.new_parent_paths = new_parent_paths
+        self.new_rows = new_rows
 
     def __repr__(self):
-        return f"ReparentActorCommand(old_path={self.old_path}, old_row={self.old_row}, new_path={self.new_path}, new_row={self.new_row})"
+        return f"MoveActorCommand(actor_paths={self.actor_paths}, old_rows={self.old_rows}, new_parent_paths={self.new_parent_paths}, new_rows={self.new_rows})"
 
 
 class TransformCommand(BaseCommand):
@@ -100,10 +115,10 @@ class PropertyChangeCommand(BaseCommand):
         return f"PropertyChangeCommand(property_key={self.property_key})"
 
 
-class DuplicateActorCommand(BaseCommand):
-    def __init__(self, source_path: Path = Path(), new_path: Path = Path()):
-        self.source_path = source_path
-        self.new_path = new_path
+class DuplicateActorsCommand(BaseCommand):
+    def __init__(self, source_paths: List[Path] = [], new_paths: List[Path] = []):
+        self.source_paths = source_paths
+        self.new_paths = new_paths
 
     def __repr__(self):
-        return f"DuplicateActorCommand(source_path={self.source_path}, new_path={self.new_path})"
+        return f"DuplicateActorsCommand(count={len(self.source_paths)})"

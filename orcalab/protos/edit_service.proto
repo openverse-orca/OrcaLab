@@ -211,11 +211,11 @@ message RenameActorResponse {
 }
 
 
-message ReParentActorRequest {
-    string actor_path = 1;
-    string new_parent_path = 2;
+message MoveActorBatchRequest {
+    repeated string actor_paths = 1;
+    repeated string new_parent_paths = 2;
 }
-message ReParentActorResponse {
+message MoveActorBatchResponse {
     StatusCode status_code = 1;
     string error_message = 2;
 }
@@ -553,7 +553,7 @@ service GrpcService {
     rpc RestoreState(RestoreStateRequest) returns (RestoreStateResponse);
 
     rpc RenameActor(RenameActorRequest) returns (RenameActorResponse);
-    rpc ReParentActor(ReParentActorRequest) returns (ReParentActorResponse);
+    rpc MoveActorBatch(MoveActorBatchRequest) returns (MoveActorBatchResponse);
 
     rpc GetWindowId(GetWindowIdRequest) returns (GetWindowIdResponse);
     rpc GetGeneratePos(GetGeneratePosRequest) returns (GetGeneratePosResponse);
