@@ -26,6 +26,7 @@ Repository = "https://github.com/openverse-orca/OrcaLab"
 
 [project.scripts]
 orcalab = "orcalab.launcher:main"
+orcalab-cli = "orcalab.mcp_service.mcp_client:mcp_main"
 orcalab-post-install = "orcalab.python_project_installer:cli"
 
 [project.optional-dependencies]

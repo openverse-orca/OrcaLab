@@ -1015,17 +1015,36 @@ class OrcaLabMCPServer:
             return json.dumps({"success": False, "message": f"获取引擎信息失败: {e}"}, ensure_ascii=False)
 
     # ==================== 布局类 API ====================
-    def save_layout(self, layout_name: str) -> str:
+    def save_layout(self, layout_path: str) -> str:
         '''
         保存布局
         Args:
-            layout_name: 布局文件名（可不带 .json）
+            layout_path: 布局名或布局文件路径（可不带 .json）。
+                - 仅名称时，保存到 ~/.orcalab/mcp_layout/
+                - 传路径时，保存到指定目录
         Returns:
             保存布局的结果的json字符串格式
         '''
         try:
-            file_name = self._normalize_layout_name(layout_name)
-            save_dir = self._mcp_layout_dir()
+            raw = (layout_path or "").strip()
+            if not raw:
+                return json.dumps({"success": False, "message": "layout_path 不能为空"}, ensure_ascii=False)
+
+            is_path = (
+                (os.sep in raw)
+                or (os.altsep is not None and os.altsep in raw)
+                or raw.startswith("~")
+                or os.path.isabs(raw)
+            )
+
+            if is_path:
+                target = os.path.abspath(os.path.expanduser(raw))
+                file_name = self._normalize_layout_name(os.path.basename(target))
+                save_dir = os.path.dirname(target) or self._mcp_layout_dir()
+            else:
+                file_name = self._normalize_layout_name(raw)
+                save_dir = self._mcp_layout_dir()
+
             os.makedirs(save_dir, exist_ok=True)
             save_path = os.path.join(save_dir, file_name)
 
@@ -1043,7 +1062,7 @@ class OrcaLabMCPServer:
             return json.dumps(
                 {
                     "success": True,
-                    "message": f"布局已保存: {file_name}",
+                    "message": f"布局已保存: {save_path}",
                     "layout_path": save_path,
                 },
                 ensure_ascii=False,
@@ -1051,17 +1070,22 @@ class OrcaLabMCPServer:
         except Exception as e:
             return json.dumps({"success": False, "message": f"保存布局失败: {e}"}, ensure_ascii=False)
 
-    async def load_layout(self, layout_name: str) -> str:
+    async def load_layout(self, layout_path: str) -> str:
         '''
         加载布局
         Args:
-            layout_name: 布局文件名（可不带 .json）
+            layout_path: 布局文件路径（支持绝对路径、相对路径、~）
         Returns:
             加载布局的结果的json字符串格式
         '''
         try:
-            file_name = self._normalize_layout_name(layout_name)
-            load_path = os.path.join(self._mcp_layout_dir(), file_name)
+            path_raw = (layout_path or "").strip()
+            if not path_raw:
+                return json.dumps(
+                    {"success": False, "message": "layout_path 不能为空"},
+                    ensure_ascii=False,
+                )
+            load_path = os.path.abspath(os.path.expanduser(path_raw))
             if not os.path.exists(load_path):
                 return json.dumps(
                     {"success": False, "message": f"布局文件不存在: {load_path}"},
@@ -1077,14 +1101,14 @@ class OrcaLabMCPServer:
             ok = await helper.load_scene_layout(None, load_path)
             if not ok:
                 return json.dumps(
-                    {"success": False, "message": f"加载布局失败: {file_name}"},
+                    {"success": False, "message": f"加载布局失败: {load_path}"},
                     ensure_ascii=False,
                 )
 
             return json.dumps(
                 {
                     "success": True,
-                    "message": f"布局已加载: {file_name}",
+                    "message": f"布局已加载: {load_path}",
                     "layout_path": load_path,
                 },
                 ensure_ascii=False,

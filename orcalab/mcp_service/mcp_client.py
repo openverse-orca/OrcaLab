@@ -164,7 +164,7 @@ async def _async_main(url: str, tool: str, json_arg: str | None) -> int:
 def mcp_main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     parser = argparse.ArgumentParser(
-        prog="orcalab mcp",
+        prog="orcalab-cli",
         description="调用已启动 OrcaLab 图形界面暴露的 MCP HTTP 服务（工具列表与界面内 MCP 一致）。",
     )
     parser.add_argument(
@@ -199,10 +199,10 @@ def mcp_main(argv: list[str] | None = None) -> int:
     try:
         return asyncio.run(_async_main(url, args.tool, args.json_arg))
     except json.JSONDecodeError as e:
-        print(f"orcalab mcp: JSON 解析失败: {e}", file=sys.stderr)
+        print(f"orcalab-cli: JSON 解析失败: {e}", file=sys.stderr)
         return 2
     except Exception as e:
-        print(f"orcalab mcp: {e}", file=sys.stderr)
+        print(f"orcalab-cli: {e}", file=sys.stderr)
         print(
             "请确认 OrcaLab 已启动且 MCP 已监听（检查配置 mcp.port 或 --url）。",
             file=sys.stderr,
