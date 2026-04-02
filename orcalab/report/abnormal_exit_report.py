@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import shutil
+import aiohttp
 from datetime import datetime, timezone
 from pathlib import Path
 from platform import python_version
@@ -107,14 +109,9 @@ def prepare_abnormal_exit_upload(
     game_path, game_searched = resolve_game_log_path(config_service)
 
     meta: Dict[str, Any] = {
-        "metadata": {
-            "type": "abnormal_exit_report",
-            "schema_version": "4.0",
-            "created_at_utc": datetime.now(timezone.utc).isoformat(),
-        },
         "orcalab_version": config_service.app_version(),
         "python_version": python_version(),
-        "account": {"username": _resolve_username(config_service)},
+        "username": _resolve_username(config_service),
         "diagnostic": collect_diagnostic_summary(),
         "orcalab_log": (
             {
@@ -137,29 +134,80 @@ def prepare_abnormal_exit_upload(
     return meta, orcalab_path, game_path
 
 
-def save_abnormal_exit_report_local(
-    config_service: ConfigService,
-) -> Optional[Path]:
-    """将 report.json 与选中的日志文件副本写入 ``<用户目录>/crash_reports/abnormal_exit_<时间戳>/``。"""
+async def send_abnormal_exit_report():
+    config_service = ConfigService()
     meta, orcalab_path, game_path = prepare_abnormal_exit_upload(config_service)
-    root = get_user_folder() / "crash_reports"
-    root.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-    out_dir = root / f"abnormal_exit_{ts}"
-    out_dir.mkdir(parents=False, exist_ok=True)
+
+    token_data = TokenStorage.load_token()
+    username = token_data.get("username", "") if token_data else ""
+    access_token = token_data.get("access_token", "") if token_data else ""
+
+    url = f"http://47.100.47.219/api/orcalab/abnormal_report/"
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'username': username,
+    }
+
+    form = aiohttp.FormData()
+    form.add_field(
+        "report_json",
+        json.dumps(meta, ensure_ascii=False, default=str),
+    )
+    # game_log 放在 orcalab_log 之前：若 orcalab 日志正文中含与 multipart boundary
+    # 相同的字节序列，部分解析器会截断后续 part，导致 game_log 被判缺失。
+    _octet = "application/octet-stream"
+    if game_path:
+        try:
+            form.add_field(
+                "game_log",
+                io.BytesIO(game_path.read_bytes()),
+                filename=game_path.name,
+                content_type=_octet,
+            )
+        except OSError as e:
+            logger.warning("无法读取 game 日志: %s", e)
+    if orcalab_path:
+        try:
+            form.add_field(
+                "orcalab_log",
+                io.BytesIO(orcalab_path.read_bytes()),
+                filename=orcalab_path.name,
+                content_type=_octet,
+            )
+        except OSError as e:
+            logger.warning("无法读取 orcalab 日志: %s", e)
 
     try:
-        report_file = out_dir / "report.json"
-        with report_file.open("w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2, default=str)
-
-        if orcalab_path and orcalab_path.is_file():
-            shutil.copy2(orcalab_path, out_dir / orcalab_path.name)
-        if game_path and game_path.is_file():
-            shutil.copy2(game_path, out_dir / game_path.name)
-
-        logger.info("异常退出报告已写入本地目录: %s", out_dir)
-        return out_dir
-    except OSError:
-        logger.exception("写入 crash_reports 失败: %s", out_dir)
-        return None
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url,
+                data=form,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=120),
+            ) as response:
+                logger.info(
+                    "Abnormal exit report sent, status=%s", response.status
+                )
+                if response.status >= 400:
+                    body = (await response.text())[:2000]
+                    logger.warning(
+                        "Abnormal exit report rejected: status=%s body=%s",
+                        response.status,
+                        body,
+                    )
+                else:
+                    try:
+                        await response.json()
+                        
+                    except Exception:
+                        pass
+    except aiohttp.ClientError as e:
+        logger.warning(
+            "Failed to send abnormal exit report (network): %s. OrcaLab will continue.",
+            e,
+        )
+    except OSError as e:
+        logger.warning(
+            "Failed to send abnormal exit report (OS error): %s. OrcaLab will continue.",
+            e,
+        )

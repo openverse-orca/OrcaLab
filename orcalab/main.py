@@ -19,11 +19,7 @@ from orcalab.logging_util import setup_logging, resolve_log_level
 from orcalab.default_layout import prepare_default_layout
 from orcalab.process_guard import ensure_single_instance
 from orcalab.ui.main_window_full_screen import MainWindowFullScreen
-from orcalab.report.abnormal_exit_report import (
-    save_abnormal_exit_report_local,
-    schedule_abnormal_exit_report,
-    take_pending_abnormal_exit_report,
-)
+from orcalab.report.abnormal_exit_report import schedule_abnormal_exit_report
 import os
 
 # import PySide6.QtAsyncio as QtAsyncio
@@ -89,15 +85,6 @@ async def main_async(q_app, fullscreen: bool):
         main_window = MainWindow()
     _main_window = main_window  # Store reference for signal handlers
     await main_window.init()
-
-    # 若上一次异常退出，将报告写入本地 crash_reports（暂不上传服务端）
-    if take_pending_abnormal_exit_report():
-        cfg = ConfigService()
-        try:
-            save_abnormal_exit_report_local(cfg)
-        except Exception:
-            logger.exception("写入 crash_reports 失败")
-
     await app_close_event.wait()
 
     # Clean up resources before exiting
@@ -176,6 +163,7 @@ def select_scene_and_layout(
             logger.info("用户选择了场景: %s", selected.get("name"))
         else:
             logger.info("用户未选择场景，退出程序")
+            ConfigService().mark_orcalab_closed_cleanly()
             exit(0)
 
     # 2. 选择布局
