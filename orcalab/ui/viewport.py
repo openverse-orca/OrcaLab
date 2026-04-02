@@ -1,7 +1,8 @@
 import asyncio
-from PySide6 import QtCore, QtWidgets, QtGui
-import pathlib
 import logging
+import os
+import pathlib
+from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.config_service import ConfigService
 from orcalab.ui.user_event_bus import UserEventRequestBus
@@ -9,6 +10,13 @@ from orcalab.ui.user_event import MouseAction, MouseButton, KeyAction
 from orcalab.ui.user_event_util import convert_key_code
 
 logger = logging.getLogger(__name__)
+
+
+def _env_flag(name: str) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return False
+    return value.lower() not in {"0", "false", "off"}
 
 
 class Viewport(QtWidgets.QWidget):
@@ -70,10 +78,32 @@ class Viewport(QtWidgets.QWidget):
 
         self.command_line.append(f"--project-path={project_path}")
 
+        enable_default_event_filter = not _env_flag("ORCA_4050_DISABLE_DEFAULT_EVENT_FILTER")
+        if any(
+            _env_flag(flag)
+            for flag in (
+                "ORCA_4050_DEBUG",
+                "ORCA_4050_DISABLE_DEFAULT_EVENT_FILTER",
+                "ORCA_4050_DISABLE_RUNTIME_PICK",
+                "ORCA_4050_DISABLE_PICK_READBACK",
+                "ORCA_4050_DISABLE_SURFACE_RESIZE_WORKAROUND",
+                "ORCA_4050_SINGLE_FRAME_PICK_LOG",
+            )
+        ):
+            logger.info(
+                "4050 special build flags: debug=%s default_event_filter=%s disable_runtime_pick=%s disable_pick_readback=%s disable_surface_resize_workaround=%s single_frame_pick_log=%s",
+                _env_flag("ORCA_4050_DEBUG"),
+                enable_default_event_filter,
+                _env_flag("ORCA_4050_DISABLE_RUNTIME_PICK"),
+                _env_flag("ORCA_4050_DISABLE_PICK_READBACK"),
+                _env_flag("ORCA_4050_DISABLE_SURFACE_RESIZE_WORKAROUND"),
+                _env_flag("ORCA_4050_SINGLE_FRAME_PICK_LOG"),
+            )
+
         if not self._viewport.init_viewport(
             self.command_line,
             connect_builder_hub,
-            enable_default_event_filter=True,
+            enable_default_event_filter=enable_default_event_filter,
             custom_event_filter=None,
         ):
             raise RuntimeError("Failed to initialize viewport")
