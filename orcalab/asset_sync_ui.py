@@ -10,6 +10,7 @@ import logging
 from PySide6 import QtWidgets
 from numpy import int64
 
+from orcalab.config_service import ConfigService
 from orcalab.asset_sync_service import sync_assets, AssetSyncCallbacks
 from orcalab.ui.sync_progress_window import SyncProgressWindow
 from orcalab.auth_service import AuthService
@@ -88,6 +89,7 @@ def ask_offline_or_exit(title: str, message: str) -> bool:
         return True
     else:
         logger.info("用户选择退出程序")
+        ConfigService().mark_orcalab_closed_cleanly()
         import sys
         sys.exit(0)
 
@@ -239,6 +241,7 @@ def run_asset_sync_ui(config_service) -> bool:
     # 检查用户选择
     if sync_window.user_choice == 'exit':
         logger.info("用户选择退出程序")
+        ConfigService().mark_orcalab_closed_cleanly()
         import sys
         sys.exit(0)
     elif sync_window.user_choice == 'offline':

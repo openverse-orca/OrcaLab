@@ -98,6 +98,7 @@ class AssetSyncService:
             timeout: 请求超时时间（秒）
             callbacks: 回调接口
             verbose: 是否输出详细日志
+            cancel_event: 同步取消事件
         """
         self.username = username
         self.access_token = access_token

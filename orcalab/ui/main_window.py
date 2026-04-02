@@ -69,7 +69,7 @@ from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 from orcalab.token_storage import TokenStorage
 from orcalab.mcp_service.mcp_service import OrcaLabMCPServer
 from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
-
+from orcalab.report.abnormal_exit_report import take_pending_abnormal_exit_report, send_abnormal_exit_report
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +184,13 @@ class MainWindow(
             await send_report_directly()
         else:
             logger.info("用户拒绝发送统计数据")
+
+        # 若上次异常退出，上传上次运行的 log 文件
+        if take_pending_abnormal_exit_report():
+            try:
+                await send_abnormal_exit_report()
+            except Exception:
+                logger.exception("crash_reports 上传失败")
 
         await asyncio.sleep(0.5)
 

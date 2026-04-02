@@ -263,8 +263,6 @@ def _get_ip_info():
 
 def collect_diagnostic_summary() -> Dict[str, object]:
     return {
-        "system": _get_system_info(),
-        "cpu": _get_cpu_info(),
         "memory": _get_memory_info(),
         "gpus": _get_gpu_info(),
     }
@@ -356,10 +354,6 @@ async def send_report_directly():
             e,
         )
 
-
-async def send_abnormal_exit_report(config_service: ConfigService) -> None:
-    # 待实现
-    pass
 
 if __name__ == "__main__":
 
