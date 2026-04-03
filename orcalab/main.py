@@ -10,7 +10,7 @@ import sys
 import signal
 import logging
 
-from orcalab.cli_options import create_argparser
+from orcalab.cli_options import create_argparser, resolve_and_validate_workspace
 from orcalab.config_service import ConfigService
 from orcalab.project_util import check_project_folder, copy_packages, sync_pak_urls
 from orcalab.asset_sync_ui import run_asset_sync_ui
@@ -245,7 +245,9 @@ def main():
 
     logger.info("进程 PID: %d", os.getpid())
 
-    workspace = pathlib.Path(args.workspace).resolve()
+    workspace = resolve_and_validate_workspace(
+        args.workspace, init_config=args.init_config
+    )
     logger.info("工作目录: %s", workspace)
 
     config_service = ConfigService()

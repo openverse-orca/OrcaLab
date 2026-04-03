@@ -5,7 +5,7 @@ import sys
 import os
 
 from orcalab.config_service import ConfigService
-from orcalab.cli_options import create_argparser
+from orcalab.cli_options import create_argparser, resolve_and_validate_workspace
 
 
 def _try_mcp_subcommand_argv(argv_tail: list[str]) -> list[str] | None:
@@ -77,7 +77,9 @@ def main():
         args, unknown = parser.parse_known_args()
         verbose = args.verbose
 
-        workspace = pathlib.Path(args.workspace).resolve()
+        workspace = resolve_and_validate_workspace(
+            args.workspace, init_config=args.init_config
+        )
 
         if args.init_config:
             create_config_file(workspace)
