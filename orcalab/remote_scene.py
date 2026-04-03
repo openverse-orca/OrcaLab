@@ -608,7 +608,7 @@ class RemoteScene(SceneEditNotification):
 
     async def actor_visible_change(self, visible: bool, paths_to_update: list):
         async with self._grpc_lock:
-            await self._service.set_visiblity(visible, paths_to_update)
+            await self._service.set_visibility(visible, paths_to_update)
 
     async def actor_locked_change(self, locked: bool, paths_to_update: list):
         async with self._grpc_lock:

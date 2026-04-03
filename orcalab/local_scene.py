@@ -1,3 +1,4 @@
+from collections import deque
 from typing import List, Sequence, Tuple, Dict
 
 from orcalab.actor import AssetActor, BaseActor, GroupActor
@@ -352,6 +353,18 @@ class LocalScene:
             new_parent.insert_child(new_row, actor)
             new_actor_path = new_parent_path / actor.name
             self._replace_path(actor_path, new_actor_path)
+
+    def refresh_subtree_parent_visibility_lock(self, root: BaseActor):
+        """按当前层级重算子树内各节点的 is_parent_visible / is_parent_locked（用于 reparent 后）。"""
+        q: deque[BaseActor] = deque([root])
+        while q:
+            node = q.popleft()
+            parent = node.parent
+            assert parent is not None
+            node.is_parent_visible = parent.is_parent_visible and parent.is_visible
+            node.is_parent_locked = parent.is_parent_locked or parent.is_locked
+            if isinstance(node, GroupActor):
+                q.extend(node.children)
 
     def _find_property_in_tree(
         self,

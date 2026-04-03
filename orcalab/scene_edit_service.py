@@ -3,7 +3,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Sequence, Tuple, override
 import logging
 
-from orcalab.actor import BaseActor, GroupActor
+from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.actor_property import (
     ActorPropertyKey,
 )
@@ -186,18 +186,6 @@ class SceneEditService(SceneEditRequest):
         #     self.local_scene.delete_actor(actor)
         #     await bus.on_actor_added_failed(actor, parent_actor_path, source)
         #     raise
-
-        # TODO: set visibility and lock state of actors after adding
-
-        # actor.is_parent_visible = (
-        #     parent_actor.is_parent_visible and parent_actor.is_visible
-        # )
-        # actor.is_parent_locked = parent_actor.is_parent_locked or parent_actor.is_locked
-
-        # if actor.is_parent_visible == False:
-        #     await self.set_actor_visible(actor, False, False, "reparent")
-        # if actor.is_parent_locked == True:
-        #     await self.set_actor_locked(actor, True, False, "reparent")
 
         if undo:
             command = AddActorCommand(requests)
@@ -521,6 +509,9 @@ class SceneEditService(SceneEditRequest):
         await bus.before_actor_reparented()
         self.local_scene.move_actors(old_actors, new_parent_paths, insert_positions)
         await self.remote_scene.move_actor_batch(_old_actor_paths, new_parent_paths)
+        for root in _old_actros:
+            self.local_scene.refresh_subtree_parent_visibility_lock(root)
+        await self._sync_subtrees_visibility_lock_remote(_old_actros)
         await bus.on_actor_reparented()
         # Set selection to new paths
         await self._set_selection(new_selection, undo=False, source=source)
@@ -595,6 +586,39 @@ class SceneEditService(SceneEditRequest):
 
         return new_root_actor_path
 
+    async def _sync_subtrees_visibility_lock_remote(
+        self, root_actors: Sequence[BaseActor]
+    ):
+        """按本地 effective 显隐/锁定批量同步远端（复制、reparent 等 subtree 变更后）。"""
+        vis_show: List[Path] = []
+        vis_hide: List[Path] = []
+        lock_on: List[Path] = []
+        lock_off: List[Path] = []
+
+        for root_actor in root_actors:
+            for actor in ActorIterator(root_actor, include_root=True):
+                a, p = self.local_scene.normalize_actor(actor)
+                eff_visible = a.is_visible and a.is_parent_visible
+                if isinstance(a, AssetActor):
+                    if eff_visible:
+                        vis_show.append(p)
+                    else:
+                        vis_hide.append(p)
+                eff_locked = a.is_locked or a.is_parent_locked
+                if eff_locked:
+                    lock_on.append(p)
+                else:
+                    lock_off.append(p)
+
+        if vis_hide:
+            await self.remote_scene.actor_visible_change(False, vis_hide)
+        if vis_show:
+            await self.remote_scene.actor_visible_change(True, vis_show)
+        if lock_on:
+            await self.remote_scene.actor_locked_change(True, lock_on)
+        if lock_off:
+            await self.remote_scene.actor_locked_change(False, lock_off)
+
     @override
     async def duplicate_actors(
         self, actors: Sequence[BaseActor | Path], undo: bool = True, source: str = ""
@@ -651,6 +675,10 @@ class SceneEditService(SceneEditRequest):
         err = self.local_scene.add_actor_batch(requests)
         if err == "":
             suceess, errors = await self.remote_scene.add_actor_batch(requests, True)
+            new_roots = [
+                self.local_scene.normalize_actor(p)[0] for p in new_actor_paths
+            ]
+            await self._sync_subtrees_visibility_lock_remote(new_roots)
         await bus.on_actor_added_batch("")
 
         await self._set_selection(new_selection, undo=False, source=source)
