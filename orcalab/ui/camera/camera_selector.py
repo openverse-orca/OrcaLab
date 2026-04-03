@@ -4,7 +4,7 @@ import logging
 from collections import defaultdict
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from typing import Any, List, override
+from typing import Any, List, Optional, override
 
 from orcalab.path import Path
 from orcalab.scene_edit_bus import SceneEditNotification, SceneEditNotificationBus
@@ -184,24 +184,25 @@ class CameraSelector(QtWidgets.QTreeView, CameraNotification, SceneEditNotificat
     #             b.actor_path = new_prefix
     #         elif ap.startswith(old_prefix + "/"):
     #             b.actor_path = new_prefix + ap[len(old_prefix) :]
-    #     try:
-    #         viewport_index = self._get_selected_camera_index()
-    #     except ValueError:
-    #         viewport_index = self._last_viewport_camera_index
+    #     sel = self._get_selected_camera_index()
+    #     viewport_index = (
+    #         sel if sel is not None else self._last_viewport_camera_index
+    #     )
     #     self.set_cameras(briefs, viewport_index)
 
-    def _get_selected_camera_index(self) -> int:
+    def _get_selected_camera_index(self) -> Optional[int]:
         indexes = self.selectionModel().selectedIndexes()
-        if not indexes: # TODO: 这里不要使用异常
-            raise ValueError("No camera is currently selected")
+        # 若选中分组行，无有效索引
+        if not indexes:
+            return None
         idx = indexes[0]
         item = self._model.itemFromIndex(idx)
         if not item:
-            raise ValueError("No camera is currently selected")
+            return None
         brief = item.data(QtCore.Qt.ItemDataRole.UserRole)
-        if isinstance(brief, CameraBrief):
-            return brief.index
-        raise ValueError("No camera is currently selected")
+        if not isinstance(brief, CameraBrief):
+            return None
+        return brief.index
 
     def _set_selected_camera(self, camera_index: int) -> None:
         self._block = True
@@ -231,18 +232,15 @@ class CameraSelector(QtWidgets.QTreeView, CameraNotification, SceneEditNotificat
     def _on_selection_changed(self, selected, deselected):
         if self._block:
             return
-        try:
-            camera_index = self._get_selected_camera_index()
-        except ValueError:
+        camera_index = self._get_selected_camera_index()
+        if camera_index is None:
             return
         asyncio.create_task(CameraRequestBus().set_viewport_camera(camera_index))
 
     @override
     def on_viewport_camera_changed(self, camera_index: int) -> None:
         self._last_viewport_camera_index = camera_index
-        try:
-            if self._get_selected_camera_index() == camera_index:
-                return
-        except ValueError:
-            pass
+        selected = self._get_selected_camera_index()
+        if selected is not None and selected == camera_index:
+            return
         self._set_selected_camera(camera_index)
