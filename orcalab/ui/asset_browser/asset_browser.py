@@ -450,7 +450,7 @@ class AssetBrowser(QtWidgets.QWidget):
             self.create_panorama_apng_button.setDisabled(False)
             return
         subscription_metadata = json.loads(subscription_metadata)
-        with open(os.path.join(get_cache_folder(), "metadata.json"), "w") as f:
+        with open(os.path.join(get_cache_folder(), "metadata.json"), "w", encoding="utf-8") as f:
             json.dump(subscription_metadata, f, ensure_ascii=False, indent=2)
 
         self._metadata_service.reload_metadata()
