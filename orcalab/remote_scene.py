@@ -513,10 +513,10 @@ class RemoteScene(SceneEditNotification):
                 await self._service.add_group_actor(actor, parent_path)
             elif isinstance(actor, AssetActor):
                 await self._service.custom_command("pause_render:true")
-                # await asyncio.sleep(0.1)
-                await self._service.add_asset_actor(actor, parent_path)
-                # await asyncio.sleep(0.1)
-                await self._service.custom_command("pause_render:false")
+                try:
+                    await self._service.add_asset_actor(actor, parent_path)
+                finally:
+                    await self._service.custom_command("pause_render:false")
             else:
                 raise Exception(f"Unsupported actor type: {type(actor)}")
 
@@ -572,10 +572,10 @@ class RemoteScene(SceneEditNotification):
         print(f"Deleting actor {actor_path}")
         async with self._grpc_lock:
             await self._service.custom_command("pause_render:true")
-            # await asyncio.sleep(0.1)
-            await self._service.delete_actor(actor_path)
-            # await asyncio.sleep(0.1)
-            await self._service.custom_command("pause_render:false")
+            try:
+                await self._service.delete_actor(actor_path)
+            finally:
+                await self._service.custom_command("pause_render:false")
 
     async def rename_actor(self, actor_path: Path, new_name: str):
         await self._service.rename_actor(actor_path, new_name)
