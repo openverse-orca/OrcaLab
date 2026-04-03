@@ -22,6 +22,19 @@ def get_project_dir():
     return project_dir
 
 
+def get_orca_studio_folder() -> pathlib.Path:
+    """获取 OrcaStudio 项目的根目录"""
+    if sys.platform == "win32":
+        local_appdata = os.getenv("LOCALAPPDATA")
+        if local_appdata:
+            base_path = pathlib.Path(local_appdata)
+        else:
+            raise EnvironmentError("LOCALAPPDATA environment variable is not set.")
+    else:
+        base_path = pathlib.Path.home()
+    return base_path / "Orca" / "OrcaStudio"
+
+
 def get_orca_studio_root() -> pathlib.Path:
     """获取 OrcaStudio 项目的根目录"""
     if sys.platform == "win32":

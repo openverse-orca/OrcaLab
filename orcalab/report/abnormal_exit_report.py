@@ -5,16 +5,16 @@ from __future__ import annotations
 import io
 import json
 import logging
-import shutil
 import aiohttp
-from datetime import datetime, timezone
+
+from project_util import get_orca_studio_folder
 from pathlib import Path
 from platform import python_version
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from orcalab.config_service import ConfigService
 from orcalab.logging_util import get_log_file_path
-from orcalab.project_util import get_user_folder, get_user_log_folder
+from orcalab.project_util import get_user_log_folder
 from orcalab.report.report import collect_diagnostic_summary
 from orcalab.token_storage import TokenStorage
 
@@ -44,7 +44,7 @@ def _resolve_username(config: ConfigService) -> str:
 def _newest_orcalab_log_path(
     log_dir: Path, exclude_resolved: Optional[str] = None
 ) -> Optional[Path]:
-    """按修改时间取最新的 orcalab_*.log；exclude 通常为当前会话正在写的文件。"""
+    """按修改时间取最新的 orcalab_*.log；exclude 为当前会话正在写的文件。"""
     if not log_dir.is_dir():
         return None
     try:
@@ -65,27 +65,16 @@ def _newest_orcalab_log_path(
     return files[0]
 
 
-def _game_log_candidate_paths(config_service: ConfigService) -> List[Path]:
-    ws = config_service.workspace()
-    proj = Path(config_service.orca_project_folder())
-    return [
-        get_user_log_folder() / "Game.log",
-        get_user_folder() / "Game.log",
-        proj / "Saved" / "Logs" / "Game.log",
-        ws / "Saved" / "Logs" / "Game.log",
-    ]
-
-
-def resolve_game_log_path(config_service: ConfigService) -> tuple[Optional[Path], List[str]]:
-    candidates = _game_log_candidate_paths(config_service)
-    tried = [str(p) for p in candidates]
-    for c in candidates:
-        try:
-            if c.is_file():
-                return c.resolve(), tried
-        except OSError:
-            continue
-    return None, tried
+def _read_project_id_from_project_json(project_dir: Path) -> Optional[str]:
+    path = project_dir / "project.json"
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError) as e:
+        logger.warning("无法读取 project.json: %s", e)
+        return None
+    return data.get("project_id")
 
 
 def prepare_abnormal_exit_upload(
@@ -106,7 +95,16 @@ def prepare_abnormal_exit_upload(
         orcalab_path = _newest_orcalab_log_path(log_dir, None)
 
     # 获取上一次运行的 Game 日志文件
-    game_path, game_searched = resolve_game_log_path(config_service)
+    if config_service.connect_builder_hub():
+        dev_project_path = config_service.dev_project_path()
+        project_id = _read_project_id_from_project_json(Path(dev_project_path))
+        game_path = get_orca_studio_folder() / project_id / "user" / "log" / "Game.log"
+    else:
+        game_path = get_user_log_folder() / "Game.log"
+    logger.info(
+        "game_path: %s",
+        game_path
+    )
 
     meta: Dict[str, Any] = {
         "orcalab_version": config_service.app_version(),
@@ -118,16 +116,12 @@ def prepare_abnormal_exit_upload(
                 "file_name": orcalab_path.name,
                 "path": str(orcalab_path.resolve()),
             }
-            if orcalab_path
-            else {"missing": True}
         ),
         "game_log": (
             {
                 "file_name": game_path.name,
                 "path": str(game_path.resolve()),
             }
-            if game_path
-            else {"missing": True, "searched_paths": game_searched}
         ),
     }
 
@@ -153,8 +147,9 @@ async def send_abnormal_exit_report():
         "report_json",
         json.dumps(meta, ensure_ascii=False, default=str),
     )
-    # game_log 放在 orcalab_log 之前：若 orcalab 日志正文中含与 multipart boundary
-    # 相同的字节序列，部分解析器会截断后续 part，导致 game_log 被判缺失。
+    # game_log 放在 orcalab_log 之前
+    # orcalab 日志正文中含与 multipart boundary 相同的字节序列，部分解析器会截断后续 part
+    # 导致 game_log 被判缺失
     _octet = "application/octet-stream"
     if game_path:
         try:
