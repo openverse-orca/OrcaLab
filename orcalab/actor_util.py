@@ -278,5 +278,9 @@ def clone_actor_basic[T](actor: T) -> T:
         raise Exception("Unsupported actor type")
 
     new_actor.transform = actor.transform
+    new_actor.is_visible = actor.is_visible
+    new_actor.is_locked = actor.is_locked
+    new_actor.is_parent_visible = actor.is_parent_visible
+    new_actor.is_parent_locked = actor.is_parent_locked
 
     return new_actor  # type: ignore

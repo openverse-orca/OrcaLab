@@ -501,11 +501,11 @@ message CustomCommandResponse {
     string error_message = 2;
 }
 
-message SetVisiblityRequest {
+message SetVisibilityRequest {
     bool visible = 1;
     repeated string actor_paths = 2;
 }
-message SetVisiblityResponse {
+message SetVisibilityResponse {
     StatusCode status_code = 1;
     string error_message = 2;
 }
@@ -585,7 +585,7 @@ service GrpcService {
     rpc SetHighlightJoint(SetHighlightJointRequest) returns (SetHighlightJointResponse);
     rpc CustomCommand(CustomCommandRequest) returns (CustomCommandResponse);
 
-    rpc SetVisiblity(SetVisiblityRequest) returns (SetVisiblityResponse);
+    rpc SetVisibility(SetVisibilityRequest) returns (SetVisibilityResponse);
     rpc SetLock(SetLockRequest) returns (SetLockResponse);
 
     rpc SetMoveRotateSensitivity(SetMoveRotateSensitivityRequest) returns (SetMoveRotateSensitivityResponse);

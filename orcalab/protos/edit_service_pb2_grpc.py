@@ -229,10 +229,10 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.CustomCommandRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.CustomCommandResponse.FromString,
                 _registered_method=True)
-        self.SetVisiblity = channel.unary_unary(
-                '/SceneEdit.GrpcService/SetVisiblity',
-                request_serializer=edit__service__pb2.SetVisiblityRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.SetVisiblityResponse.FromString,
+        self.SetVisibility = channel.unary_unary(
+                '/SceneEdit.GrpcService/SetVisibility',
+                request_serializer=edit__service__pb2.SetVisibilityRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.SetVisibilityResponse.FromString,
                 _registered_method=True)
         self.SetLock = channel.unary_unary(
                 '/SceneEdit.GrpcService/SetLock',
@@ -488,7 +488,7 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def SetVisiblity(self, request, context):
+    def SetVisibility(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -710,10 +710,10 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     request_deserializer=edit__service__pb2.CustomCommandRequest.FromString,
                     response_serializer=edit__service__pb2.CustomCommandResponse.SerializeToString,
             ),
-            'SetVisiblity': grpc.unary_unary_rpc_method_handler(
-                    servicer.SetVisiblity,
-                    request_deserializer=edit__service__pb2.SetVisiblityRequest.FromString,
-                    response_serializer=edit__service__pb2.SetVisiblityResponse.SerializeToString,
+            'SetVisibility': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetVisibility,
+                    request_deserializer=edit__service__pb2.SetVisibilityRequest.FromString,
+                    response_serializer=edit__service__pb2.SetVisibilityResponse.SerializeToString,
             ),
             'SetLock': grpc.unary_unary_rpc_method_handler(
                     servicer.SetLock,
@@ -1795,7 +1795,7 @@ class GrpcService(object):
             _registered_method=True)
 
     @staticmethod
-    def SetVisiblity(request,
+    def SetVisibility(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1808,9 +1808,9 @@ class GrpcService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/SceneEdit.GrpcService/SetVisiblity',
-            edit__service__pb2.SetVisiblityRequest.SerializeToString,
-            edit__service__pb2.SetVisiblityResponse.FromString,
+            '/SceneEdit.GrpcService/SetVisibility',
+            edit__service__pb2.SetVisibilityRequest.SerializeToString,
+            edit__service__pb2.SetVisibilityResponse.FromString,
             options,
             channel_credentials,
             insecure,

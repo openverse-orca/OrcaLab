@@ -619,17 +619,17 @@ class EditServiceWrapper:
         response = await self.stub.CustomCommand(request)
         self._check_response(response)
 
-    async def set_visiblity(self, visible: bool, actor_paths: List[Path]):
+    async def set_visibility(self, visible: bool, actor_paths: List[Path]):
         paths = []
         for p in actor_paths:
             if not isinstance(p, Path):
                 raise Exception(f"Invalid path: {p}")
             paths.append(p.string())
 
-        request = edit_service_pb2.SetVisiblityRequest(
+        request = edit_service_pb2.SetVisibilityRequest(
             visible=visible, actor_paths=paths
         )
-        response = await self.stub.SetVisiblity(request)
+        response = await self.stub.SetVisibility(request)
         self._check_response(response)
 
     async def set_lock(self, locked: bool, actor_paths: List[Path]):
