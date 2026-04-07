@@ -82,7 +82,11 @@ def find_other_orcalab_processes() -> List[psutil.Process]:
                 continue
 
             if is_ghost_process(proc):
-                logger.warning("跳过僵尸进程 PID=%s（无 exe/cmdline，无法干扰新实例）", proc.pid)
+                try:
+                    proc.kill()
+                    logger.info("已清理僵尸进程 PID=%s", proc.pid)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("清理僵尸进程 PID=%s 失败，忽略: %s", proc.pid, exc)
                 continue
 
             processes.append(proc)
