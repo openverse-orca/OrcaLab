@@ -150,9 +150,9 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         SceneEditNotificationBus.disconnect(self)
 
     def set_actor_model(self, model: ActorOutlineModel):
+        self.setModel(model)
         connect(model.modelAboutToBeReset, self._before_reset_model)
         connect(model.modelReset, self._after_reset_model)
-        self.setModel(model)
 
     def actor_model(self) -> ActorOutlineModel:
         model = self.model()
@@ -230,7 +230,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             action_rename.setEnabled(not is_root)
             menu.addAction(action_rename)
 
-        menu.exec_(self.mapToGlobal(position))
+        menu.exec(self.mapToGlobal(position))
 
     async def _add_group(self):
         parent_actor = self._current_actor
@@ -255,8 +255,13 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
     async def _delete_actor(self):
         if self._current_actor is None:
             return
-
-        await SceneEditRequestBus().delete_actor(
+        
+        selection = self._selected_actor_paths()
+        if self._current_actor_path in selection:
+            bus = SceneEditRequestBus()
+            await bus.delete_actors(selection)
+        else:
+             await SceneEditRequestBus().delete_actor(
             self._current_actor, undo=True, source="actor_outline"
         )
 
@@ -373,14 +378,12 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
         actor_paths = self._selected_actor_paths()
         if actor_paths:
-            if self._current_actor_path not in actor_paths:
-                return
-
+            if self._current_actor_path in actor_paths:
             # 如果选中的 actor 中有不在同一父级下的，则不允许拖拽。
-            parent = self._current_actor_path.parent()
-            for actor_path in actor_paths:
-                if actor_path.parent() != parent:
-                    return
+                parent = self._current_actor_path.parent()
+                for actor_path in actor_paths:
+                    if actor_path.parent() != parent:
+                        return
 
         distance = (
             event.position() - self._left_mouse_pressed_position
@@ -391,7 +394,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         # important: must set before startDrag
         self._left_mouse_pressed = False
 
-        if actor_paths:
+        if self._current_actor_path in actor_paths:
             data_string = ";".join(str(p) for p in actor_paths)
         else:
             data_string = self._current_actor_path.string()
