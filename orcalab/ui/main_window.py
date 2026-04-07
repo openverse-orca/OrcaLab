@@ -1314,18 +1314,6 @@ class MainWindow(
     @override
     async def set_manipulator_type(self, type: ManipulatorType) -> None:
         await self.remote_scene.change_manipulator_type(type)
-        # if type == ManipulatorType.Translate:
-        #     await self.remote_scene.change_manipulator_type(1)
-        # elif type == ManipulatorType.Rotate:
-        #     await self.remote_scene.change_manipulator_type(2)
-        # elif type == ManipulatorType.Scale:
-        #     await self.remote_scene.change_manipulator_type(3)
-        # elif type == ManipulatorType.CameraTranslate:
-        #     await self.remote_scene.change_manipulator_type(4)
-        # elif type == ManipulatorType.CameraRotate:
-        #     await self.remote_scene.change_manipulator_type(5)
-        # elif type == ManipulatorType.CameraScale:
-        #     await self.remote_scene.change_manipulator_type(6)
 
     @override
     async def set_camera_movement_type(self, type: CameraMovementType) -> None:
