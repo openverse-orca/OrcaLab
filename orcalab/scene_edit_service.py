@@ -507,7 +507,6 @@ class SceneEditService(SceneEditRequest):
         for root in _old_actros:
             self.local_scene.refresh_subtree_parent_visibility_lock(root)
         await self._sync_subtrees_visibility_lock_remote(_old_actros)
-        await bus.on_actor_reparented()
         # Set selection to new paths
         await self._set_selection(new_selection, undo=False, source=source)
         # Set active to new paths
@@ -515,6 +514,7 @@ class SceneEditService(SceneEditRequest):
             await self._set_active_actor(
                 active_command.new_active_actor, undo=False, source=source
             )
+        await bus.on_actor_reparented()
 
         if undo:
             command_group.commands.append(deselect_command)
