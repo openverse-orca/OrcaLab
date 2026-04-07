@@ -305,8 +305,8 @@ class LocalScene:
 
         _old_actors, _old_actor_paths = self.normalize_actors(old_actors)
         _new_parent_actors, _new_parent_paths = self.normalize_actors(new_parent_paths)
-        for actor_path, new_parent_path, new_parent in zip(
-            _old_actor_paths, _new_parent_paths, _new_parent_actors
+        for actor, actor_path, new_parent_path, new_parent in zip(
+            _old_actors, _old_actor_paths, _new_parent_paths, _new_parent_actors
         ):
             if not isinstance(new_parent, GroupActor):
                 return False, "New parent must be a GroupActor."
@@ -321,7 +321,7 @@ class LocalScene:
                 return False, "Cannot reparent to its descendant."
 
             for child in new_parent.children:
-                if child.name == actor_path.name:
+                if child.name == actor.name:
                     return False, "Name already exists under new parent."
 
         # TODO: 检查多个移动操作不会导致冲突
