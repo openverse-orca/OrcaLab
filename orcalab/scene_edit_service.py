@@ -500,11 +500,6 @@ class SceneEditService(SceneEditRequest):
         # Clear selection
         await self._set_selection([], undo=False, source=source)
 
-        if active_command is not None:
-            await self._set_active_actor(
-                active_command.new_active_actor, undo=False, source=source
-            )
-
         # Move
         await bus.before_actor_reparented()
         self.local_scene.move_actors(old_actors, new_parent_paths, insert_positions)
@@ -515,6 +510,11 @@ class SceneEditService(SceneEditRequest):
         await bus.on_actor_reparented()
         # Set selection to new paths
         await self._set_selection(new_selection, undo=False, source=source)
+        # Set active to new paths
+        if active_command is not None:
+            await self._set_active_actor(
+                active_command.new_active_actor, undo=False, source=source
+            )
 
         if undo:
             command_group.commands.append(deselect_command)
