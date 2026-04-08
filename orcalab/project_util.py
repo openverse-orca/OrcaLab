@@ -93,6 +93,12 @@ def get_orcalab_cache_folder():
     """
     return get_cache_folder() / "orcalab"
    
+def get_downloaded_packages_folder():
+    """
+    获取已下载 paks 文件夹
+    已下载但取消订阅的 paks 会存储在这个子目录下
+    """
+    return get_orca_studio_root() / "user" / "downloaded_packages"
 
 def get_md5_cache_file() -> pathlib.Path:
     """获取MD5缓存文件路径"""
@@ -204,6 +210,38 @@ def clear_cache_packages(exclude_names: Optional[List[str]] = None):
     if deleted_count > 0:
         logger.info("Cleared %s pak file(s) from cache folder", deleted_count)
 
+
+def move_packages_to_downloaded_folder(exclude_names: Optional[List[str]] = None):
+    """
+    将缓存目录下的 paks 移至已下载文件夹
+    便于重新订阅后直接复制添加
+    
+    Args:
+        exclude_names: 要保留的文件名列表（不删除这些文件）
+    """
+    cache_folder = get_cache_folder()
+    downloaded_folder = get_downloaded_packages_folder()
+
+    if not cache_folder.exists():
+        return
+    if not downloaded_folder.exists():
+        downloaded_folder.mkdir(parents=False, exist_ok=True)
+
+    exclude_set = set(exclude_names) if exclude_names else set()
+    move_count = 0
+
+    for pak_file in cache_folder.glob("*.pak"):
+        if pak_file.name not in exclude_set:
+            try:
+                shutil.copy2(pak_file, downloaded_folder / pak_file.name)
+                pak_file.unlink()
+                move_count += 1
+                logger.info("Moved %s to downloaded folder", pak_file.name)
+            except Exception as e:
+                logger.error("Error moving %s: %s", pak_file.name, e)
+    
+    if move_count > 0:
+        logger.info("Moved %s pak file(s) to downloaded folder", move_count)
 
 def copy_packages(packages: List[str]):
     """
