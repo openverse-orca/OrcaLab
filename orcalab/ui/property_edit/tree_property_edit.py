@@ -28,9 +28,10 @@ def _get_highlight_set(actor_path_str: str) -> Set[int]:
 
 
 def _node_entity_id(node: TreePropertyNode) -> int | None:
+    """从 node.name 提取 entityId。支持 'entityId:componentId' 和旧格式 'entityId'。"""
     try:
-        return int(node.name)
-    except (ValueError, TypeError):
+        return int(node.name.split(":")[0])
+    except (ValueError, TypeError, AttributeError):
         return None
 
 
@@ -337,12 +338,23 @@ class JointButton(QtWidgets.QPushButton):
             highlight_set.discard(eid)
         asyncio.ensure_future(_send_highlight(eid, self._highlighted))
 
+    def setText(self, text: str):
+        """重写以同步更新节点 display_name 并使缓存的编辑对话框失效。"""
+        super().setText(text)
+        self._node.display_name = text
+        self._dialog = None
+
     def _on_right_click(self, pos: QtCore.QPoint):
         if self._dialog is None:
             self._dialog = SingleJointDialog(
                 self.window(), self._node, self._context, self._label_width
             )
         self._dialog.exec()
+
+
+def _is_entity_node(node: TreePropertyNode) -> bool:
+    """判断是否为实体容器节点（name 以 'e:' 开头）"""
+    return isinstance(node.name, str) and node.name.startswith("e:")
 
 
 def _build_nodes(
@@ -352,21 +364,21 @@ def _build_nodes(
     label_width: int,
     indent: int,
     highlight_set: Set[int],
+    button_registry: "dict[str, JointButton] | None" = None,
 ):
-    """递归构建关节树节点到 layout 中，跳过未命名节点。"""
+    """递归构建关节树节点到 layout 中。"""
     for node in nodes:
-        if node.display_name.startswith("未命名"):
-            if node.children:
-                _build_nodes(node.children, layout, context, label_width, indent, highlight_set)
-            continue
-
-        if node.children:
+        if _is_entity_node(node):
             layout.addWidget(
-                _CollapsibleJointGroup(None, node, context, label_width, indent)
+                _EntityGroup(None, node, context, label_width, indent, button_registry)
             )
+        elif node.display_name.startswith("未命名"):
+            continue
         else:
             eid = _node_entity_id(node)
             btn = JointButton(None, node, context, label_width, eid in highlight_set if eid else False)
+            if button_registry is not None:
+                button_registry[node.name] = btn
             row = QtWidgets.QWidget()
             row_layout = QtWidgets.QHBoxLayout(row)
             row_layout.setContentsMargins(indent * INDENT_WIDTH, 0, 0, 0)
@@ -376,8 +388,8 @@ def _build_nodes(
             layout.addWidget(row)
 
 
-class _CollapsibleJointGroup(QtWidgets.QWidget):
-    """可折叠的关节组"""
+class _EntityGroup(QtWidgets.QWidget):
+    """可折叠的实体容器节点：头部显示实体名文本标签，子区域显示 Joint 按钮或嵌套实体组"""
 
     def __init__(
         self,
@@ -386,6 +398,7 @@ class _CollapsibleJointGroup(QtWidgets.QWidget):
         context: PropertyEditContext,
         label_width: int,
         indent: int,
+        button_registry: "dict[str, JointButton] | None" = None,
     ):
         super().__init__(parent)
         self._node = node
@@ -395,6 +408,7 @@ class _CollapsibleJointGroup(QtWidgets.QWidget):
         self._collapsed = False
         self._children_widget: QtWidgets.QWidget | None = None
         self._toggle_btn: QtWidgets.QPushButton | None = None
+        self._button_registry = button_registry
         self._init_ui()
 
     def _init_ui(self):
@@ -408,7 +422,7 @@ class _CollapsibleJointGroup(QtWidgets.QWidget):
         header_row = QtWidgets.QWidget()
         header_layout = QtWidgets.QHBoxLayout(header_row)
         header_layout.setContentsMargins(self._indent * INDENT_WIDTH, 0, 0, 0)
-        header_layout.setSpacing(2)
+        header_layout.setSpacing(4)
 
         self._toggle_btn = QtWidgets.QPushButton("▾")
         self._toggle_btn.setFixedSize(18, 22)
@@ -423,11 +437,10 @@ class _CollapsibleJointGroup(QtWidgets.QWidget):
         self._toggle_btn.clicked.connect(self._toggle)
         header_layout.addWidget(self._toggle_btn)
 
-        eid = _node_entity_id(self._node)
-        header_layout.addWidget(
-            JointButton(header_row, self._node, self._context, self._label_width,
-                        eid in highlight_set if eid else False)
-        )
+        # 实体名：普通标签，不可高亮/右键编辑
+        entity_label = QtWidgets.QLabel(self._node.display_name)
+        entity_label.setStyleSheet(f"color: {text_color}; font-weight: bold;")
+        header_layout.addWidget(entity_label)
         header_layout.addStretch()
         root_layout.addWidget(header_row)
 
@@ -436,7 +449,8 @@ class _CollapsibleJointGroup(QtWidgets.QWidget):
         children_layout.setContentsMargins(0, 0, 0, 0)
         children_layout.setSpacing(1)
         _build_nodes(self._node.children, children_layout, self._context,
-                     self._label_width, self._indent + 1, highlight_set)
+                     self._label_width, self._indent + 1, highlight_set,
+                     self._button_registry)
         root_layout.addWidget(self._children_widget)
 
     def _toggle(self):
@@ -458,6 +472,8 @@ class TreePropertyEdit(BasePropertyEdit):
         super().__init__(parent, context)
         self._label_width = label_width
         self._actor_path_str = str(context.actor_path)
+        # node.name -> JointButton，用于名字变更后刷新按钮文字
+        self._joint_buttons: dict[str, "JointButton"] = {}
         self._init_ui()
         asyncio.ensure_future(self._restore_highlights())
 
@@ -485,7 +501,8 @@ class TreePropertyEdit(BasePropertyEdit):
         tree_data = self.context.group.tree_data
         if tree_data:
             _build_nodes(tree_data, root_layout, self.context, self._label_width,
-                         indent=0, highlight_set=_get_highlight_set(self._actor_path_str))
+                         indent=0, highlight_set=_get_highlight_set(self._actor_path_str),
+                         button_registry=self._joint_buttons)
 
     def set_value(self, value: Any):
         pass
@@ -494,7 +511,19 @@ class TreePropertyEdit(BasePropertyEdit):
         pass
 
     def set_child_value(self, property_name: str, value: Any):
-        pass
+        """处理子属性变更通知，用于刷新 JointButton 显示的关节名字。
+        property_name 格式: 'entityId:componentId.Name'
+        """
+        dot_pos = property_name.rfind(".")
+        if dot_pos == -1:
+            return
+        node_key = property_name[:dot_pos]
+        prop = property_name[dot_pos + 1:]
+        if prop != "Name":
+            return
+        btn = self._joint_buttons.get(node_key)
+        if btn is not None and isinstance(value, str):
+            btn.setText(value)
 
     def set_child_read_only(self, property_name: str, read_only: bool):
         pass

@@ -37,6 +37,59 @@ from orcalab.protos.edit_service_wrapper import CameraDataPNGResult, EditService
 logger = logging.getLogger(__name__)
 
 
+def _sync_tree_display_names(nodes: list) -> None:
+    """递归同步关节叶节点的 display_name 与 Name 属性值。"""
+    for node in nodes:
+        _sync_tree_display_names(node.children)
+        # 关节叶节点：name 不以 "e:" 开头
+        if not node.name.startswith("e:"):
+            for prop in node.properties:
+                if prop.name() == "Name":
+                    val = prop.value()
+                    if isinstance(val, str) and val:
+                        node.display_name = val
+                    break
+
+
+def _sync_joint_display_names(property_groups: list) -> None:
+    """对 actor 的所有 property group 同步关节 display_name。"""
+    for group in property_groups:
+        _sync_tree_display_names(group.tree_data)
+
+
+def _restore_original_values_recursive(src_nodes: list, dst_nodes: list) -> None:
+    for src_node, dst_node in zip(src_nodes, dst_nodes):
+        for src_prop, dst_prop in zip(src_node.properties, dst_node.properties):
+            dst_prop.set_original_value(src_prop.original_value())
+        _restore_original_values_recursive(src_node.children, dst_node.children)
+
+
+def _apply_original_values_from_template(requests: list, errors: list) -> None:
+    """复制 Actor 后，把源 Actor 的 original_value 传播到目标 Actor 的新属性对象，
+    确保 is_modified() 正确反映相对于 asset 初始状态的修改（而非复制时已有的值）。
+    必须在第二次 _fetch_and_set_properties 之后调用，因为那次调用会替换 property_groups。"""
+    for request, error in zip(requests, errors):
+        if error:
+            continue
+        if not isinstance(request.actor, AssetActor):
+            continue
+        if not isinstance(request.actor_template, AssetActor):
+            continue
+
+        src_groups = request.actor_template.property_groups
+        dst_groups = request.actor.property_groups
+
+        for src_group, dst_group in zip(src_groups, dst_groups):
+            # 普通属性（跳过 TREE 容器属性）
+            for src_prop, dst_prop in zip(src_group.properties, dst_group.properties):
+                if src_prop.value_type().name == "TREE":
+                    continue
+                dst_prop.set_original_value(src_prop.original_value())
+
+            # 树形属性（关节等）
+            _restore_original_values_recursive(src_group.tree_data, dst_group.tree_data)
+
+
 class _TrasformChangeList:
     def __init__(self):
         self.actor_paths: List[Path] = []
@@ -472,6 +525,10 @@ class RemoteScene(SceneEditNotification):
             prop.set_value(value)
             prop.set_original_value(value)
 
+        # 同步关节叶节点的 display_name 与 Name 属性值，确保 UI 按钮文字正确
+        for actor in actors:
+            _sync_joint_display_names(actor.property_groups)
+
     async def _apply_properties_from_template(
         self, requests: List[AddActorRequest], errors: List[str]
     ):
@@ -526,6 +583,11 @@ class RemoteScene(SceneEditNotification):
             # 因为Readonly可能更新，所以我们再次全量更新。
             # TODO: 只针对Readonly属性进行更新，避免不必要的性能开销
             await self._fetch_and_set_properties(requests, errors)
+
+            # 第二次 fetch 会替换 property_groups 并将 original_value 设为当前引擎值。
+            # 对于复制的 actor，引擎已持有源 actor 的修改值，导致 is_modified() = False。
+            # 此处从源 actor 恢复正确的 original_value，使 is_modified() 能准确标记修改。
+            _apply_original_values_from_template(requests, errors)
 
             return success, errors
 
