@@ -192,22 +192,24 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         value: Any,
         source: str,
     ):
-        if source == "ui":
-            return
-
         if property_key.actor_path != self._actor_path:
             return
 
         if property_key.group_prefix != self._group.prefix:
             return
 
+        # 始终刷新树形属性中的子值（如关节名按钮），不受 source 影响
+        for edit in self._property_edits:
+            if isinstance(edit, TreePropertyEdit):
+                edit.set_child_value(property_key.property_name, value)
+
+        if source == "ui":
+            return
+
         for edit in self._property_edits:
             if edit.context.prop.name() == property_key.property_name:
                 edit.set_value(value)
                 return
-            # 处理树形属性的子属性
-            if isinstance(edit, TreePropertyEdit):
-                edit.set_child_value(property_key.property_name, value)
 
     @override
     async def on_property_read_only_changed(

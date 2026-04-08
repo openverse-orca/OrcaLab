@@ -40,14 +40,27 @@ class SceneLayoutHelper:
         self.version = "1.0"
 
     @staticmethod
+    def _node_stable_key(node) -> str:
+        """返回节点的稳定标识符：使用 Name 属性的 original_value（跨 session 不变的初始名）。
+        如果不存在则退回到 display_name。"""
+        name_prop = next((p for p in node.properties if p.name() == "Name"), None)
+        if name_prop is not None:
+            orig = name_prop.original_value()
+            if isinstance(orig, str) and orig:
+                return orig
+        return node.display_name
+
+    @staticmethod
     def _collect_modified_tree_props(nodes, group_prefix: str) -> list:
         result = []
         for node in nodes:
+            # 实体容器节点（e: 前缀）无属性，仅递归子节点
+            stable_key = SceneLayoutHelper._node_stable_key(node)
             for prop in node.properties:
                 if prop.is_modified():
                     result.append({
                         "group_prefix": group_prefix,
-                        "name": f"{node.display_name}.{prop.name()}",
+                        "name": f"{stable_key}.{prop.name()}",
                         "type": prop.value_type().name,
                         "value": prop.value(),
                     })
@@ -80,6 +93,19 @@ class SceneLayoutHelper:
             if found is not None:
                 return found
         return None
+
+    @staticmethod
+    def _sync_tree_display_names(nodes: list) -> None:
+        """同步关节叶节点的 display_name 与 Name 属性值（加载 layout 后调用）。"""
+        for node in nodes:
+            SceneLayoutHelper._sync_tree_display_names(node.children)
+            if not node.name.startswith("e:"):
+                for prop in node.properties:
+                    if prop.name() == "Name":
+                        val = prop.value()
+                        if isinstance(val, str) and val:
+                            node.display_name = val
+                        break
 
     async def clear_layout(self):
         for actor in self.local_scene.root_actor.children:
@@ -187,11 +213,13 @@ class SceneLayoutHelper:
                     await SceneEditRequestBus().set_actor_visible(actor_path, False, undo=False, source="layout")
                 if actor.is_locked or actor.is_parent_locked:
                     await SceneEditRequestBus().set_actor_locked(actor_path, True, undo=False, source="layout")
-                
+
                 if isinstance(actor, AssetActor):
                     await self._apply_modified_properties(actor, actor_data)
+                    # 属性应用完毕后同步关节显示名，确保 UI 按钮文字正确
+                    for group in actor.property_groups:
+                        SceneLayoutHelper._sync_tree_display_names(group.tree_data)
             except Exception as e:
-
                 if isinstance(actor, AssetActor):
                     error_msg = (
                         f"创建 Actor {name} 失败: {e}, asset_path: {actor.asset_path}"
