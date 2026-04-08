@@ -14,6 +14,7 @@ import threading
 from numpy import int64
 import requests
 import pathlib
+import shutil
 from typing import List, Dict, Optional, Callable, Tuple
 import time
 import logging
@@ -82,7 +83,7 @@ class AssetSyncCallbacks:
 class AssetSyncService:
     """资产同步服务"""
     
-    def __init__(self, username: str, access_token: str, base_url: str, cache_folder: pathlib.Path, 
+    def __init__(self, username: str, access_token: str, base_url: str, cache_folder: pathlib.Path, downloaded_packages_folder: pathlib.Path,
                  config_paks: List[str], pak_urls: List[str] = None, timeout: int = 60, callbacks: Optional[AssetSyncCallbacks] = None,
                  verbose: bool = False, cancel_event: Optional[threading.Event] = None):
         """
@@ -103,6 +104,7 @@ class AssetSyncService:
         self.access_token = access_token
         self.base_url = base_url.rstrip('/')
         self.cache_folder = cache_folder
+        self.downloaded_packages_folder = downloaded_packages_folder
         self.timeout = timeout
         self.callbacks = callbacks or AssetSyncCallbacks()
         self.verbose = verbose
@@ -206,6 +208,7 @@ class AssetSyncService:
         for pkg in packages:
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
             local_path = self.cache_folder / file_name
+            downloaded_path = self.downloaded_packages_folder / file_name
             pkg_id = pkg['id']
             pkg_name = pkg['name']
             size = pkg['size']
@@ -214,22 +217,32 @@ class AssetSyncService:
                 local_size = local_path.stat().st_size
                 if local_size == size:
                     self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'ok')
-                    self.log(f"✓ {file_name} 已最新")
+                    logger.info("%s 已最新", file_name)
                 else:
                     self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
                     missing_packages.append(pkg)
-                    self.log(f"⬇ {file_name} 大小不匹配，需重新下载")
+                    logger.info("%s 大小不匹配，需重新下载", file_name)
+            elif downloaded_path.exists():
+                local_size = downloaded_path.stat().st_size
+                if local_size == size:
+                    shutil.copy2(downloaded_path, local_path)
+                    self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'ok')
+                    logger.info("%s 已最新", file_name)
+                else:
+                    self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
+                    missing_packages.append(pkg)
+                    logger.info("%s 大小不匹配，需重新下载", file_name)
             else:
                 self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
                 missing_packages.append(pkg)
-                self.log(f"⬇ {file_name} 需要下载")
+                logger.info("%s 需要下载", file_name)
 
         for pkg in incompatible_packages:
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
             pkg_id = pkg['id']
             pkg_name = pkg['name']
             self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, 0, 'incompatible')
-            self.log(f"⬇ {file_name} 没有与当前版本兼容的资产")
+            logger.info("%s 没有与当前版本兼容的资产", file_name)
         
         # 检查需要删除的文件
         subscribed_file_names = set()
@@ -439,6 +452,7 @@ class AssetSyncService:
         for file_name in to_delete:
             try:
                 pak_file = self.cache_folder / file_name
+                shutil.copy2(pak_file, self.downloaded_packages_folder / file_name)
                 pak_file.unlink()
                 self.log(f"✓ 已删除 {file_name}")
             except Exception as e:
@@ -490,14 +504,14 @@ class AssetSyncService:
             # 合并手工pak、订阅pak和pak_urls的文件名（要保留的文件）
             keep_file_names = subscribed_file_names | self.config_pak_names | self.pak_url_names
             
+            from orcalab.project_util import move_packages_to_downloaded_folder
             if keep_file_names:
-                from orcalab.project_util import clear_cache_packages
-                clear_cache_packages(exclude_names=list(keep_file_names))
+                # 把要删除的包复制到 downloaded_packages_folder 中
+                move_packages_to_downloaded_folder(exclude_names=list(keep_file_names))
                 self.log(f"已清除不在保留列表中的pak文件（保留 {len(keep_file_names)} 个包：{len(self.config_pak_names)} 个手工 + {len(subscribed_file_names)} 个订阅 + {len(self.pak_url_names)} 个pak_urls）")
             else:
-                # 如果没有任何要保留的包，清除所有
-                from orcalab.project_util import clear_cache_packages
-                clear_cache_packages()
+                # 如果没有任何要保留的包，迁移所有
+                move_packages_to_downloaded_folder()
                 self.log("已清除所有pak文件（没有任何需要保留的包）")
         
         # 2. 检查本地文件
@@ -575,7 +589,7 @@ def sync_assets(config_service, callbacks: Optional[AssetSyncCallbacks] = None, 
     Returns:
         同步是否成功
     """
-    from orcalab.project_util import get_cache_folder
+    from orcalab.project_util import get_cache_folder, get_downloaded_packages_folder
     
     # 检查是否启用资产同步
     if not config_service.datalink_enable_sync():
@@ -595,6 +609,7 @@ def sync_assets(config_service, callbacks: Optional[AssetSyncCallbacks] = None, 
     # 获取配置
     base_url = config_service.datalink_base_url()
     cache_folder = get_cache_folder()
+    downloaded_packages_folder = get_downloaded_packages_folder()
     config_paks = config_service.paks()
     pak_urls = config_service.pak_urls()
     timeout = config_service.datalink_timeout()
@@ -606,6 +621,7 @@ def sync_assets(config_service, callbacks: Optional[AssetSyncCallbacks] = None, 
         access_token=token,
         base_url=base_url,
         cache_folder=cache_folder,
+        downloaded_packages_folder=downloaded_packages_folder,
         config_paks=config_paks,
         pak_urls=pak_urls,
         timeout=timeout,
