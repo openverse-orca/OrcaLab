@@ -212,6 +212,20 @@ class RemoteScene(SceneEditNotification):
                 actor_path, source="remote_scene"
             )
             return
+        
+        prefix = "selection_and_active_change:"
+        if op.startswith(prefix):
+            actor_path_str = op[len(prefix) :]
+            actor_path = Path(actor_path_str) if actor_path_str else None
+
+            actor_paths = await self.get_pending_selection_change()
+
+            paths = []
+            for p in actor_paths:
+                paths.append(Path(p))
+            
+            await SceneEditRequestBus().set_selection_and_active_actor(paths, actor_path, source="remote_scene")
+            return
 
         # TODO: refactor using e-bus
         if op == "add_item":

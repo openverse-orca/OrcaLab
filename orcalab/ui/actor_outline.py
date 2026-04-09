@@ -341,10 +341,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                 self.set_actor_selection(_actors)
 
                 bus = SceneEditRequestBus()
-                await bus.set_selection(actor_paths, undo=True, source="actor_outline")
-                await bus.set_active_actor(
-                    active_path, undo=True, source="actor_outline"
-                )
+                await bus.set_selection_and_active_actor(actor_paths, active_path, source="actor_outline")
 
             def do_set_selection(actor_paths: list[Path], active_path: Path | None):
                 asyncio.create_task(_do_set_selection(actor_paths, active_path))

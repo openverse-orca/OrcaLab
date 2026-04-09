@@ -190,6 +190,15 @@ class SceneEditRequest:
     ):
         pass
 
+    async def set_selection_and_active_actor(
+        self,
+        selection: List[Path],
+        actor: BaseActor | Path | None,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+        pass
+
     async def set_highlight_joint(self, entity_id: int, highlight: bool) -> None:
         """Highlight or unhighlight a single joint in the viewport.
         Args:
