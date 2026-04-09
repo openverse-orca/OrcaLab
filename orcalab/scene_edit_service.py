@@ -137,6 +137,61 @@ class SceneEditService(SceneEditRequest):
         bus = SceneEditNotificationBus()
         await bus.on_active_actor_changed(old_actor_path, actor_path, source)
 
+        if undo:
+            cmd = ActiveActorCommand(old_actor_path, actor_path)
+            UndoRequestBus().add_command(cmd)
+
+    @override
+    async def set_selection_and_active_actor(
+        self,
+        selection: List[Path],
+        actor: BaseActor | Path | None,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+        if self._edit_lock.locked() and source == "remote_scene":
+            return
+
+        async with self._edit_lock:
+            await self._set_selection_and_active_actor(selection, actor, undo, source)
+
+    async def _set_selection_and_active_actor(
+        self,
+        selection: List[Path],
+        actor: BaseActor | Path | None,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+        actor_path = None
+        if actor is not None:
+            _, actor_path = self.local_scene.normalize_actor(actor)
+        actor_paths = sorted(selection)
+
+        if actor_paths == self.local_scene.selection and actor_path == self.local_scene.active_actor:
+            return
+
+        old_selection = deepcopy(self.local_scene.selection)
+        old_actor_path = self.local_scene.active_actor
+
+        self.local_scene.selection = actor_paths
+        self.local_scene.active_actor = actor_path
+
+        if source != "remote_scene":
+            await self.remote_scene.set_selection(actor_paths)
+            await self.remote_scene.set_active_actor(actor_path)
+
+        bus = SceneEditNotificationBus()
+        await bus.on_selection_changed(old_selection, actor_paths, source)
+        await bus.on_active_actor_changed(old_actor_path, actor_path, source)
+
+        if undo:
+            command_group = CommandGroup()
+            active_cmd = ActiveActorCommand(old_actor_path, actor_path)
+            select_cmd = SelectionCommand(old_selection, actor_paths)
+            command_group.commands.append(select_cmd)
+            command_group.commands.append(active_cmd)
+            UndoRequestBus().add_command(command_group)
+
     @override
     async def add_actor(
         self,
