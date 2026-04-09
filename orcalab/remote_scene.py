@@ -583,10 +583,12 @@ class RemoteScene(SceneEditNotification):
         print(f"add_actor_batch: {len(requests)} actors")
         async with self._grpc_lock:
             await self._service.custom_command("pause_render:true")
-            success, errors = await self._service.add_actor_batch(
-                requests, stop_on_error
-            )
-            await self._service.custom_command("pause_render:false")
+            try:
+                success, errors = await self._service.add_actor_batch(
+                    requests, stop_on_error
+                )
+            finally:
+                await self._service.custom_command("pause_render:false")
 
             if not success and stop_on_error:
                 raise Exception("Failed to add actors")
@@ -609,8 +611,10 @@ class RemoteScene(SceneEditNotification):
         print(f"delete_actor_batch: {len(actor_paths)} actors")
         async with self._grpc_lock:
             await self._service.custom_command("pause_render:true")
-            success, errors = await self._service.delete_actor_batch(actor_paths)
-            await self._service.custom_command("pause_render:false")
+            try:
+                success, errors = await self._service.delete_actor_batch(actor_paths)
+            finally:
+                await self._service.custom_command("pause_render:false")
 
             if not success:
                 raise Exception("Failed to delete actors")
