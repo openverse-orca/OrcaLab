@@ -69,7 +69,7 @@ class AssetSyncCallbacks:
     def on_metadata_sync(self, status: str, count: int = 0, total: int = 0):
         """
         元数据同步状态
-        status: 'start' (开始), 'progress' (进度), 'complete' (完成)
+        status: 'start' (开始), 'fetching' (拉取列表), 'scanning' (扫描远端元数据), 'complete' (完成)
         count: 当前已处理数量
         total: 总数量
         """
@@ -331,6 +331,7 @@ class AssetSyncService:
         if len(to_update_metadata) > 0:
             # 开始同步元数据
             self.callbacks.on_metadata_sync('start', 0, len(to_update_metadata))
+            self.callbacks.on_metadata_sync('fetching', 0, 0)
             
             response = requests.get(f"{self.base_url}/meta/?isPublished=true", headers=self.get_headers(), timeout=self.timeout)
             if response.status_code != 200:
@@ -346,10 +347,13 @@ class AssetSyncService:
             remote_metadata = remote_metadata_published + remote_metadata_unpublished
 
             updated_count = 0
-            for sub_metadata in remote_metadata:
+            total_remote = len(remote_metadata)
+            for index, sub_metadata in enumerate(remote_metadata, start=1):
                 if self._cancelled():
                     self.log("元数据同步已取消")
                     return
+                if total_remote > 0 and (index == 1 or index % 20 == 0 or index == total_remote):
+                    self.callbacks.on_metadata_sync('scanning', index, total_remote)
                 if sub_metadata['id'] in to_update_metadata:
                     for key, value in sub_metadata.items():
                         if sub_metadata['id'] not in metadata.keys():
@@ -357,8 +361,6 @@ class AssetSyncService:
                             metadata[sub_metadata['id']]['children'] = []
                         metadata[sub_metadata['id']][key] = value
                     updated_count += 1
-                    # 更新进度
-                    self.callbacks.on_metadata_sync('progress', updated_count, len(to_update_metadata))
                     
                 if 'parentPackageId' in sub_metadata and sub_metadata['parentPackageId'] in to_update_metadata:
                     if sub_metadata['parentPackageId'] not in metadata.keys():

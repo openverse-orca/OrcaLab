@@ -51,12 +51,15 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
         pass
     
     def on_metadata_sync(self, status: str, count: int = 0, total: int = 0):
+        self.window.set_metadata_progress(status, count, total)
         if status == 'start':
-            self.window.set_status(f"正在同步元数据... (0/{total})")
-        elif status == 'progress':
-            self.window.set_status(f"正在同步元数据... ({count}/{total})")
+            self.window.set_status(f"正在准备同步元数据... (待更新 {total} 个包)")
+        elif status == 'fetching':
+            self.window.set_status("正在获取远端元数据列表...")
+        elif status == 'scanning':
+            self.window.set_status(f"正在扫描远端元数据... ({count}/{total})")
         elif status == 'complete':
-            self.window.set_status(f"元数据同步完成 ({count}/{total})")
+            self.window.set_status(f"元数据同步完成 (更新 {count}/{total} 个包)")
     
     def on_complete(self, success: bool, message: str = ""):
         self.window.complete_sync(success, message)
