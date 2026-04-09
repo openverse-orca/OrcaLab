@@ -383,6 +383,65 @@ def _pip_install_editable(package_root: Path) -> None:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", str(package_root)])
 
 
+def _build_user_friendly_install_error(error: Exception) -> str:
+    """将安装异常转换成更易理解的中文提示。"""
+    raw_error = str(error)
+    lower_error = raw_error.lower()
+
+    if isinstance(error, requests.exceptions.ProxyError):
+        lines = [
+            "下载资源时无法连接代理服务器。",
+            "请检查系统或终端环境变量中的代理配置（如 HTTP_PROXY、HTTPS_PROXY）。",
+        ]
+        if "127.0.0.1" in raw_error or "localhost" in lower_error:
+            lines.append("检测到当前代理指向本机地址，可能是代理软件未启动，或端口配置不正确。")
+        lines.append("如果当前网络不需要代理，请关闭代理后重试。")
+        lines.append("")
+        lines.append(f"原始错误: {raw_error}")
+        return "\n".join(lines)
+
+    if isinstance(error, requests.exceptions.SSLError):
+        return (
+            "下载资源时 HTTPS 证书校验失败。\n"
+            "请检查系统时间是否正确、网络是否经过 HTTPS 代理，或当前系统证书是否完整。\n\n"
+            f"原始错误: {raw_error}"
+        )
+
+    if isinstance(error, requests.exceptions.Timeout):
+        return (
+            "下载资源超时，当前网络可能较慢或连接不稳定。\n"
+            "请确认可以访问网络后重试，必要时切换网络或稍后再试。\n\n"
+            f"原始错误: {raw_error}"
+        )
+
+    if isinstance(error, requests.exceptions.HTTPError):
+        response = getattr(error, "response", None)
+        status_code = getattr(response, "status_code", None)
+        if status_code == 404:
+            reason = "下载地址不存在或文件已被移除。"
+        elif status_code == 403:
+            reason = "下载地址无访问权限，可能是权限策略或鉴权配置有误。"
+        elif status_code and status_code >= 500:
+            reason = "下载服务器暂时不可用，请稍后重试。"
+        else:
+            reason = "下载服务器返回异常状态码。"
+        return f"{reason}\n\n原始错误: {raw_error}"
+
+    if isinstance(error, requests.exceptions.ConnectionError):
+        if "name or service not known" in lower_error or "temporary failure in name resolution" in lower_error:
+            reason = "域名解析失败，请检查 DNS 或当前网络是否可以正常访问网络。"
+        elif "failed to establish a new connection" in lower_error or "connection refused" in lower_error:
+            reason = "网络连接失败，目标地址不可达或对应端口未开启。"
+        else:
+            reason = "建立网络连接失败，请检查网络、代理或防火墙设置。"
+        return f"{reason}\n\n原始错误: {raw_error}"
+
+    if isinstance(error, requests.exceptions.RequestException):
+        return f"下载资源时发生网络错误，请检查网络连接和代理配置。\n\n原始错误: {raw_error}"
+
+    return f"安装过程中出现错误，请根据下方信息排查。\n\n原始错误: {raw_error}"
+
+
 def ensure_python_project_installed(config: Optional[ConfigService] = None) -> None:
     """确保 orcalab-pyside 已安装，支持版本变化检测"""
     # Read config
@@ -530,8 +589,9 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         
     except Exception as e:
         logger.exception("Installation failed: %s", e)
-        progress_dialog.log(f"错误: {str(e)}")
-        QtWidgets.QMessageBox.critical(progress_dialog, "安装失败", f"安装过程中出现错误:\n{str(e)}")
+        friendly_error = _build_user_friendly_install_error(e)
+        progress_dialog.log(f"错误: {friendly_error}")
+        QtWidgets.QMessageBox.critical(progress_dialog, "安装失败", friendly_error)
         raise
     finally:
         progress_dialog.close()
