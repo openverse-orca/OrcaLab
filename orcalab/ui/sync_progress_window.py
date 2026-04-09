@@ -147,6 +147,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
     _set_status_signal = QtCore.Signal(str, str)  # asset_id, status
     _set_progress_signal = QtCore.Signal(str, int64, float)  # asset_id, progress, speed
     _set_message_signal = QtCore.Signal(str)  # message
+    _set_metadata_progress_signal = QtCore.Signal(str, int, int)  # status, count, total
     _complete_signal = QtCore.Signal(bool, str)  # success, message
     _start_signal = QtCore.Signal()
     
@@ -171,6 +172,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
         self._set_status_signal.connect(self._set_status_impl)
         self._set_progress_signal.connect(self._set_progress_impl)
         self._set_message_signal.connect(self._set_message_impl)
+        self._set_metadata_progress_signal.connect(self._set_metadata_progress_impl)
         self._complete_signal.connect(self._complete_impl)
         self._start_signal.connect(self._start_impl)
     
@@ -213,6 +215,23 @@ class SyncProgressWindow(QtWidgets.QDialog):
         
         scroll_area.setWidget(self.asset_list_widget)
         layout.addWidget(scroll_area)
+
+        # 元数据同步进度
+        metadata_layout = QtWidgets.QVBoxLayout()
+        metadata_layout.setSpacing(4)
+        self.metadata_label = QtWidgets.QLabel("元数据同步")
+        self.metadata_label.setStyleSheet("color: gray;")
+        self.metadata_label.setVisible(False)
+        metadata_layout.addWidget(self.metadata_label)
+
+        self.metadata_progress_bar = QtWidgets.QProgressBar()
+        self.metadata_progress_bar.setRange(0, 100)
+        self.metadata_progress_bar.setValue(0)
+        self.metadata_progress_bar.setTextVisible(True)
+        self.metadata_progress_bar.setVisible(False)
+        metadata_layout.addWidget(self.metadata_progress_bar)
+
+        layout.addLayout(metadata_layout)
         
         # 底部状态
         bottom_layout = QtWidgets.QHBoxLayout()
@@ -309,6 +328,51 @@ class SyncProgressWindow(QtWidgets.QDialog):
     def _set_message_impl(self, message: str):
         """内部实现：设置底部状态消息"""
         self.status_label.setText(message)
+
+    def set_metadata_progress(self, status: str, count: int = 0, total: int = 0):
+        """线程安全：设置元数据同步进度。"""
+        self._set_metadata_progress_signal.emit(status, count, total)
+
+    def _set_metadata_progress_impl(self, status: str, count: int, total: int):
+        """内部实现：设置元数据同步进度。"""
+        if status == 'start':
+            self.metadata_label.setVisible(True)
+            self.metadata_progress_bar.setVisible(True)
+            self.metadata_progress_bar.setRange(0, max(total, 1))
+            self.metadata_progress_bar.setValue(0)
+            self.metadata_label.setText(f"元数据同步准备中: 待更新 {total} 个包")
+            return
+
+        if status == 'fetching':
+            self.metadata_label.setVisible(True)
+            self.metadata_progress_bar.setVisible(True)
+            self.metadata_progress_bar.setRange(0, 0)
+            self.metadata_label.setText("元数据同步进度: 正在获取远端列表...")
+            return
+
+        if status == 'scanning':
+            self.metadata_label.setVisible(True)
+            self.metadata_progress_bar.setVisible(True)
+            if total > 0:
+                self.metadata_progress_bar.setRange(0, total)
+                self.metadata_progress_bar.setValue(min(count, total))
+                self.metadata_label.setText(f"元数据同步进度: 已扫描 {count}/{total}")
+            else:
+                self.metadata_progress_bar.setRange(0, 0)
+                self.metadata_label.setText("元数据同步进度: 正在扫描...")
+            return
+
+        if status == 'complete':
+            self.metadata_label.setVisible(True)
+            self.metadata_progress_bar.setVisible(True)
+            final_total = max(total, count, 1)
+            self.metadata_progress_bar.setRange(0, final_total)
+            self.metadata_progress_bar.setValue(min(count, final_total))
+            self.metadata_label.setText(f"元数据同步完成: {count}/{total}")
+            return
+
+        self.metadata_label.setVisible(False)
+        self.metadata_progress_bar.setVisible(False)
     
     def start_sync(self):
         """线程安全：开始同步"""
@@ -318,6 +382,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
         """内部实现：开始同步"""
         self.start_time = time.time()
         self._set_message_impl("正在同步资产包...")
+        self._set_metadata_progress_impl('idle', 0, 0)
     
     def complete_sync(self, success: bool, message: str = ""):
         """线程安全：完成同步"""
