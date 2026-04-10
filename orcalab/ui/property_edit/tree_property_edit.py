@@ -241,11 +241,18 @@ class SingleJointDialog(QtWidgets.QDialog):
 
         button_layout = QtWidgets.QHBoxLayout()
         button_layout.addStretch()
-        close_btn = QtWidgets.QPushButton("关闭")
-        close_btn.setFixedWidth(80)
-        close_btn.clicked.connect(self.accept)
-        button_layout.addWidget(close_btn)
+        save_btn = QtWidgets.QPushButton("保存并关闭")
+        save_btn.setFixedWidth(100)
+        save_btn.clicked.connect(self._on_save)
+        button_layout.addWidget(save_btn)
         root_layout.addLayout(button_layout)
+
+    def _on_save(self):
+        """清除当前焦点以触发最后一个字段的 FocusOut 提交，然后关闭对话框。"""
+        fw = QtWidgets.QApplication.focusWidget()
+        if fw is not None:
+            fw.clearFocus()
+        self.accept()
 
     def _update_content_size(self):
         QtCore.QTimer.singleShot(0, self._do_update_content_size)
@@ -259,6 +266,12 @@ class SingleJointDialog(QtWidgets.QDialog):
     def resizeEvent(self, event: QtGui.QResizeEvent):
         super().resizeEvent(event)
         self._do_update_content_size()
+
+    def refresh_name(self, name: str):
+        """对话框已打开时原地更新窗口标题和内部节点标题。"""
+        self.setWindowTitle(f"编辑关节 - {name}")
+        if self._node_widget is not None:
+            self._node_widget._title_label.setText(name)
 
     def get_property_edits(self) -> List[BasePropertyEdit]:
         return self._node_widget.get_property_edits() if self._node_widget else []
