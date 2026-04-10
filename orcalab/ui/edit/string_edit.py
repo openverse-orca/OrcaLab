@@ -45,6 +45,12 @@ class StringEdit(QtWidgets.QLineEdit):
 
         if event.type() == QtCore.QEvent.Type.FocusOut:
             if self._state == StringEditState.Typing:
+                if not self._real_time_type:
+                    value = self.value()
+                    assert self._original_value is not None
+                    self._set_value_only(self._original_value)
+                    if self._set_value_only(value):
+                        self.value_changed.emit()
                 self.set_state(StringEditState.Idle)
                 self._original_value = None
 
