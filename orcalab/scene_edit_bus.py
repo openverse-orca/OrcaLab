@@ -199,10 +199,10 @@ class SceneEditRequest:
     ) -> None:
         pass
 
-    async def set_highlight_joint(self, entity_id: int, highlight: bool) -> None:
-        """Highlight or unhighlight a single joint in the viewport.
+    async def set_highlight_entity(self, entity_id: int, highlight: bool) -> None:
+        """Highlight or unhighlight a single entity (joint/geom/site) in the viewport.
         Args:
-            entity_id (int): The EntityId of the joint entity (from TreePropertyNode.name).
+            entity_id (int): The EntityId of the target entity (from TreePropertyNode.name).
             highlight (bool): True to highlight, False to clear.
         """
         pass
