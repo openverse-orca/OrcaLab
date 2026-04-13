@@ -4,6 +4,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 from orcalab.state_sync_bus import (
     ManipulatorType,
     CameraMovementType,
+    MeasureType,
     StateSyncRequestBus,
     StateSyncNotification,
     StateSyncNotificationBus,
@@ -70,6 +71,16 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self.camera_scale_button.setFixedSize(button_size)
         self.camera_scale_button.icon_size = icon_size
 
+        self.measure_distance_button = Button(icon=make_icon(":/icons/distance.svg", icon_color))
+        self.measure_distance_button.setToolTip("测距离")
+        self.measure_distance_button.setFixedSize(button_size)
+        self.measure_distance_button.icon_size = icon_size
+
+        self.measure_angle_button = Button(icon=make_icon(":/icons/angle.svg", icon_color))
+        self.measure_angle_button.setToolTip("测角度")
+        self.measure_angle_button.setFixedSize(button_size)
+        self.measure_angle_button.icon_size = icon_size
+
         self.debug_button = Button(icon=make_icon(":/icons/physics.png", icon_color))
         self.debug_button.setToolTip("显示物理(F4)")
         self.debug_button.setFixedSize(button_size)
@@ -83,6 +94,7 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self.sep_1 = make_vertical_line(2)
         self.sep_2 = make_vertical_line(2)
         self.sep_3 = make_vertical_line(2)
+        self.sep_4 = make_vertical_line(2)
 
         self._layout.addWidget(self.move_button)
         self._layout.addWidget(self.rotate_button)
@@ -92,8 +104,11 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self._layout.addWidget(self.camera_rotate_button)
         self._layout.addWidget(self.camera_scale_button)
         self._layout.addWidget(self.sep_2)
-        self._layout.addWidget(self.debug_button)
+        self._layout.addWidget(self.measure_distance_button)
+        self._layout.addWidget(self.measure_angle_button)
         self._layout.addWidget(self.sep_3)
+        self._layout.addWidget(self.debug_button)
+        self._layout.addWidget(self.sep_4)
         self._layout.addWidget(self.runtime_grab_button)
 
         connect(self.move_button.mouse_pressed, self.set_translation)
@@ -102,6 +117,8 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         connect(self.camera_move_button.mouse_pressed, self.set_camera_translation)
         connect(self.camera_rotate_button.mouse_pressed, self.set_camera_rotation)
         connect(self.camera_scale_button.mouse_pressed, self.set_camera_scale)
+        connect(self.measure_distance_button.mouse_pressed, self.set_measure_distance)
+        connect(self.measure_angle_button.mouse_pressed, self.set_measure_angle)
         connect(self.debug_button.mouse_pressed, self.set_debug_draw)
         connect(self.runtime_grab_button.mouse_pressed, self.set_runtime_grab)
 
@@ -134,6 +151,18 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
     async def set_camera_scale(self):
         bus = StateSyncRequestBus()
         await bus.set_camera_movement_type(CameraMovementType.CameraScale)
+
+    async def set_measure(self):
+        bus = StateSyncRequestBus()
+        await bus.set_measure_type(MeasureType.Distance)
+
+    async def set_measure_distance(self):
+        bus = StateSyncRequestBus()
+        await bus.set_measure_type(MeasureType.Distance)
+
+    async def set_measure_angle(self):
+        bus = StateSyncRequestBus()
+        await bus.set_measure_type(MeasureType.Angle)
 
     @override
     def on_manipulator_type_changed(self, type: ManipulatorType):
@@ -168,6 +197,20 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self.camera_move_button.update()
         self.camera_rotate_button.update()
         self.camera_scale_button.update()
+
+    @override
+    def on_measure_type_changed(self,  type: MeasureType):
+        print(type)
+        self.measure_distance_button.bg_color = self.bg_color
+        self.measure_angle_button.bg_color = self.bg_color
+
+        if type == MeasureType.Distance:
+            self.measure_distance_button.bg_color = self.bg_color_selected
+        elif type == MeasureType.Angle:
+            self.measure_angle_button.bg_color = self.bg_color_selected
+
+        self.measure_distance_button.update()
+        self.measure_angle_button.update()
 
     async def set_debug_draw(self):
         bus = StateSyncRequestBus()

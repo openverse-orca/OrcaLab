@@ -35,6 +35,9 @@
     <file alias="camera_translate.svg">icons/camera_translate.svg</file>
     <file alias="camera_rotate.svg">icons/camera_rotate.svg</file>
     <file alias="camera_scale.svg">icons/camera_scale.svg</file>
+    
+    <file alias="distance.svg">icons/ic_fluent_measure_20_filled.svg</file>
+    <file alias="angle.svg">icons/ic_fluent_angle_20_filled.svg</file>
 
     <file alias="grab.png">icons/opvs_grab.png</file>
     <file alias="physics.png">icons/opvs_physics.png</file>
