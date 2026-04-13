@@ -13,12 +13,19 @@ class CameraMovementType(Enum):
     CameraScale = 2
     CameraNone = 3
 
+class MeasureType(Enum):
+    Distance = 0
+    Angle = 1
+    MeasureNone = 2
 
 class StateSyncRequest:
     async def set_manipulator_type(self, type: ManipulatorType):
         pass
 
     async def set_camera_movement_type(self, type: CameraMovementType):
+        pass
+
+    async def set_measure_type(self, type: MeasureType):
         pass
 
     async def set_debug_draw(self, enabled: bool):
@@ -37,6 +44,9 @@ class StateSyncNotification:
         pass
 
     def on_camera_movement_type_changed(self, type: CameraMovementType):
+        pass
+
+    def on_measure_type_changed(self, type: MeasureType):
         pass
 
     def on_debug_draw_changed(self, enabled: bool):

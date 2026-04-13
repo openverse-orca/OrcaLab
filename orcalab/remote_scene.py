@@ -28,6 +28,7 @@ from orcalab.scene_edit_types import AddActorRequest
 from orcalab.state_sync_bus import (
     ManipulatorType,
     CameraMovementType,
+    MeasureType,
     StateSyncNotificationBus,
 )
 from orcalab.ui.camera.camera_brief import CameraBrief
@@ -284,6 +285,20 @@ class RemoteScene(SceneEditNotification):
 
             bus = StateSyncNotificationBus()
             bus.on_camera_movement_type_changed(camera_movement_type)
+            return
+        
+        prefix = "measure_type:"
+        if op.startswith(prefix):
+            value = op[len(prefix) :]
+            if value == "distance":
+                measure_type = MeasureType.Distance
+            elif value == "angle":
+                measure_type = MeasureType.Angle
+            else:
+                measure_type = MeasureType.MeasureNone
+
+            bus = StateSyncNotificationBus()
+            bus.on_measure_type_changed(measure_type)
             return
 
         prefix = "debug_draw:"
@@ -723,6 +738,13 @@ class RemoteScene(SceneEditNotification):
         self, camera_movement_type: CameraMovementType
     ) -> bool:
         cmd = f"change_camera_movement_type:{camera_movement_type.name.lower()}"
+        async with self._grpc_lock:
+            return await self._service.custom_command(cmd)
+        
+    async def change_measure_type(
+        self, measure_type: MeasureType
+    ) -> bool:
+        cmd = f"change_measure_type:{measure_type.name.lower()}"
         async with self._grpc_lock:
             return await self._service.custom_command(cmd)
 

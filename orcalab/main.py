@@ -259,7 +259,7 @@ def main():
 
     if config_service.had_previous_abnormal_exit():
         logger.warning("检测到上次 OrcaLab 未正常退出")
-        schedule_abnormal_exit_report()
+        # schedule_abnormal_exit_report()
     config_service.mark_orcalab_started()
 
     check_project_folder()
