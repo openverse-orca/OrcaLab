@@ -156,6 +156,12 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
             case ActorPropertyType.STRING:
                 return StringPropertyEdit(self, context, label_width)
             case ActorPropertyType.TREE:
+                if self._group.name == "Geom":
+                    from orcalab.ui.property_edit.geom_tree_property_edit import GeomTreePropertyEdit
+                    return GeomTreePropertyEdit(self, context, label_width)
+                if self._group.name == "Site":
+                    from orcalab.ui.property_edit.site_tree_property_edit import SiteTreePropertyEdit
+                    return SiteTreePropertyEdit(self, context, label_width)
                 return TreePropertyEdit(self, context, label_width)
             case _:
                 raise NotImplementedError("Unsupported property type")

@@ -796,7 +796,7 @@ class RemoteScene(SceneEditNotification):
     async def set_properties(self, keys: List[ActorPropertyKey], values: List[Any]):
         await self._service.set_properties(keys, values)
 
-    async def set_highlight_joint(self, entity_id: int, highlight: bool):
+    async def set_highlight_entity(self, entity_id: int, highlight: bool):
         async with self._grpc_lock:
             await self._service.set_highlight_joint(entity_id, highlight)
 
