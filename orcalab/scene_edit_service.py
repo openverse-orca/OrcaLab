@@ -230,17 +230,14 @@ class SceneEditService(SceneEditRequest):
         err = self.local_scene.add_actor_batch(requests)
         if err == "":
             suceess, errors = await self.remote_scene.add_actor_batch(requests, True)
-        await bus.on_actor_added_batch("")
-
-        # TODO: report errors
-        # try:
-        #     await bus.on_actor_added(actor, parent_actor_path, source)
-        # except Exception as e:
-        #     # on_actor_added failed (e.g. remote scene sync failed)
-        #     # Need to rollback: delete actor from local scene and notify
-        #     self.local_scene.delete_actor(actor)
-        #     await bus.on_actor_added_failed(actor, parent_actor_path, source)
-        #     raise
+            if suceess:
+                await bus.on_actor_added_batch("")
+            else:
+                actors_to_delete = []
+                for request in requests:
+                    actors_to_delete.append(request.actor)
+                self.local_scene.delete_actors(actors_to_delete)
+                await bus.on_actor_added_failed("")
 
         if undo:
             command = AddActorCommand(requests)

@@ -124,7 +124,7 @@ class EditServiceWrapper:
                 raise ValueError("Unsupported actor type.")
             requests.append(request_union)
 
-        batch_request = edit_service_pb2.AddActorBatchRequest(requests=requests)
+        batch_request = edit_service_pb2.AddActorBatchRequest(requests=requests, stop_on_error=stop_on_error)
         response = await self.stub.AddActorBatch(batch_request)
         if response.status_code != Success:
             print(f"Errors occur during add_actor_batch()")

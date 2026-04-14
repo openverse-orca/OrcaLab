@@ -364,7 +364,6 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
     ):
         # The insert operation was started but failed
         # Reset the entire model to ensure view is in sync with actual data
-        self.beginResetModel()
         self.endResetModel()
 
     @override
