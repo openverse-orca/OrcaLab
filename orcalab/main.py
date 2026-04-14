@@ -61,16 +61,8 @@ def _start_force_exit_watchdog(timeout: int = 10) -> None:
 
 def signal_handler(signum, frame):
     """Handle system signals to ensure cleanup"""
-    logger.info("Received signal %s, cleaning up...", signum)
-    if _main_window is not None:
-        try:
-            # Try to run cleanup in the event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(_main_window.cleanup())
-        except Exception as e:
-            logger.exception("Error during signal cleanup: %s", e)
-    sys.exit(0)
+    logger.info("Received signal %s, exiting...", signum)
+    os._exit(0)
 
 
 def register_signal_handlers():
@@ -245,6 +237,12 @@ def main():
 
     logger.info("进程 PID: %d", os.getpid())
 
+    # 设置崩溃日志文件路径，C++ 信号处理器从此环境变量读取并写入 error.log（覆盖模式）
+    from orcalab.project_util import get_user_log_folder
+    _error_log_dir = get_user_log_folder()
+    _error_log_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["ORCALAB_ERROR_LOG"] = str(_error_log_dir / "error.log")
+
     workspace = resolve_and_validate_workspace(
         args.workspace, init_config=args.init_config
     )
@@ -327,12 +325,10 @@ def main():
     finally:
         event_loop.close()
 
-    _start_force_exit_watchdog(timeout=10)
-
-    # magic!
-    # AttributeError: 'NoneType' object has no attribute 'POLLER'
-    # https://github.com/google-gemini/deprecated-generative-ai-python/issues/207#issuecomment-2601058191
-    exit(0)
+    # 直接终止进程，跳过 Python atexit 和 C++ 静态析构。
+    # 引擎资源已在 main_async → cleanup 中清理完毕，
+    # 此处若走 exit(0) 会触发 .so 卸载时的静态析构器访问已销毁子系统导致 SIGSEGV。
+    os._exit(0)
 
 
 if __name__ == "__main__":
