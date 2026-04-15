@@ -14,7 +14,7 @@ from orcalab.asset_sync_service import sync_assets, AssetSyncCallbacks
 from orcalab.ui.sync_progress_window import SyncProgressWindow
 from orcalab.auth_service import AuthService
 from orcalab.token_storage import TokenStorage
-from orcalab.ui.auth_window import show_auth_dialog
+from orcalab.ui.auth_window import AuthWindow
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,10 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
         elif status == 'scanning':
             self.window.set_status(f"正在扫描远端元数据... ({count}/{total})")
         elif status == 'complete':
-            self.window.set_status(f"元数据同步完成 (更新 {count}/{total} 个包)")
+            if count == 0 and total == 0:
+                self.window.set_status("元数据已是最新，无需同步")
+            else:
+                self.window.set_status(f"元数据同步完成 (更新 {count}/{total} 个包)")
     
     def on_complete(self, success: bool, message: str = ""):
         self.window.complete_sync(success, message)
@@ -114,13 +117,14 @@ def authenticate_user(config_service, window=None) -> bool:
     # 创建认证服务
     auth_service = AuthService(base_url, auth_server_url=auth_server_url, timeout=timeout)
     
-    def auth_func():
+    def auth_func(auth_window=None):
         """认证函数，带进度回调"""
-        return auth_service.authenticate(window=window, redirect_url=redirect_url)
+        return auth_service.authenticate(window=auth_window or window, redirect_url=redirect_url)
     
     # 如果没有传入 window，则显示认证对话框
     if window is None:
-        credentials = show_auth_dialog(auth_func)
+        dialog = AuthWindow()
+        credentials = dialog.run_auth(lambda: auth_func(dialog))
     else:
         credentials = auth_func()
     
