@@ -4,6 +4,7 @@ DataLink 认证服务模块
 负责处理与 DataLink 认证服务器的交互
 """
 
+import os
 import requests
 import webbrowser
 import time
@@ -94,7 +95,8 @@ class AuthService:
         logger.error("✗ 获取 nonce 失败，已尝试 %s 次", max_retries)
         return None
     
-    def verify_nonce(self, nonce: str, max_retries: int = 60, retry_interval: float = 2.0) -> Optional[Dict[str, str]]:
+    def verify_nonce(self, nonce: str, max_retries: int = 60, retry_interval: float = 2.0,
+                     waiting_callback: Optional[Callable[[float], None]] = None) -> Optional[Dict[str, str]]:
         """
         验证 nonce 并获取 token（轮询方式）
         
@@ -109,6 +111,7 @@ class AuthService:
         try:
             url = f"{self.auth_url}/nonce/verify/"
             
+            start_time = time.monotonic()
             for i in range(max_retries):
                 try:
                     response = requests.post(
@@ -124,12 +127,17 @@ class AuthService:
                             'access_token': data.get('accessToken'),
                             'refresh_token': data.get('refreshToken')
                         }
+
+                    if waiting_callback:
+                        waiting_callback(time.monotonic() - start_time)
                     
                     # 如果还未授权，继续等待
                     if i < max_retries - 1:
                         time.sleep(retry_interval)
                     
                 except requests.exceptions.Timeout:
+                    if waiting_callback:
+                        waiting_callback(time.monotonic() - start_time)
                     if i < max_retries - 1:
                         time.sleep(retry_interval)
                     continue
@@ -141,6 +149,20 @@ class AuthService:
             logger.exception("验证 nonce 失败: %s", e)
             return None
     
+    def build_auth_url(self, nonce: str, redirect_url: Optional[str] = None) -> str:
+        """构造认证页面 URL。"""
+        if redirect_url is None:
+            redirect_url = "http://127.0.0.1:34511/"
+
+        server_url = "datalink.orca3d.cn:7000"
+
+        params = {
+            'server': server_url,
+            'nonce': nonce,
+            'next': redirect_url
+        }
+        return f"{self.auth_frontend_url}/?{urlencode(params)}"
+
     def open_auth_page(self, nonce: str, redirect_url: Optional[str] = None) -> bool:
         """
         在浏览器中打开认证页面
@@ -153,23 +175,8 @@ class AuthService:
             是否成功打开浏览器
         """
         try:
-            # 如果没有提供 redirect_url，使用默认值
-            if redirect_url is None:
-                redirect_url = "http://127.0.0.1:34511/"
-            
-            # 构造认证URL
-            # server 参数应该指向认证服务器期望的 API 服务器地址
-            # 根据观察，认证服务器期望的是 datalink.orca3d.cn:7000
-            server_url = "datalink.orca3d.cn:7000"
-            
-            params = {
-                'server': server_url,
-                'nonce': nonce,
-                'next': redirect_url
-            }
-            
-            auth_url = f"{self.auth_frontend_url}/?{urlencode(params)}"
-            
+            auth_url = self.build_auth_url(nonce, redirect_url=redirect_url)
+
             # 打开浏览器
             webbrowser.open(auth_url)
             return True
@@ -212,6 +219,11 @@ class AuthService:
             progress_callback(msg)
         if window:
             window.update_status(msg)
+
+        auth_url = self.build_auth_url(nonce, redirect_url=redirect_url)
+
+        if hasattr(os, "geteuid") and os.geteuid() == 0 and window:
+            window.show_root_user_warning()
         
         if not self.open_auth_page(nonce, redirect_url=redirect_url):
             msg = "无法打开浏览器"
@@ -227,8 +239,19 @@ class AuthService:
             progress_callback(msg)
         if window:
             window.update_status(msg)
-        
-        credentials = self.verify_nonce(nonce)
+
+        browser_help_shown = False
+
+        def on_waiting(elapsed_seconds: float):
+            nonlocal browser_help_shown
+            if browser_help_shown or elapsed_seconds < 30:
+                return
+            browser_help_shown = True
+            if window:
+                window.show_browser_help_dialog(auth_url)
+                window.update_status("等待浏览器认证超过 30 秒，请检查浏览器后重试")
+
+        credentials = self.verify_nonce(nonce, waiting_callback=on_waiting)
         
         if credentials:
             msg = f"认证成功: {credentials['username']}"

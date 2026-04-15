@@ -365,6 +365,11 @@ class SyncProgressWindow(QtWidgets.QDialog):
         if status == 'complete':
             self.metadata_label.setVisible(True)
             self.metadata_progress_bar.setVisible(True)
+            if count == 0 and total == 0:
+                self.metadata_progress_bar.setRange(0, 1)
+                self.metadata_progress_bar.setValue(1)
+                self.metadata_label.setText("元数据同步完成: 无需更新")
+                return
             final_total = max(total, count, 1)
             self.metadata_progress_bar.setRange(0, final_total)
             self.metadata_progress_bar.setValue(min(count, final_total))

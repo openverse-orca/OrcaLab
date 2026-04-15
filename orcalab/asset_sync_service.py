@@ -313,7 +313,7 @@ class AssetSyncService:
             {
                 "id": package['id'],
                 "name": package['name'],
-                "revisionKind": package['revisionKind']
+                "revisionKind": package.get('revisionKind')
             }
             for package in packages
         ]
@@ -341,7 +341,7 @@ class AssetSyncService:
             {
                 "id": to_missing_pak['id'],
                 "name": to_missing_pak['name'],
-                "revisionKind": to_missing_pak['revisionKind']
+                "revisionKind": to_missing_pak.get('revisionKind')
             }
             for to_missing_pak in to_missing
         ]
@@ -373,7 +373,9 @@ class AssetSyncService:
         for package_id in to_update_metadata:
             to_update_metadata_json[package_id] = {}
         
-        if len(to_update_metadata) > 0:
+        if len(to_update_metadata) == 0:
+            self.callbacks.on_metadata_sync('complete', 0, 0)
+        else:
             # 开始同步元数据
             self.callbacks.on_metadata_sync('start', 0, len(to_update_metadata))
             self.callbacks.on_metadata_sync('fetching', 0, 0)
