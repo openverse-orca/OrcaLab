@@ -2,6 +2,8 @@ import asyncio
 from copy import deepcopy
 from typing import Any, Dict, List, Sequence, Tuple, override
 import logging
+import numpy as np
+import random
 
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.actor_property import (
@@ -713,6 +715,16 @@ class SceneEditService(SceneEditRequest):
                 )
                 new_actor_paths.append(new_actor_path)
                 exsiting_names.append(new_actor_path.name())
+
+        for request in requests:
+            if isinstance(request.actor, AssetActor):
+                bias = random.uniform(0.1, 0.2)
+                transform_bias = Transform(
+                    position=np.array([bias, bias, 0.0]),
+                    rotation=np.array([1.0, 0.0, 0.0, 0.0]),
+                    scale=1.0
+                )
+                request.actor._transform = transform_bias * request.actor._transform
 
         bus = SceneEditNotificationBus()
 
