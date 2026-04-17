@@ -7,7 +7,7 @@ import json
 import logging
 import aiohttp
 
-from project_util import get_orca_studio_folder
+from orcalab.project_util import get_orca_studio_folder
 from pathlib import Path
 from platform import python_version
 from typing import Any, Dict, Optional, Tuple
