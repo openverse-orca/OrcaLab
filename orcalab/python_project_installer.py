@@ -575,7 +575,7 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         
         # 下载 pak 文件（如果配置了）
         pak_urls = orcalab_cfg.get("pak_urls", [])
-        sha256 = orcalab_cfg.get("sha256", [])
+        pak_urls_sha256 = orcalab_cfg.get("pak_urls_sha256", [])
         if pak_urls:
             progress_dialog.set_determinate()
             progress_dialog.log(f"检测到 {len(pak_urls)} 个 pak 文件需要下载")
@@ -587,7 +587,7 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
             for i, pak_url in enumerate(pak_urls):
                 filename = pak_url.split("/")[-1]
                 target_path = cache_folder / filename
-                clound_file_sha256 = sha256[i]
+                clound_file_sha256 = pak_urls_sha256[i]
                 # 如果文件已存在，跳过
                 if target_path.exists():
                     local_file_sha256 = calculate_file_sha256(target_path)
