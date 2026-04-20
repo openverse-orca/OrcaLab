@@ -290,9 +290,10 @@ def main():
 
     # 处理pak_urls（独立于paks和订阅列表，下载到orcalab子目录）
     pak_urls = config_service.pak_urls()
+    sha256 = config_service.sha256()
     if pak_urls:
         logger.info("正在同步pak_urls列表...")
-        sync_pak_urls(pak_urls)
+        sync_pak_urls(pak_urls, sha256)
 
     # 确保不会同时运行多个 OrcaLab 实例
     ensure_single_instance()

@@ -10,6 +10,7 @@ import aiohttp
 import aiofiles
 import asyncio
 import logging
+from PySide6 import QtWidgets
 
 
 project_id = "{3DB8A56E-2458-4543-93A1-1A41756B97DA}"
@@ -162,6 +163,18 @@ def calculate_file_md5(file_path: pathlib.Path) -> str:
     except Exception as e:
         logger.error("Error calculating MD5 for %s: %s", file_path, e)
         return ""
+    
+def calculate_file_sha256(file_path: pathlib.Path) -> str:
+    """计算文件的SHA256值"""
+    hash_sha256 = hashlib.sha256()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                hash_sha256.update(chunk)
+        return hash_sha256.hexdigest()
+    except Exception as e:
+        logger.error("Error calculating SHA256 for %s: %s", file_path, e)
+        return ""
 
 def get_cached_md5(file_path: pathlib.Path, cache: Dict[str, Dict]) -> Optional[str]:
     """从缓存中获取MD5值"""
@@ -278,7 +291,7 @@ def copy_packages(packages: List[str]):
             logger.warning("Package %s does not exist or is not a file.", package)
 
 
-async def download_pak_from_url(url: str, target_path: pathlib.Path) -> bool:
+async def download_pak_from_url(url: str, target_path: pathlib.Path, cloud_file_sha256: str) -> bool:
     """
     从URL下载pak文件到指定路径
     
@@ -300,10 +313,23 @@ async def download_pak_from_url(url: str, target_path: pathlib.Path) -> bool:
                 target_path.parent.mkdir(parents=True, exist_ok=True)
                 
                 # 下载文件
-                async with aiofiles.open(target_path, "wb") as f:
+                temp_path = target_path.with_suffix(target_path.suffix + ".tmp")
+                async with aiofiles.open(temp_path, "wb") as f:
                     async for chunk in response.content.iter_chunked(8192):
                         await f.write(chunk)
                 
+                # 验证文件完整性
+                local_file_sha256 = calculate_file_sha256(temp_path)
+                if local_file_sha256.lower() != cloud_file_sha256:
+                    logger.error("文件下载不完整，源文件sha256: %s, 下载文件sha256: %s", cloud_file_sha256, local_file_sha256)
+                    msg = f"源文件sha256: {cloud_file_sha256}\n下载文件sha256: {local_file_sha256}"
+                    QtWidgets.QMessageBox.information(None, "pak 下载不完整, 请重新启动 orcalab", msg)
+                    return False
+
+                # 重命名
+                if target_path.exists():
+                    target_path.unlink()
+                temp_path.rename(target_path)
                 logger.info("Downloaded %s to %s", url, target_path)
                 return True
                 
@@ -312,7 +338,7 @@ async def download_pak_from_url(url: str, target_path: pathlib.Path) -> bool:
         return False
 
 
-def sync_pak_urls(pak_urls: List[str]) -> List[str]:
+def sync_pak_urls(pak_urls: List[str], sha256: List[str]) -> List[str]:
     """
     同步pak_urls列表到缓存目录
     确保缓存目录下的文件与pak_urls列表一致（先检查后决定删除和下载）
@@ -345,26 +371,29 @@ def sync_pak_urls(pak_urls: List[str]) -> List[str]:
     
     # 下载缺失的文件
     downloaded_files = []
-    for url in pak_urls:
+    for i, url in enumerate(pak_urls):
         filename = url_to_filename[url]
         target_path = cache_folder / filename
-        
+        clound_file_sha256 = sha256[i]
         # 如果文件已存在，检查是否需要更新（跳过下载，避免重复下载）
         if target_path.exists():
-            logger.info("File %s already exists in cache, skipping download", filename)
-            downloaded_files.append(str(target_path))
-            continue
+            local_file_sha256 = calculate_file_sha256(target_path)
+            if local_file_sha256 == clound_file_sha256:
+                logger.info("File %s already exists in cache, skipping download", filename)
+                downloaded_files.append(str(target_path))
+                continue
+            logger.info("File %s already exists in cache, but the file is incomplete", filename)
         
         # 同步下载
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 # 如果事件循环正在运行，创建新任务
-                task = asyncio.create_task(download_pak_from_url(url, target_path))
+                task = asyncio.create_task(download_pak_from_url(url, target_path, clound_file_sha256))
                 success = loop.run_until_complete(task)
             else:
                 # 如果事件循环未运行，直接运行
-                success = loop.run_until_complete(download_pak_from_url(url, target_path))
+                success = loop.run_until_complete(download_pak_from_url(url, target_path, clound_file_sha256))
             
             if success:
                 downloaded_files.append(str(target_path))

@@ -112,6 +112,9 @@ class AssetItemWidget(QtWidgets.QWidget):
         elif self.status == 'incompatible':
             self.status_text.setText("不兼容")
             self.status_text.setStyleSheet("color: orange;")
+        elif self.status == 'incomplete':
+            self.status_text.setText("文件下载不完整")
+            self.status_text.setStyleSheet("color: orange;")
     
     def set_progress(self, progress: int64, speed: float = 0):
         """

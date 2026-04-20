@@ -46,7 +46,10 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
         if success:
             self.window.set_asset_status(asset_id, 'completed')
         else:
-            self.window.set_asset_status(asset_id, 'failed')
+            if error == "incomplete":
+                self.window.set_asset_status(asset_id, 'incomplete')
+            else:
+                self.window.set_asset_status(asset_id, 'failed')
     
     def on_delete(self, file_name: str):
         pass

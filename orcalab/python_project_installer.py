@@ -14,7 +14,7 @@ import requests
 import importlib.metadata
 
 from orcalab.config_service import ConfigService
-from orcalab.project_util import project_id
+from orcalab.project_util import project_id, calculate_file_sha256
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class InstallProgressDialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("OrcaLab 安装进度")
-        self.setMinimumWidth(500)
+        self.setMinimumSize(500, 300)
         self.setModal(True)
         
         layout = QtWidgets.QVBoxLayout(self)
@@ -340,12 +340,13 @@ def _get_current_orcalab_pyside_path() -> Optional[Path]:
         return None
 
 
-def _download_pak_file(url: str, target_path: Path, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
+def _download_pak_file(url: str, target_path: Path, cloud_file_sha256: str, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
     """下载 pak 文件
     
     Args:
         url: 下载链接
         target_path: 保存路径
+        cloud_file_sha256: 源文件hash值
         progress_callback: 进度回调函数，接收 (进度百分比, 详细信息) 参数
         
     Returns:
@@ -372,6 +373,13 @@ def _download_pak_file(url: str, target_path: Path, progress_callback: Optional[
                             detail = f"已下载: {downloaded / 1024 / 1024:.1f}MB"
                             if progress_callback:
                                 progress_callback(0, detail)
+
+        # 验证文件完整性
+        local_file_sha256 = calculate_file_sha256(target_path)
+        print(local_file_sha256, cloud_file_sha256)
+        if local_file_sha256.lower() != cloud_file_sha256.lower():
+            logger.error("下载出错，文件不完整，源文件sha256: %s, 下载文件sha256: %s", cloud_file_sha256, local_file_sha256)
+            return False
         return True
     except Exception as e:
         logger.error("Failed to download pak file from %s: %s", url, e)
@@ -519,6 +527,28 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
             _download_archive(download_url, archive_path, download_progress)
             progress_dialog.log(f"下载完成: {archive_path.name}")
 
+            from orcalab.project_util import calculate_file_sha256
+
+            progress_dialog.set_status("正在校验文件完整性...")
+
+            expected_sha256 = orcalab_cfg.get("python_project_sha256")
+
+            if expected_sha256:
+                actual_sha256 = calculate_file_sha256(archive_path)
+
+                progress_dialog.log(f"expected: {expected_sha256}")
+                progress_dialog.log(f"actual:   {actual_sha256}")
+
+                if actual_sha256.lower() != expected_sha256:
+                    raise ValueError(
+                        f"SHA256 mismatch! 文件下载不完整，请重新安装\n"
+                        f"expected: {expected_sha256}\n"
+                        f"actual:   {actual_sha256}"
+                    )
+
+            progress_dialog.set_progress(50)
+            progress_dialog.log("SHA256 校验通过")
+
             # 解压进度回调
             def extract_progress(percent: int, detail: str):
                 progress_dialog.set_status("正在解压 python-project...")
@@ -528,7 +558,7 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
             progress_dialog.log(f"开始解压到: {dest_root}")
             _extract_tar_xz(archive_path, dest_root, extract_progress)
             progress_dialog.log("解压完成")
-            
+
             # Try to locate package root (in case archive contains a top-level directory)
             found = _find_editable_root(dest_root)
             editable_root = found or dest_root
@@ -545,22 +575,26 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         
         # 下载 pak 文件（如果配置了）
         pak_urls = orcalab_cfg.get("pak_urls", [])
+        sha256 = orcalab_cfg.get("sha256", [])
         if pak_urls:
             progress_dialog.set_determinate()
             progress_dialog.log(f"检测到 {len(pak_urls)} 个 pak 文件需要下载")
             
-            from orcalab.project_util import get_cache_folder
+            from orcalab.project_util import get_cache_folder, calculate_file_sha256
             cache_folder = get_cache_folder()
             cache_folder.mkdir(parents=True, exist_ok=True)
             
             for i, pak_url in enumerate(pak_urls):
                 filename = pak_url.split("/")[-1]
                 target_path = cache_folder / filename
-                
+                clound_file_sha256 = sha256[i]
                 # 如果文件已存在，跳过
                 if target_path.exists():
-                    progress_dialog.log(f"pak 文件已存在，跳过: {filename}")
-                    continue
+                    local_file_sha256 = calculate_file_sha256(target_path)
+                    if local_file_sha256 == clound_file_sha256:
+                        logger.info("File %s already exists in cache, skipping download", filename)
+                        progress_dialog.log(f"pak 文件已存在，跳过: {filename}")
+                        continue
                 
                 def pak_download_progress(percent: int, detail: str):
                     progress_dialog.set_status(f"正在下载 pak 文件 ({i+1}/{len(pak_urls)})...")
@@ -592,6 +626,9 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         friendly_error = _build_user_friendly_install_error(e)
         progress_dialog.log(f"错误: {friendly_error}")
         QtWidgets.QMessageBox.critical(progress_dialog, "安装失败", friendly_error)
+        progress_dialog.close()
+        import sys
+        sys.exit(1)
         raise
     finally:
         progress_dialog.close()

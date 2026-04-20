@@ -69,7 +69,7 @@ class PanelManager(QtWidgets.QWidget, PanelRequest):
         right_panel_area = PanelAreaVertical("right")
         bottom_panel_area = PanelAreaHorizontal("bottom")
 
-        main_content_area.setMinimumSize(64, 64)
+        main_content_area.setMinimumSize(300, 350)
 
         window_central_area_layout = QtWidgets.QHBoxLayout(window_central_area)
         window_central_area_layout.setContentsMargins(0, 0, 0, 0)
