@@ -19,6 +19,7 @@ from typing import List, Dict, Optional, Callable, Tuple
 import time
 import logging
 
+from orcalab.project_util import calculate_file_sha256
 from orcalab.config_service import ConfigService
 from orcalab.exception import TokenExpiredException, ConnectionFailedException
 
@@ -214,25 +215,36 @@ class AssetSyncService:
             pkg_name = pkg['name']
             size = pkg['size']
             
+            download_info = self.get_download_url(pkg_id)
+            cloud_file_sha256 = download_info.get("sha256")
             if local_path.exists():
-                local_size = local_path.stat().st_size
-                if local_size == size:
+                if cloud_file_sha256:
+                    local_file_sha256 = calculate_file_sha256(local_path)
+                    if local_file_sha256.lower() == cloud_file_sha256:
+                        self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'ok')
+                        logger.info("%s 已最新", file_name)
+                    else:
+                        self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
+                        missing_packages.append(pkg)
+                        logger.info("%s hash 不匹配，需重新下载", file_name)
+                else:
                     self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'ok')
                     logger.info("%s 已最新", file_name)
-                else:
-                    self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
-                    missing_packages.append(pkg)
-                    logger.info("%s 大小不匹配，需重新下载", file_name)
             elif downloaded_path.exists():
-                local_size = downloaded_path.stat().st_size
-                if local_size == size:
+                if cloud_file_sha256:
+                    local_file_sha256 = calculate_file_sha256(downloaded_path)
+                    if local_file_sha256.lower() == cloud_file_sha256:
+                        shutil.copy2(downloaded_path, local_path)
+                        self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'ok')
+                        logger.info("%s 已最新", file_name)
+                    else:
+                        self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
+                        missing_packages.append(pkg)
+                        logger.info("%s hash 不匹配，需重新下载", file_name)
+                else:
                     shutil.copy2(downloaded_path, local_path)
                     self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'ok')
                     logger.info("%s 已最新", file_name)
-                else:
-                    self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
-                    missing_packages.append(pkg)
-                    logger.info("%s 大小不匹配，需重新下载", file_name)
             else:
                 self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
                 missing_packages.append(pkg)
@@ -266,8 +278,14 @@ class AssetSyncService:
     
     def get_download_url(self, package_id: str) -> Optional[Dict]:
         """获取资产包的下载链接"""
+        if sys.platform == "win32":
+            platform = "pc"
+        else:
+            platform = "linux"
+        params = f"?platform={platform}"
+
         try:
-            url = f"{self.base_url}/orcalab/package/{package_id}/download_url/"
+            url = f"{self.base_url}/orcalab/package/{package_id}/download_url/{params}"
             response = requests.get(url, headers=self.get_headers(), timeout=self.timeout)
             
             if response.status_code != 200:
@@ -428,7 +446,7 @@ class AssetSyncService:
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, ensure_ascii=False, indent=2)
 
-    def download_package(self, package_id: str, file_name: str, download_url: str, expected_size: int) -> bool:
+    def download_package(self, package_id: str, file_name: str, download_url: str, expected_size: int, cloud_file_sha256: str) -> bool:
         """下载资产包"""
         try:
             local_path = self.cache_folder / file_name
@@ -480,6 +498,13 @@ class AssetSyncService:
             # 最终进度更新
             if total_size > 0:
                 self.callbacks.on_download_progress(package_id, 100, 0)
+            
+            # 文件完整性验证
+            local_file_sha256 = calculate_file_sha256(temp_path)
+            if cloud_file_sha256:
+                if local_file_sha256.lower() != cloud_file_sha256:
+                    self.callbacks.on_download_complete(package_id, False, "incomplete")
+                    return False
             
             # 重命名
             if local_path.exists():
@@ -594,12 +619,16 @@ class AssetSyncService:
             
             download_url = download_info.get('downloadUrl') or download_info.get('download_url')
             size = download_info.get('size')
+            cloud_file_sha256 = download_info.get("sha256")
             
             # 下载
-            if self.download_package(package_id, file_name, download_url, size):
+            if self.download_package(package_id, file_name, download_url, size, cloud_file_sha256):
                 success_count += 1
             else:
-                fail_count += 1
+                if  self.download_package(package_id, file_name, download_url, size, cloud_file_sha256):
+                    success_count += 1
+                else:
+                    fail_count += 1
         
         if self._cancelled():
             self.log("同步已由用户取消（跳过元数据与本地清理）")

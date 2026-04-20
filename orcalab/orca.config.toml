@@ -8,8 +8,10 @@ level = "orcalab_day"
 lock_fps = 60
 paks = []
 pak_urls = []
+sha256 = []
 python_project_path = ""
 python_project_url = ""
+python_project_sha256 = ""
 send_statistics = "unset"
 
 [mcp]

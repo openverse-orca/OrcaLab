@@ -240,6 +240,9 @@ class ConfigService:
 
     def pak_urls(self) -> list:
         return self.config["orcalab"].get("pak_urls", [])
+    
+    def sha256(self) -> dict:
+        return self.config["orcalab"].get("sha256", [])
 
     def level(self) -> str:
         level_value = self.config["orcalab"].get("level")
