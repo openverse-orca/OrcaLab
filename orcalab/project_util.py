@@ -338,7 +338,7 @@ async def download_pak_from_url(url: str, target_path: pathlib.Path, cloud_file_
         return False
 
 
-def sync_pak_urls(pak_urls: List[str], sha256: List[str]) -> List[str]:
+def sync_pak_urls(pak_urls: List[str], pak_urls_sha256: List[str]) -> List[str]:
     """
     同步pak_urls列表到缓存目录
     确保缓存目录下的文件与pak_urls列表一致（先检查后决定删除和下载）
@@ -374,7 +374,7 @@ def sync_pak_urls(pak_urls: List[str], sha256: List[str]) -> List[str]:
     for i, url in enumerate(pak_urls):
         filename = url_to_filename[url]
         target_path = cache_folder / filename
-        clound_file_sha256 = sha256[i]
+        clound_file_sha256 = pak_urls_sha256[i]
         # 如果文件已存在，检查是否需要更新（跳过下载，避免重复下载）
         if target_path.exists():
             local_file_sha256 = calculate_file_sha256(target_path)
