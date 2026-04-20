@@ -82,6 +82,7 @@ class PanelManager(QtWidgets.QWidget, PanelRequest):
 
         splitter_v.addWidget(splitter_h)
         splitter_v.addWidget(bottom_panel_area)
+        splitter_v.setCollapsible(0, False)
 
         splitter_h.addWidget(left_panel_area)
         splitter_h.addWidget(main_content_area)
