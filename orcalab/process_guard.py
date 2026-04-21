@@ -5,6 +5,7 @@ import psutil
 from typing import List
 
 from PySide6 import QtWidgets
+from PySide6.QtCore import QTimer
 
 
 logger = logging.getLogger(__name__)
@@ -119,15 +120,32 @@ def ensure_single_instance():
     msg_box.setText("当前系统上已存在正在运行的 OrcaLab 实例。")
     msg_box.setInformativeText(
         "OrcaLab 不支持在同一台电脑同时运行多个实例。\n\n"
-        "选择“终止并继续”将尝试结束所有已发现的 OrcaLab 进程后再继续启动。\n"
-        "选择“退出”将直接退出当前启动。"
+        "选择\"终止并继续\"将尝试结束所有已发现的 OrcaLab 进程后再继续启动。\n"
+        "选择\"退出\"将直接退出当前启动。\n\n"
+        "若 5 秒内未操作，将自动终止已有进程并继续启动。"
     )
     msg_box.setDetailedText(details_text or "未获取到进程信息")
 
     kill_button = msg_box.addButton("终止并继续", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
     exit_button = msg_box.addButton("退出", QtWidgets.QMessageBox.ButtonRole.RejectRole)
     msg_box.setDefaultButton(kill_button)
+
+    countdown_seconds = 5
+    kill_button.setText(f"终止并继续（{countdown_seconds}s）")
+
+    def _tick():
+        nonlocal countdown_seconds
+        countdown_seconds -= 1
+        if countdown_seconds <= 0:
+            msg_box.accept()
+            return
+        kill_button.setText(f"终止并继续（{countdown_seconds}s）")
+
+    timer = QTimer()
+    timer.timeout.connect(_tick)
+    timer.start(1000)
     msg_box.exec()
+    timer.stop()
 
     if msg_box.clickedButton() == exit_button:
         logger.info("用户选择退出，以避免多个 OrcaLab 实例同时运行")
