@@ -455,10 +455,10 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
     # Read config
     cfg = config or ConfigService()
     if not hasattr(cfg, "config"):
-        # If not initialized by caller, initialize with project root resolved from this file
         current_dir = os.path.dirname(__file__)
-        project_root = os.path.abspath(os.path.join(current_dir, os.pardir))
-        cfg.init_config(project_root)
+        project_root = Path(current_dir).parent.resolve()
+        workspace = Path.cwd()
+        cfg.init_config(project_root, workspace)
 
     # 检查是否需要安装或更新
     if not _is_installation_needed(cfg):
@@ -627,14 +627,11 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         progress_dialog.log(f"错误: {friendly_error}")
         QtWidgets.QMessageBox.critical(progress_dialog, "安装失败", friendly_error)
         progress_dialog.close()
-        import sys
         sys.exit(1)
         raise
     finally:
         progress_dialog.close()
     
-    # 包更新后直接退出程序
-    import sys
     sys.exit(0)
 
 

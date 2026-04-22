@@ -270,15 +270,17 @@ class LaunchDialog(QtWidgets.QDialog):
 
 if __name__ == "__main__":
     import sys
+    from pathlib import Path
     from orcalab.config_service import ConfigService
-    
-    # 初始化配置服务
+
     config_service = ConfigService()
-    config_service.init_config("/home/superfhwl/repo/OrcaLab")
-    
+    project_root = Path(__file__).resolve().parent.parent
+    workspace = Path.cwd()
+    config_service.init_config(project_root, workspace)
+
     app = QtWidgets.QApplication(sys.argv)
-    
+
     dialog = LaunchDialog()
     dialog.show()
-    
+
     sys.exit(app.exec())
