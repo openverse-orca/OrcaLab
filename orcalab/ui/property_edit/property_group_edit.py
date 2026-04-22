@@ -206,7 +206,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
 
         # 始终刷新树形属性中的子值（如关节名按钮），不受 source 影响
         for edit in self._property_edits:
-            if isinstance(edit, TreePropertyEdit):
+            if hasattr(edit, 'set_child_value'):
                 edit.set_child_value(property_key.property_name, value)
 
         if source == "ui":
@@ -236,7 +236,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
                 edit.set_read_only(read_only)
                 return
             # 处理树形属性的子属性
-            if isinstance(edit, TreePropertyEdit):
+            if hasattr(edit, 'set_child_read_only'):
                 edit.set_child_read_only(property_name, read_only)
 
     def expand(self):
