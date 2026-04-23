@@ -30,7 +30,7 @@ from orcalab.simulation.simulation_bus import (
     SimulationState,
 )
 from orcalab.simulation.simulation_service import SimulationService
-from orcalab.state_sync_bus import ManipulatorType,CameraMovementType, StateSyncRequest, StateSyncRequestBus
+from orcalab.state_sync_bus import ManipulatorType,CameraMovementType, MeasureType, StateSyncRequest, StateSyncRequestBus
 from orcalab.ui.actor_editor import ActorEditor
 from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.actor_outline_model import ActorOutlineModel
@@ -1325,6 +1325,10 @@ class MainWindow(
     @override
     async def set_camera_movement_type(self, type: CameraMovementType) -> None:
         await self.remote_scene.change_camera_movement_type(type)
+
+    @override
+    async def set_measure_type(self, type: MeasureType) -> None:
+        await self.remote_scene.change_measure_type(type)
 
     @override
     async def set_debug_draw(self, enabled: bool):
