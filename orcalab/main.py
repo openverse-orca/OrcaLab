@@ -17,7 +17,7 @@ from orcalab.asset_sync_ui import run_asset_sync_ui
 from orcalab.ui.main_window import MainWindow
 from orcalab.logging_util import setup_logging, resolve_log_level
 from orcalab.default_layout import prepare_default_layout
-from orcalab.process_guard import ensure_single_instance
+from orcalab.process_guard import ensure_single_instance_by_file_lock
 from orcalab.ui.main_window_full_screen import MainWindowFullScreen
 from orcalab.report.abnormal_exit_report import schedule_abnormal_exit_report
 import os
@@ -296,7 +296,7 @@ def main():
         sync_pak_urls(pak_urls, pak_urls_sha256)
 
     # 确保不会同时运行多个 OrcaLab 实例
-    ensure_single_instance()
+    ensure_single_instance_by_file_lock(config_service)
 
     # 同步订阅的资产包（带UI）
     run_asset_sync_ui(config_service)
