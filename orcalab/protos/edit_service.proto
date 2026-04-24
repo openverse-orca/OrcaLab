@@ -484,6 +484,53 @@ message PublishSceneResponse {
     string error_message = 2;
 }
 
+// Entity hierarchy messages
+
+message EntityInfoMessage {
+    uint64 entity_id = 1;
+    string name = 2;
+    string entity_path = 3;
+    repeated EntityInfoMessage children = 4;
+}
+
+message GetEntityHierarchyRequest {
+    string actor_path = 1;
+}
+message GetEntityHierarchyResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    EntityInfoMessage root_entity = 3;
+}
+
+message SetSelectedEntityRequest {
+    string actor_path = 1;
+    uint64 entity_id = 2;
+}
+message SetSelectedEntityResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+message SetHighlightEntityTreeRequest {
+    string actor_path = 1;
+    uint64 entity_id = 2;
+    bool highlight = 3;
+}
+message SetHighlightEntityTreeResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+message GetEntityPropertyGroupsRequest {
+    string actor_path = 1;
+    uint64 entity_id = 2;
+}
+message GetEntityPropertyGroupsResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    repeated PropertyGroup property_groups = 3;
+}
+
 message SetHighlightJointRequest {
     uint64 entity_id = 1;
     bool highlight = 2;
@@ -591,5 +638,11 @@ service GrpcService {
     rpc SetMoveRotateSensitivity(SetMoveRotateSensitivityRequest) returns (SetMoveRotateSensitivityResponse);
 
     rpc PublishScene(PublishSceneRequest) returns (PublishSceneResponse);
+
+    // Entity hierarchy related RPCs
+    rpc GetEntityHierarchy(GetEntityHierarchyRequest) returns (GetEntityHierarchyResponse);
+    rpc SetSelectedEntity(SetSelectedEntityRequest) returns (SetSelectedEntityResponse);
+    rpc SetHighlightEntityTree(SetHighlightEntityTreeRequest) returns (SetHighlightEntityTreeResponse);
+    rpc GetEntityPropertyGroups(GetEntityPropertyGroupsRequest) returns (GetEntityPropertyGroupsResponse);
 
 }

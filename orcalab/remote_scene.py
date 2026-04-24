@@ -846,3 +846,27 @@ class RemoteScene(SceneEditNotification):
             await self._service.custom_command(
                 f"set_active_actor:{actor.string() if actor else ''}"
             )
+
+    async def get_entity_hierarchy(self, actor_path: Path) -> dict | None:
+        async with self._grpc_lock:
+            return await self._service.get_entity_hierarchy(actor_path)
+
+    async def set_selected_entity(self, actor_path: Path, entity_id: int):
+        async with self._grpc_lock:
+            await self._service.set_selected_entity(actor_path, entity_id)
+
+    async def set_highlight_entity_tree(
+        self, actor_path: Path, entity_id: int, highlight: bool
+    ):
+        async with self._grpc_lock:
+            await self._service.set_highlight_entity_tree(
+                actor_path, entity_id, highlight
+            )
+
+    async def get_entity_property_groups(
+        self, actor_path: Path, entity_id: int
+    ) -> list:
+        async with self._grpc_lock:
+            return await self._service.get_entity_property_groups(
+                actor_path, entity_id
+            )

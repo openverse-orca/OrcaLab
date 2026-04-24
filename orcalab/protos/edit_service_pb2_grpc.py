@@ -5,7 +5,7 @@ import warnings
 
 import edit_service_pb2 as edit__service__pb2
 
-GRPC_GENERATED_VERSION = '1.66.1'
+GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + f' but the generated code in edit_service_pb2_grpc.py depends on'
+        + ' but the generated code in edit_service_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -248,6 +248,26 @@ class GrpcServiceStub(object):
                 '/SceneEdit.GrpcService/PublishScene',
                 request_serializer=edit__service__pb2.PublishSceneRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.PublishSceneResponse.FromString,
+                _registered_method=True)
+        self.GetEntityHierarchy = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetEntityHierarchy',
+                request_serializer=edit__service__pb2.GetEntityHierarchyRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetEntityHierarchyResponse.FromString,
+                _registered_method=True)
+        self.SetSelectedEntity = channel.unary_unary(
+                '/SceneEdit.GrpcService/SetSelectedEntity',
+                request_serializer=edit__service__pb2.SetSelectedEntityRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.SetSelectedEntityResponse.FromString,
+                _registered_method=True)
+        self.SetHighlightEntityTree = channel.unary_unary(
+                '/SceneEdit.GrpcService/SetHighlightEntityTree',
+                request_serializer=edit__service__pb2.SetHighlightEntityTreeRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.SetHighlightEntityTreeResponse.FromString,
+                _registered_method=True)
+        self.GetEntityPropertyGroups = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetEntityPropertyGroups',
+                request_serializer=edit__service__pb2.GetEntityPropertyGroupsRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetEntityPropertyGroupsResponse.FromString,
                 _registered_method=True)
 
 
@@ -512,6 +532,31 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetEntityHierarchy(self, request, context):
+        """Entity hierarchy related RPCs
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetSelectedEntity(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetHighlightEntityTree(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetEntityPropertyGroups(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GrpcServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -729,6 +774,26 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.PublishScene,
                     request_deserializer=edit__service__pb2.PublishSceneRequest.FromString,
                     response_serializer=edit__service__pb2.PublishSceneResponse.SerializeToString,
+            ),
+            'GetEntityHierarchy': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetEntityHierarchy,
+                    request_deserializer=edit__service__pb2.GetEntityHierarchyRequest.FromString,
+                    response_serializer=edit__service__pb2.GetEntityHierarchyResponse.SerializeToString,
+            ),
+            'SetSelectedEntity': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetSelectedEntity,
+                    request_deserializer=edit__service__pb2.SetSelectedEntityRequest.FromString,
+                    response_serializer=edit__service__pb2.SetSelectedEntityResponse.SerializeToString,
+            ),
+            'SetHighlightEntityTree': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetHighlightEntityTree,
+                    request_deserializer=edit__service__pb2.SetHighlightEntityTreeRequest.FromString,
+                    response_serializer=edit__service__pb2.SetHighlightEntityTreeResponse.SerializeToString,
+            ),
+            'GetEntityPropertyGroups': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetEntityPropertyGroups,
+                    request_deserializer=edit__service__pb2.GetEntityPropertyGroupsRequest.FromString,
+                    response_serializer=edit__service__pb2.GetEntityPropertyGroupsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1892,6 +1957,114 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/PublishScene',
             edit__service__pb2.PublishSceneRequest.SerializeToString,
             edit__service__pb2.PublishSceneResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetEntityHierarchy(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetEntityHierarchy',
+            edit__service__pb2.GetEntityHierarchyRequest.SerializeToString,
+            edit__service__pb2.GetEntityHierarchyResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetSelectedEntity(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/SetSelectedEntity',
+            edit__service__pb2.SetSelectedEntityRequest.SerializeToString,
+            edit__service__pb2.SetSelectedEntityResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetHighlightEntityTree(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/SetHighlightEntityTree',
+            edit__service__pb2.SetHighlightEntityTreeRequest.SerializeToString,
+            edit__service__pb2.SetHighlightEntityTreeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetEntityPropertyGroups(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetEntityPropertyGroups',
+            edit__service__pb2.GetEntityPropertyGroupsRequest.SerializeToString,
+            edit__service__pb2.GetEntityPropertyGroupsResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -651,3 +651,57 @@ class EditServiceWrapper:
         )
         response = await self.stub.SetMoveRotateSensitivity(request)
         self._check_response(response)
+
+    async def get_entity_hierarchy(self, actor_path: Path) -> dict:
+        request = edit_service_pb2.GetEntityHierarchyRequest(
+            actor_path=actor_path.string()
+        )
+        response = await self.stub.GetEntityHierarchy(request)
+        self._check_response(response)
+
+        def parse_entity_info(msg) -> dict:
+            return {
+                "entity_id": msg.entity_id,
+                "name": msg.name,
+                "entity_path": msg.entity_path,
+                "children": [parse_entity_info(child) for child in msg.children],
+            }
+
+        if response.HasField("root_entity"):
+            return parse_entity_info(response.root_entity)
+        return None
+
+    async def set_selected_entity(self, actor_path: Path, entity_id: int):
+        request = edit_service_pb2.SetSelectedEntityRequest(
+            actor_path=actor_path.string(),
+            entity_id=entity_id,
+        )
+        response = await self.stub.SetSelectedEntity(request)
+        self._check_response(response)
+
+    async def set_highlight_entity_tree(
+        self, actor_path: Path, entity_id: int, highlight: bool
+    ):
+        request = edit_service_pb2.SetHighlightEntityTreeRequest(
+            actor_path=actor_path.string(),
+            entity_id=entity_id,
+            highlight=highlight,
+        )
+        response = await self.stub.SetHighlightEntityTree(request)
+        self._check_response(response)
+
+    async def get_entity_property_groups(
+        self, actor_path: Path, entity_id: int
+    ) -> List[ActorPropertyGroup]:
+        request = edit_service_pb2.GetEntityPropertyGroupsRequest(
+            actor_path=actor_path.string(),
+            entity_id=entity_id,
+        )
+        response = await self.stub.GetEntityPropertyGroups(request)
+        self._check_response(response)
+
+        property_groups: List[ActorPropertyGroup] = []
+        for pg_msg in response.property_groups:
+            pg = self._parse_property_group_msg(pg_msg)
+            property_groups.append(pg)
+        return property_groups
