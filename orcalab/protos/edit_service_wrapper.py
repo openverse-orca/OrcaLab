@@ -3,6 +3,8 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import Any, List, Tuple
 
+from orcalab.entity_info import EntityInfo
+
 import orcalab.protos.edit_service_pb2_grpc as edit_service_pb2_grpc
 import orcalab.protos.edit_service_pb2 as edit_service_pb2
 
@@ -652,20 +654,21 @@ class EditServiceWrapper:
         response = await self.stub.SetMoveRotateSensitivity(request)
         self._check_response(response)
 
-    async def get_entity_hierarchy(self, actor_path: Path) -> dict:
+    async def get_entity_hierarchy(self, actor_path: Path) -> EntityInfo | None:
         request = edit_service_pb2.GetEntityHierarchyRequest(
             actor_path=actor_path.string()
         )
         response = await self.stub.GetEntityHierarchy(request)
         self._check_response(response)
 
-        def parse_entity_info(msg) -> dict:
-            return {
-                "entity_id": msg.entity_id,
-                "name": msg.name,
-                "entity_path": msg.entity_path,
-                "children": [parse_entity_info(child) for child in msg.children],
-            }
+        def parse_entity_info(msg) -> EntityInfo:
+            children = [parse_entity_info(child) for child in msg.children]
+            return EntityInfo(
+                entity_id=msg.entity_id,
+                name=msg.name,
+                entity_path=msg.entity_path,
+                children=children,
+            )
 
         if response.HasField("root_entity"):
             return parse_entity_info(response.root_entity)

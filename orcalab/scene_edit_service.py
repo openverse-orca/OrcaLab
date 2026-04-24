@@ -14,6 +14,7 @@ from orcalab.actor_util import (
     clone_actor_basic,
     make_unique_name1,
 )
+from orcalab.entity_info import EntityInfo
 from orcalab.local_scene import LocalScene
 from orcalab.remote_scene import RemoteScene
 from orcalab.math import Transform
@@ -131,6 +132,9 @@ class SceneEditService(SceneEditRequest):
         old_actor_path = self.local_scene.active_actor
         if actor_path == old_actor_path:
             return
+
+        if self.local_scene.active_entity is not None:
+            await self._set_active_entity(None, None, False, source)
 
         self.local_scene.active_actor = actor_path
         if source != "remote_scene":
@@ -362,6 +366,11 @@ class SceneEditService(SceneEditRequest):
             )
             command_group.commands.append(active_actor_command)
             await self._set_active_actor(new_active_actor, undo=False, source=source)
+
+        if self.local_scene.active_entity is not None:
+            active_entity_actor_path, _ = self.local_scene.active_entity
+            if active_entity_actor_path in _actor_paths:
+                await self._set_active_entity(None, None, False, source)
 
         delete_command = DeleteActorCommand(_actors, parent_paths, indexes)
         command_group.commands.append(delete_command)
@@ -957,3 +966,76 @@ class SceneEditService(SceneEditRequest):
             await SceneEditNotificationBus().on_actor_locked_changed(
                 _actor_path, paths_to_update, locked, source
             )
+
+    @override
+    async def set_active_entity(
+        self,
+        actor_path: Path | None,
+        entity_id: int | None,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+        if self._edit_lock.locked() and source == "remote_scene":
+            return
+
+        async with self._edit_lock:
+            await self._set_active_entity(actor_path, entity_id, undo, source)
+
+    async def _set_active_entity(
+        self,
+        actor_path: Path | None,
+        entity_id: int | None,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+        old_active_entity = self.local_scene.active_entity
+
+        new_active_entity = None
+        if actor_path is not None and entity_id is not None:
+            new_active_entity = (actor_path, entity_id)
+
+        if new_active_entity == old_active_entity:
+            return
+
+        if old_active_entity is not None:
+            old_actor_path, old_entity_id = old_active_entity
+            await self.remote_scene.set_highlight_entity_tree(
+                old_actor_path, old_entity_id, False
+            )
+
+        self.local_scene.active_entity = new_active_entity
+
+        if new_active_entity is not None:
+            new_actor_path, new_entity_id = new_active_entity
+            await self.remote_scene.set_selected_entity(new_actor_path, new_entity_id)
+            await self.remote_scene.set_highlight_entity_tree(
+                new_actor_path, new_entity_id, True
+            )
+        else:
+            if old_active_entity is not None:
+                old_actor_path, _ = old_active_entity
+                await self.remote_scene.set_selected_entity(old_actor_path, 0)
+
+        bus = SceneEditNotificationBus()
+        await bus.on_active_entity_changed(old_active_entity, new_active_entity, source)
+
+    @override
+    async def fetch_entity_hierarchy(
+        self,
+        actor_path: Path,
+        source: str = "",
+    ) -> EntityInfo | None:
+        existing = self.local_scene.get_entity_root(actor_path)
+        if existing is not None:
+            return existing
+
+        entity_root = await self.remote_scene.get_entity_hierarchy(actor_path)
+        if entity_root is None:
+            return None
+
+        self.local_scene.set_entity_root(actor_path, entity_root)
+
+        bus = SceneEditNotificationBus()
+        await bus.on_entity_hierarchy_loaded(actor_path, entity_root, source)
+
+        return entity_root

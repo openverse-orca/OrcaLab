@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Sequence
 
 from orcalab.actor import BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyKey
+from orcalab.entity_info import EntityInfo
 from orcalab.math import Transform
 from orcalab.event_bus import create_event_bus
 from orcalab.path import Path
@@ -207,6 +208,22 @@ class SceneEditRequest:
         """
         pass
 
+    async def set_active_entity(
+        self,
+        actor_path: Path | None,
+        entity_id: int | None,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+        pass
+
+    async def fetch_entity_hierarchy(
+        self,
+        actor_path: Path,
+        source: str = "",
+    ) -> EntityInfo | None:
+        pass
+
 
 SceneEditRequestBus = create_event_bus(SceneEditRequest)
 
@@ -336,6 +353,22 @@ class SceneEditNotification:
     async def on_actor_locked_changed(
         self, actor_path: Path, paths_to_update: List[Path], locked: bool, source: str
     ):
+        pass
+
+    async def on_active_entity_changed(
+        self,
+        old_active_entity: tuple | None,
+        new_active_entity: tuple | None,
+        source: str = "",
+    ) -> None:
+        pass
+
+    async def on_entity_hierarchy_loaded(
+        self,
+        actor_path: Path,
+        entity_root: EntityInfo,
+        source: str = "",
+    ) -> None:
         pass
 
 

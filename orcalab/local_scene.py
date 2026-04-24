@@ -9,6 +9,7 @@ from orcalab.actor_property import (
     ActorPropertyType,
     TreePropertyNode,
 )
+from orcalab.entity_info import EntityInfo
 from orcalab.path import Path
 from orcalab.scene_edit_types import AddActorRequest
 
@@ -21,6 +22,7 @@ class LocalScene:
         self._actors[Path.root_path()] = self.root_actor
         self._selection: List[Path] = []
         self._active_actor: Path | None = None
+        self._active_entity: Tuple[Path, int] | None = None
 
     def __contains__(self, path: Path) -> bool:
         return path in self._actors
@@ -63,10 +65,45 @@ class LocalScene:
     def active_actor(self, actor_path: Path | None):
         self._active_actor = actor_path
 
+    @property
+    def active_entity(self) -> Tuple[Path, int] | None:
+        return self._active_entity
+
+    @active_entity.setter
+    def active_entity(self, value: Tuple[Path, int] | None):
+        self._active_entity = value
+
     def find_actor_by_path(self, path: Path) -> BaseActor | None:
         if path in self._actors:
             return self._actors[path]
         return None
+
+    def get_entity_root(self, actor_path: Path) -> EntityInfo | None:
+        actor = self.find_actor_by_path(actor_path)
+        if isinstance(actor, AssetActor):
+            return actor.entity_root
+        return None
+
+    def set_entity_root(self, actor_path: Path, entity_root: EntityInfo | None):
+        actor = self.find_actor_by_path(actor_path)
+        if isinstance(actor, AssetActor):
+            actor.entity_root = entity_root
+
+    def find_entity_info_by_id(
+        self, actor_path: Path, entity_id: int
+    ) -> EntityInfo | None:
+        entity_root = self.get_entity_root(actor_path)
+        if entity_root is None:
+            return None
+        return entity_root.find_by_entity_id(entity_id)
+
+    def find_entity_info_by_path(
+        self, actor_path: Path, entity_path: str
+    ) -> EntityInfo | None:
+        entity_root = self.get_entity_root(actor_path)
+        if entity_root is None:
+            return None
+        return entity_root.find_by_entity_path(entity_path)
 
     def get_actor_path(self, actor) -> Path | None:
         for path, a in self._actors.items():

@@ -16,6 +16,7 @@ from orcalab.actor_util import (
 )
 from orcalab.application_util import get_local_scene
 from orcalab.config_service import ConfigService
+from orcalab.entity_info import EntityInfo
 from orcalab.math import Transform
 from orcalab.path import Path
 from orcalab.actor import BaseActor, GroupActor, AssetActor
@@ -847,7 +848,7 @@ class RemoteScene(SceneEditNotification):
                 f"set_active_actor:{actor.string() if actor else ''}"
             )
 
-    async def get_entity_hierarchy(self, actor_path: Path) -> dict | None:
+    async def get_entity_hierarchy(self, actor_path: Path) -> EntityInfo | None:
         async with self._grpc_lock:
             return await self._service.get_entity_hierarchy(actor_path)
 
