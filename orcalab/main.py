@@ -272,6 +272,9 @@ def main():
     q_app = QtWidgets.QApplication(sys.argv)
     q_app.setWindowIcon(app_window_icon())
 
+    # 确保不会同时运行多个 OrcaLab 实例
+    ensure_single_instance_by_file_lock(config_service)
+
     # Ensure the external Python project (orcalab-pyside) is present and installed
     try:
         ensure_python_project_installed(config_service)
@@ -294,9 +297,6 @@ def main():
     if pak_urls:
         logger.info("正在同步pak_urls列表...")
         sync_pak_urls(pak_urls, pak_urls_sha256)
-
-    # 确保不会同时运行多个 OrcaLab 实例
-    ensure_single_instance_by_file_lock(config_service)
 
     # 同步订阅的资产包（带UI）
     run_asset_sync_ui(config_service)
