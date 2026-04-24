@@ -1039,3 +1039,13 @@ class SceneEditService(SceneEditRequest):
         await bus.on_entity_hierarchy_loaded(actor_path, entity_root, source)
 
         return entity_root
+
+    @override
+    async def get_entity_property_groups(
+        self,
+        actor_path: Path,
+        entity_id: int,
+    ) -> list:
+        return await self.remote_scene.get_entity_property_groups(
+            actor_path, entity_id
+        )

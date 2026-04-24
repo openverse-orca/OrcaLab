@@ -224,6 +224,13 @@ class SceneEditRequest:
     ) -> EntityInfo | None:
         pass
 
+    async def get_entity_property_groups(
+        self,
+        actor_path: Path,
+        entity_id: int,
+    ) -> list:
+        pass
+
 
 SceneEditRequestBus = create_event_bus(SceneEditRequest)
 

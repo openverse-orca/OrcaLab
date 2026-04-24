@@ -2,9 +2,10 @@ import asyncio
 from typing import Tuple, override
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from orcalab.actor import BaseActor, GroupActor
+from orcalab.actor import BaseActor, GroupActor, AssetActor
 from orcalab.actor_util import make_unique_name
 from orcalab.application_util import get_local_scene
+from orcalab.entity_info import EntityInfo
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.pyside_util import connect
@@ -25,7 +26,6 @@ logger = logging.getLogger(__name__)
 OUTLINE_BUTTON_GAP = 2
 
 
-# 每行右侧两个按钮的尺寸与间距（与 delegate 和 view 中计算一致）
 def _visibility_lock_button_rects(
     row_rect: QtCore.QRect,
 ) -> Tuple[QtCore.QRect, QtCore.QRect]:
@@ -64,10 +64,24 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
         if not index.isValid():
             super().paint(painter, option, index)
             return
-        actor = index.internalPointer()
+
+        node = index.internalPointer()
+        if isinstance(node, EntityInfo):
+            text_option = QtWidgets.QStyleOptionViewItem(option)
+            font = text_option.font
+            font.setItalic(True)
+            text_option.font = font
+            text_rect = QtCore.QRect(option.rect)
+            text_rect.setRight(text_rect.right() - 4)
+            text_option.rect = text_rect
+            super().paint(painter, text_option, index)
+            return
+
+        actor = node
         if not isinstance(actor, BaseActor):
             super().paint(painter, option, index)
             return
+
         color = option.palette.color(
             QtGui.QPalette.ColorGroup.Active,
             QtGui.QPalette.ColorRole.Text,
@@ -77,40 +91,19 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
         text_rect = QtCore.QRect(option.rect)
         text_rect.setRight(eye_rect.left() - OUTLINE_BUTTON_GAP)
         h = option.rect.height()
-        # 绘制 actor 名称
         text_option = QtWidgets.QStyleOptionViewItem(option)
         text_option.rect = text_rect
         super().paint(painter, text_option, index)
-        # 绘制可见按钮图标
         eye_icon = self._eye_visible_icon if actor.is_visible else self._eye_hidden_icon
         eye_pixmap = eye_icon.pixmap(QtCore.QSize(h, h))
         painter.drawPixmap(eye_rect, eye_pixmap)
-        # 绘制锁定按钮图标
         lock_icon = (
             self._lock_locked_icon if actor.is_locked else self._lock_unlocked_icon
         )
         lock_pixmap = lock_icon.pixmap(QtCore.QSize(h, h))
         painter.drawPixmap(lock_rect, lock_pixmap)
 
-    # @typing.override
-    # def createEditor(self, parent, option, index):
-    #     return QtWidgets.QLineEdit(text="aaaa", parent=parent)
 
-    # def setEditorData(self, editor: QtWidgets.QLineEdit, index):
-    #     print("set data")
-
-    # def updateEditorGeometry(
-    #     self, editor: QtWidgets.QLineEdit, option: QtWidgets.QStyleOptionViewItem, index
-    # ):
-    #     print(option.rect)
-    #     editor.setGeometry(option.rect)
-
-    # def setModelData(self, editor: QtWidgets.QLineEdit, model, index):
-    #     print(editor.text())
-
-
-# QTreeView的默认行为是按下鼠标左键时选中，我们希望在鼠标左键抬起的时候选中。
-# 这样可以避免在拖拽时选中。
 class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
     def __init__(self):
@@ -120,13 +113,11 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         self.customContextMenuRequested.connect(self.show_context_menu)
         self.setItemDelegate(ActorOutlineDelegate(self))
 
-        # self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(True)
         self.setDragDropMode(QtWidgets.QAbstractItemView.DragDropMode.DragDrop)
         self.setDefaultDropAction(QtCore.Qt.DropAction.CopyAction)
 
-        # 允许多选
         self.setSelectionMode(
             QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection
         )
@@ -140,8 +131,9 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
         self.reparent_mime = "application/x-orca-actor-reparent"
 
-        # 存储展开的Actor路径，刷新时保持展开状态。
         self._temp_expaned_actor_paths = []
+
+        self._fetched_entity_actors: set[Path] = set()
 
     def connect_bus(self):
         SceneEditNotificationBus.connect(self)
@@ -153,6 +145,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         self.setModel(model)
         connect(model.modelAboutToBeReset, self._before_reset_model)
         connect(model.modelReset, self._after_reset_model)
+        self.expanded.connect(self._on_node_expanded)
 
     def actor_model(self) -> ActorOutlineModel:
         model = self.model()
@@ -162,7 +155,6 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
     @override
     async def on_selection_changed(self, old_selection, new_selection, source=""):
-        # TODO: Set to focus actor.
         if source == "actor_outline":
             return
 
@@ -176,9 +168,17 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
         self.set_actor_selection(actors)
 
-    def set_actor_selection(self, actors: list[BaseActor]):
-        """Update UI only."""
+    @override
+    async def on_active_entity_changed(
+        self,
+        old_active_entity: tuple | None,
+        new_active_entity: tuple | None,
+        source: str = "",
+    ) -> None:
+        if source == "actor_outline":
+            return
 
+    def set_actor_selection(self, actors: list[BaseActor]):
         selection_model = self.selectionModel()
         selection_model.clearSelection()
 
@@ -195,6 +195,48 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             selection_model.select(index, flags)
             self.scrollTo(index)
 
+    def _on_node_expanded(self, index: QtCore.QModelIndex):
+        if not index.isValid():
+            return
+
+        node = index.internalPointer()
+        if not isinstance(node, AssetActor):
+            return
+
+        actor_path = self.actor_model().local_scene.get_actor_path(node)
+        if actor_path is None:
+            return
+
+        if actor_path in self._fetched_entity_actors:
+            return
+
+        self._fetched_entity_actors.add(actor_path)
+
+        async def _fetch():
+            await SceneEditRequestBus().fetch_entity_hierarchy(
+                actor_path, source="actor_outline"
+            )
+
+        asyncio.create_task(_fetch())
+
+    def _recursive_expand(self, index: QtCore.QModelIndex, expanded: bool):
+        if not index.isValid():
+            return
+
+        self.setExpanded(index, expanded)
+
+        model = self.actor_model()
+        row_count = model.rowCount(index)
+        for i in range(row_count):
+            child = model.index(i, 0, index)
+            self._recursive_expand(child, expanded)
+
+    def _recursive_expand_action(self, expanded: bool):
+        index = self._current_index
+        if not index.isValid():
+            return
+        self._recursive_expand(index, expanded)
+
     @QtCore.Slot()
     def show_context_menu(self, position):
         self._current_index = self.indexAt(position)
@@ -203,8 +245,20 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         local_scene: LocalScene = actor_outline_model.local_scene
 
         is_root = False
-        current_actor = actor_outline_model.get_actor(self._current_index)
-        if current_actor is None:
+        current_node = None
+        if self._current_index.isValid():
+            current_node = self._current_index.internalPointer()
+
+        is_entity_node = isinstance(current_node, EntityInfo)
+
+        if current_node is None:
+            current_actor = local_scene.root_actor
+            is_root = True
+        elif isinstance(current_node, BaseActor):
+            current_actor = current_node
+        elif isinstance(current_node, EntityInfo):
+            current_actor = actor_outline_model.get_actor(self._current_index)
+        else:
             current_actor = local_scene.root_actor
             is_root = True
 
@@ -213,22 +267,41 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
         menu = QtWidgets.QMenu()
 
-        action_add_group = QtGui.QAction("Add Group")
-        connect(action_add_group.triggered, self._add_group)
-        menu.addAction(action_add_group)
+        if is_entity_node:
+            action_expand = QtGui.QAction("递归展开")
+            connect(action_expand.triggered, lambda: self._recursive_expand_action(True))
+            menu.addAction(action_expand)
 
-        if self._current_index.isValid():
+            action_collapse = QtGui.QAction("递归折叠")
+            connect(action_collapse.triggered, lambda: self._recursive_expand_action(False))
+            menu.addAction(action_collapse)
+        else:
+            action_add_group = QtGui.QAction("Add Group")
+            connect(action_add_group.triggered, self._add_group)
+            menu.addAction(action_add_group)
+
+            if self._current_index.isValid():
+                menu.addSeparator()
+
+                action_delete = QtGui.QAction("Delete")
+                connect(action_delete.triggered, self._delete_actor)
+                action_delete.setEnabled(not is_root)
+                menu.addAction(action_delete)
+
+                action_rename = QtGui.QAction("Rename")
+                connect(action_rename.triggered, self._open_rename_dialog)
+                action_rename.setEnabled(not is_root)
+                menu.addAction(action_rename)
+
             menu.addSeparator()
 
-            action_delete = QtGui.QAction("Delete")
-            connect(action_delete.triggered, self._delete_actor)
-            action_delete.setEnabled(not is_root)
-            menu.addAction(action_delete)
+            action_expand = QtGui.QAction("递归展开")
+            connect(action_expand.triggered, lambda: self._recursive_expand_action(True))
+            menu.addAction(action_expand)
 
-            action_rename = QtGui.QAction("Rename")
-            connect(action_rename.triggered, self._open_rename_dialog)
-            action_rename.setEnabled(not is_root)
-            menu.addAction(action_rename)
+            action_collapse = QtGui.QAction("递归折叠")
+            connect(action_collapse.triggered, lambda: self._recursive_expand_action(False))
+            menu.addAction(action_collapse)
 
         menu.exec(self.mapToGlobal(position))
 
@@ -255,15 +328,15 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
     async def _delete_actor(self):
         if self._current_actor is None:
             return
-        
+
         selection = self._selected_actor_paths()
         if self._current_actor_path in selection:
             bus = SceneEditRequestBus()
             await bus.delete_actors(selection)
         else:
-             await SceneEditRequestBus().delete_actor(
-            self._current_actor, undo=True, source="actor_outline"
-        )
+            await SceneEditRequestBus().delete_actor(
+                self._current_actor, undo=True, source="actor_outline"
+            )
 
     def _open_rename_dialog(self):
 
@@ -287,22 +360,29 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                 )
             )
 
-    def _get_actor_at_pos(self, pos: QtCore.QPoint) -> Tuple[BaseActor, Path]:
+    def _get_node_at_pos(self, pos: QtCore.QPoint):
         index = self.indexAt(pos)
-        actor_outline_model = self.actor_model()
-        actor = actor_outline_model.get_actor(index)
-        if actor is None:
-            raise Exception("Invalid actor.")
-
-        return actor_outline_model.local_scene.get_actor_and_path(actor)
+        if not index.isValid():
+            return None, None, None
+        node = index.internalPointer()
+        if isinstance(node, BaseActor):
+            actor_outline_model = self.actor_model()
+            actor, actor_path = actor_outline_model.local_scene.get_actor_and_path(node)
+            return node, actor_path, False
+        elif isinstance(node, EntityInfo):
+            actor_outline_model = self.actor_model()
+            actor_path = actor_outline_model._find_actor_path_for_entity_index(index)
+            return node, actor_path, True
+        return None, None, None
 
     def mousePressEvent(self, event: QtGui.QMouseEvent):
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
             self._left_mouse_pressed = True
             self._left_mouse_pressed_position = event.position()
-            actor, actor_path = self._get_actor_at_pos(event.position().toPoint())
-            self._current_actor = actor
-            self._current_actor_path = actor_path
+            node, actor_path, is_entity = self._get_node_at_pos(event.position().toPoint())
+            if isinstance(node, BaseActor):
+                self._current_actor = node
+                self._current_actor_path = actor_path
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent):
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
@@ -315,18 +395,39 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             index = self.indexAt(pos)
 
             if index.isValid():
-                row_rect = self.visualRect(index)
-                eye_rect, lock_rect = _visibility_lock_button_rects(row_rect)
-                if eye_rect.contains(pos):
-                    self._toggle_actor_visibile(index)
-                    return
-                if lock_rect.contains(pos):
-                    self._toggle_actor_locked(index)
+                node = index.internalPointer()
+
+                if isinstance(node, BaseActor):
+                    row_rect = self.visualRect(index)
+                    eye_rect, lock_rect = _visibility_lock_button_rects(row_rect)
+                    if eye_rect.contains(pos):
+                        self._toggle_actor_visibile(index)
+                        return
+                    if lock_rect.contains(pos):
+                        self._toggle_actor_locked(index)
+                        return
+
+            node, actor_path, is_entity = self._get_node_at_pos(pos)
+
+            if is_entity and isinstance(node, EntityInfo):
+                if not actor_path:
                     return
 
-            actor, actor_path = self._get_actor_at_pos(pos)
+                branch_area = self._brach_areas.get(index)
+                if branch_area and branch_area.contains(pos):
+                    self.setExpanded(index, not self.isExpanded(index))
+                    return
 
-            # Expand and collapse
+                async def _do_select_entity():
+                    await SceneEditRequestBus().set_active_entity(
+                        actor_path, node.entity_id, source="actor_outline"
+                    )
+
+                asyncio.create_task(_do_select_entity())
+                return
+
+            if node is None or actor_path is None:
+                return
 
             if not actor_path.is_root():
                 branch_area = self._brach_areas.get(index)
@@ -346,8 +447,6 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             def do_set_selection(actor_paths: list[Path], active_path: Path | None):
                 asyncio.create_task(_do_set_selection(actor_paths, active_path))
 
-            # Shift + 点击：如果点击的是 actor，则切换该 actor 的选中状态；如果点击的是空白，则不做任何操作。
-            # 参考Blender的行为。
             shift = event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
             if shift:
                 if actor_path == Path.root_path():
@@ -376,7 +475,6 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         actor_paths = self._selected_actor_paths()
         if actor_paths:
             if self._current_actor_path in actor_paths:
-            # 如果选中的 actor 中有不在同一父级下的，则不允许拖拽。
                 parent = self._current_actor_path.parent()
                 for actor_path in actor_paths:
                     if actor_path.parent() != parent:
@@ -388,7 +486,6 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         if distance < QtWidgets.QApplication.startDragDistance():
             return
 
-        # important: must set before startDrag
         self._left_mouse_pressed = False
 
         if self._current_actor_path in actor_paths:
@@ -419,7 +516,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             return
 
         actor.is_visible = not actor.is_visible
-        if actor.is_parent_visible == True:
+        if actor.is_parent_visible:
             asyncio.create_task(
                 SceneEditRequestBus().set_actor_visible(
                     actor_path, actor.is_visible, False, source="actor_outline"
@@ -455,11 +552,11 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         local_scene = actor_outline_model.local_scene
 
         for index in indexes:
-            actor = actor_outline_model.get_actor(index)
-            assert actor is not None
-            actor_path = local_scene.get_actor_path(actor)
-            assert actor_path is not None
-            actor_paths.append(actor_path)
+            node = index.internalPointer()
+            if isinstance(node, BaseActor):
+                actor_path = local_scene.get_actor_path(node)
+                if actor_path is not None:
+                    actor_paths.append(actor_path)
 
         return actor_paths
 
@@ -471,10 +568,11 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         actor_outline_model = self.actor_model()
         local_scene = actor_outline_model.local_scene
 
-        actor = actor_outline_model.get_actor(index)
-        actor_path = local_scene.get_actor_path(actor)
-        assert actor_path is not None
-        self._brach_areas[index] = rect
+        node = index.internalPointer()
+        if isinstance(node, BaseActor):
+            actor_path = local_scene.get_actor_path(node)
+            if actor_path is not None:
+                self._brach_areas[index] = rect
 
         return super().drawBranches(painter, rect, index)
 
@@ -488,11 +586,11 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             for i in range(model.rowCount(parent)):
                 child = model.index(i, 0, parent)
                 if self.isExpanded(child):
-                    actor = model.get_actor(child)
-                    actor_path = local_scene.get_actor_path(actor)
-                    assert actor_path is not None
-                    self._temp_expaned_actor_paths.append(actor_path)
-                    # Recursively check children
+                    node = child.internalPointer()
+                    if isinstance(node, BaseActor):
+                        actor_path = local_scene.get_actor_path(node)
+                        if actor_path is not None:
+                            self._temp_expaned_actor_paths.append(actor_path)
                     collect_expaneded_actors(child)
 
         collect_expaneded_actors(QtCore.QModelIndex())

@@ -31,7 +31,7 @@ from orcalab.simulation.simulation_bus import (
 )
 from orcalab.simulation.simulation_service import SimulationService
 from orcalab.state_sync_bus import ManipulatorType,CameraMovementType, MeasureType, StateSyncRequest, StateSyncRequestBus
-from orcalab.ui.actor_editor import ActorEditor
+from orcalab.ui.property_editor import PropertyEditor
 from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.asset_browser.asset_browser import AssetBrowser
@@ -421,8 +421,8 @@ class MainWindow(
         self.add_panel(panel, "left")
 
         logger.info("创建属性编辑器…")
-        self.actor_editor_widget = ActorEditor()
-        panel = Panel("编辑", self.actor_editor_widget)
+        self.actor_editor_widget = PropertyEditor()
+        panel = Panel("属性", self.actor_editor_widget)
         panel.panel_icon = make_icon(":/icons/circle_edit.svg", panel_icon_color)
         self.add_panel(panel, "right")
 
