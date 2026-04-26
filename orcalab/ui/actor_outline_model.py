@@ -42,6 +42,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         self.m_root_group: GroupActor | None = None
         self.reparent_mime = "application/x-orca-actor-reparent"
         self.local_scene = local_scene
+        self._entity_actor_path_cache: dict[int, Path] = {}
 
     def connect_bus(self):
         SceneEditNotificationBus.connect(self)
@@ -78,13 +79,38 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         raise ValueError("Invalid node.")
 
     def _find_actor_path_for_entity_index(self, index: QModelIndex) -> Path | None:
-        current = index
-        while current.isValid():
-            node = current.internalPointer()
-            if isinstance(node, AssetActor):
-                return self.local_scene.get_actor_path(node)
-            current = current.parent()
+        node = index.internalPointer()
+        if isinstance(node, AssetActor):
+            return self.local_scene.get_actor_path(node)
+        if isinstance(node, EntityInfo):
+            cached = self._entity_actor_path_cache.get(id(node))
+            if cached is not None:
+                return cached
+            for path, actor in self.local_scene._actors.items():
+                if isinstance(actor, AssetActor) and actor.entity_root is not None:
+                    if self._is_entity_in_tree(actor.entity_root, node):
+                        self._entity_actor_path_cache[id(node)] = path
+                        return path
         return None
+
+    def _is_entity_in_tree(self, root: EntityInfo, target: EntityInfo) -> bool:
+        if root is target:
+            return True
+        for child in root.children:
+            if self._is_entity_in_tree(child, target):
+                return True
+        return False
+
+    def _register_entity_tree(self, actor_path: Path, entity: EntityInfo):
+        self._entity_actor_path_cache[id(entity)] = actor_path
+        for child in entity.children:
+            self._register_entity_tree(actor_path, child)
+
+    def _rebuild_entity_cache(self):
+        self._entity_actor_path_cache.clear()
+        for path, actor in self.local_scene._actors.items():
+            if isinstance(actor, AssetActor) and actor.entity_root is not None:
+                self._register_entity_tree(path, actor.entity_root)
 
     def get_index_from_actor(self, actor: BaseActor) -> QModelIndex:
         if not isinstance(actor, BaseActor):
@@ -224,9 +250,32 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
                     return QModelIndex()
                 return self.createIndex(0, 0, entity_root)
 
-            return self.createIndex(child.row(), 0, parent_entity)
+            _, parent_row = self._find_parent_and_row(entity_root, parent_entity)
+            if parent_row == -1:
+                return QModelIndex()
+
+            return self.createIndex(parent_row, 0, parent_entity)
 
         return QModelIndex()
+
+    @override
+    def hasChildren(self, /, parent=...):
+        if not parent.isValid():
+            return self.m_root_group is not None and len(self.m_root_group.children) > 0
+
+        if parent.column() != 0:
+            return False
+
+        node = parent.internalPointer()
+
+        if isinstance(node, GroupActor):
+            return len(node.children) > 0
+        elif isinstance(node, AssetActor):
+            return True
+        elif isinstance(node, EntityInfo):
+            return len(node.children) > 0
+
+        return False
 
     @override
     def rowCount(self, /, parent=...):
@@ -303,9 +352,11 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         if not isinstance(group, GroupActor):
             raise TypeError("Root group must be an instance of GroupActor.")
 
+        self._entity_actor_path_cache.clear()
         self.beginResetModel()
         self.m_root_group = group
         self.endResetModel()
+        self._rebuild_entity_cache()
 
     def supportedDropActions(self):
         return Qt.DropAction.CopyAction | Qt.DropAction.MoveAction
@@ -489,6 +540,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         source: str,
     ):
         self.endResetModel()
+        self._rebuild_entity_cache()
 
     @override
     async def before_actors_deleted(self, actor_paths: List[Path], source: str):
@@ -497,6 +549,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
     @override
     async def on_actors_deleted(self, actor_paths: List[Path], source: str):
         self.endResetModel()
+        self._rebuild_entity_cache()
 
     @override
     async def before_actor_renamed(
@@ -526,6 +579,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
     @override
     async def on_actor_reparented(self):
         self.endResetModel()
+        self._rebuild_entity_cache()
 
     @override
     async def on_actor_visible_changed(
@@ -550,6 +604,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
     @override
     async def on_actor_added_batch(self, error: str):
         self.endResetModel()
+        self._rebuild_entity_cache()
 
     @override
     async def on_entity_hierarchy_loaded(
@@ -558,6 +613,8 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         entity_root: EntityInfo,
         source: str = "",
     ) -> None:
+        self._register_entity_tree(actor_path, entity_root)
+
         actor = self.local_scene.find_actor_by_path(actor_path)
         if actor is None:
             return

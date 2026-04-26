@@ -565,19 +565,15 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         return super().paintEvent(event)
 
     def drawBranches(self, painter, rect, index):
-        actor_outline_model = self.actor_model()
-        local_scene = actor_outline_model.local_scene
-
         node = index.internalPointer()
-        if isinstance(node, BaseActor):
-            actor_path = local_scene.get_actor_path(node)
-            if actor_path is not None:
-                self._brach_areas[index] = rect
+        if isinstance(node, (BaseActor, EntityInfo)):
+            self._brach_areas[index] = rect
 
         return super().drawBranches(painter, rect, index)
 
     def _before_reset_model(self):
         self._temp_expaned_actor_paths.clear()
+        self._fetched_entity_actors.clear()
 
         model = self.actor_model()
         local_scene = model.local_scene
