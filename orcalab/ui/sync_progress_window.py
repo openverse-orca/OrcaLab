@@ -9,6 +9,7 @@
 
 from PySide6 import QtWidgets, QtCore, QtGui
 from typing import Dict, List, Optional
+import threading
 import time
 
 from numpy import int64
@@ -111,6 +112,9 @@ class AssetItemWidget(QtWidgets.QWidget):
         elif self.status == 'incompatible':
             self.status_text.setText("不兼容")
             self.status_text.setStyleSheet("color: orange;")
+        elif self.status == 'incomplete':
+            self.status_text.setText("文件下载不完整")
+            self.status_text.setStyleSheet("color: orange;")
     
     def set_progress(self, progress: int64, speed: float = 0):
         """
@@ -146,13 +150,20 @@ class SyncProgressWindow(QtWidgets.QDialog):
     _set_status_signal = QtCore.Signal(str, str)  # asset_id, status
     _set_progress_signal = QtCore.Signal(str, int64, float)  # asset_id, progress, speed
     _set_message_signal = QtCore.Signal(str)  # message
+    _set_metadata_progress_signal = QtCore.Signal(str, int, int)  # status, count, total
     _complete_signal = QtCore.Signal(bool, str)  # success, message
     _start_signal = QtCore.Signal()
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, cancel_event: Optional[threading.Event] = None):
         super().__init__(parent)
+        self._cancel_event = cancel_event
+        self._sync_finished = False
         self.setWindowFlag(QtCore.Qt.WindowType.WindowMinMaxButtonsHint, True)
-        self.setWindowFlags(QtCore.Qt.WindowType.Window) # Ubuntu 下修复无法最大化的问题
+        self.setWindowFlags(
+            QtCore.Qt.WindowType.Window
+            | QtCore.Qt.WindowType.WindowCloseButtonHint
+            | QtCore.Qt.WindowType.WindowMinMaxButtonsHint
+        )  # Ubuntu 下修复无法最大化；显式保留关闭按钮
         self.asset_widgets: Dict[str, AssetItemWidget] = {}
         self.start_time = None
         self.countdown_seconds = 0
@@ -164,6 +175,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
         self._set_status_signal.connect(self._set_status_impl)
         self._set_progress_signal.connect(self._set_progress_impl)
         self._set_message_signal.connect(self._set_message_impl)
+        self._set_metadata_progress_signal.connect(self._set_metadata_progress_impl)
         self._complete_signal.connect(self._complete_impl)
         self._start_signal.connect(self._start_impl)
     
@@ -206,6 +218,23 @@ class SyncProgressWindow(QtWidgets.QDialog):
         
         scroll_area.setWidget(self.asset_list_widget)
         layout.addWidget(scroll_area)
+
+        # 元数据同步进度
+        metadata_layout = QtWidgets.QVBoxLayout()
+        metadata_layout.setSpacing(4)
+        self.metadata_label = QtWidgets.QLabel("元数据同步")
+        self.metadata_label.setStyleSheet("color: gray;")
+        self.metadata_label.setVisible(False)
+        metadata_layout.addWidget(self.metadata_label)
+
+        self.metadata_progress_bar = QtWidgets.QProgressBar()
+        self.metadata_progress_bar.setRange(0, 100)
+        self.metadata_progress_bar.setValue(0)
+        self.metadata_progress_bar.setTextVisible(True)
+        self.metadata_progress_bar.setVisible(False)
+        metadata_layout.addWidget(self.metadata_progress_bar)
+
+        layout.addLayout(metadata_layout)
         
         # 底部状态
         bottom_layout = QtWidgets.QHBoxLayout()
@@ -214,6 +243,11 @@ class SyncProgressWindow(QtWidgets.QDialog):
         bottom_layout.addWidget(self.status_label)
         
         bottom_layout.addStretch()
+        
+        # 同步进行中可停止（取消下载并退出或离线启动）
+        self.stop_button = QtWidgets.QPushButton("停止同步")
+        self.stop_button.clicked.connect(self._prompt_stop_sync)
+        bottom_layout.addWidget(self.stop_button)
         
         # 退出按钮（初始隐藏，仅在失败时显示）
         self.exit_button = QtWidgets.QPushButton("退出")
@@ -297,6 +331,56 @@ class SyncProgressWindow(QtWidgets.QDialog):
     def _set_message_impl(self, message: str):
         """内部实现：设置底部状态消息"""
         self.status_label.setText(message)
+
+    def set_metadata_progress(self, status: str, count: int = 0, total: int = 0):
+        """线程安全：设置元数据同步进度。"""
+        self._set_metadata_progress_signal.emit(status, count, total)
+
+    def _set_metadata_progress_impl(self, status: str, count: int, total: int):
+        """内部实现：设置元数据同步进度。"""
+        if status == 'start':
+            self.metadata_label.setVisible(True)
+            self.metadata_progress_bar.setVisible(True)
+            self.metadata_progress_bar.setRange(0, max(total, 1))
+            self.metadata_progress_bar.setValue(0)
+            self.metadata_label.setText(f"元数据同步准备中: 待更新 {total} 个包")
+            return
+
+        if status == 'fetching':
+            self.metadata_label.setVisible(True)
+            self.metadata_progress_bar.setVisible(True)
+            self.metadata_progress_bar.setRange(0, 0)
+            self.metadata_label.setText("元数据同步进度: 正在获取远端列表...")
+            return
+
+        if status == 'scanning':
+            self.metadata_label.setVisible(True)
+            self.metadata_progress_bar.setVisible(True)
+            if total > 0:
+                self.metadata_progress_bar.setRange(0, total)
+                self.metadata_progress_bar.setValue(min(count, total))
+                self.metadata_label.setText(f"元数据同步进度: 已扫描 {count}/{total}")
+            else:
+                self.metadata_progress_bar.setRange(0, 0)
+                self.metadata_label.setText("元数据同步进度: 正在扫描...")
+            return
+
+        if status == 'complete':
+            self.metadata_label.setVisible(True)
+            self.metadata_progress_bar.setVisible(True)
+            if count == 0 and total == 0:
+                self.metadata_progress_bar.setRange(0, 1)
+                self.metadata_progress_bar.setValue(1)
+                self.metadata_label.setText("元数据同步完成: 无需更新")
+                return
+            final_total = max(total, count, 1)
+            self.metadata_progress_bar.setRange(0, final_total)
+            self.metadata_progress_bar.setValue(min(count, final_total))
+            self.metadata_label.setText(f"元数据同步完成: {count}/{total}")
+            return
+
+        self.metadata_label.setVisible(False)
+        self.metadata_progress_bar.setVisible(False)
     
     def start_sync(self):
         """线程安全：开始同步"""
@@ -306,6 +390,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
         """内部实现：开始同步"""
         self.start_time = time.time()
         self._set_message_impl("正在同步资产包...")
+        self._set_metadata_progress_impl('idle', 0, 0)
     
     def complete_sync(self, success: bool, message: str = ""):
         """线程安全：完成同步"""
@@ -313,6 +398,12 @@ class SyncProgressWindow(QtWidgets.QDialog):
     
     def _complete_impl(self, success: bool, message: str):
         """内部实现：完成同步"""
+        self._sync_finished = True
+        self.stop_button.setVisible(False)
+        
+        if (not success and message == "用户已取消" and self.user_choice in ("exit", "offline")):
+            return
+        
         elapsed = time.time() - self.start_time if self.start_time else 0
         
         if success:
@@ -395,3 +486,33 @@ class SyncProgressWindow(QtWidgets.QDialog):
             del self.asset_widgets[asset_id]
             self.update_stats()
 
+    def _prompt_stop_sync(self):
+        if self._sync_finished:
+            return
+        msg = QtWidgets.QMessageBox(self)
+        msg.setWindowTitle("停止同步")
+        msg.setText("同步尚未完成，是否停止同步？")
+        msg.setInformativeText(
+            "退出程序：结束 OrcaLab\n离线继续：使用本地已有资产包启动"
+        )
+        msg.addButton("继续同步", QtWidgets.QMessageBox.ButtonRole.RejectRole)
+        btn_offline = msg.addButton("离线继续", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+        btn_exit = msg.addButton("退出程序", QtWidgets.QMessageBox.ButtonRole.DestructiveRole)
+        msg.exec()
+        if msg.clickedButton() == btn_exit:
+            if self._cancel_event:
+                self._cancel_event.set()
+            self.user_choice = "exit"
+            self.reject()
+        elif msg.clickedButton() == btn_offline:
+            if self._cancel_event:
+                self._cancel_event.set()
+            self.user_choice = "offline"
+            self.accept()
+
+    def closeEvent(self, event: QtGui.QCloseEvent):
+        if self._sync_finished:
+            super().closeEvent(event)
+            return
+        event.ignore()
+        self._prompt_stop_sync()

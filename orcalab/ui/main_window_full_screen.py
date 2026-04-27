@@ -23,11 +23,12 @@ from orcalab.ui.camera.camera_bus import (
     CameraNotificationBus,
     CameraRequestBus,
 )
+from orcalab.ui.icon_util import schedule_windows_taskbar_icon_refresh
 from orcalab.ui.viewport import Viewport
 from orcalab.config_service import ConfigService
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
-
+from orcalab.report.abnormal_exit_report import take_pending_abnormal_exit_report, send_abnormal_exit_report
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class MainWindowFullScreen(
     async def init(self):
         self.local_scene = LocalScene()
         self.remote_scene = RemoteScene(self.config_service)
-        self.scene_edit_service = SceneEditService(self.local_scene)
+        self.scene_edit_service = SceneEditService(self.local_scene, self.remote_scene)
         self.simulation_service = SimulationService()
 
         logger.info("开始初始化 UI…")
@@ -73,11 +74,13 @@ class MainWindowFullScreen(
         layout.setSpacing(0)
 
         self._viewport_widget = Viewport()
+        await asyncio.sleep(0.5)
         layout.addWidget(self._viewport_widget)
 
         rect = self.screen().availableGeometry()
         self.resize(rect.width(), rect.height())
         self.showMaximized()
+        schedule_windows_taskbar_icon_refresh(self)
         await asyncio.sleep(0.5)
         logger.info("UI 初始化完成")
 
@@ -86,6 +89,13 @@ class MainWindowFullScreen(
             await send_report_directly()
         else:
             logger.info("用户拒绝发送统计数据")
+
+        # 若上次异常退出，上传上次运行的 log 文件
+        if take_pending_abnormal_exit_report():
+            try:
+                await send_abnormal_exit_report()
+            except Exception:
+                logger.exception("crash_reports 上传失败")
 
         logger.info("初始化引擎...")
         self._viewport_widget.init_viewport()

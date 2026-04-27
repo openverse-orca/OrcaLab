@@ -15,6 +15,7 @@ class AuthWindow(QtWidgets.QDialog):
     # 定义信号
     update_status_signal = QtCore.Signal(str)
     auth_complete_signal = QtCore.Signal(bool, str)  # (success, message)
+    show_warning_dialog_signal = QtCore.Signal(str, str)  # (title, message)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -25,6 +26,10 @@ class AuthWindow(QtWidgets.QDialog):
         
         self.auth_success = False
         self.auth_message = ""
+        self._auth_finished = False
+        self._dialog_active = True
+        self._root_warning_shown = False
+        self._browser_help_shown = False
         
         self._setup_ui()
         self._connect_signals()
@@ -89,6 +94,7 @@ class AuthWindow(QtWidgets.QDialog):
         """连接信号"""
         self.update_status_signal.connect(self._on_status_update)
         self.auth_complete_signal.connect(self._on_auth_complete)
+        self.show_warning_dialog_signal.connect(self._on_show_warning_dialog)
     
     def _on_status_update(self, message: str):
         """更新状态文本"""
@@ -96,6 +102,7 @@ class AuthWindow(QtWidgets.QDialog):
     
     def _on_auth_complete(self, success: bool, message: str):
         """认证完成"""
+        self._auth_finished = True
         self.auth_success = success
         self.auth_message = message
         
@@ -113,6 +120,18 @@ class AuthWindow(QtWidgets.QDialog):
             self.status_label.setText(f"✗ {message}")
             self.status_label.setStyleSheet("color: red;")
             self.cancel_button.setText("关闭")
+
+    def _on_show_warning_dialog(self, title: str, message: str):
+        """显示警告弹窗。"""
+        if not self._dialog_active or self._auth_finished:
+            return
+
+        msg_box = QtWidgets.QMessageBox(self)
+        msg_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Ok)
+        msg_box.exec()
     
     def update_status(self, message: str):
         """
@@ -132,6 +151,33 @@ class AuthWindow(QtWidgets.QDialog):
             message: 结果消息
         """
         self.auth_complete_signal.emit(success, message)
+
+    def show_browser_help_dialog(self, auth_url: str):
+        """线程安全：显示浏览器故障排查提示。"""
+        if self._browser_help_shown:
+            return
+        self._browser_help_shown = True
+        message = (
+            "等待浏览器认证已超过 30 秒，浏览器可能没有正常弹出，或认证页没有成功打开。\n\n"
+            "建议尝试：\n"
+            "1. 检查默认浏览器是否可正常启动。\n"
+            "2. 检查是否被弹窗拦截、远程桌面会话限制或系统安全策略阻止。\n"
+            "3. 复制下面地址到浏览器中手动打开后继续登录：\n"
+            f"{auth_url}"
+        )
+        self.show_warning_dialog_signal.emit("浏览器未正常打开", message)
+
+    def show_root_user_warning(self):
+        """线程安全：显示 root 用户运行提示。"""
+        if self._root_warning_shown:
+            return
+        self._root_warning_shown = True
+        message = (
+            "检测到当前使用 root 用户运行 OrcaLab。\n\n"
+            "不建议使用 root 用户启动 OrcaLab，这可能导致浏览器沙箱报错，认证页面无法正常打开。\n"
+            "建议切换到普通用户后重新启动。"
+        )
+        self.show_warning_dialog_signal.emit("不建议使用 root 用户", message)
     
     def run_auth(self, auth_func: Callable[[], Optional[dict]]) -> Optional[dict]:
         """
@@ -173,6 +219,11 @@ class AuthWindow(QtWidgets.QDialog):
             return None
         
         return result_container[0]
+
+    def done(self, r: int):
+        """关闭窗口时标记为非活动状态，避免后台线程继续弹提示。"""
+        self._dialog_active = False
+        super().done(r)
 
 
 def show_auth_dialog(auth_func: Callable[[], Optional[dict]], parent=None) -> Optional[dict]:

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Sequence
 
 from orcalab.actor import BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyKey
@@ -6,6 +6,7 @@ from orcalab.math import Transform
 from orcalab.event_bus import create_event_bus
 from orcalab.path import Path
 from orcalab.protos.edit_service_wrapper import CameraDataPNGResult
+from orcalab.scene_edit_types import AddActorRequest
 
 
 class SceneEditRequest:
@@ -16,12 +17,14 @@ class SceneEditRequest:
         undo: bool = True,
         source: str = "",
     ) -> None:
-        """Set the current selection.
-        Args:
-            selection (List[Path]): The new selection. A list of actor paths. An empty list clears the selection.
-            undo (bool): Whether this action should be undoable.
-            source (str): The source of the selection change. Useful for avoiding feedback loops.
-        """
+        pass
+
+    async def set_active_actor(
+        self,
+        actor: BaseActor | Path | None,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
         pass
 
     async def add_actor(
@@ -33,12 +36,25 @@ class SceneEditRequest:
     ):
         pass
 
-    def can_delete_actor(self, out: List[bool], actor: BaseActor | Path):
+    async def add_actors(
+        self,
+        requests: List[AddActorRequest],
+        undo: bool = True,
+        source: str = "",
+    ):
         pass
 
     async def delete_actor(
         self,
         actor: BaseActor | Path,
+        undo: bool = True,
+        source: str = "",
+    ):
+        pass
+
+    async def delete_actors(
+        self,
+        actors: Sequence[BaseActor | Path],
         undo: bool = True,
         source: str = "",
     ):
@@ -58,6 +74,34 @@ class SceneEditRequest:
         actor: BaseActor | Path,
         new_parent: BaseActor | Path,
         row: int,
+        undo: bool = True,
+        source: str = "",
+    ):
+        pass
+
+    async def reparent_actors(
+        self,
+        actors: Sequence[BaseActor | Path],
+        new_parent: BaseActor | Path,
+        row: int,
+        undo: bool = True,
+        source: str = "",
+    ):
+        pass
+
+    async def move_actors(
+        self,
+        old_actors: Sequence[BaseActor | Path],
+        new_parent_paths: List[Path],
+        insert_positions: List[int],
+        undo: bool = True,
+        source: str = "",
+    ):
+        pass
+
+    async def duplicate_actors(
+        self,
+        actors: Sequence[BaseActor | Path],
         undo: bool = True,
         source: str = "",
     ):
@@ -94,17 +138,26 @@ class SceneEditRequest:
     def end_change_property(self, property_key: ActorPropertyKey):
         pass
 
-    def start_change_transform(self, actor: BaseActor | Path):
-        pass
-
-    def end_change_transform(self, actor: BaseActor | Path):
-        pass
-
     async def set_transform(
         self,
         actor: BaseActor | Path,
         transform: Transform,
         local: bool,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+        pass
+
+    async def start_change_transform_batch(self, actors: Sequence[BaseActor | Path]):
+        pass
+
+    async def end_change_transform_batch(self, actors: Sequence[BaseActor | Path]):
+        pass
+
+    async def set_transform_batch(
+        self,
+        actors: Sequence[BaseActor | Path],
+        transforms: Sequence[Transform],
         undo: bool = True,
         source: str = "",
     ) -> None:
@@ -119,13 +172,41 @@ class SceneEditRequest:
     def get_selection(self, out: List[List[Path]]):
         pass
 
-    async def set_highlight_joint(self, entity_id: int, highlight: bool) -> None:
-        """Highlight or unhighlight a single joint in the viewport.
+    async def set_actor_visible(
+        self,
+        actor: BaseActor | Path,
+        visible: bool,
+        undo: bool = False,
+        source: str = "",
+    ):
+        pass
+
+    async def set_actor_locked(
+        self,
+        actor: BaseActor | Path,
+        locked: bool,
+        undo: bool = False,
+        source: str = "",
+    ):
+        pass
+
+    async def set_selection_and_active_actor(
+        self,
+        selection: List[Path],
+        actor: BaseActor | Path | None,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+        pass
+
+    async def set_highlight_entity(self, entity_id: int, highlight: bool) -> None:
+        """Highlight or unhighlight a single entity (joint/geom/site) in the viewport.
         Args:
-            entity_id (int): The EntityId of the joint entity (from TreePropertyNode.name).
+            entity_id (int): The EntityId of the target entity (from TreePropertyNode.name).
             highlight (bool): True to highlight, False to clear.
         """
         pass
+
 
 SceneEditRequestBus = create_event_bus(SceneEditRequest)
 
@@ -140,11 +221,19 @@ class SceneEditNotification:
     ) -> None:
         pass
 
-    async def on_transform_changed(
+    async def on_active_actor_changed(
         self,
-        actor_path: Path,
-        transform: Transform,
-        local: bool,
+        old_active_actor: Path | None,
+        new_active_actor: Path | None,
+        source: str = "",
+    ) -> None:
+        pass
+
+    async def on_transforms_changed(
+        self,
+        actor_paths: List[Path],
+        old_transforms: List[Transform],
+        new_transforms: List[Transform],
         source: str,
     ) -> None:
         pass
@@ -173,18 +262,16 @@ class SceneEditNotification:
     ):
         pass
 
-    async def before_actor_deleted(
-        self,
-        actor_path: Path,
-        source: str,
-    ):
+    async def before_actor_added_batch(self):
         pass
 
-    async def on_actor_deleted(
-        self,
-        actor_path: Path,
-        source: str,
-    ):
+    async def on_actor_added_batch(self, error: str):
+        pass
+
+    async def before_actors_deleted(self, actor_paths: List[Path], source: str):
+        pass
+
+    async def on_actors_deleted(self, actor_paths: List[Path], source: str):
         pass
 
     async def before_actor_renamed(
@@ -203,22 +290,10 @@ class SceneEditNotification:
     ):
         pass
 
-    async def before_actor_reparented(
-        self,
-        actor_path: Path,
-        new_parent_path: Path,
-        row: int,
-        source: str,
-    ):
+    async def before_actor_reparented(self):
         pass
 
-    async def on_actor_reparented(
-        self,
-        actor_path: Path,
-        new_parent_path: Path,
-        row: int,
-        source: str,
-    ):
+    async def on_actor_reparented(self):
         pass
 
     async def on_property_changed(
@@ -241,10 +316,26 @@ class SceneEditNotification:
     async def get_camera_png(self, camera_name: str, png_path: str, png_name: str):
         pass
 
-    async def get_camera_data_png(self, camera_name: str, png_path: str, index: int, output: list[CameraDataPNGResult] = None) -> CameraDataPNGResult:
+    async def get_camera_data_png(
+        self,
+        camera_name: str,
+        png_path: str,
+        index: int,
+        output: list[CameraDataPNGResult] = None,
+    ) -> CameraDataPNGResult:
         pass
 
     async def get_actor_asset_aabb(self, actor_path: Path, output: List[float]):
+        pass
+
+    async def on_actor_visible_changed(
+        self, actor_path: Path, paths_to_update: List[Path], visible: bool, source: str
+    ):
+        pass
+
+    async def on_actor_locked_changed(
+        self, actor_path: Path, paths_to_update: List[Path], locked: bool, source: str
+    ):
         pass
 
 

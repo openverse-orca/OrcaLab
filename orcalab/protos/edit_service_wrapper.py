@@ -1,4 +1,3 @@
-import asyncio
 import grpc
 import numpy as np
 from dataclasses import dataclass, field
@@ -9,7 +8,7 @@ import orcalab.protos.edit_service_pb2 as edit_service_pb2
 
 from orcalab.math import Transform
 from orcalab.path import Path
-from orcalab.actor import BaseActor, GroupActor, AssetActor
+from orcalab.actor import GroupActor, AssetActor
 from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
@@ -17,6 +16,7 @@ from orcalab.actor_property import (
     ActorPropertyType,
     TreePropertyNode,
 )
+from orcalab.scene_edit_types import AddActorRequest
 from orcalab.ui.camera.camera_brief import CameraBrief
 
 Success = edit_service_pb2.StatusCode.Success
@@ -75,6 +75,12 @@ class EditServiceWrapper:
             print(f"[Error] {response.error_message}")
             raise Exception(f"Request failed. {response.error_message}")
 
+    def _check_response_no_exception(self, response) -> str:
+        if response.status_code != Success:
+            print(f"[Error] {response.error_message}")
+            return response.error_message
+        return ""
+
     async def aloha(self) -> bool:
         try:
             request = edit_service_pb2.AlohaRequest(value=1)
@@ -85,6 +91,70 @@ class EditServiceWrapper:
             return True
         except Exception as e:
             return False
+
+    async def add_actor_batch(
+        self, in_requests: List[AddActorRequest], stop_on_error
+    ) -> Tuple[bool, List[str]]:
+        requests = []
+        for in_request in in_requests:
+            actor = in_request.actor
+            parent_path = in_request.parent_path
+
+            request_union = edit_service_pb2.AddActorRequestUnion()
+            if isinstance(actor, GroupActor):
+                transform_msg = self._create_transform_message(actor.transform)
+                request = edit_service_pb2.AddGroupRequest(
+                    actor_name=actor.name,
+                    parent_actor_path=parent_path.string(),
+                    transform=transform_msg,
+                    space=edit_service_pb2.Space.Local,
+                )
+                request_union.group_actor.CopyFrom(request)
+            elif isinstance(actor, AssetActor):
+                transform_msg = self._create_transform_message(actor.transform)
+                request = edit_service_pb2.AddAssetActorRequest(
+                    actor_name=actor.name,
+                    spawnable_name=actor.asset_path,
+                    parent_actor_path=parent_path.string(),
+                    transform=transform_msg,
+                    space=edit_service_pb2.Space.Local,
+                )
+                request_union.asset_actor.CopyFrom(request)
+            else:
+                raise ValueError("Unsupported actor type.")
+            requests.append(request_union)
+
+        batch_request = edit_service_pb2.AddActorBatchRequest(requests=requests, stop_on_error=stop_on_error)
+        response = await self.stub.AddActorBatch(batch_request)
+        if response.status_code != Success:
+            print(f"Errors occur during add_actor_batch()")
+            for req, error in zip(in_requests, response.errors):
+                if error:
+                    print(
+                        f"    Error adding {req.actor.name} under {req.parent_path}: {error}"
+                    )
+            return False, response.errors
+        return True, response.errors
+
+    async def delete_actor_batch(
+        self, actor_paths: List[Path]
+    ) -> Tuple[bool, List[str]]:
+        paths = []
+        for p in actor_paths:
+            if not isinstance(p, Path):
+                raise Exception(f"Invalid path: {p}")
+            paths.append(p.string())
+
+        batch_request = edit_service_pb2.DeleteActorBatchRequest(actor_paths=paths)
+        response = await self.stub.DeleteActorBatch(batch_request)
+
+        if response.status_code != Success:
+            print(f"Errors occur during delete_actor_batch()")
+            for path, error in zip(actor_paths, response.errors):
+                if error:
+                    print(f"    Error deleting {path}: {error}")
+            return False, response.errors
+        return True, response.errors
 
     async def query_pending_operation_loop(self) -> List[str]:
         request = edit_service_pb2.GetPendingOperationsRequest()
@@ -102,44 +172,35 @@ class EditServiceWrapper:
         self._check_response(response)
         return self._get_transform_from_message(response.transform)
 
-    async def add_group_actor(self, actor: GroupActor, parent_path: Path):
-        assert isinstance(actor, GroupActor), "actor must be a GroupActor"
-        transform_msg = self._create_transform_message(actor.transform)
-        request = edit_service_pb2.AddGroupRequest(
-            actor_name=actor.name,
-            parent_actor_path=parent_path.string(),
-            transform=transform_msg,
-            space=edit_service_pb2.Space.Local,
+    async def get_pending_actor_transform_batch(
+        self, paths: List[Path]
+    ) -> List[Transform]:
+        request = edit_service_pb2.GetPendingActorTransformBatchRequest(
+            actor_paths=[p.string() for p in paths]
         )
-        response = await self.stub.AddGroup(request)
-
+        response = await self.stub.GetPendingActorTransformBatch(request)
         self._check_response(response)
+        transforms = []
+        for transform_msg in response.transforms:
+            transform = self._get_transform_from_message(transform_msg)
+            transforms.append(transform)
+        assert len(transforms) == len(
+            paths
+        ), "Response transforms length does not match request paths length."
+        return transforms
 
-    async def add_asset_actor(self, actor: AssetActor, parent_path: Path):
-        assert isinstance(actor, AssetActor), "actor must be an AssetActor"
-        transform_msg = self._create_transform_message(actor.transform)
+    async def set_actor_transform_batch(
+        self, paths: List[Path], transforms: List[Transform]
+    ):
+        if len(paths) != len(transforms):
+            raise ValueError("Paths and transforms must have the same length.")
+        request = edit_service_pb2.SetActorTransformBatchRequest()
+        for path, transform in zip(paths, transforms):
+            transform_msg = self._create_transform_message(transform)
+            request.actor_paths.append(path.string())
+            request.transforms.append(transform_msg)
 
-        request = edit_service_pb2.AddActorRequest(
-            actor_name=actor.name,
-            spawnable_name=actor.asset_path,
-            parent_actor_path=parent_path.string(),
-            transform=transform_msg,
-            space=edit_service_pb2.Space.Local,
-        )
-        response = await self.stub.AddActor(request)
-
-        self._check_response(response)
-
-    async def set_actor_transform(self, path: Path, transform: Transform, local: bool):
-        transform_msg = self._create_transform_message(transform)
-        space = edit_service_pb2.Space.Local if local else edit_service_pb2.Space.World
-        request = edit_service_pb2.SetActorTransformRequest(
-            actor_path=path.string(),
-            transform=transform_msg,
-            space=space,
-        )
-
-        response = await self.stub.SetActorTransform(request)
+        response = await self.stub.SetActorTransformBatch(request)
         self._check_response(response)
 
     async def publish_scene(self):
@@ -203,11 +264,6 @@ class EditServiceWrapper:
         response = await self.stub.RestoreState(request)
         self._check_response(response)
 
-    async def delete_actor(self, actor_path: Path):
-        request = edit_service_pb2.DeleteActorRequest(actor_path=actor_path.string())
-        response = await self.stub.DeleteActor(request)
-        self._check_response(response)
-
     async def rename_actor(self, actor_path: Path, new_name: str):
         request = edit_service_pb2.RenameActorRequest(
             actor_path=actor_path.string(),
@@ -216,13 +272,17 @@ class EditServiceWrapper:
         response = await self.stub.RenameActor(request)
         self._check_response(response)
 
-    async def reparent_actor(self, actor_path: Path, new_parent_path: Path):
-        request = edit_service_pb2.ReParentActorRequest(
-            actor_path=actor_path.string(),
-            new_parent_path=new_parent_path.string(),
+    async def move_actor_batch(
+        self, actor_paths: List[Path], new_parent_paths: List[Path]
+    ):
+        actor_paths_str = [p.string() for p in actor_paths]
+        new_parent_paths_str = [p.string() for p in new_parent_paths]
+        request = edit_service_pb2.MoveActorBatchRequest(
+            actor_paths=actor_paths_str,
+            new_parent_paths=new_parent_paths_str,
         )
 
-        response = await self.stub.ReParentActor(request)
+        response = await self.stub.MoveActorBatch(request)
         self._check_response(response)
 
     async def get_window_id(self):
@@ -334,7 +394,8 @@ class EditServiceWrapper:
         l = []
         for cam in response.cameras:
             camera_brief = CameraBrief(index=cam.index, name=cam.name)
-            camera_brief.source = cam.source
+            camera_brief.source = getattr(cam, "source", "") or ""
+            camera_brief.actor_path = getattr(cam, "actor_path", "") or ""
             l.append(camera_brief)
         return l
 
@@ -419,6 +480,23 @@ class EditServiceWrapper:
             node.children.append(child_node)
         return node
 
+    def _parse_property_group_msg(self, pg_msg) -> ActorPropertyGroup:
+        pg = ActorPropertyGroup(
+            prefix=pg_msg.prefix, name=pg_msg.name, hint=pg_msg.hint
+        )
+
+        for prop_msg in pg_msg.properties:
+            prop = self._parse_property_msg(prop_msg)
+            if prop:
+                pg.properties.append(prop)
+
+        # 解析树形数据
+        for tree_node_msg in pg_msg.tree_data:
+            tree_node = self._parse_tree_node_msg(tree_node_msg)
+            pg.tree_data.append(tree_node)
+
+        return pg
+
     async def get_property_groups(self, actor_path: Path) -> List[ActorPropertyGroup]:
         request = edit_service_pb2.GetPropertyGroupsRequest()
         request.actor_path = actor_path.string()
@@ -428,23 +506,29 @@ class EditServiceWrapper:
         property_groups: List[ActorPropertyGroup] = []
 
         for pg_msg in response.property_groups:
-            pg = ActorPropertyGroup(
-                prefix=pg_msg.prefix, name=pg_msg.name, hint=pg_msg.hint
-            )
-
-            for prop_msg in pg_msg.properties:
-                prop = self._parse_property_msg(prop_msg)
-                if prop:
-                    pg.properties.append(prop)
-
-            # 解析树形数据
-            for tree_node_msg in pg_msg.tree_data:
-                tree_node = self._parse_tree_node_msg(tree_node_msg)
-                pg.tree_data.append(tree_node)
-
+            pg = self._parse_property_group_msg(pg_msg)
             property_groups.append(pg)
 
         return property_groups
+
+    async def get_property_groups_batch(
+        self, actor_paths: List[Path]
+    ) -> List[List[ActorPropertyGroup]]:
+        request = edit_service_pb2.GetPropertyGroupsBatchRequest()
+        for actor_path in actor_paths:
+            request.actor_paths.append(actor_path.string())
+        response = await self.stub.GetPropertyGroupsBatch(request)
+        self._check_response(response)
+
+        all_property_groups: List[List[ActorPropertyGroup]] = []
+        for pg_list_msg in response.property_group_lists:
+            property_groups: List[ActorPropertyGroup] = []
+            for pg_msg in pg_list_msg.elements:
+                pg = self._parse_property_group_msg(pg_msg)
+                property_groups.append(pg)
+            all_property_groups.append(property_groups)
+
+        return all_property_groups
 
     def _create_property_key_message(self, key: ActorPropertyKey):
         key_msg = edit_service_pb2.PropertyKey()
@@ -533,4 +617,37 @@ class EditServiceWrapper:
     async def custom_command(self, command: str):
         request = edit_service_pb2.CustomCommandRequest(command=command)
         response = await self.stub.CustomCommand(request)
+        self._check_response(response)
+
+    async def set_visibility(self, visible: bool, actor_paths: List[Path]):
+        paths = []
+        for p in actor_paths:
+            if not isinstance(p, Path):
+                raise Exception(f"Invalid path: {p}")
+            paths.append(p.string())
+
+        request = edit_service_pb2.SetVisibilityRequest(
+            visible=visible, actor_paths=paths
+        )
+        response = await self.stub.SetVisibility(request)
+        self._check_response(response)
+
+    async def set_lock(self, locked: bool, actor_paths: List[Path]):
+        paths = []
+        for p in actor_paths:
+            if not isinstance(p, Path):
+                raise Exception(f"Invalid path: {p}")
+            paths.append(p.string())
+
+        request = edit_service_pb2.SetLockRequest(locked=locked, actor_paths=paths)
+        response = await self.stub.SetLock(request)
+        self._check_response(response)
+
+    async def set_move_rotate_sensitivity(
+        self, move_sensitivity: float, rotate_sensitivity: float
+    ):
+        request = edit_service_pb2.SetMoveRotateSensitivityRequest(
+            move_sensitivity=move_sensitivity, rotate_sensitivity=rotate_sensitivity
+        )
+        response = await self.stub.SetMoveRotateSensitivity(request)
         self._check_response(response)

@@ -10,6 +10,19 @@ from orcalab.ui.edit.string_edit import StringEdit
 from orcalab.ui.edit.multiline_string_edit import MultilineStringEdit
 
 
+def _normalize_float_vec(text: str) -> str | None:
+    """若文本为逗号分隔的 2~4 个浮点数（Vector2/3/4 或 range），
+    返回规范化为每分量 '%.6f' 的字符串，否则返回 None。"""
+    parts = text.split(",")
+    if len(parts) not in (2, 3, 4):
+        return None
+    try:
+        values = [float(p.strip()) for p in parts]
+        return ",".join(f"{v:.6f}" for v in values)
+    except ValueError:
+        return None
+
+
 class StringPropertyEdit(BasePropertyEdit[str]):
 
     def __init__(
@@ -64,17 +77,27 @@ class StringPropertyEdit(BasePropertyEdit[str]):
             return
 
         text = self._editor.text()
-        self.context.prop.set_value(text)
+        normalized = _normalize_float_vec(text)
+        commit_text = normalized if normalized is not None else text
 
+        self.context.prop.set_value(commit_text)
         undo = not self.in_dragging
-        self._do_set_value(text, undo)
+        self._do_set_value(commit_text, undo)
+
+        # 规范化后同步更新编辑器显示
+        if normalized is not None and normalized != text:
+            self._block_events = True
+            self._editor.set_value(normalized)
+            self._block_events = False
 
     @override
     def set_value(self, value: str):
         self._block_events = True
 
-        self.context.prop.set_value(value)
-        self._editor.setText(value)
+        normalized = _normalize_float_vec(value)
+        display = normalized if normalized is not None else value
+        self.context.prop.set_value(display)
+        self._editor.setText(display)
 
         self._block_events = False
 

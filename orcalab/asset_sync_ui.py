@@ -10,11 +10,12 @@ import logging
 from PySide6 import QtWidgets
 from numpy import int64
 
+from orcalab.config_service import ConfigService
 from orcalab.asset_sync_service import sync_assets, AssetSyncCallbacks
 from orcalab.ui.sync_progress_window import SyncProgressWindow
 from orcalab.auth_service import AuthService
 from orcalab.token_storage import TokenStorage
-from orcalab.ui.auth_window import show_auth_dialog
+from orcalab.ui.auth_window import AuthWindow
 
 logger = logging.getLogger(__name__)
 
@@ -45,18 +46,27 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
         if success:
             self.window.set_asset_status(asset_id, 'completed')
         else:
-            self.window.set_asset_status(asset_id, 'failed')
+            if error == "incomplete":
+                self.window.set_asset_status(asset_id, 'incomplete')
+            else:
+                self.window.set_asset_status(asset_id, 'failed')
     
     def on_delete(self, file_name: str):
         pass
     
     def on_metadata_sync(self, status: str, count: int = 0, total: int = 0):
+        self.window.set_metadata_progress(status, count, total)
         if status == 'start':
-            self.window.set_status(f"正在同步元数据... (0/{total})")
-        elif status == 'progress':
-            self.window.set_status(f"正在同步元数据... ({count}/{total})")
+            self.window.set_status(f"正在准备同步元数据... (待更新 {total} 个包)")
+        elif status == 'fetching':
+            self.window.set_status("正在获取远端元数据列表...")
+        elif status == 'scanning':
+            self.window.set_status(f"正在扫描远端元数据... ({count}/{total})")
         elif status == 'complete':
-            self.window.set_status(f"元数据同步完成 ({count}/{total})")
+            if count == 0 and total == 0:
+                self.window.set_status("元数据已是最新，无需同步")
+            else:
+                self.window.set_status(f"元数据同步完成 (更新 {count}/{total} 个包)")
     
     def on_complete(self, success: bool, message: str = ""):
         self.window.complete_sync(success, message)
@@ -88,6 +98,7 @@ def ask_offline_or_exit(title: str, message: str) -> bool:
         return True
     else:
         logger.info("用户选择退出程序")
+        ConfigService().mark_orcalab_closed_cleanly()
         import sys
         sys.exit(0)
 
@@ -111,13 +122,14 @@ def authenticate_user(config_service, window=None) -> bool:
     # 创建认证服务
     auth_service = AuthService(base_url, auth_server_url=auth_server_url, timeout=timeout)
     
-    def auth_func():
+    def auth_func(auth_window=None):
         """认证函数，带进度回调"""
-        return auth_service.authenticate(window=window, redirect_url=redirect_url)
+        return auth_service.authenticate(window=auth_window or window, redirect_url=redirect_url)
     
     # 如果没有传入 window，则显示认证对话框
     if window is None:
-        credentials = show_auth_dialog(auth_func)
+        dialog = AuthWindow()
+        credentials = dialog.run_auth(lambda: auth_func(dialog))
     else:
         credentials = auth_func()
     
@@ -197,19 +209,27 @@ def run_asset_sync_ui(config_service) -> bool:
         username = config_service.datalink_username()
         token = config_service.datalink_token()
     
+    # 与进度窗口共用：停止同步时 set()，让后台线程尽快退出，避免 exec 返回后 join 长时间阻塞
+    cancel_event = threading.Event()
+
     # 创建同步进度窗口
-    sync_window = SyncProgressWindow()
-    
+    sync_window = SyncProgressWindow(cancel_event=cancel_event)
+
     # 创建回调
     callbacks = SyncCallbacksImpl(sync_window)
-    
+
     # 在后台线程执行同步
     sync_result = [True]  # 使用列表来存储结果，因为需要在闭包中修改
     token_expired = [False]
     connection_failed = [False]
-    
+
     def run_sync():
-        result = sync_assets(config_service, callbacks=callbacks, verbose=False)
+        result = sync_assets(
+            config_service,
+            callbacks=callbacks,
+            verbose=False,
+            cancel_event=cancel_event,
+        )
         if result == 'TOKEN_EXPIRED':
             token_expired[0] = True
             sync_result[0] = False
@@ -231,6 +251,7 @@ def run_asset_sync_ui(config_service) -> bool:
     # 检查用户选择
     if sync_window.user_choice == 'exit':
         logger.info("用户选择退出程序")
+        ConfigService().mark_orcalab_closed_cleanly()
         import sys
         sys.exit(0)
     elif sync_window.user_choice == 'offline':

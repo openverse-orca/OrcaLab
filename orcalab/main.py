@@ -10,23 +10,25 @@ import sys
 import signal
 import logging
 
-from orcalab.cli_options import create_argparser
+from orcalab.cli_options import create_argparser, resolve_and_validate_workspace
 from orcalab.config_service import ConfigService
 from orcalab.project_util import check_project_folder, copy_packages, sync_pak_urls
 from orcalab.asset_sync_ui import run_asset_sync_ui
 from orcalab.ui.main_window import MainWindow
 from orcalab.logging_util import setup_logging, resolve_log_level
 from orcalab.default_layout import prepare_default_layout
-from orcalab.process_guard import ensure_single_instance
+from orcalab.process_guard import ensure_single_instance_by_file_lock
 from orcalab.ui.main_window_full_screen import MainWindowFullScreen
+from orcalab.report.abnormal_exit_report import schedule_abnormal_exit_report
 import os
 
 # import PySide6.QtAsyncio as QtAsyncio
-from PySide6 import QtWidgets, QtGui
+from PySide6 import QtWidgets
 import orcalab.assets.rc_assets
 
 from qasync import QEventLoop
 from orcalab.python_project_installer import ensure_python_project_installed
+from orcalab.ui.icon_util import app_window_icon
 
 # This is needed to display the app icon on the taskbar on Windows
 if os.name == 'nt':
@@ -60,16 +62,8 @@ def _start_force_exit_watchdog(timeout: int = 10) -> None:
 
 def signal_handler(signum, frame):
     """Handle system signals to ensure cleanup"""
-    logger.info("Received signal %s, cleaning up...", signum)
-    if _main_window is not None:
-        try:
-            # Try to run cleanup in the event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(_main_window.cleanup())
-        except Exception as e:
-            logger.exception("Error during signal cleanup: %s", e)
-    sys.exit(0)
+    logger.info("Received signal %s, exiting...", signum)
+    os._exit(0)
 
 
 def register_signal_handlers():
@@ -91,13 +85,14 @@ async def main_async(q_app, fullscreen: bool):
         main_window = MainWindow()
     _main_window = main_window  # Store reference for signal handlers
     await main_window.init()
-
     await app_close_event.wait()
 
     # Clean up resources before exiting
     logger.info("Application is closing, cleaning up resources...")
     await main_window.cleanup()
 
+    # Application is closed normally
+    ConfigService().mark_orcalab_closed_cleanly()
 
 _ADMIN_ONLY_LEVELS = {"previewthumbnail_orcalab"}
 
@@ -168,6 +163,7 @@ def select_scene_and_layout(
             logger.info("用户选择了场景: %s", selected.get("name"))
         else:
             logger.info("用户未选择场景，退出程序")
+            ConfigService().mark_orcalab_closed_cleanly()
             exit(0)
 
     # 2. 选择布局
@@ -244,7 +240,15 @@ def main():
 
     logger.info("进程 PID: %d", os.getpid())
 
-    workspace = pathlib.Path(args.workspace).resolve()
+    # 设置崩溃日志文件路径，C++ 信号处理器从此环境变量读取并写入 error.log（覆盖模式）
+    from orcalab.project_util import get_user_log_folder
+    _error_log_dir = get_user_log_folder()
+    _error_log_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["ORCALAB_ERROR_LOG"] = str(_error_log_dir / "error.log")
+
+    workspace = resolve_and_validate_workspace(
+        args.workspace, init_config=args.init_config
+    )
     logger.info("工作目录: %s", workspace)
 
     config_service = ConfigService()
@@ -252,6 +256,11 @@ def main():
     current_dir = pathlib.Path(__file__).parent.resolve()
     project_root = current_dir.parent  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root, workspace)
+
+    if config_service.had_previous_abnormal_exit():
+        logger.warning("检测到上次 OrcaLab 未正常退出")
+        schedule_abnormal_exit_report()
+    config_service.mark_orcalab_started()
 
     check_project_folder()
 
@@ -261,7 +270,10 @@ def main():
     register_signal_handlers()
 
     q_app = QtWidgets.QApplication(sys.argv)
-    q_app.setWindowIcon(QtGui.QIcon(":/icons/orcalab_logo.png"))
+    q_app.setWindowIcon(app_window_icon())
+
+    # 确保不会同时运行多个 OrcaLab 实例
+    ensure_single_instance_by_file_lock(config_service)
 
     # Ensure the external Python project (orcalab-pyside) is present and installed
     try:
@@ -281,12 +293,10 @@ def main():
 
     # 处理pak_urls（独立于paks和订阅列表，下载到orcalab子目录）
     pak_urls = config_service.pak_urls()
+    pak_urls_sha256 = config_service.pak_urls_sha256()
     if pak_urls:
         logger.info("正在同步pak_urls列表...")
-        sync_pak_urls(pak_urls)
-
-    # 确保不会同时运行多个 OrcaLab 实例
-    ensure_single_instance()
+        sync_pak_urls(pak_urls, pak_urls_sha256)
 
     # 同步订阅的资产包（带UI）
     run_asset_sync_ui(config_service)
@@ -324,12 +334,10 @@ def main():
     finally:
         event_loop.close()
 
-    _start_force_exit_watchdog(timeout=10)
-
-    # magic!
-    # AttributeError: 'NoneType' object has no attribute 'POLLER'
-    # https://github.com/google-gemini/deprecated-generative-ai-python/issues/207#issuecomment-2601058191
-    exit(0)
+    # 直接终止进程，跳过 Python atexit 和 C++ 静态析构。
+    # 引擎资源已在 main_async → cleanup 中清理完毕，
+    # 此处若走 exit(0) 会触发 .so 卸载时的静态析构器访问已销毁子系统导致 SIGSEGV。
+    os._exit(0)
 
 
 if __name__ == "__main__":

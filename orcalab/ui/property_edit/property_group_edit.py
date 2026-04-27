@@ -156,6 +156,12 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
             case ActorPropertyType.STRING:
                 return StringPropertyEdit(self, context, label_width)
             case ActorPropertyType.TREE:
+                if self._group.name == "Geom":
+                    from orcalab.ui.property_edit.geom_tree_property_edit import GeomTreePropertyEdit
+                    return GeomTreePropertyEdit(self, context, label_width)
+                if self._group.name == "Site":
+                    from orcalab.ui.property_edit.site_tree_property_edit import SiteTreePropertyEdit
+                    return SiteTreePropertyEdit(self, context, label_width)
                 return TreePropertyEdit(self, context, label_width)
             case _:
                 raise NotImplementedError("Unsupported property type")
@@ -192,22 +198,24 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         value: Any,
         source: str,
     ):
-        if source == "ui":
-            return
-
         if property_key.actor_path != self._actor_path:
             return
 
         if property_key.group_prefix != self._group.prefix:
             return
 
+        # 始终刷新树形属性中的子值（如关节名按钮），不受 source 影响
+        for edit in self._property_edits:
+            if hasattr(edit, 'set_child_value'):
+                edit.set_child_value(property_key.property_name, value)
+
+        if source == "ui":
+            return
+
         for edit in self._property_edits:
             if edit.context.prop.name() == property_key.property_name:
                 edit.set_value(value)
                 return
-            # 处理树形属性的子属性
-            if isinstance(edit, TreePropertyEdit):
-                edit.set_child_value(property_key.property_name, value)
 
     @override
     async def on_property_read_only_changed(
@@ -228,7 +236,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
                 edit.set_read_only(read_only)
                 return
             # 处理树形属性的子属性
-            if isinstance(edit, TreePropertyEdit):
+            if hasattr(edit, 'set_child_read_only'):
                 edit.set_child_read_only(property_name, read_only)
 
     def expand(self):

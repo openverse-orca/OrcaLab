@@ -118,7 +118,6 @@ class LaunchDialog(QtWidgets.QDialog):
         # 程序列表容器
         self.programs_scroll = QtWidgets.QScrollArea()
         self.programs_scroll.setWidgetResizable(True)
-        self.programs_scroll.setMaximumHeight(200)
         self.programs_scroll.setStyleSheet("""
             QScrollArea {
                 border: none;
@@ -142,6 +141,8 @@ class LaunchDialog(QtWidgets.QDialog):
         self.programs_widget = QtWidgets.QWidget()
         self.programs_layout = QtWidgets.QVBoxLayout(self.programs_widget)
         self.programs_layout.setContentsMargins(0, 0, 0, 0)
+        self.programs_layout.setSpacing(10)
+        self.programs_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
         
         self.programs_scroll.setWidget(self.programs_widget)
         programs_layout.addWidget(self.programs_scroll)
@@ -165,7 +166,7 @@ class LaunchDialog(QtWidgets.QDialog):
         
         self.details_text = QtWidgets.QTextEdit()
         self.details_text.setReadOnly(True)
-        self.details_text.setMaximumHeight(100)
+        self.details_text.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
         details_layout.addWidget(self.details_text)
         
         layout.addWidget(details_group)

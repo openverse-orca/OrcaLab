@@ -16,12 +16,81 @@ from orcalab.scene_edit_bus import (
 
 from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.rename_dialog import RenameDialog
+from orcalab.ui.icon_util import make_icon
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+OUTLINE_BUTTON_GAP = 2
+
+
+# 每行右侧两个按钮的尺寸与间距（与 delegate 和 view 中计算一致）
+def _visibility_lock_button_rects(
+    row_rect: QtCore.QRect,
+) -> Tuple[QtCore.QRect, QtCore.QRect]:
+    h = row_rect.height()
+    y = row_rect.top() + (row_rect.height() - h) // 2
+    r = row_rect.right()
+
+    lock_rect = QtCore.QRect(r - h, y, h, h)
+    eye_rect = QtCore.QRect(r - 2 * h - OUTLINE_BUTTON_GAP, y, h, h)
+
+    return eye_rect, lock_rect
 
 
 class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
 
     def __init__(self, /, parent=...):
         super().__init__(parent)
+        self._eye_visible_icon: QtGui.QIcon | None = None
+        self._eye_hidden_icon: QtGui.QIcon | None = None
+        self._lock_locked_icon: QtGui.QIcon | None = None
+        self._lock_unlocked_icon: QtGui.QIcon | None = None
+
+    def _ensure_icons(self, color: QtGui.QColor):
+        if self._eye_visible_icon is None:
+            self._eye_visible_icon = make_icon(":/icons/eye-open.svg", color)
+            self._eye_hidden_icon = make_icon(":/icons/eye-close.svg", color)
+            self._lock_locked_icon = make_icon(":/icons/lock-close-filled.svg", color)
+            self._lock_unlocked_icon = make_icon(":/icons/lock-open.svg", color)
+
+    def paint(
+        self,
+        painter: QtGui.QPainter,
+        option: QtWidgets.QStyleOptionViewItem,
+        index: QtCore.QModelIndex,
+    ):
+        if not index.isValid():
+            super().paint(painter, option, index)
+            return
+        actor = index.internalPointer()
+        if not isinstance(actor, BaseActor):
+            super().paint(painter, option, index)
+            return
+        color = option.palette.color(
+            QtGui.QPalette.ColorGroup.Active,
+            QtGui.QPalette.ColorRole.Text,
+        )
+        self._ensure_icons(color)
+        eye_rect, lock_rect = _visibility_lock_button_rects(option.rect)
+        text_rect = QtCore.QRect(option.rect)
+        text_rect.setRight(eye_rect.left() - OUTLINE_BUTTON_GAP)
+        h = option.rect.height()
+        # 绘制 actor 名称
+        text_option = QtWidgets.QStyleOptionViewItem(option)
+        text_option.rect = text_rect
+        super().paint(painter, text_option, index)
+        # 绘制可见按钮图标
+        eye_icon = self._eye_visible_icon if actor.is_visible else self._eye_hidden_icon
+        eye_pixmap = eye_icon.pixmap(QtCore.QSize(h, h))
+        painter.drawPixmap(eye_rect, eye_pixmap)
+        # 绘制锁定按钮图标
+        lock_icon = (
+            self._lock_locked_icon if actor.is_locked else self._lock_unlocked_icon
+        )
+        lock_pixmap = lock_icon.pixmap(QtCore.QSize(h, h))
+        painter.drawPixmap(lock_rect, lock_pixmap)
 
     # @typing.override
     # def createEditor(self, parent, option, index):
@@ -57,16 +126,22 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         self.setDragDropMode(QtWidgets.QAbstractItemView.DragDropMode.DragDrop)
         self.setDefaultDropAction(QtCore.Qt.DropAction.CopyAction)
 
-        self._change_from_inside = False
-        self._change_from_outside = False
+        # 允许多选
+        self.setSelectionMode(
+            QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection
+        )
+
         self._current_index = QtCore.QModelIndex()
         self._current_actor: BaseActor | None = None
 
-        self._brach_areas = {}
+        self._brach_areas: dict[QtCore.QModelIndex, QtCore.QRect] = {}
         self._left_mouse_pressed = False
-        self._left_mouse_pressed_position: QtCore.QPoint | None = None
+        self._left_mouse_pressed_position: QtCore.QPointF | None = None
 
         self.reparent_mime = "application/x-orca-actor-reparent"
+
+        # 存储展开的Actor路径，刷新时保持展开状态。
+        self._temp_expaned_actor_paths = []
 
     def connect_bus(self):
         SceneEditNotificationBus.connect(self)
@@ -76,8 +151,8 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
     def set_actor_model(self, model: ActorOutlineModel):
         self.setModel(model)
-        self.selectionModel().selectionChanged.connect(self._on_selection_changed)
-        connect(model.request_reparent, self._on_request_reparent)
+        connect(model.modelAboutToBeReset, self._before_reset_model)
+        connect(model.modelReset, self._after_reset_model)
 
     def actor_model(self) -> ActorOutlineModel:
         model = self.model()
@@ -85,20 +160,9 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             raise Exception("Invalid actor model.")
         return model
 
-    async def _on_request_reparent(
-        self, actor_path: Path, new_parent_path: Path, index: int
-    ):
-        print(f"reparent {actor_path} to {new_parent_path} at {index}")
-        await SceneEditRequestBus().reparent_actor(
-            actor_path, new_parent_path, index, undo=True, source="actor_outline"
-        )
-
-    @QtCore.Slot()
-    def _on_selection_changed(self):
-        pass
-
     @override
     async def on_selection_changed(self, old_selection, new_selection, source=""):
+        # TODO: Set to focus actor.
         if source == "actor_outline":
             return
 
@@ -113,10 +177,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         self.set_actor_selection(actors)
 
     def set_actor_selection(self, actors: list[BaseActor]):
-        if self._change_from_inside:
-            return
-
-        self._change_from_outside = True
+        """Update UI only."""
 
         selection_model = self.selectionModel()
         selection_model.clearSelection()
@@ -127,12 +188,12 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             if not index.isValid():
                 raise Exception("Invalid actor.")
 
-            selection_model.select(
-                index, QtCore.QItemSelectionModel.SelectionFlag.Select
+            flags = (
+                QtCore.QItemSelectionModel.SelectionFlag.Select
+                | QtCore.QItemSelectionModel.SelectionFlag.Rows
             )
+            selection_model.select(index, flags)
             self.scrollTo(index)
-
-        self._change_from_outside = False
 
     @QtCore.Slot()
     def show_context_menu(self, position):
@@ -169,7 +230,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             action_rename.setEnabled(not is_root)
             menu.addAction(action_rename)
 
-        menu.exec_(self.mapToGlobal(position))
+        menu.exec(self.mapToGlobal(position))
 
     async def _add_group(self):
         parent_actor = self._current_actor
@@ -194,8 +255,13 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
     async def _delete_actor(self):
         if self._current_actor is None:
             return
-
-        await SceneEditRequestBus().delete_actor(
+        
+        selection = self._selected_actor_paths()
+        if self._current_actor_path in selection:
+            bus = SceneEditRequestBus()
+            await bus.delete_actors(selection)
+        else:
+             await SceneEditRequestBus().delete_actor(
             self._current_actor, undo=True, source="actor_outline"
         )
 
@@ -221,7 +287,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                 )
             )
 
-    def _get_actor_at_pos(self, pos) -> Tuple[BaseActor, Path]:
+    def _get_actor_at_pos(self, pos: QtCore.QPoint) -> Tuple[BaseActor, Path]:
         index = self.indexAt(pos)
         actor_outline_model = self.actor_model()
         actor = actor_outline_model.get_actor(index)
@@ -233,8 +299,8 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
     def mousePressEvent(self, event: QtGui.QMouseEvent):
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
             self._left_mouse_pressed = True
-            self._left_mouse_pressed_position = event.pos()
-            actor, actor_path = self._get_actor_at_pos(event.pos())
+            self._left_mouse_pressed_position = event.position()
+            actor, actor_path = self._get_actor_at_pos(event.position().toPoint())
             self._current_actor = actor
             self._current_actor_path = actor_path
 
@@ -247,29 +313,58 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
             pos = event.position().toPoint()
             index = self.indexAt(pos)
+
+            if index.isValid():
+                row_rect = self.visualRect(index)
+                eye_rect, lock_rect = _visibility_lock_button_rects(row_rect)
+                if eye_rect.contains(pos):
+                    self._toggle_actor_visibile(index)
+                    return
+                if lock_rect.contains(pos):
+                    self._toggle_actor_locked(index)
+                    return
+
             actor, actor_path = self._get_actor_at_pos(pos)
 
-            if actor_path == Path.root_path():
-                self.set_actor_selection([])
+            # Expand and collapse
 
-                asyncio.create_task(
-                    SceneEditRequestBus().set_selection(
-                        [], undo=True, source="actor_outline"
-                    )
-                )
-
-            else:
-                rect = self._brach_areas.get(index)
-
-                if rect and rect.contains(pos):
+            if not actor_path.is_root():
+                branch_area = self._brach_areas.get(index)
+                if branch_area and branch_area.contains(pos):
                     self.setExpanded(index, not self.isExpanded(index))
+                    return
+
+            async def _do_set_selection(
+                actor_paths: list[Path], active_path: Path | None
+            ):
+                _actors, _ = get_local_scene().normalize_actors(actor_paths)
+                self.set_actor_selection(_actors)
+
+                bus = SceneEditRequestBus()
+                await bus.set_selection_and_active_actor(actor_paths, active_path, source="actor_outline")
+
+            def do_set_selection(actor_paths: list[Path], active_path: Path | None):
+                asyncio.create_task(_do_set_selection(actor_paths, active_path))
+
+            # Shift + 点击：如果点击的是 actor，则切换该 actor 的选中状态；如果点击的是空白，则不做任何操作。
+            # 参考Blender的行为。
+            shift = event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
+            if shift:
+                if actor_path == Path.root_path():
+                    pass
                 else:
-                    self.set_actor_selection([actor])
-                    asyncio.create_task(
-                        SceneEditRequestBus().set_selection(
-                            [actor_path], undo=True, source="actor_outline"
-                        )
-                    )
+                    actor_paths = self._selected_actor_paths()
+                    if actor_path in actor_paths:
+                        if actor_path == self.actor_model().local_scene.active_actor:
+                            actor_paths.remove(actor_path)
+                    else:
+                        actor_paths.append(actor_path)
+                    do_set_selection(actor_paths, actor_path)
+            else:
+                if actor_path == Path.root_path():
+                    do_set_selection([], None)
+                else:
+                    do_set_selection([actor_path], actor_path)
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent):
         if not self._left_mouse_pressed or self._left_mouse_pressed_position is None:
@@ -278,19 +373,34 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         if self._current_actor_path is None or self._current_actor_path.is_root():
             return
 
-        distance = (event.pos() - self._left_mouse_pressed_position).manhattanLength()
+        actor_paths = self._selected_actor_paths()
+        if actor_paths:
+            if self._current_actor_path in actor_paths:
+            # 如果选中的 actor 中有不在同一父级下的，则不允许拖拽。
+                parent = self._current_actor_path.parent()
+                for actor_path in actor_paths:
+                    if actor_path.parent() != parent:
+                        return
+
+        distance = (
+            event.position() - self._left_mouse_pressed_position
+        ).manhattanLength()
         if distance < QtWidgets.QApplication.startDragDistance():
             return
-        
+
         # important: must set before startDrag
         self._left_mouse_pressed = False
 
-        self.startDrag(QtCore.Qt.DropAction.CopyAction)
-        data = self._current_actor_path.string().encode("utf-8")
+        if self._current_actor_path in actor_paths:
+            data_string = ";".join(str(p) for p in actor_paths)
+        else:
+            data_string = self._current_actor_path.string()
+        data = data_string.encode("utf-8")
 
         mime_data = QtCore.QMimeData()
         mime_data.setData("application/x-orca-actor-reparent", data)
 
+        self.startDrag(QtCore.Qt.DropAction.CopyAction)
         drag = QtGui.QDrag(self)
         drag.setMimeData(mime_data)
         drag.exec(QtCore.Qt.DropAction.CopyAction)
@@ -298,27 +408,113 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         self._current_actor_path = None
         self._current_actor = None
 
-    def _get_selection_actor_path(self) -> Path | None:
-        indexes = self.selectedIndexes()
-        if not indexes:
-            return None
-
+    def _toggle_actor_visibile(self, index: QtCore.QModelIndex):
         actor_outline_model = self.actor_model()
-        actor = actor_outline_model.get_actor(indexes[0])
+        actor = actor_outline_model.get_actor(index)
         if actor is None:
-            return None
-
+            return
         local_scene: LocalScene = actor_outline_model.local_scene
         actor_path = local_scene.get_actor_path(actor)
-        return actor_path
+        if actor_path is None:
+            return
+
+        actor.is_visible = not actor.is_visible
+        if actor.is_parent_visible == True:
+            asyncio.create_task(
+                SceneEditRequestBus().set_actor_visible(
+                    actor_path, actor.is_visible, False, source="actor_outline"
+                )
+            )
+        self.viewport().update(self.visualRect(index))
+
+    def _toggle_actor_locked(self, index: QtCore.QModelIndex):
+        actor_outline_model = self.actor_model()
+        actor = actor_outline_model.get_actor(index)
+        if actor is None:
+            return
+        local_scene: LocalScene = actor_outline_model.local_scene
+        actor_path = local_scene.get_actor_path(actor)
+        if actor_path is None:
+            return
+
+        actor.is_locked = not actor.is_locked
+        asyncio.create_task(
+            SceneEditRequestBus().set_actor_locked(
+                actor_path, actor.is_locked, False, source="actor_outline"
+            )
+        )
+        self.viewport().update(self.visualRect(index))
+
+    def _selected_actor_paths(self) -> list[Path]:
+        indexes = self.selectedIndexes()
+        if not indexes:
+            return []
+
+        actor_paths = []
+        actor_outline_model = self.actor_model()
+        local_scene = actor_outline_model.local_scene
+
+        for index in indexes:
+            actor = actor_outline_model.get_actor(index)
+            assert actor is not None
+            actor_path = local_scene.get_actor_path(actor)
+            assert actor_path is not None
+            actor_paths.append(actor_path)
+
+        return actor_paths
 
     def paintEvent(self, event):
-        self._brach_areas = {}
+        self._brach_areas.clear()
         return super().paintEvent(event)
 
     def drawBranches(self, painter, rect, index):
+        actor_outline_model = self.actor_model()
+        local_scene = actor_outline_model.local_scene
+
+        actor = actor_outline_model.get_actor(index)
+        actor_path = local_scene.get_actor_path(actor)
+        assert actor_path is not None
         self._brach_areas[index] = rect
+
         return super().drawBranches(painter, rect, index)
+
+    def _before_reset_model(self):
+        self._temp_expaned_actor_paths.clear()
+
+        model = self.actor_model()
+        local_scene = model.local_scene
+
+        def collect_expaneded_actors(parent: QtCore.QModelIndex):
+            for i in range(model.rowCount(parent)):
+                child = model.index(i, 0, parent)
+                if self.isExpanded(child):
+                    actor = model.get_actor(child)
+                    actor_path = local_scene.get_actor_path(actor)
+                    assert actor_path is not None
+                    self._temp_expaned_actor_paths.append(actor_path)
+                    # Recursively check children
+                    collect_expaneded_actors(child)
+
+        collect_expaneded_actors(QtCore.QModelIndex())
+
+    def _after_reset_model(self):
+
+        model = self.actor_model()
+        local_scene = model.local_scene
+
+        actors, actor_paths = local_scene.normalize_actors(local_scene.selection)
+        self.set_actor_selection(actors)
+
+        for actor_path in self._temp_expaned_actor_paths:
+            actor = local_scene.find_actor_by_path(actor_path)
+            if actor is not None:
+                index = model.get_index_from_actor(actor)
+                if index.isValid():
+                    QtCore.QTimer.singleShot(
+                        10, lambda index=index: self.setExpanded(index, True)
+                    )
+
+        self._temp_expaned_actor_paths.clear()
 
 
 if __name__ == "__main__":
@@ -340,9 +536,9 @@ if __name__ == "__main__":
 
     def on_request_reparent(actor_path: Path, new_parent_path: Path, row: int):
         if row < 0:
-            print(f"reparent {actor_path} to end of {new_parent_path}")
+            logger.debug(f"reparent {actor_path} to end of {new_parent_path}")
         else:
-            print(f"reparent {actor_path} to row {row} of {new_parent_path}")
+            logger.debug(f"reparent {actor_path} to row {row} of {new_parent_path}")
 
     model.request_reparent.connect(on_request_reparent)
 

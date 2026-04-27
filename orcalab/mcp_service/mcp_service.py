@@ -29,6 +29,7 @@ from orcalab.asset_service_bus import AssetServiceRequestBus
 from orcalab.http_service.http_bus import HttpServiceRequestBus
 from orcalab.ui.panel_bus import PanelRequestBus
 from orcalab.copilot.service import CopilotService
+from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
 
 class OrcaLabMCPServer:
     def __init__(self, port):
@@ -47,8 +48,6 @@ class OrcaLabMCPServer:
         self.copilot_service = CopilotService()
         self.mcp = FastMCP("OrcaLab MCP Server")
         self._task = None
-        # Register tools immediately after MCP instance creation
-        self.add_tools()
 
     @staticmethod
     def _quat_to_euler_list(quat) -> List[float]:
@@ -65,6 +64,59 @@ class OrcaLabMCPServer:
         r = Rotation.from_euler("xyz", euler, degrees=True)
         x, y, z, w = r.as_quat()
         return [float(w), float(x), float(y), float(z)]
+
+    @staticmethod
+    def _mcp_layout_dir() -> str:
+        return os.path.join(os.path.expanduser("~"), ".orcalab", "mcp_layout")
+
+    @staticmethod
+    def _normalize_layout_name(layout_name: str) -> str:
+        # 仅允许文件名，避免路径穿越；强制 .json 后缀
+        base = os.path.basename((layout_name or "").strip())
+        if not base:
+            raise ValueError("layout_name 不能为空")
+        if not base.lower().endswith(".json"):
+            base += ".json"
+        return base
+
+    @staticmethod
+    def _actor_to_layout_dict(local_scene, actor: AssetActor | GroupActor) -> dict:
+        def _to_list(v):
+            return v.tolist() if hasattr(v, "tolist") else v
+
+        def _compact_array(arr):
+            return "[" + ",".join(str(x) for x in arr) + "]"
+
+        actor_path = local_scene.get_actor_path(actor)
+        path_str = actor_path._p if actor_path is not None else "/"
+        data = {
+            "name": actor.name,
+            "path": path_str,
+            "transform": {
+                "position": _compact_array(_to_list(actor.transform.position)),
+                "rotation": _compact_array(_to_list(actor.transform.rotation)),
+                "scale": actor.transform.scale,
+            },
+            "is_visible": actor.is_visible,
+            "is_parent_visible": actor.is_parent_visible,
+            "is_locked": actor.is_locked,
+            "is_parent_locked": actor.is_parent_locked,
+        }
+
+        if actor.name == "root":
+            data = {"version": "1.0", **data}
+
+        if isinstance(actor, AssetActor):
+            data["type"] = "AssetActor"
+            data["asset_path"] = getattr(actor, "_asset_path", getattr(actor, "asset_path", ""))
+            data["modified_properties"] = SceneLayoutHelper.collect_modified_properties(actor)
+        elif isinstance(actor, GroupActor):
+            data["type"] = "GroupActor"
+            data["children"] = [
+                OrcaLabMCPServer._actor_to_layout_dict(local_scene, child) for child in actor.children
+            ]
+
+        return data
 
     def get_asset_map(self) -> str:
         '''
@@ -111,6 +163,115 @@ class OrcaLabMCPServer:
         self.metadata_service_bus.get_asset_info(asset_path, output)
         asset_info = output[0]
         return json.dumps(asset_info, ensure_ascii=False)
+
+    @staticmethod
+    def _find_first_package_match_by_asset_name(
+        metadata_rows: list, asset_name: str
+    ) -> tuple[dict | None, str | None]:
+        needle = asset_name.strip().lower()
+        if not needle:
+            return None, None
+        for item in metadata_rows:
+            if not isinstance(item, dict):
+                continue
+            name_l = (item.get("name") or "").lower()
+            path_l = (item.get("assetPath") or "").lower()
+            if needle not in name_l and needle not in path_l:
+                continue
+            pkg_id = item.get("parentPackageId") or item.get("id")
+            if pkg_id:
+                return item, str(pkg_id)
+        return None, None
+
+    async def subscribe_asset_package_by_asset_name(self, asset_name: str) -> str:
+        '''
+        根据资产名称在元数据中搜索，并订阅第一个匹配项所属的资产包。
+        Args:
+            asset_name: 资产显示名或路径片段（不区分大小写，匹配 name 或 assetPath 子串）。
+        Returns:
+            操作结果的 json 字符串，含 success、所选资产包 id、匹配条目及订阅接口返回。
+        '''
+        try:
+            name = asset_name.strip()
+            if not name:
+                return json.dumps(
+                    {"success": False, "message": "asset_name 不能为空"},
+                    ensure_ascii=False,
+                )
+
+            meta_out: list[str] = []
+            await self.http_service_bus.get_all_metadata(meta_out)
+            if not meta_out:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": "无法获取远程元数据（请确认已登录 DataLink 且网络正常）",
+                    },
+                    ensure_ascii=False,
+                )
+
+            metadata_list = json.loads(meta_out[0])
+            if not isinstance(metadata_list, list):
+                return json.dumps(
+                    {"success": False, "message": "元数据格式异常：非列表"},
+                    ensure_ascii=False,
+                )
+
+            matched, package_id = self._find_first_package_match_by_asset_name(metadata_list, name)
+            if not matched or not package_id:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": f"未找到名称或路径包含「{name}」的资产",
+                    },
+                    ensure_ascii=False,
+                )
+
+            sub_out: list[str] = []
+            await self.http_service_bus.post_asset_subscribe(package_id, sub_out)
+            if not sub_out:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "package_id": package_id,
+                        "matched_asset": {
+                            "id": matched.get("id"),
+                            "name": matched.get("name"),
+                            "assetPath": matched.get("assetPath"),
+                            "parentPackageId": matched.get("parentPackageId"),
+                        },
+                        "message": "订阅请求未执行（请确认已登录 DataLink 且在线）",
+                    },
+                    ensure_ascii=False,
+                )
+            sub_result = json.loads(sub_out[0])
+
+            merged = {
+                "success": bool(sub_result.get("success")),
+                "package_id": package_id,
+                "matched_asset": {
+                    "id": matched.get("id"),
+                    "name": matched.get("name"),
+                    "assetPath": matched.get("assetPath"),
+                    "parentPackageId": matched.get("parentPackageId"),
+                },
+                "subscribe": sub_result,
+            }
+            if merged["success"]:
+                merged["message"] = f"已请求订阅资产包 {package_id}（匹配资产: {matched.get('name', '')}）"
+            else:
+                merged["message"] = sub_result.get("body") or sub_result.get("message") or "订阅请求失败"
+            return json.dumps(merged, ensure_ascii=False)
+        except json.JSONDecodeError as e:
+            return json.dumps(
+                {"success": False, "message": f"解析元数据或订阅结果失败: {e}"},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"订阅资产包失败: {e}"},
+                ensure_ascii=False,
+            )
 
     def get_all_actors(self) -> str:
         '''
@@ -264,17 +425,21 @@ class OrcaLabMCPServer:
                     selection_dict[path.string()] = ad
         return json.dumps(selection_dict, ensure_ascii=False)
 
-    async def start_simulation(self) -> str:
+    async def start_simulation(self, program_name: str = "external") -> str:
         '''
-        运行仿真
+        运行仿真（默认启动 无仿真程序（手动启动））
         Args:
-            无需传递参数
+            program_name: 配置文件里 [[external_programs.programs]] 的 name 字段；默认 external；
+                传 external 表示「无仿真程序」
         Returns:
             运行仿真的结果的json字符串格式
         '''
         try:
-            await self.simulation_bus.start_simulation()
-            return json.dumps({"success": True, "message": "成功启动仿真"}, ensure_ascii=False)
+            await self.simulation_bus.start_simulation(program_name)
+            return json.dumps(
+                {"success": True, "message": f"成功启动仿真（program_name={program_name}）"},
+                ensure_ascii=False,
+            )
         except Exception as e:
             return json.dumps({"success": False, "message": f"启动仿真失败: {e}"}, ensure_ascii=False)
 
@@ -291,6 +456,16 @@ class OrcaLabMCPServer:
             return json.dumps({"success": True, "message": "成功停止仿真"}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"success": False, "message": f"停止仿真失败: {e}"}, ensure_ascii=False)
+
+    # async def get_camera_position(self) -> str:
+    #     '''
+    #     获取相机位置
+    #     Args:
+    #         无需传递参数
+    #     Returns:
+    #         相机位置的json字符串格式
+    #     '''
+    #     pass
       
     async def get_viewport_camera_info(self, index: int = 0) -> str:
         '''
@@ -387,6 +562,76 @@ class OrcaLabMCPServer:
         return Image(path=color_path)
 
 
+    async def set_viewport_camera(self, camera_index: int) -> str:
+        '''
+        设置视口相机
+        Args:
+            camera_index: 相机索引
+        Returns:
+            操作结果的json字符串格式
+        '''
+        try:
+            await self.camera_bus.set_viewport_camera(camera_index)
+            return json.dumps({"success": True, "message": f"成功切换到相机 {camera_index}"}, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"success": False, "message": f"设置视口相机失败: {e}"}, ensure_ascii=False)
+
+
+    async def get_view_png_from_transform(
+        self,
+        position: List[float],
+        rotation: List[float],
+        scale: float = 1.0,
+        index: int = 0,
+    ) -> Image:
+        '''
+        在指定世界位姿临时放置渲染相机，输出一张视角 PNG 后自动删除（不保留场景中的相机 Actor）。
+        Args:
+            position: 相机位置 [x, y, z]
+            rotation: 欧拉角 [roll, pitch, yaw]，单位度，顺序 xyz
+            scale: 均匀缩放，默认 1.0
+            index: 输出文件名后缀 view_transform_{index}.png，避免并发覆盖
+        Returns:
+            截图 Image，文件位于 ~/.orcalab/view_transform_{index}.png
+        '''
+        if len(position) != 3:
+            raise ValueError("position 须为长度 3 的列表 [x, y, z]")
+        if len(rotation) != 3:
+            raise ValueError("rotation 须为长度 3 的列表 [roll, pitch, yaw]（度，xyz 顺序）")
+
+        quat_list = self._euler_to_quat_list([float(x) for x in rotation])
+        transform = Transform(
+            position=np.array([float(x) for x in position], dtype=np.float64),
+            rotation=np.array(quat_list, dtype=np.float64),
+            scale=float(scale),
+        )
+        camera_type = "mujococamera1080"
+        prefab_path = "prefabs/mujococamera1080"
+
+        actor_out: List = []
+        await self.application_bus.add_item_to_scene_with_transform(
+            camera_type,
+            prefab_path,
+            parent_path=Path.root_path(),
+            transform=transform,
+            output=actor_out,
+        )
+        if len(actor_out) == 0 or actor_out[0] is None:
+            raise RuntimeError("临时相机创建失败")
+
+        actor = actor_out[0]
+        viewport_image_path = os.path.join(os.path.expanduser("~"), ".orcalab")
+        os.makedirs(viewport_image_path, exist_ok=True)
+        png_name = f"view_transform_{index}.png"
+        color_path = os.path.join(viewport_image_path, png_name)
+        await self.scene_edit_notification_bus.get_camera_png(
+            camera_type, viewport_image_path, png_name
+        )
+        await asyncio.sleep(0.2)
+        await self.scene_edit_bus.delete_actor(actor, undo=True, source="mcp")
+
+        return Image(path=color_path)
+
     async def get_viewport_transform(self) -> str:
         '''
         获取当前视口相机的变换
@@ -419,6 +664,15 @@ class OrcaLabMCPServer:
                 return json.dumps({"success": False, "message": "获取当前视口相机变换失败"}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"success": False, "message": f"获取当前视口相机变换失败: {e}"}, ensure_ascii=False)
+    # async def get_camera_png(self) -> Image:
+    #     '''
+    #     获取相机截图
+    #     Args:
+    #         无需传递参数
+    #     Returns:
+    #         相机截图
+    #     '''
+    #    pass
 
 
     # ==================== 撤销/重做类 API ====================
@@ -705,94 +959,6 @@ class OrcaLabMCPServer:
         except Exception as e:
             return json.dumps({"success": False, "message": f"批量设置Actor变换失败: {e}"}, ensure_ascii=False)
 
-    # ==================== 相机控制类 API ====================
-
-    async def set_viewport_camera(self, camera_index: int) -> str:
-        '''
-        设置视口相机
-        Args:
-            camera_index: 相机索引
-        Returns:
-            操作结果的json字符串格式
-        '''
-        try:
-            await self.camera_bus.set_viewport_camera(camera_index)
-            return json.dumps({"success": True, "message": f"成功切换到相机 {camera_index}"}, ensure_ascii=False)
-        except Exception as e:
-            return json.dumps({"success": False, "message": f"设置视口相机失败: {e}"}, ensure_ascii=False)
-
-    async def add_viewport_camera(
-        self,
-        position: List[float] = None,
-        rotation: List[float] = None,
-        scale: float = 1.0,
-    ) -> str:
-        '''
-        按当前视口（或指定变换）向场景中添加 Agent 相机（AgentCamera / prefabs/agentcamera）
-        Args:
-            position: 可选，相机位置 [x, y, z]。不传则使用当前视口相机位置
-            rotation: 可选，相机欧拉角 [roll, pitch, yaw] 单位度。不传则使用当前视口相机旋转
-            scale: 可选，缩放，默认 1.0
-        Returns:
-            操作结果的 json 字符串，成功时包含 actor_path（相机在场景中的路径）
-        '''
-        camera_type = "AgentCamera"
-        prefab_path = "prefabs/agentcamera"
-        try:
-            if position is not None and rotation is not None:
-                quat = self._euler_to_quat_list(rotation)
-                transform = Transform(
-                    position=np.array(position, dtype=np.float64),
-                    rotation=np.array(quat, dtype=np.float64),
-                    scale=scale,
-                )
-            else:
-                output = []
-                await self.camera_bus.get_viewport_camera_transform(output)
-                if len(output) == 0 or output[0] is None:
-                    return json.dumps(
-                        {"success": False, "message": "获取视口相机变换失败，请显式传入 position 与 rotation"},
-                        ensure_ascii=False,
-                    )
-                transform = output[0]
-                if position is not None:
-                    transform = Transform(
-                        position=np.array(position, dtype=np.float64),
-                        rotation=transform.rotation,
-                        scale=transform.scale,
-                    )
-                elif rotation is not None:
-                    quat = self._euler_to_quat_list(rotation)
-                    transform = Transform(
-                        position=transform.position,
-                        rotation=np.array(quat, dtype=np.float64),
-                        scale=transform.scale,
-                    )
-                if scale != 1.0:
-                    transform = Transform(
-                        position=transform.position,
-                        rotation=transform.rotation,
-                        scale=scale,
-                    )
-            actor = []
-            await self.application_bus.add_item_to_scene_with_transform(
-                camera_type,
-                prefab_path,
-                parent_path=Path.root_path(),
-                transform=transform,
-                output=actor,
-            )
-            if len(actor) > 0 and actor[0] is not None:
-                added = actor[0]
-                path_str = (Path.root_path() / added.name).string()
-                return json.dumps(
-                    {"success": True, "message": "成功添加 AgentCamera", "actor_path": path_str},
-                    ensure_ascii=False,
-                )
-            return json.dumps({"success": False, "message": "添加 AgentCamera 失败，未返回 Actor"}, ensure_ascii=False)
-        except Exception as e:
-            return json.dumps({"success": False, "message": f"添加 AgentCamera 失败: {e}"}, ensure_ascii=False)
-
     # ==================== 系统信息类 API ====================
 
     def get_engine_info(self) -> str:
@@ -848,10 +1014,113 @@ class OrcaLabMCPServer:
         except Exception as e:
             return json.dumps({"success": False, "message": f"获取引擎信息失败: {e}"}, ensure_ascii=False)
 
+    # ==================== 布局类 API ====================
+    def save_layout(self, layout_path: str) -> str:
+        '''
+        保存布局
+        Args:
+            layout_path: 布局名或布局文件路径（可不带 .json）。
+                - 仅名称时，保存到 ~/.orcalab/mcp_layout/
+                - 传路径时，保存到指定目录
+        Returns:
+            保存布局的结果的json字符串格式
+        '''
+        try:
+            raw = (layout_path or "").strip()
+            if not raw:
+                return json.dumps({"success": False, "message": "layout_path 不能为空"}, ensure_ascii=False)
+
+            is_path = (
+                (os.sep in raw)
+                or (os.altsep is not None and os.altsep in raw)
+                or raw.startswith("~")
+                or os.path.isabs(raw)
+            )
+
+            if is_path:
+                target = os.path.abspath(os.path.expanduser(raw))
+                file_name = self._normalize_layout_name(os.path.basename(target))
+                save_dir = os.path.dirname(target) or self._mcp_layout_dir()
+            else:
+                file_name = self._normalize_layout_name(raw)
+                save_dir = self._mcp_layout_dir()
+
+            os.makedirs(save_dir, exist_ok=True)
+            save_path = os.path.join(save_dir, file_name)
+
+            local_scene_out = []
+            self.application_bus.get_local_scene(local_scene_out)
+            if not local_scene_out or local_scene_out[0] is None:
+                return json.dumps({"success": False, "message": "获取本地场景失败"}, ensure_ascii=False)
+
+            local_scene = local_scene_out[0]
+            root = local_scene.root_actor
+            scene_layout_dict = self._actor_to_layout_dict(local_scene, root)
+            with open(save_path, "w", encoding="utf-8") as f:
+                json.dump(scene_layout_dict, f, ensure_ascii=False, indent=4)
+
+            return json.dumps(
+                {
+                    "success": True,
+                    "message": f"布局已保存: {save_path}",
+                    "layout_path": save_path,
+                },
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps({"success": False, "message": f"保存布局失败: {e}"}, ensure_ascii=False)
+
+    async def load_layout(self, layout_path: str) -> str:
+        '''
+        加载布局
+        Args:
+            layout_path: 布局文件路径（支持绝对路径、相对路径、~）
+        Returns:
+            加载布局的结果的json字符串格式
+        '''
+        try:
+            path_raw = (layout_path or "").strip()
+            if not path_raw:
+                return json.dumps(
+                    {"success": False, "message": "layout_path 不能为空"},
+                    ensure_ascii=False,
+                )
+            load_path = os.path.abspath(os.path.expanduser(path_raw))
+            if not os.path.exists(load_path):
+                return json.dumps(
+                    {"success": False, "message": f"布局文件不存在: {load_path}"},
+                    ensure_ascii=False,
+                )
+
+            local_scene_out = []
+            self.application_bus.get_local_scene(local_scene_out)
+            if not local_scene_out or local_scene_out[0] is None:
+                return json.dumps({"success": False, "message": "获取本地场景失败"}, ensure_ascii=False)
+
+            helper = SceneLayoutHelper(local_scene_out[0])
+            ok = await helper.load_scene_layout(None, load_path)
+            if not ok:
+                return json.dumps(
+                    {"success": False, "message": f"加载布局失败: {load_path}"},
+                    ensure_ascii=False,
+                )
+
+            return json.dumps(
+                {
+                    "success": True,
+                    "message": f"布局已加载: {load_path}",
+                    "layout_path": load_path,
+                },
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps({"success": False, "message": f"加载布局失败: {e}"}, ensure_ascii=False)
+
     def add_tools(self):
         # 资产元数据类
         self.mcp.tool(self.get_asset_map)
         self.mcp.tool(self.get_asset_info)
+        self.mcp.tool(self.subscribe_asset_package_by_asset_name)
 
         # Actor 查询类
         self.mcp.tool(self.get_all_actors)
@@ -888,17 +1157,19 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.get_viewport_camera_info)
         self.mcp.tool(self.get_viewport_png)
         self.mcp.tool(self.get_viewport_transform)
+        self.mcp.tool(self.set_viewport_camera)
+        self.mcp.tool(self.get_view_png_from_transform)
 
         # 场景编辑高级
         self.mcp.tool(self.get_actor_asset_aabb)
 
-        # 相机控制
-        self.mcp.tool(self.set_viewport_camera)
-        self.mcp.tool(self.add_viewport_camera)
-
         # 系统信息类
         self.mcp.tool(self.get_engine_info)
-        
+
+        # 布局类
+        self.mcp.tool(self.save_layout)
+        self.mcp.tool(self.load_layout)
+
     async def run(self):
         await self.mcp.run_async(transport="http", port=self.port)
 

@@ -30,7 +30,7 @@ from orcalab.simulation.simulation_bus import (
     SimulationState,
 )
 from orcalab.simulation.simulation_service import SimulationService
-from orcalab.state_sync_bus import ManipulatorType, StateSyncRequest, StateSyncRequestBus
+from orcalab.state_sync_bus import ManipulatorType,CameraMovementType, MeasureType, StateSyncRequest, StateSyncRequestBus
 from orcalab.ui.actor_editor import ActorEditor
 from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.actor_outline_model import ActorOutlineModel
@@ -45,7 +45,7 @@ from orcalab.ui.camera.camera_bus import (
 )
 from orcalab.ui.camera.camera_selector import CameraSelector
 from orcalab.ui.copilot import CopilotPanel
-from orcalab.ui.icon_util import make_icon
+from orcalab.ui.icon_util import make_icon, schedule_windows_taskbar_icon_refresh
 from orcalab.ui.theme_service import ThemeService
 from orcalab.ui.tool_bar import ToolBar
 from orcalab.ui.manipulator_bar import ManipulatorBar
@@ -69,7 +69,7 @@ from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 from orcalab.token_storage import TokenStorage
 from orcalab.mcp_service.mcp_service import OrcaLabMCPServer
 from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
-
+from orcalab.report.abnormal_exit_report import take_pending_abnormal_exit_report, send_abnormal_exit_report
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +154,7 @@ class MainWindow(
 
         self.undo_service.add_command = add_command_with_dirty
 
-        self.scene_edit_service = SceneEditService(self.local_scene)
+        self.scene_edit_service = SceneEditService(self.local_scene, self.remote_scene)
 
         self._viewport_widget = Viewport()
 
@@ -172,6 +172,7 @@ class MainWindow(
         # self.move(center - rect.center())
         self.restore_default_layout()
         self.showMaximized()
+        schedule_windows_taskbar_icon_refresh(self)
 
         if await ask_user_consent():
             logger.info("用户允许发送统计数据")
@@ -179,8 +180,15 @@ class MainWindow(
         else:
             logger.info("用户拒绝发送统计数据")
 
+        # 若上次异常退出，上传上次运行的 log 文件
+        if take_pending_abnormal_exit_report():
+            try:
+                await send_abnormal_exit_report()
+            except Exception:
+                logger.exception("crash_reports 上传失败")
+
         await asyncio.sleep(0.5)
-        
+
         logger.info("初始化引擎...")
         self._viewport_widget.init_viewport()
         self._viewport_widget.start_viewport_main_loop()
@@ -208,13 +216,14 @@ class MainWindow(
         self.actor_outline_widget.connect_bus()
         self.actor_outline_model.connect_bus()
         self.actor_editor_widget.connect_bus()
+        self.camera_selector_widget.connect_bus()
 
         self.undo_service.connect_bus()
         self.scene_edit_service.connect_bus()
         self.remote_scene.connect_bus()
         self.simulation_service.connect_bus()
 
-        self.manipulator_bar.connect_buses()
+        self.manipulator_bar.connect_bus()
 
         self.connect_buses()
 
@@ -260,8 +269,20 @@ class MainWindow(
         self.mcp_service.add_tools()
         self.mcp_service._task = asyncio.create_task(self.mcp_service.run())
 
+        # Reset camera's move & rotate sensitivity
+        await self.remote_scene.set_move_rotate_sensitivity(
+            move_sensitivity=self.config_service.camera_move_sensitivity(),
+            rotate_sensitivity=self.config_service.camera_rotation_sensitivity()
+        )
+
         # 发送匿名统计数据
         await self.send_statistics()
+
+        # 在Viewport之前拦截事件。
+        # Note: filters invoked in reverse order of installation, so we install it last.
+        qapp = QtCore.QCoreApplication.instance()
+        assert qapp is not None
+        qapp.installEventFilter(self)
 
     def stop_viewport_main_loop(self):
         """停止viewport主循环"""
@@ -615,20 +636,6 @@ class MainWindow(
         # 初始化状态指示器（Editor模式，隐藏）
         self._set_window_border_style(is_runtime=False)
 
-        # Window actions.
-
-        action_undo = QtGui.QAction("撤销", self)
-        action_undo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
-        action_undo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(action_undo.triggered, self.undo)
-
-        action_redo = QtGui.QAction("重做", self)
-        action_redo.setShortcut(QtGui.QKeySequence("Ctrl+Shift+Z"))
-        action_redo.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(action_redo.triggered, self.redo)
-
-        self.addActions([action_undo, action_redo])
-
     async def start_sim(self):
         await SimulationRequestBus().start_simulation()
 
@@ -774,7 +781,11 @@ class MainWindow(
                 "position": compact_array(to_list(actor.transform.position)),
                 "rotation": compact_array(to_list(actor.transform.rotation)),
                 "scale": actor.transform.scale,
-            }
+            },
+            "is_visible": actor.is_visible,
+            "is_parent_visible": actor.is_parent_visible,
+            "is_locked": actor.is_locked,
+            "is_parent_locked": actor.is_parent_locked,
         }
 
         if actor.name == "root":
@@ -923,12 +934,39 @@ class MainWindow(
         action_undo = self.menu_edit.addAction("撤销")
         action_undo.setEnabled(can_undo())
         action_undo.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
-        connect(action_undo.triggered, self.undo)
+        action_undo.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
+        async def undo_warpper():
+            await self.undo("menu")
+        connect(action_undo.triggered, undo_warpper)
 
         action_redo = self.menu_edit.addAction("重做")
         action_redo.setEnabled(can_redo())
         action_redo.setShortcut(QtGui.QKeySequence("Ctrl+Shift+Z"))
-        connect(action_redo.triggered, self.redo)
+        action_redo.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
+        async def redo_wrapper():
+            await self.redo("menu")
+        connect(action_redo.triggered, redo_wrapper)
+
+        self.menu_edit.addSeparator()
+
+        action_duplicate = self.menu_edit.addAction("复制")
+        action_duplicate.setEnabled(self.can_duplicate_selection())
+        action_duplicate.setShortcut(QtGui.QKeySequence("Ctrl+D"))
+        action_duplicate.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
+        async def duplicate_wrapper():
+            await self.duplicate_selection("menu")
+        connect(action_duplicate.triggered, duplicate_wrapper)
+
+
+        action_delete = self.menu_edit.addAction("删除")
+        action_delete.setEnabled(self.can_delete_selection())
+        action_delete.setShortcut(QtGui.QKeySequence("Delete"))
+        action_delete.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
+        async def delete_wrapper():
+            await self.delete_selection("menu")
+        connect(action_delete.triggered, delete_wrapper)
+
+        self.menu_edit.addSeparator()
 
         action_settings = self.menu_edit.addAction("配置")
         connect(action_settings.triggered, self.open_settings)
@@ -1065,11 +1103,13 @@ class MainWindow(
 
         msg_box.exec()
 
-    async def undo(self):
+    async def undo(self, source:str = ""):
+        logger.debug("undo. source: %s", source)
         if can_undo():
             await self.undo_service.undo()
 
-    async def redo(self):
+    async def redo(self, source:str = ""):
+        logger.debug("redo. source: %s", source)
         if can_redo():
             await self.undo_service.redo()
 
@@ -1280,12 +1320,15 @@ class MainWindow(
     #
     @override
     async def set_manipulator_type(self, type: ManipulatorType) -> None:
-        if type == ManipulatorType.Translate:
-            await self.remote_scene.change_manipulator_type(1)
-        elif type == ManipulatorType.Rotate:
-            await self.remote_scene.change_manipulator_type(2)
-        elif type == ManipulatorType.Scale:
-            await self.remote_scene.change_manipulator_type(3)
+        await self.remote_scene.change_manipulator_type(type)
+
+    @override
+    async def set_camera_movement_type(self, type: CameraMovementType) -> None:
+        await self.remote_scene.change_camera_movement_type(type)
+
+    @override
+    async def set_measure_type(self, type: MeasureType) -> None:
+        await self.remote_scene.change_measure_type(type)
 
     @override
     async def set_debug_draw(self, enabled: bool):
@@ -1363,5 +1406,64 @@ class MainWindow(
         await self.remote_scene.custom_command(f"user_env_report:{json.dumps(data)}")
 
     def open_settings(self):
-        # 打开设置窗口的逻辑
-        SettingsDialog(self).exec()
+        SettingsDialog(self, remote_scene=self.remote_scene).exec()
+    
+    def can_duplicate_selection(self) -> bool:
+        if not self.local_scene.selection:
+            return False
+
+        ok, err = self.local_scene.can_duplicate_actors(self.local_scene.selection)
+        return ok
+
+    async def duplicate_selection(self, source:str = ""):
+        logger.debug("duplicate_selection. source: %s", source)
+
+        selection = self.local_scene.selection.copy()
+        if not selection:
+            return
+
+        bus = SceneEditRequestBus()
+        await bus.duplicate_actors(selection)
+
+    def can_delete_selection(self) -> bool:
+        if not self.local_scene.selection:
+            return False
+
+        ok, err = self.local_scene.can_delete_actors(self.local_scene.selection)
+        return ok
+
+    async def delete_selection(self, source:str = ""):
+        logger.debug("delete_selection. source: %s", source)
+
+        selection = self.local_scene.selection
+        if not selection:
+            return
+
+        bus = SceneEditRequestBus()
+        await bus.delete_actors(selection)
+
+    @override
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if event.type() == QtCore.QEvent.Type.KeyPress:
+            assert isinstance(event, QtGui.QKeyEvent)
+            ctrl = event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier
+            shift = event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
+            
+            if event.key() == QtCore.Qt.Key.Key_Z:
+                if ctrl and not event.isAutoRepeat():
+                    if shift and not event.isAutoRepeat():
+                        asyncio.create_task(self.redo("main window"))
+                    else:
+                        asyncio.create_task(self.undo("main window"))
+                    return True
+
+            if event.key() == QtCore.Qt.Key.Key_D:
+                if ctrl and not event.isAutoRepeat():
+                    asyncio.create_task(self.duplicate_selection("main window"))
+                    return True
+                
+            if event.key() == QtCore.Qt.Key.Key_Delete and not event.isAutoRepeat():
+                asyncio.create_task(self.delete_selection("main window"))
+                return True
+
+        return super().eventFilter(watched, event)

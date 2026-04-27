@@ -240,6 +240,9 @@ class ConfigService:
 
     def pak_urls(self) -> list:
         return self.config["orcalab"].get("pak_urls", [])
+    
+    def pak_urls_sha256(self) -> dict:
+        return self.config["orcalab"].get("pak_urls_sha256", [])
 
     def level(self) -> str:
         level_value = self.config["orcalab"].get("level")
@@ -429,7 +432,28 @@ class ConfigService:
     def enable_debug_tool(self) -> bool:
         return self.config.get("orcalab", {}).get("debug_tool", False)
 
-    
+    def camera_move_sensitivity(self) -> float:
+        return float(self.config.get("orcalab", {}).get("camera_move_sensitivity", 1.0))
+
+    def set_camera_move_sensitivity(self, value: float) -> None:
+        self.config.setdefault("orcalab", {})["camera_move_sensitivity"] = value
+
+        def update_func(config):
+            config.setdefault("orcalab", {})["camera_move_sensitivity"] = value
+
+        self.set_user_config("orcalab", update_func)
+
+    def camera_rotation_sensitivity(self) -> float:
+        return float(self.config.get("orcalab", {}).get("camera_rotation_sensitivity", 1.0))
+
+    def set_camera_rotation_sensitivity(self, value: float) -> None:
+        self.config.setdefault("orcalab", {})["camera_rotation_sensitivity"] = value
+
+        def update_func(config):
+            config.setdefault("orcalab", {})["camera_rotation_sensitivity"] = value
+
+        self.set_user_config("orcalab", update_func)
+
     def set_user_config(self, key: str, cb):
         """更新用户配置文件中的指定键值对"""
         user_config = {}
@@ -450,7 +474,30 @@ class ConfigService:
         
     def send_statistics(self) -> str:
         return self.config.get("orcalab", {}).get("send_statistics", "unset")
-    
+
+    def had_previous_abnormal_exit(self) -> bool:
+        pending = bool(
+            self.config.get("orcalab", {}).get("abnormal_exit_pending", False)
+        )
+        logger.info("上次运行是否异常退出：%s", pending)
+        return pending
+
+    def mark_orcalab_started(self) -> None:
+        self.config.setdefault("orcalab", {})["abnormal_exit_pending"] = True
+
+        def update_func(config):
+            config.setdefault("orcalab", {})["abnormal_exit_pending"] = True
+
+        self.set_user_config("orcalab", update_func)
+
+    def mark_orcalab_closed_cleanly(self) -> None:
+        self.config.setdefault("orcalab", {})["abnormal_exit_pending"] = False
+
+        def update_func(config):
+            config.setdefault("orcalab", {})["abnormal_exit_pending"] = False
+
+        self.set_user_config("orcalab", update_func)
+
     def set_send_statistics(self, value: str):
         self.config.setdefault("orcalab", {})["send_statistics"] = value
 

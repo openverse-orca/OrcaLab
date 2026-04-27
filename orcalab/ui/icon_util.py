@@ -1,7 +1,24 @@
+import os
+
 from PySide6 import QtCore, QtWidgets, QtGui, QtSvg
 
 import orcalab.assets.rc_assets
 
+APP_WINDOW_ICON_QRC = ":/icons/orcalab_logo.png"
+
+def app_window_icon() -> QtGui.QIcon:
+    return QtGui.QIcon(APP_WINDOW_ICON_QRC)
+
+def schedule_windows_taskbar_icon_refresh(window: QtWidgets.QWidget) -> None:
+    if os.name != "nt":
+        return
+
+    def _reapply() -> None:
+        icon = window.windowIcon()
+        window.setWindowIcon(QtGui.QIcon())
+        window.setWindowIcon(icon)
+
+    QtCore.QTimer.singleShot(0, _reapply)
 
 def make_color_svg(svg_file: str, color: QtGui.QColor) -> QtGui.QPixmap:
     # Load the SVG file

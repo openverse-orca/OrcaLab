@@ -261,6 +261,11 @@ def _get_ip_info():
 
     return {}
 
+def collect_diagnostic_summary() -> Dict[str, object]:
+    return {
+        "memory": _get_memory_info(),
+        "gpus": _get_gpu_info(),
+    }
 
 def collect_user_env(source: str) -> Dict[str, object]:
     token_data = TokenStorage.load_token()

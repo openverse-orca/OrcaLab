@@ -2,6 +2,9 @@ from typing import Self
 
 
 class Path:
+    """
+    A immutable class representing a path to an actor in the scene.
+    """
 
     def __init__(self, p: str = "/"):
         if not self.is_valid_path(p):
@@ -33,7 +36,7 @@ class Path:
 
         return False
 
-    def parent(self) -> Self | None:
+    def parent(self):
         if self == self.root_path():
             return None
 
@@ -66,12 +69,23 @@ class Path:
         return hash(self._p)
 
     def __eq__(self, other):
+        if not isinstance(other, Path):
+            return False
         return self._p == other._p
 
     def __ne__(self, other):
         # Not strictly necessary, but to avoid having both x==y and x!=y
         # True at the same time
         return not (self == other)
+
+    def __lt__(self, other):
+        """
+        Path按照字符串排序，因此/a/b在/a/c之前，/a在/a/b之前。同时也能确保父节点在子节点之前。
+        """
+        if not isinstance(other, Path):
+            raise TypeError("other must be an instance of Path.")
+
+        return self._p < other._p
 
     @classmethod
     def is_valid_name(cls, name: str) -> bool:
@@ -99,6 +113,14 @@ class Path:
     @classmethod
     def root_path(cls):
         return Path("/")
-    
+
     def is_root(self) -> bool:
         return self._p == "/"
+
+    def replace_parent(self, old_parent_path: Self, new_parent_path: Self):
+        if not self.is_descendant_of(old_parent_path):
+            raise Exception("The path is not a descendant of the old parent path.")
+
+        suffix = self._p[len(old_parent_path._p) :]
+        new_path_str = new_parent_path._p + suffix
+        return Path(new_path_str)

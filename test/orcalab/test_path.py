@@ -43,3 +43,13 @@ def test_is_root():
     assert Path().is_root() is True
     assert Path("/a").is_root() is False
     assert Path("/a/b").is_root() is False
+
+
+def test_sort():
+    """
+    Path按照字符串排序，因此/a/b在/a/c之前，/a在/a/b之前。同时也能确保父节点在子节点之前。
+    """
+
+    paths = [Path("/a/b"), Path("/a/c"), Path("/a"), Path("/b"), Path("/")]
+    sorted_paths = sorted(paths)
+    assert sorted_paths == [Path("/"), Path("/a"), Path("/a/b"), Path("/a/c"), Path("/b")]
