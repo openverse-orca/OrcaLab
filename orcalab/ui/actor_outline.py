@@ -178,6 +178,52 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         if source == "actor_outline":
             return
 
+        if new_active_entity is None:
+            selection_model = self.selectionModel()
+            node = None
+            current = selection_model.currentIndex()
+            if current.isValid():
+                node = current.internalPointer()
+            if isinstance(node, EntityInfo):
+                selection_model.clearSelection()
+            return
+
+        actor_path, entity_id = new_active_entity
+        model = self.actor_model()
+        local_scene = model.local_scene
+
+        actor = local_scene.find_actor_by_path(actor_path)
+        if actor is None:
+            return
+
+        entity_info = local_scene.find_entity_info_by_id(actor_path, entity_id)
+        if entity_info is None:
+            return
+
+        entity_index = model.get_index_from_entity_info(actor_path, entity_info)
+        if not entity_index.isValid():
+            return
+
+        self._select_entity_index(entity_index)
+
+    def _select_entity_index(self, entity_index: QtCore.QModelIndex):
+        parent_index = entity_index.parent()
+        while parent_index.isValid():
+            if not self.isExpanded(parent_index):
+                self.expand(parent_index)
+            parent_index = parent_index.parent()
+
+        self.scrollTo(entity_index)
+
+        selection_model = self.selectionModel()
+        selection_model.clearSelection()
+
+        flags = (
+            QtCore.QItemSelectionModel.SelectionFlag.Select
+            | QtCore.QItemSelectionModel.SelectionFlag.Rows
+        )
+        selection_model.select(entity_index, flags)
+
     def set_actor_selection(self, actors: list[BaseActor]):
         selection_model = self.selectionModel()
         selection_model.clearSelection()
@@ -423,6 +469,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                         actor_path, node.entity_id, source="actor_outline"
                     )
 
+                self._select_entity_index(index)
                 asyncio.create_task(_do_select_entity())
                 return
 
