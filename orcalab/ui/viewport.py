@@ -1,4 +1,5 @@
 import asyncio
+import time
 from PySide6 import QtCore, QtWidgets, QtGui
 import pathlib
 import logging
@@ -18,6 +19,11 @@ class Viewport(QtWidgets.QWidget):
         super().__init__(parent)
 
         self.setAcceptDrops(True)
+
+        # 帧率控制相关属性
+        self.last_frame_time = None
+        self.frame_count = 0
+        self.target_fps = 60  # 固定目标帧率
 
         # 延迟导入 orcalab_pyside，直到实际需要时
         try:
@@ -110,13 +116,24 @@ class Viewport(QtWidgets.QWidget):
             if not self._viewport_running:
                 return
 
+            # 记录帧时间
+            current_time = time.time()
+            if self.last_frame_time is not None:
+                self.frame_count += 1
+                
+                # 每120帧进行一次简单的帧率调整
+                if self.frame_count % 120 == 0:
+                    self._simple_adjust_frame_rate()        
+            self.last_frame_time = current_time
+
             if self._viewport:
                 self._viewport.main_loop_tick()
 
             # 如果还在运行，继续下一帧
             if self._viewport_running:
-                # 使用asyncio.sleep而不是立即创建新任务，避免递归过深
-                await asyncio.sleep(0.016)  # ~60 FPS
+                # 动态计算睡眠时间以实现目标帧率
+                sleep_time = self._calculate_sleep_time()
+                await asyncio.sleep(sleep_time)
                 asyncio.create_task(self._viewport_main_loop())
         except Exception as e:
             logger.exception("Viewport 主循环错误: %s", e)
@@ -197,3 +214,50 @@ class Viewport(QtWidgets.QWidget):
                 UserEventRequestBus().queue_mouse_event(x, y, button, MouseAction.Move)
 
         return super().eventFilter(watched, event)
+
+    # 帧率控制相关方法
+    def _calculate_sleep_time(self) -> float:
+        """计算睡眠时间以实现目标帧率"""
+        if self.target_fps <= 0:
+            return 0.016  # 默认60 FPS
+        
+        target_frame_time = 1.0 / self.target_fps
+        if self.last_frame_time is None:
+            return target_frame_time
+        
+        current_time = time.time()
+        elapsed = current_time - self.last_frame_time
+        
+        # 如果已经超过目标帧时间，立即返回
+        if elapsed >= target_frame_time:
+            return 0.0
+        
+        # 否则计算需要睡眠的时间
+        sleep_time = target_frame_time - elapsed
+        return max(0.0, sleep_time)
+    
+    def _simple_adjust_frame_rate(self):
+        """简化版动态帧率调整（以60 FPS为基准）"""
+        try:
+            # 基于帧计数和时间的简单调整
+            # 每120帧调整一次，以60 FPS为基准
+            if self.frame_count > 0 and self.last_frame_time is not None:
+                # 计算实际平均帧率
+                total_time = time.time() - self.last_frame_time
+                if total_time > 0:
+                    actual_fps = self.frame_count / total_time
+                    
+                    # 如果实际帧率持续高于65 FPS，说明性能充足，可以尝试稍微提高目标帧率
+                    if actual_fps > 65 and self.target_fps < 75:
+                        self.target_fps = min(self.target_fps + 5, 75)
+                        logger.info(f"性能充足，提高目标帧率到: {self.target_fps} FPS")
+                    
+                    # 如果实际帧率持续低于55 FPS，说明性能不足，降低目标帧率
+                    elif actual_fps < 55 and self.target_fps > 45:
+                        self.target_fps = max(self.target_fps - 5, 45)
+                        logger.info(f"性能不足，降低目标帧率到: {self.target_fps} FPS")
+        
+        except Exception as e:
+            logger.debug(f"简化版动态帧率调整失败: {e}")
+    
+
