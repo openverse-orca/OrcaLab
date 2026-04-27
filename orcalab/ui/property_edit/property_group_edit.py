@@ -1,12 +1,13 @@
 from typing import Any, List, override
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from orcalab.actor import AssetActor
+from orcalab.actor import BaseActor
 from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
     ActorPropertyKey,
     ActorPropertyType,
+    TreePropertyNode,
 )
 from orcalab.application_util import get_local_scene
 from orcalab.path import Path
@@ -24,7 +25,6 @@ from orcalab.ui.property_edit.bool_property_edit import BooleanPropertyEdit
 from orcalab.ui.property_edit.float_property_edit import FloatPropertyEdit
 from orcalab.ui.property_edit.int_property_edit import IntegerPropertyEdit
 from orcalab.ui.property_edit.string_property_edit import StringPropertyEdit
-from orcalab.ui.property_edit.tree_property_edit import TreePropertyEdit
 
 from orcalab.ui.styled_widget import StyledWidget
 from orcalab.ui.text_label import TextLabel
@@ -71,7 +71,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
     def __init__(
         self,
         parent: QtWidgets.QWidget | None,
-        actor: AssetActor,
+        actor: BaseActor,
         group: ActorPropertyGroup,
         label_width: int,
     ):
@@ -104,11 +104,14 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         content_layout.setSpacing(4)
 
         for prop in group.properties:
-            editor = self._create_property_edit(prop, label_width)
-            if prop.is_read_only():
-                editor.set_read_only(True)
-            self._property_edits.append(editor)
-            content_layout.addWidget(editor)
+            if prop.value_type() == ActorPropertyType.TREE:
+                self._render_tree_data_flat(group.tree_data, content_layout, label_width)
+            else:
+                editor = self._create_property_edit(prop, label_width)
+                if prop.is_read_only():
+                    editor.set_read_only(True)
+                self._property_edits.append(editor)
+                content_layout.addWidget(editor)
 
         self._title_area = title_area
         self._content_area = content_area
@@ -137,13 +140,13 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         SceneEditNotificationBus.disconnect(self)
 
     def _create_property_edit(
-        self, prop: ActorProperty, label_width: int
+        self, prop: ActorProperty, label_width: int, name_prefix: str = ""
     ) -> BasePropertyEdit:
         context = PropertyEditContext(
             actor=self._actor,
             actor_path=self._actor_path,
             group=self._group,
-            prop=prop,
+            prop=prop.create_alias(f"{name_prefix}{prop.name()}") if name_prefix else prop,
         )
 
         match prop.value_type():
@@ -155,16 +158,60 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
                 return FloatPropertyEdit(self, context, label_width)
             case ActorPropertyType.STRING:
                 return StringPropertyEdit(self, context, label_width)
-            case ActorPropertyType.TREE:
-                if self._group.name == "Geom":
-                    from orcalab.ui.property_edit.geom_tree_property_edit import GeomTreePropertyEdit
-                    return GeomTreePropertyEdit(self, context, label_width)
-                if self._group.name == "Site":
-                    from orcalab.ui.property_edit.site_tree_property_edit import SiteTreePropertyEdit
-                    return SiteTreePropertyEdit(self, context, label_width)
-                return TreePropertyEdit(self, context, label_width)
             case _:
                 raise NotImplementedError("Unsupported property type")
+
+    def _render_tree_data_flat(
+        self,
+        nodes: List[TreePropertyNode],
+        layout: QtWidgets.QVBoxLayout,
+        label_width: int,
+        indent: int = 0,
+        name_prefix: str = "",
+    ):
+        theme = ThemeService()
+        text_color = theme.get_color_hex("text")
+        indent_px = indent * 20
+
+        for node in nodes:
+            header_row = QtWidgets.QWidget()
+            header_layout = QtWidgets.QHBoxLayout(header_row)
+            header_layout.setContentsMargins(indent_px, 2, 4, 2)
+            header_layout.setSpacing(4)
+
+            if node.children:
+                indicator = QtWidgets.QLabel("▾")
+                indicator.setStyleSheet(f"color: {text_color}; font-weight: bold;")
+                header_layout.addWidget(indicator)
+
+            name_label = QtWidgets.QLabel(node.display_name)
+            name_label.setStyleSheet(f"color: {text_color}; font-weight: bold;")
+            header_layout.addWidget(name_label)
+            header_layout.addStretch()
+            layout.addWidget(header_row)
+
+            node_prefix = f"{name_prefix}{node.name}." if name_prefix else f"{node.name}."
+
+            for prop in node.properties:
+                editor = self._create_property_edit(prop, label_width, name_prefix=node_prefix)
+                if prop.is_read_only():
+                    editor.set_read_only(True)
+
+                prop_row = QtWidgets.QWidget()
+                row_layout = QtWidgets.QHBoxLayout(prop_row)
+                row_layout.setContentsMargins((indent + 1) * 20, 0, 0, 0)
+                row_layout.setSpacing(0)
+                row_layout.addWidget(editor)
+                row_layout.addStretch()
+
+                self._property_edits.append(editor)
+                layout.addWidget(prop_row)
+
+            if node.children:
+                self._render_tree_data_flat(
+                    node.children, layout, label_width,
+                    indent=indent + 1, name_prefix=node_prefix,
+                )
 
     #
     # SceneEditNotificationBus overrides
@@ -204,11 +251,6 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         if property_key.group_prefix != self._group.prefix:
             return
 
-        # 始终刷新树形属性中的子值（如关节名按钮），不受 source 影响
-        for edit in self._property_edits:
-            if hasattr(edit, 'set_child_value'):
-                edit.set_child_value(property_key.property_name, value)
-
         if source == "ui":
             return
 
@@ -235,9 +277,6 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
             if edit.context.prop.name() == property_name:
                 edit.set_read_only(read_only)
                 return
-            # 处理树形属性的子属性
-            if hasattr(edit, 'set_child_read_only'):
-                edit.set_child_read_only(property_name, read_only)
 
     def expand(self):
         self._content_area.show()

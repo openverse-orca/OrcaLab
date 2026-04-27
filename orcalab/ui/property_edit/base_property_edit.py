@@ -1,7 +1,7 @@
 import asyncio
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from orcalab.actor import AssetActor
+from orcalab.actor import BaseActor
 from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
@@ -18,7 +18,7 @@ from orcalab.ui.theme_service import ThemeService
 class PropertyEditContext:
     def __init__(
         self,
-        actor: AssetActor,
+        actor: BaseActor,
         actor_path: Path,
         group: ActorPropertyGroup,
         prop: ActorProperty,

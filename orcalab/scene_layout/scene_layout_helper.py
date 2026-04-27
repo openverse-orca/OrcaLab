@@ -37,7 +37,7 @@ class _ActorData:
 class SceneLayoutHelper:
     def __init__(self, local_scene: LocalScene) -> None:
         self.local_scene = local_scene
-        self.version = "1.0"
+        self.version = "2.0"
 
     @staticmethod
     def _node_stable_key(node) -> str:
@@ -51,37 +51,62 @@ class SceneLayoutHelper:
         return node.display_name
 
     @staticmethod
-    def _collect_modified_tree_props(nodes, group_prefix: str) -> list:
+    def _resolve_entity_path_for_node(actor: AssetActor, node) -> str | None:
+        """根据 TreePropertyNode.name 中的 entity_id 从 EntityInfo 层级中解析 entity_path。
+        node.name 格式为 'entityId:componentId' 或 'entityId'。
+        """
+        entity_root = actor.entity_root
+        if entity_root is None:
+            return None
+        try:
+            entity_id = int(node.name.split(":")[0])
+        except (ValueError, TypeError, AttributeError):
+            return None
+        entity_info = entity_root.find_by_entity_id(entity_id)
+        if entity_info is not None:
+            return entity_info.entity_path
+        return None
+
+    @staticmethod
+    def _collect_modified_tree_props(nodes, group_prefix: str, component_type: str, actor: AssetActor) -> list:
         result = []
         for node in nodes:
-            # 实体容器节点（e: 前缀）无属性，仅递归子节点
-            stable_key = SceneLayoutHelper._node_stable_key(node)
+            entity_path = SceneLayoutHelper._resolve_entity_path_for_node(actor, node)
             for prop in node.properties:
                 if prop.is_modified():
-                    result.append({
+                    entry = {
                         "group_prefix": group_prefix,
-                        "name": f"{stable_key}.{prop.name()}",
+                        "component_type": component_type,
+                        "property_name": prop.name(),
                         "type": prop.value_type().name,
                         "value": prop.value(),
-                    })
-            result.extend(SceneLayoutHelper._collect_modified_tree_props(node.children, group_prefix))
+                    }
+                    if entity_path is not None:
+                        entry["entity_path"] = entity_path
+                    else:
+                        stable_key = SceneLayoutHelper._node_stable_key(node)
+                        entry["name"] = f"{stable_key}.{prop.name()}"
+                    result.append(entry)
+            result.extend(SceneLayoutHelper._collect_modified_tree_props(node.children, group_prefix, component_type, actor))
         return result
 
     @staticmethod
     def collect_modified_properties(actor: AssetActor) -> list:
         result = []
         for group in actor.property_groups:
+            component_type = group.name
             for prop in group.properties:
                 if prop.value_type() == ActorPropertyType.TREE:
                     continue
                 if prop.is_modified():
                     result.append({
                         "group_prefix": group.prefix,
-                        "name": prop.name(),
+                        "component_type": component_type,
+                        "property_name": prop.name(),
                         "type": prop.value_type().name,
                         "value": prop.value(),
                     })
-            result.extend(SceneLayoutHelper._collect_modified_tree_props(group.tree_data, group.prefix))
+            result.extend(SceneLayoutHelper._collect_modified_tree_props(group.tree_data, group.prefix, component_type, actor))
         return result
 
     @staticmethod
@@ -135,6 +160,14 @@ class SceneLayoutHelper:
         except Exception as e:
             logger.exception("读取场景布局文件失败: %s", e)
             return False
+
+        layout_version = data.get("version", "1.0")
+        if layout_version not in ("1.0", "2.0"):
+            logger.error("不支持的场景布局版本: %s", layout_version)
+            return False
+
+        if layout_version == "1.0":
+            logger.warning("加载旧版(v1.0)场景布局，建议重新保存以升级到 v2.0 格式")
 
         await self._clear_scene_layout(self.local_scene.root_actor)
         errors: List[str] = []
@@ -244,7 +277,6 @@ class SceneLayoutHelper:
 
         for entry in saved:
             group_prefix: str = entry.get("group_prefix", "")
-            prop_name: str = entry.get("name", "")
             type_str: str = entry.get("type", "")
             value: Any = entry.get("value")
 
@@ -252,32 +284,22 @@ class SceneLayoutHelper:
             if prop_type is None or prop_type == ActorPropertyType.TREE:
                 continue
 
-            # 在 actor.property_groups 中找到对应属性并更新 Python 侧值
-            # 对于树形子属性，engine_key_name 使用当前 EntityId（运行时稳定），
-            # 而 prop_name 中存储的是 display_name（跨 session 稳定）
+            entity_path: str | None = entry.get("entity_path", None)
+            component_type: str | None = entry.get("component_type", None)
+            property_name: str | None = entry.get("property_name", None)
+            prop_name: str | None = entry.get("name", None)
+
             matched_prop = None
-            engine_key_name = prop_name
-            for group in actor.property_groups:
-                if group.prefix != group_prefix:
-                    continue
-                if "." in prop_name:
-                    # 树形子属性：格式为 "display_name.PropName"
-                    dot = prop_name.index(".")
-                    node_display_name = prop_name[:dot]
-                    leaf_name = prop_name[dot + 1:]
-                    node = SceneLayoutHelper._find_tree_node_by_display_name(group.tree_data, node_display_name)
-                    if node is not None:
-                        matched_prop = next(
-                            (p for p in node.properties if p.name() == leaf_name), None
-                        )
-                        engine_key_name = f"{node.name}.{leaf_name}"
-                else:
-                    for prop in group.properties:
-                        if prop.name() == prop_name:
-                            matched_prop = prop
-                            break
-                if matched_prop is not None:
-                    break
+            engine_key_name = prop_name or property_name or ""
+
+            if entity_path is not None and property_name is not None:
+                matched_prop, engine_key_name = self._find_prop_by_entity_path(
+                    actor, group_prefix, entity_path, component_type, property_name
+                )
+            elif prop_name is not None:
+                matched_prop, engine_key_name = self._find_prop_by_legacy_name(
+                    actor, group_prefix, prop_name
+                )
 
             if matched_prop is not None:
                 try:
@@ -285,8 +307,93 @@ class SceneLayoutHelper:
                 except Exception:
                     pass
 
-            key = ActorPropertyKey(actor_path, group_prefix, engine_key_name, prop_type)
+            if engine_key_name:
+                key = ActorPropertyKey(actor_path, group_prefix, engine_key_name, prop_type)
+                try:
+                    await SceneEditRequestBus().set_property(key, value, undo=False, source="layout")
+                except Exception as e:
+                    logger.warning("应用属性失败 %s.%s: %s", group_prefix, prop_name or property_name, e)
+
+    @staticmethod
+    def _find_prop_by_entity_path(
+        actor: AssetActor,
+        group_prefix: str,
+        entity_path: str,
+        component_type: str | None,
+        property_name: str,
+    ) -> tuple | tuple[None, str]:
+        """v2.0 格式：使用 entity_path 在 EntityInfo 层级中定位 Entity，
+        获取运行时 entity_id，再在 TreePropertyNode 中找到对应属性。"""
+        entity_root = actor.entity_root
+        if entity_root is None:
+            return None, ""
+
+        entity_info = entity_root.find_by_entity_path(entity_path)
+        if entity_info is None:
+            return None, ""
+
+        runtime_entity_id = entity_info.entity_id
+
+        for group in actor.property_groups:
+            if group.prefix != group_prefix:
+                continue
+            if component_type is not None and group.name != component_type:
+                continue
+            matched_prop, engine_key_name = SceneLayoutHelper._find_prop_in_tree_by_entity_id(
+                group.tree_data, runtime_entity_id, property_name
+            )
+            if matched_prop is not None:
+                return matched_prop, engine_key_name
+
+        return None, ""
+
+    @staticmethod
+    def _find_prop_in_tree_by_entity_id(
+        nodes, entity_id: int, property_name: str
+    ) -> tuple | tuple[None, str]:
+        """在树形属性节点中根据 entity_id 和 property_name 查找属性。"""
+        for node in nodes:
             try:
-                await SceneEditRequestBus().set_property(key, value, undo=False, source="layout")
-            except Exception as e:
-                logger.warning("应用属性失败 %s.%s: %s", group_prefix, prop_name, e)
+                node_entity_id = int(node.name.split(":")[0])
+            except (ValueError, TypeError, AttributeError):
+                node_entity_id = None
+
+            if node_entity_id == entity_id:
+                for prop in node.properties:
+                    if prop.name() == property_name:
+                        return prop, f"{node.name}.{prop.name()}"
+
+            found_prop, found_key = SceneLayoutHelper._find_prop_in_tree_by_entity_id(
+                node.children, entity_id, property_name
+            )
+            if found_prop is not None:
+                return found_prop, found_key
+
+        return None, ""
+
+    @staticmethod
+    def _find_prop_by_legacy_name(
+        actor: AssetActor,
+        group_prefix: str,
+        prop_name: str,
+    ) -> tuple | tuple[None, str]:
+        """v1.0 兼容格式：使用 display_name.PropName 在树形属性中查找。"""
+        for group in actor.property_groups:
+            if group.prefix != group_prefix:
+                continue
+            if "." in prop_name:
+                dot = prop_name.index(".")
+                node_display_name = prop_name[:dot]
+                leaf_name = prop_name[dot + 1:]
+                node = SceneLayoutHelper._find_tree_node_by_display_name(group.tree_data, node_display_name)
+                if node is not None:
+                    matched_prop = next(
+                        (p for p in node.properties if p.name() == leaf_name), None
+                    )
+                    if matched_prop is not None:
+                        return matched_prop, f"{node.name}.{leaf_name}"
+            else:
+                for prop in group.properties:
+                    if prop.name() == prop_name:
+                        return prop, prop_name
+        return None, ""

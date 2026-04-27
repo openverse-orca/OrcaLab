@@ -28,7 +28,7 @@ class SceneLayoutConverter:
     match OrcaLab's expectations.
     """
 
-    def __init__(self, layout_version: str = "1.0"):
+    def __init__(self, layout_version: str = "2.0"):
         self._layout_version = layout_version
 
     def convert_file(

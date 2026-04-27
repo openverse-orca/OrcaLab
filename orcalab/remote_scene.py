@@ -410,7 +410,26 @@ class RemoteScene(SceneEditNotification):
         if not isinstance(actor, AssetActor):
             return
 
-        property_groups = await self.get_property_groups(property_key.actor_path)
+        entity_root = local_scene.get_entity_root(property_key.actor_path)
+        if entity_root is None:
+            entity_root = await self.get_entity_hierarchy(property_key.actor_path)
+        if entity_root is None:
+            return
+
+        entity_ids = entity_root.collect_entity_ids()
+
+        tasks = [
+            self.get_entity_property_groups(property_key.actor_path, eid)
+            for eid in entity_ids
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        property_groups: List[ActorPropertyGroup] = []
+        for result in results:
+            if isinstance(result, BaseException):
+                logger.warning(f"Failed to fetch entity property groups: {result}")
+                continue
+            property_groups.extend(result)
 
         for new_group in property_groups:
             if new_group.prefix != property_key.group_prefix:
@@ -494,19 +513,6 @@ class RemoteScene(SceneEditNotification):
             )
             sync_node(new_node, old_node)
 
-    async def _fetch_actor_proprerties(self, actor: AssetActor, actor_path: Path):
-        property_groups = await self.get_property_groups(actor_path)
-        actor.property_groups = property_groups
-
-        keys: List[ActorPropertyKey] = []
-        props: List[ActorProperty] = []
-        collect_properties(keys, props, property_groups, actor_path)
-
-        values = await self.get_properties(keys)
-        for prop, value in zip(props, values):
-            prop.set_value(value)
-            prop.set_original_value(value)
-
     ############################################################
     #
     #
@@ -538,14 +544,27 @@ class RemoteScene(SceneEditNotification):
         if not actors:
             return
 
-        property_groups_list = await self._service.get_property_groups_batch(
-            actor_paths
-        )
+        all_property_groups: List[List[ActorPropertyGroup]] = []
+        for actor_path in actor_paths:
+            entity_root = await self.get_entity_hierarchy(actor_path)
+            if entity_root is None:
+                all_property_groups.append([])
+                continue
+
+            entity_ids = entity_root.collect_entity_ids()
+            batch_results = await self.get_entity_property_groups_batch(
+                actor_path, entity_ids
+            )
+
+            groups: List[ActorPropertyGroup] = []
+            for result in batch_results:
+                groups.extend(result)
+            all_property_groups.append(groups)
 
         keys: List[ActorPropertyKey] = []
         props: List[ActorProperty] = []
         for actor, actor_path, property_groups in zip(
-            actors, actor_paths, property_groups_list
+            actors, actor_paths, all_property_groups
         ):
             actor.property_groups = property_groups
             collect_properties(keys, props, property_groups, actor_path)
@@ -589,7 +608,7 @@ class RemoteScene(SceneEditNotification):
                 dst_path,
             )
 
-        await self._service.set_properties(keys, values)
+        await self.set_properties(keys, values)
         for key, prop, value in zip(keys, props, values):
             prop.set_value(value)
 
@@ -606,22 +625,22 @@ class RemoteScene(SceneEditNotification):
             finally:
                 await self._service.custom_command("pause_render:false")
 
-            if not success and stop_on_error:
-                raise Exception("Failed to add actors")
+        if not success and stop_on_error:
+            raise Exception("Failed to add actors")
 
-            await self._fetch_and_set_properties(requests, errors)
-            await self._apply_properties_from_template(requests, errors)
+        await self._fetch_and_set_properties(requests, errors)
+        await self._apply_properties_from_template(requests, errors)
 
-            # 因为Readonly可能更新，所以我们再次全量更新。
-            # TODO: 只针对Readonly属性进行更新，避免不必要的性能开销
-            await self._fetch_and_set_properties(requests, errors)
+        # 因为Readonly可能更新，所以我们再次全量更新。
+        # TODO: 只针对Readonly属性进行更新，避免不必要的性能开销
+        await self._fetch_and_set_properties(requests, errors)
 
-            # 第二次 fetch 会替换 property_groups 并将 original_value 设为当前引擎值。
-            # 对于复制的 actor，引擎已持有源 actor 的修改值，导致 is_modified() = False。
-            # 此处从源 actor 恢复正确的 original_value，使 is_modified() 能准确标记修改。
-            _apply_original_values_from_template(requests, errors)
+        # 第二次 fetch 会替换 property_groups 并将 original_value 设为当前引擎值。
+        # 对于复制的 actor，引擎已持有源 actor 的修改值，导致 is_modified() = False。
+        # 此处从源 actor 恢复正确的 original_value，使 is_modified() 能准确标记修改。
+        _apply_original_values_from_template(requests, errors)
 
-            return success, errors
+        return success, errors
 
     async def delete_actor_batch(self, actor_paths: List[Path]) -> None:
         print(f"delete_actor_batch: {len(actor_paths)} actors")
@@ -809,14 +828,6 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             return await self._service.get_viewport_camera_transform()
 
-    async def get_property_groups(self, actor_path: Path) -> List[ActorPropertyGroup]:
-        return await self._service.get_property_groups(actor_path)
-
-    async def get_property_groups_batch(
-        self, actor_paths: List[Path]
-    ) -> List[List[ActorPropertyGroup]]:
-        return await self._service.get_property_groups_batch(actor_paths)
-
     async def get_properties(self, keys: List[ActorPropertyKey]) -> List[Any]:
         return await self._service.get_properties(keys)
 
@@ -868,6 +879,19 @@ class RemoteScene(SceneEditNotification):
         self, actor_path: Path, entity_id: int
     ) -> list:
         async with self._grpc_lock:
-            return await self._service.get_entity_property_groups(
+            result = await self._service.get_entity_property_groups(
                 actor_path, entity_id
+            )
+            logger.info(
+                f"[gRPC] get_entity_property_groups: actor_path={actor_path}, "
+                f"entity_id={entity_id}, groups={len(result) if result else 'None'}"
+            )
+            return result
+
+    async def get_entity_property_groups_batch(
+        self, actor_path: Path, entity_ids: List[int]
+    ) -> List[List[ActorPropertyGroup]]:
+        async with self._grpc_lock:
+            return await self._service.get_entity_property_groups_batch(
+                actor_path, entity_ids
             )

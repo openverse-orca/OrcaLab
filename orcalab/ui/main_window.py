@@ -789,7 +789,7 @@ class MainWindow(
         }
 
         if actor.name == "root":
-            new_fields = {"version": "1.0"}
+            new_fields = {"version": "2.0"}
             data = {**new_fields, **data}
 
         if isinstance(actor, AssetActor):

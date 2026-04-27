@@ -124,6 +124,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
         self._current_index = QtCore.QModelIndex()
         self._current_actor: BaseActor | None = None
+        self._current_actor_path: Path | None = None
 
         self._brach_areas: dict[QtCore.QModelIndex, QtCore.QRect] = {}
         self._left_mouse_pressed = False

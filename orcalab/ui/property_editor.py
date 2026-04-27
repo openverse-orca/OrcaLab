@@ -5,7 +5,7 @@ from PySide6 import QtCore, QtWidgets
 
 from orcalab.actor import BaseActor, AssetActor
 from orcalab.actor_property import ActorPropertyGroup
-from orcalab.application_util import get_local_scene
+from orcalab.application_util import get_local_scene, get_remote_scene
 from orcalab.entity_info import EntityInfo
 from orcalab.path import Path
 from orcalab.ui.property_edit.property_group_edit import PropertyGroupEdit
@@ -14,7 +14,6 @@ from orcalab.ui.property_edit.transform_edit import TransformEdit
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
     SceneEditNotificationBus,
-    SceneEditRequestBus,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,6 +71,11 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
     def set_entity(self, actor: BaseActor, entity: EntityInfo, actor_path: Path):
         if self._actor == actor and self._entity is entity:
             return
+
+        logger.info(
+            f"[set_entity] actor={actor.name}, entity={entity.name} "
+            f"(entity_id={entity.entity_id}), actor_path={actor_path}"
+        )
 
         self._actor = actor
         self._entity = entity
@@ -137,17 +141,26 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._transform_edit.connect_buses()
         self._layout.addWidget(self._transform_edit)
 
+        if self._actor_path is not None:
+            self._load_actor_components(self._actor_path, label_width)
+
     def _add_entity_mode_ui(self, label_width: int):
         assert self._entity is not None
         assert self._actor is not None
+        logger.info(
+            f"[_add_entity_mode_ui] entity={self._entity.name}, "
+            f"entity_id={self._entity.entity_id}, actor_path={self._actor_path}"
+        )
         label = QtWidgets.QLabel(f"Entity: {self._entity.name}")
         label.setContentsMargins(4, 4, 4, 4)
         self._layout.addWidget(label)
 
         self._add_entity_transform_display(self._entity)
 
-        if isinstance(self._actor, AssetActor) and self._actor_path is not None:
-            self._load_entity_components(self._actor_path, self._entity.entity_id, label_width)
+        if self._actor_path is not None:
+            self._load_entity_components(
+                self._actor_path, self._entity.entity_id, label_width
+            )
 
     def _add_entity_transform_display(self, entity: EntityInfo):
         group_box = QtWidgets.QGroupBox("Transform (只读)")
@@ -180,31 +193,102 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
     ):
         async def _fetch_and_render():
             try:
-                groups = await SceneEditRequestBus().get_entity_property_groups(
+                remote_scene = get_remote_scene()
+                groups = await remote_scene.get_entity_property_groups(
                     actor_path, entity_id
                 )
 
-                def _sort_key(g: ActorPropertyGroup):
-                    name_lower = g.name.lower()
-                    if "transform" in name_lower:
-                        return 0
-                    return 1
-
-                sorted_groups = sorted(groups, key=_sort_key)
-
-                for group in sorted_groups:
-                    if not isinstance(self._actor, AssetActor):
-                        break
-                    edit = PropertyGroupEdit(
-                        self, self._actor, group, label_width
+                if groups is None or len(groups) == 0:
+                    logger.info(
+                        f"[Entity] no groups for entity_id={entity_id}, "
+                        f"falling back to actor-level groups"
                     )
-                    edit.connect_buses()
-                    self._property_edits.append(edit)
-                    self._layout.addWidget(edit)
+                    self._load_actor_components(actor_path, label_width)
+                    return
+
+                sorted_groups = self._sort_property_groups(groups)
+
+                if isinstance(self._actor, AssetActor):
+                    self._actor.property_groups = sorted_groups
+
+                self._render_property_groups(sorted_groups, label_width)
             except Exception as e:
-                logger.warning(f"Failed to load entity components: {e}")
+                logger.warning(f"Failed to load entity components: {e}", exc_info=True)
 
         asyncio.create_task(_fetch_and_render())
+
+    def _load_actor_components(self, actor_path: Path, label_width: int):
+        async def _fetch_and_render():
+            try:
+                if (
+                    isinstance(self._actor, AssetActor)
+                    and self._actor.property_groups
+                ):
+                    sorted_groups = self._sort_property_groups(
+                        self._actor.property_groups
+                    )
+                    self._render_property_groups(sorted_groups, label_width)
+                    return
+
+                local_scene = get_local_scene()
+                remote_scene = get_remote_scene()
+
+                entity_root = local_scene.get_entity_root(actor_path)
+                if entity_root is None:
+                    entity_root = await remote_scene.get_entity_hierarchy(
+                        actor_path
+                    )
+                    if entity_root is not None:
+                        local_scene.set_entity_root(actor_path, entity_root)
+
+                if entity_root is None:
+                    logger.info(f"[Actor] entity_root is None for {actor_path}")
+                    return
+
+                entity_ids = entity_root.collect_entity_ids()
+
+                batch_results = await remote_scene.get_entity_property_groups_batch(
+                    actor_path, entity_ids
+                )
+
+                all_groups: list[ActorPropertyGroup] = []
+                for groups in batch_results:
+                    if groups:
+                        all_groups.extend(groups)
+
+                sorted_groups = self._sort_property_groups(all_groups)
+
+                if isinstance(self._actor, AssetActor):
+                    self._actor.property_groups = sorted_groups
+
+                self._render_property_groups(sorted_groups, label_width)
+            except Exception as e:
+                logger.warning(f"Failed to load actor components: {e}")
+
+        asyncio.create_task(_fetch_and_render())
+
+    @staticmethod
+    def _sort_property_groups(
+        groups: list[ActorPropertyGroup],
+    ) -> list[ActorPropertyGroup]:
+        def _sort_key(g: ActorPropertyGroup):
+            name_lower = g.name.lower()
+            if "transform" in name_lower:
+                return 0
+            return 1
+
+        return sorted(groups, key=_sort_key)
+
+    def _render_property_groups(
+        self, groups: list[ActorPropertyGroup], label_width: int
+    ):
+        if self._actor is None:
+            return
+        for group in groups:
+            edit = PropertyGroupEdit(self, self._actor, group, label_width)
+            edit.connect_buses()
+            self._property_edits.append(edit)
+            self._layout.addWidget(edit)
 
     @override
     async def on_active_actor_changed(
@@ -229,6 +313,9 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         new_active_entity: tuple | None,
         source: str = "",
     ) -> None:
+        logger.info(
+            f"[on_active_entity_changed] old={old_active_entity}, new={new_active_entity}, source={source}"
+        )
         if new_active_entity is None:
             if self._entity is not None:
                 if self._actor is not None:
@@ -240,10 +327,17 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             local_scene = get_local_scene()
             actor = local_scene.find_actor_by_path(actor_path)
             if actor is None:
+                logger.warning(
+                    f"[on_active_entity_changed] actor not found for path={actor_path}"
+                )
                 return
 
             entity_info = local_scene.find_entity_info_by_id(actor_path, entity_id)
             if entity_info is None:
+                logger.warning(
+                    f"[on_active_entity_changed] entity_info not found for "
+                    f"actor_path={actor_path}, entity_id={entity_id}"
+                )
                 return
 
             self.set_entity(actor, entity_info, actor_path)

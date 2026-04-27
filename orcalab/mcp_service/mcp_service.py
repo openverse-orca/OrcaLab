@@ -104,7 +104,7 @@ class OrcaLabMCPServer:
         }
 
         if actor.name == "root":
-            data = {"version": "1.0", **data}
+            data = {"version": "2.0", **data}
 
         if isinstance(actor, AssetActor):
             data["type"] = "AssetActor"

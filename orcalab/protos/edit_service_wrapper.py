@@ -1,7 +1,10 @@
 import grpc
+import logging
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Any, List, Tuple
+
+logger = logging.getLogger(__name__)
 
 from orcalab.entity_info import EntityInfo
 
@@ -499,39 +502,6 @@ class EditServiceWrapper:
 
         return pg
 
-    async def get_property_groups(self, actor_path: Path) -> List[ActorPropertyGroup]:
-        request = edit_service_pb2.GetPropertyGroupsRequest()
-        request.actor_path = actor_path.string()
-        response = await self.stub.GetPropertyGroups(request)
-        self._check_response(response)
-
-        property_groups: List[ActorPropertyGroup] = []
-
-        for pg_msg in response.property_groups:
-            pg = self._parse_property_group_msg(pg_msg)
-            property_groups.append(pg)
-
-        return property_groups
-
-    async def get_property_groups_batch(
-        self, actor_paths: List[Path]
-    ) -> List[List[ActorPropertyGroup]]:
-        request = edit_service_pb2.GetPropertyGroupsBatchRequest()
-        for actor_path in actor_paths:
-            request.actor_paths.append(actor_path.string())
-        response = await self.stub.GetPropertyGroupsBatch(request)
-        self._check_response(response)
-
-        all_property_groups: List[List[ActorPropertyGroup]] = []
-        for pg_list_msg in response.property_group_lists:
-            property_groups: List[ActorPropertyGroup] = []
-            for pg_msg in pg_list_msg.elements:
-                pg = self._parse_property_group_msg(pg_msg)
-                property_groups.append(pg)
-            all_property_groups.append(property_groups)
-
-        return all_property_groups
-
     def _create_property_key_message(self, key: ActorPropertyKey):
         key_msg = edit_service_pb2.PropertyKey()
         key_msg.actor_path = key.actor_path.string()
@@ -703,8 +673,34 @@ class EditServiceWrapper:
         response = await self.stub.GetEntityPropertyGroups(request)
         self._check_response(response)
 
+        logger.info(
+            f"[gRPC wrapper] get_entity_property_groups: "
+            f"actor_path={actor_path}, entity_id={entity_id}, "
+            f"status={response.status_code}, "
+            f"property_groups_count={len(response.property_groups)}"
+        )
+
         property_groups: List[ActorPropertyGroup] = []
         for pg_msg in response.property_groups:
             pg = self._parse_property_group_msg(pg_msg)
             property_groups.append(pg)
         return property_groups
+
+    async def get_entity_property_groups_batch(
+        self, actor_path: Path, entity_ids: List[int]
+    ) -> List[List[ActorPropertyGroup]]:
+        request = edit_service_pb2.GetEntityPropertyGroupsBatchRequest(
+            actor_path=actor_path.string(),
+            entity_ids=entity_ids,
+        )
+        response = await self.stub.GetEntityPropertyGroupsBatch(request)
+        self._check_response(response)
+
+        result: List[List[ActorPropertyGroup]] = []
+        for pg_list_msg in response.property_group_lists:
+            groups: List[ActorPropertyGroup] = []
+            for pg_msg in pg_list_msg.elements:
+                pg = self._parse_property_group_msg(pg_msg)
+                groups.append(pg)
+            result.append(groups)
+        return result
