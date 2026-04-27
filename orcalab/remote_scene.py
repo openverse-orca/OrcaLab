@@ -29,6 +29,7 @@ from orcalab.state_sync_bus import (
     ManipulatorType,
     CameraMovementType,
     MeasureType,
+    PivotPointType,
     StateSyncNotificationBus,
 )
 from orcalab.ui.camera.camera_brief import CameraBrief
@@ -299,6 +300,24 @@ class RemoteScene(SceneEditNotification):
 
             bus = StateSyncNotificationBus()
             bus.on_measure_type_changed(measure_type)
+            return
+        
+        prefix = "pivot_point_type:"
+        if op.startswith(prefix):
+            value = op[len(prefix) :]
+            if value == "individualcenter":
+                pivot_point_type = PivotPointType.IndividualCenter
+            elif value == "boundingboxcenter":
+                pivot_point_type = PivotPointType.BoundingBoxCenter
+            elif value == "medianpoint":
+                pivot_point_type = PivotPointType.MedianPoint
+            elif value == "activeactor":
+                pivot_point_type = PivotPointType.ActiveActor
+            else:
+                pivot_point_type = PivotPointType.Default
+
+            bus = StateSyncNotificationBus()
+            bus.on_pivot_point_type_changed(pivot_point_type)
             return
 
         prefix = "debug_draw:"
@@ -745,6 +764,13 @@ class RemoteScene(SceneEditNotification):
         self, measure_type: MeasureType
     ) -> bool:
         cmd = f"change_measure_type:{measure_type.name.lower()}"
+        async with self._grpc_lock:
+            return await self._service.custom_command(cmd)
+        
+    async def change_pivot_point_type(
+        self, pivot_point_type: PivotPointType
+    ) -> bool:
+        cmd = f"change_pivot_point_type:{pivot_point_type.name.lower()}"
         async with self._grpc_lock:
             return await self._service.custom_command(cmd)
 

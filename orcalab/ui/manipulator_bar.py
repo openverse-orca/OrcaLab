@@ -5,6 +5,7 @@ from orcalab.state_sync_bus import (
     ManipulatorType,
     CameraMovementType,
     MeasureType,
+    PivotPointType,
     StateSyncRequestBus,
     StateSyncNotification,
     StateSyncNotificationBus,
@@ -86,6 +87,51 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self.debug_button.setFixedSize(button_size)
         self.debug_button.icon_size = icon_size
 
+        self.pivot_point_button = Button(icon=make_icon(":/icons/move.svg", icon_color))
+        self.pivot_point_button.setToolTip("枢轴点")
+        self.pivot_point_button.setFixedSize(button_size)
+        self.pivot_point_button.icon_size = icon_size
+
+        # 创建枢轴点下拉菜单
+        self.pivot_point_menu = QtWidgets.QMenu()
+        self.pivot_point_menu.setStyleSheet("""
+            QMenuBar {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border-bottom: 1px solid #404040;
+            }
+            QMenuBar::item {
+                background-color: transparent;
+            }
+            QMenuBar::item:selected {
+                background-color: #4a4a4a;
+            }
+            QMenuBar::item:pressed {
+                background-color: #2a2a2a;
+            }
+            QMenu {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #404040;
+                border-radius: 3px;
+            }
+            QMenu::item {
+                padding: 6px 20px;
+            }
+            QMenu::item:selected {
+                background-color: #4a4a4a;
+            }
+            QMenu::item:disabled {
+                color: #aaaaaa; /* Light gray text */
+                background-color: transparent;
+            }
+        """)
+        self.pivot_individual_origin_action = self.pivot_point_menu.addAction("各自中心")
+        self.pivot_bounding_box_action = self.pivot_point_menu.addAction("包围盒中心")
+        self.pivot_meadian_point_action = self.pivot_point_menu.addAction("中位点")
+        self.pivot_active_actor_action = self.pivot_point_menu.addAction("激活的物体")
+        connect(self.pivot_point_button.mouse_pressed, self.show_pivot_menu)
+
         self.runtime_grab_button = Button(icon=make_icon(":/icons/grab.png", icon_color))
         self.runtime_grab_button.setToolTip("抓取(F3)")
         self.runtime_grab_button.setFixedSize(button_size)
@@ -95,6 +141,7 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self.sep_2 = make_vertical_line(2)
         self.sep_3 = make_vertical_line(2)
         self.sep_4 = make_vertical_line(2)
+        self.sep_5 = make_vertical_line(2)
 
         self._layout.addWidget(self.move_button)
         self._layout.addWidget(self.rotate_button)
@@ -107,8 +154,10 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self._layout.addWidget(self.measure_distance_button)
         self._layout.addWidget(self.measure_angle_button)
         self._layout.addWidget(self.sep_3)
-        self._layout.addWidget(self.debug_button)
+        self._layout.addWidget(self.pivot_point_button)
         self._layout.addWidget(self.sep_4)
+        self._layout.addWidget(self.debug_button)
+        self._layout.addWidget(self.sep_5)
         self._layout.addWidget(self.runtime_grab_button)
 
         connect(self.move_button.mouse_pressed, self.set_translation)
@@ -121,6 +170,10 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         connect(self.measure_angle_button.mouse_pressed, self.set_measure_angle)
         connect(self.debug_button.mouse_pressed, self.set_debug_draw)
         connect(self.runtime_grab_button.mouse_pressed, self.set_runtime_grab)
+        connect(self.pivot_individual_origin_action.triggered, self.set_pivot_individual_center)
+        connect(self.pivot_bounding_box_action.triggered, self.set_pivot_bounding_box)
+        connect(self.pivot_meadian_point_action.triggered, self.set_pivot_median_point)
+        connect(self.pivot_active_actor_action.triggered, self.set_pivot_active_actor)
 
     def connect_bus(self):
         StateSyncNotificationBus.connect(self)
@@ -164,6 +217,25 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         bus = StateSyncRequestBus()
         await bus.set_measure_type(MeasureType.Angle)
 
+    def show_pivot_menu(self):
+        self.pivot_point_menu.exec(self.pivot_point_button.mapToGlobal(QtCore.QPoint(0, self.pivot_point_button.height())))
+
+    async def set_pivot_individual_center(self):
+        bus = StateSyncRequestBus()
+        await bus.set_pivot_point_type(PivotPointType.IndividualCenter)
+
+    async def set_pivot_bounding_box(self):
+        bus = StateSyncRequestBus()
+        await bus.set_pivot_point_type(PivotPointType.BoundingBoxCenter)
+
+    async def set_pivot_median_point(self):
+        bus = StateSyncRequestBus()
+        await bus.set_pivot_point_type(PivotPointType.MedianPoint)
+
+    async def set_pivot_active_actor(self):
+        bus = StateSyncRequestBus()
+        await bus.set_pivot_point_type(PivotPointType.ActiveActor)
+
     @override
     def on_manipulator_type_changed(self, type: ManipulatorType):
         self.move_button.bg_color = self.bg_color
@@ -200,7 +272,6 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
 
     @override
     def on_measure_type_changed(self,  type: MeasureType):
-        print(type)
         self.measure_distance_button.bg_color = self.bg_color
         self.measure_angle_button.bg_color = self.bg_color
 
@@ -215,6 +286,22 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
     async def set_debug_draw(self):
         bus = StateSyncRequestBus()
         await bus.set_debug_draw(not self._debug_draw)
+
+    @override
+    def on_pivot_point_type_changed(self, type: PivotPointType):
+        print(type)
+        
+        # 根据选择的类型更新图标
+        if type == PivotPointType.IndividualCenter:
+            self.pivot_point_button.setIcon(make_icon(":/icons/distance.svg", self.bg_color))
+        elif type == PivotPointType.BoundingBoxCenter:
+            self.pivot_point_button.setIcon(make_icon(":/icons/move.svg", self.bg_color))
+        elif type == PivotPointType.MedianPoint:
+            self.pivot_point_button.setIcon(make_icon(":/icons/rotate.svg", self.bg_color))
+        elif type == PivotPointType.ActiveActor:
+            self.pivot_point_button.setIcon(make_icon(":/icons/scale.svg", self.bg_color))
+        
+        self.pivot_point_button.update()
 
     @override
     def on_debug_draw_changed(self, enabled: bool):
