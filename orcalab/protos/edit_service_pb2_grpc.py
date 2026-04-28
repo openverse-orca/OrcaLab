@@ -274,6 +274,11 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.GetEntityPropertyGroupsBatchRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetEntityPropertyGroupsBatchResponse.FromString,
                 _registered_method=True)
+        self.GetAllEntityPropertyGroups = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetAllEntityPropertyGroups',
+                request_serializer=edit__service__pb2.GetAllEntityPropertyGroupsRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetAllEntityPropertyGroupsResponse.FromString,
+                _registered_method=True)
 
 
 class GrpcServiceServicer(object):
@@ -568,6 +573,12 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetAllEntityPropertyGroups(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GrpcServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -810,6 +821,11 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.GetEntityPropertyGroupsBatch,
                     request_deserializer=edit__service__pb2.GetEntityPropertyGroupsBatchRequest.FromString,
                     response_serializer=edit__service__pb2.GetEntityPropertyGroupsBatchResponse.SerializeToString,
+            ),
+            'GetAllEntityPropertyGroups': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAllEntityPropertyGroups,
+                    request_deserializer=edit__service__pb2.GetAllEntityPropertyGroupsRequest.FromString,
+                    response_serializer=edit__service__pb2.GetAllEntityPropertyGroupsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -2108,6 +2124,33 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/GetEntityPropertyGroupsBatch',
             edit__service__pb2.GetEntityPropertyGroupsBatchRequest.SerializeToString,
             edit__service__pb2.GetEntityPropertyGroupsBatchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAllEntityPropertyGroups(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetAllEntityPropertyGroups',
+            edit__service__pb2.GetAllEntityPropertyGroupsRequest.SerializeToString,
+            edit__service__pb2.GetAllEntityPropertyGroupsResponse.FromString,
             options,
             channel_credentials,
             insecure,

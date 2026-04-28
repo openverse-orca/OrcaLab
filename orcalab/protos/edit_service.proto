@@ -541,6 +541,23 @@ message GetEntityPropertyGroupsBatchResponse {
     repeated PropertyGroupList property_group_lists = 3;
 }
 
+message EntityPropertyGroupEntry {
+    uint64 entity_id = 1;
+    string entity_path = 2;
+    string component_type = 3;
+    string component_display_name = 4;
+    PropertyGroup property_group = 5;
+}
+
+message GetAllEntityPropertyGroupsRequest {
+    string actor_path = 1;
+}
+message GetAllEntityPropertyGroupsResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    repeated EntityPropertyGroupEntry entries = 3;
+}
+
 message SetHighlightJointRequest {
     uint64 entity_id = 1;
     bool highlight = 2;
@@ -655,5 +672,6 @@ service GrpcService {
     rpc SetHighlightEntityTree(SetHighlightEntityTreeRequest) returns (SetHighlightEntityTreeResponse);
     rpc GetEntityPropertyGroups(GetEntityPropertyGroupsRequest) returns (GetEntityPropertyGroupsResponse);
     rpc GetEntityPropertyGroupsBatch(GetEntityPropertyGroupsBatchRequest) returns (GetEntityPropertyGroupsBatchResponse);
+    rpc GetAllEntityPropertyGroups(GetAllEntityPropertyGroupsRequest) returns (GetAllEntityPropertyGroupsResponse);
 
 }

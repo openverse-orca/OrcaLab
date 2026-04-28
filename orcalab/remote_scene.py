@@ -8,6 +8,7 @@ from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
     ActorPropertyKey,
+    EntityPropertyGroupEntry,
 )
 from orcalab.actor_util import (
     collect_properties,
@@ -57,6 +58,11 @@ def _sync_joint_display_names(property_groups: list) -> None:
     """对 actor 的所有 property group 同步关节 display_name。"""
     for group in property_groups:
         _sync_tree_display_names(group.tree_data)
+
+
+def _sync_joint_display_names_for_actors(actors: list) -> None:
+    for actor in actors:
+        _sync_joint_display_names(actor.property_groups)
 
 
 def _restore_original_values_recursive(src_nodes: list, dst_nodes: list) -> None:
@@ -410,26 +416,11 @@ class RemoteScene(SceneEditNotification):
         if not isinstance(actor, AssetActor):
             return
 
-        entity_root = local_scene.get_entity_root(property_key.actor_path)
-        if entity_root is None:
-            entity_root = await self.get_entity_hierarchy(property_key.actor_path)
-        if entity_root is None:
-            return
-
-        entity_ids = entity_root.collect_entity_ids()
-
-        tasks = [
-            self.get_entity_property_groups(property_key.actor_path, eid)
-            for eid in entity_ids
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        entries = await self.get_all_entity_property_groups(property_key.actor_path)
 
         property_groups: List[ActorPropertyGroup] = []
-        for result in results:
-            if isinstance(result, BaseException):
-                logger.warning(f"Failed to fetch entity property groups: {result}")
-                continue
-            property_groups.extend(result)
+        for entry in entries:
+            property_groups.append(entry.property_group)
 
         for new_group in property_groups:
             if new_group.prefix != property_key.group_prefix:
@@ -546,19 +537,11 @@ class RemoteScene(SceneEditNotification):
 
         all_property_groups: List[List[ActorPropertyGroup]] = []
         for actor_path in actor_paths:
-            entity_root = await self.get_entity_hierarchy(actor_path)
-            if entity_root is None:
-                all_property_groups.append([])
-                continue
-
-            entity_ids = entity_root.collect_entity_ids()
-            batch_results = await self.get_entity_property_groups_batch(
-                actor_path, entity_ids
-            )
+            entries = await self.get_all_entity_property_groups(actor_path)
 
             groups: List[ActorPropertyGroup] = []
-            for result in batch_results:
-                groups.extend(result)
+            for entry in entries:
+                groups.append(entry.property_group)
             all_property_groups.append(groups)
 
         keys: List[ActorPropertyKey] = []
@@ -574,9 +557,7 @@ class RemoteScene(SceneEditNotification):
             prop.set_value(value)
             prop.set_original_value(value)
 
-        # 同步关节叶节点的 display_name 与 Name 属性值，确保 UI 按钮文字正确
-        for actor in actors:
-            _sync_joint_display_names(actor.property_groups)
+        _sync_joint_display_names_for_actors(actors)
 
     async def _apply_properties_from_template(
         self, requests: List[AddActorRequest], errors: List[str]
@@ -895,3 +876,9 @@ class RemoteScene(SceneEditNotification):
             return await self._service.get_entity_property_groups_batch(
                 actor_path, entity_ids
             )
+
+    async def get_all_entity_property_groups(
+        self, actor_path: Path
+    ) -> List[EntityPropertyGroupEntry]:
+        async with self._grpc_lock:
+            return await self._service.get_all_entity_property_groups(actor_path)

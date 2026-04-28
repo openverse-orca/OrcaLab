@@ -1,13 +1,16 @@
 import asyncio
 import logging
 from typing import override
+
 from PySide6 import QtCore, QtWidgets
 
 from orcalab.actor import BaseActor, AssetActor
-from orcalab.actor_property import ActorPropertyGroup
+from orcalab.actor_property import ActorPropertyGroup, EntityPropertyGroupEntry
 from orcalab.application_util import get_local_scene, get_remote_scene
 from orcalab.entity_info import EntityInfo
 from orcalab.path import Path
+from orcalab.ui.filter_bar import FilterBar
+from orcalab.ui.property_data_store import PropertyDataStore
 from orcalab.ui.property_edit.property_group_edit import PropertyGroupEdit
 from orcalab.ui.property_edit.transform_edit import TransformEdit
 
@@ -24,26 +27,34 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self._layout = QtWidgets.QVBoxLayout()
-        self._layout.setContentsMargins(4, 4, 4, 4)
-        self._layout.setSpacing(4)
-        self._widget = QtWidgets.QWidget()
-        self._widget.setLayout(self._layout)
-        self._widget.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Expanding,
-            QtWidgets.QSizePolicy.Policy.Fixed,
-        )
-
-        self.setWidget(self._widget)
-        self.setWidgetResizable(True)
-
+        self._data_store = PropertyDataStore()
         self._actor: BaseActor | None = None
         self._entity: EntityInfo | None = None
         self._actor_path: Path | None = None
         self._transform_edit: TransformEdit | None = None
         self._property_edits: list[PropertyGroupEdit] = []
+        self._raw_entries: list[EntityPropertyGroupEntry] = []
 
-        self._refresh()
+        self._container = QtWidgets.QWidget()
+        self._main_layout = QtWidgets.QVBoxLayout(self._container)
+        self._main_layout.setContentsMargins(4, 4, 4, 4)
+        self._main_layout.setSpacing(4)
+
+        self._filter_bar = FilterBar()
+        self._filter_bar.filter_changed.connect(self._apply_filter)
+        self._main_layout.addWidget(self._filter_bar)
+
+        self._property_layout = QtWidgets.QVBoxLayout()
+        self._property_layout.setContentsMargins(0, 0, 0, 0)
+        self._property_layout.setSpacing(4)
+        self._main_layout.addLayout(self._property_layout)
+
+        self._main_layout.addStretch()
+
+        self.setWidget(self._container)
+        self.setWidgetResizable(True)
+
+        self._show_empty()
 
     def connect_bus(self):
         SceneEditNotificationBus.connect(self)
@@ -66,7 +77,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             local_scene = get_local_scene()
             self._actor_path = local_scene.get_actor_path(actor)
 
-        self._refresh()
+        self._load_properties()
 
     def set_entity(self, actor: BaseActor, entity: EntityInfo, actor_path: Path):
         if self._actor == actor and self._entity is entity:
@@ -80,7 +91,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._actor = actor
         self._entity = entity
         self._actor_path = actor_path
-        self._refresh()
+        self._load_properties()
 
     def clear_selection(self):
         if self._actor is None and self._entity is None:
@@ -89,9 +100,11 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._actor = None
         self._entity = None
         self._actor_path = None
-        self._refresh()
+        self._data_store.clear()
+        self._raw_entries.clear()
+        self._show_empty()
 
-    def _clear_layout(self, layout=None):
+    def _clear_property_layout(self):
         for edit in self._property_edits:
             edit.disconnect_buses()
         self._property_edits.clear()
@@ -100,110 +113,131 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             self._transform_edit.disconnect_buses()
             self._transform_edit = None
 
-        if layout is None:
-            layout = self._layout
-        while layout.count():
-            item = layout.takeAt(0)
+        while self._property_layout.count():
+            item = self._property_layout.takeAt(0)
             if item.widget():
                 w = item.widget()
-                layout.removeWidget(w)
+                self._property_layout.removeWidget(w)
                 w.setParent(None)
             elif item.layout():
-                self._clear_layout(item.layout())
-                layout.removeItem(item)
+                self._property_layout.removeItem(item)
 
-    def _refresh(self):
-        self._clear_layout()
+    def _show_empty(self):
+        self._clear_property_layout()
+        label = QtWidgets.QLabel("没有选中任何对象")
+        label.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignCenter
+            | QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
+        self._property_layout.addWidget(label)
+
+    def _load_properties(self):
+        self._clear_property_layout()
 
         if self._actor is None:
-            label = QtWidgets.QLabel("没有选中任何对象")
-            label.setAlignment(
-                QtCore.Qt.AlignmentFlag.AlignCenter
-                | QtCore.Qt.AlignmentFlag.AlignVCenter
-            )
-            self._layout.addWidget(label)
+            self._show_empty()
             return
 
-        label_width = 160
-
         if self._entity is not None:
-            self._add_entity_mode_ui(label_width)
+            self._load_entity_properties()
         else:
-            self._add_actor_mode_ui(label_width)
+            self._load_actor_properties()
 
-    def _add_actor_mode_ui(self, label_width: int):
+    def _load_actor_properties(self):
         assert self._actor is not None
+
         label = QtWidgets.QLabel(f"Actor: {self._actor.name}")
         label.setContentsMargins(4, 4, 4, 4)
-        self._layout.addWidget(label)
+        self._property_layout.addWidget(label)
 
-        self._transform_edit = TransformEdit(self, self._actor, label_width)
+        self._transform_edit = TransformEdit(self, self._actor, 160)
         self._transform_edit.connect_buses()
-        self._layout.addWidget(self._transform_edit)
+        self._property_layout.addWidget(self._transform_edit)
 
-        if self._actor_path is not None:
-            self._load_actor_components(self._actor_path, label_width)
+        if self._actor_path is None:
+            return
 
-    def _add_entity_mode_ui(self, label_width: int):
+        if isinstance(self._actor, AssetActor) and self._actor.property_groups:
+            self._data_store.set_data_from_entries(self._raw_entries) if self._raw_entries else None
+            self._render_from_data_store()
+            return
+
+        self._fetch_and_render_all(self._actor_path)
+
+    def _load_entity_properties(self):
         assert self._entity is not None
         assert self._actor is not None
-        logger.info(
-            f"[_add_entity_mode_ui] entity={self._entity.name}, "
-            f"entity_id={self._entity.entity_id}, actor_path={self._actor_path}"
-        )
+
         label = QtWidgets.QLabel(f"Entity: {self._entity.name}")
         label.setContentsMargins(4, 4, 4, 4)
-        self._layout.addWidget(label)
+        self._property_layout.addWidget(label)
 
         self._add_entity_transform_display(self._entity)
 
-        if self._actor_path is not None:
-            self._load_entity_components(
-                self._actor_path, self._entity.entity_id, label_width
-            )
+        if self._actor_path is None:
+            return
+
+        self._fetch_and_render_entity(self._actor_path, self._entity.entity_id)
 
     def _add_entity_transform_display(self, entity: EntityInfo):
         group_box = QtWidgets.QGroupBox("Transform (只读)")
-        group_box.setStyleSheet(
-            "QGroupBox { font-weight: bold; }"
-        )
+        group_box.setStyleSheet("QGroupBox { font-weight: bold; }")
         form = QtWidgets.QFormLayout()
         form.setContentsMargins(4, 8, 4, 4)
         form.setSpacing(4)
 
         label_style = "color: gray; font-style: italic;"
 
-        pos_label = QtWidgets.QLabel("(由引擎驱动)")
-        pos_label.setStyleSheet(label_style)
-        form.addRow("Position:", pos_label)
-
-        rot_label = QtWidgets.QLabel("(由引擎驱动)")
-        rot_label.setStyleSheet(label_style)
-        form.addRow("Rotation:", rot_label)
-
-        scale_label = QtWidgets.QLabel("(由引擎驱动)")
-        scale_label.setStyleSheet(label_style)
-        form.addRow("Scale:", scale_label)
+        for field_name in ("Position:", "Rotation:", "Scale:"):
+            lbl = QtWidgets.QLabel("(由引擎驱动)")
+            lbl.setStyleSheet(label_style)
+            form.addRow(field_name, lbl)
 
         group_box.setLayout(form)
-        self._layout.addWidget(group_box)
+        self._property_layout.addWidget(group_box)
 
-    def _load_entity_components(
-        self, actor_path: Path, entity_id: int, label_width: int
-    ):
-        async def _fetch_and_render():
+    def _fetch_and_render_all(self, actor_path: Path):
+        async def _fetch():
+            try:
+                remote_scene = get_remote_scene()
+                entries = await remote_scene.get_all_entity_property_groups(
+                    actor_path
+                )
+
+                if not entries:
+                    logger.info(f"[Actor] no entries for {actor_path}")
+                    return
+
+                self._raw_entries = entries
+                self._data_store.set_data_from_entries(entries)
+
+                if isinstance(self._actor, AssetActor):
+                    groups = [e.property_group for e in entries]
+                    self._actor.property_groups = self._sort_property_groups(groups)
+
+                self._filter_bar.set_available_types(
+                    self._data_store.available_component_types
+                )
+                self._render_from_data_store()
+            except Exception as e:
+                logger.warning(f"Failed to load actor components: {e}")
+
+        asyncio.create_task(_fetch())
+
+    def _fetch_and_render_entity(self, actor_path: Path, entity_id: int):
+        async def _fetch():
             try:
                 remote_scene = get_remote_scene()
                 groups = await remote_scene.get_entity_property_groups(
                     actor_path, entity_id
                 )
 
-                if groups is None or len(groups) == 0:
+                if not groups:
                     logger.info(
                         f"[Entity] no groups for entity_id={entity_id}, "
                         f"falling back to actor-level groups"
                     )
-                    self._load_actor_components(actor_path, label_width)
+                    self._fetch_and_render_all(actor_path)
                     return
 
                 sorted_groups = self._sort_property_groups(groups)
@@ -211,61 +245,46 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                 if isinstance(self._actor, AssetActor):
                     self._actor.property_groups = sorted_groups
 
-                self._render_property_groups(sorted_groups, label_width)
+                self._render_property_groups(sorted_groups, 160)
             except Exception as e:
                 logger.warning(f"Failed to load entity components: {e}", exc_info=True)
 
-        asyncio.create_task(_fetch_and_render())
+        asyncio.create_task(_fetch())
 
-    def _load_actor_components(self, actor_path: Path, label_width: int):
-        async def _fetch_and_render():
-            try:
-                if (
-                    isinstance(self._actor, AssetActor)
-                    and self._actor.property_groups
-                ):
-                    sorted_groups = self._sort_property_groups(
-                        self._actor.property_groups
-                    )
-                    self._render_property_groups(sorted_groups, label_width)
-                    return
+    def _render_from_data_store(self):
+        self._clear_property_layout()
 
-                local_scene = get_local_scene()
-                remote_scene = get_remote_scene()
+        if self._actor is None:
+            return
 
-                entity_root = local_scene.get_entity_root(actor_path)
-                if entity_root is None:
-                    entity_root = await remote_scene.get_entity_hierarchy(
-                        actor_path
-                    )
-                    if entity_root is not None:
-                        local_scene.set_entity_root(actor_path, entity_root)
+        search_text = self._filter_bar.get_search_text()
+        selected_types = self._filter_bar.get_selected_component_types()
 
-                if entity_root is None:
-                    logger.info(f"[Actor] entity_root is None for {actor_path}")
-                    return
+        groups = self._data_store.get_property_groups_for_display(
+            component_types=selected_types,
+            search_text=search_text,
+        )
 
-                entity_ids = entity_root.collect_entity_ids()
+        if not groups:
+            label = QtWidgets.QLabel("无匹配属性")
+            label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            self._property_layout.addWidget(label)
+            return
 
-                batch_results = await remote_scene.get_entity_property_groups_batch(
-                    actor_path, entity_ids
-                )
+        sorted_groups = self._sort_property_groups(groups)
+        self._render_property_groups(sorted_groups, 160)
 
-                all_groups: list[ActorPropertyGroup] = []
-                for groups in batch_results:
-                    if groups:
-                        all_groups.extend(groups)
+    def _apply_filter(self):
+        if self._actor is None:
+            return
 
-                sorted_groups = self._sort_property_groups(all_groups)
+        if self._entity is not None:
+            return
 
-                if isinstance(self._actor, AssetActor):
-                    self._actor.property_groups = sorted_groups
+        if not self._data_store.items:
+            return
 
-                self._render_property_groups(sorted_groups, label_width)
-            except Exception as e:
-                logger.warning(f"Failed to load actor components: {e}")
-
-        asyncio.create_task(_fetch_and_render())
+        self._render_from_data_store()
 
     @staticmethod
     def _sort_property_groups(
@@ -288,7 +307,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             edit = PropertyGroupEdit(self, self._actor, group, label_width)
             edit.connect_buses()
             self._property_edits.append(edit)
-            self._layout.addWidget(edit)
+            self._property_layout.addWidget(edit)
 
     @override
     async def on_active_actor_changed(

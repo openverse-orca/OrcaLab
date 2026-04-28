@@ -1,5 +1,6 @@
 from enum import Enum
-from typing import List
+from dataclasses import dataclass
+from typing import List, Any
 
 from orcalab.path import Path
 
@@ -159,3 +160,26 @@ class ActorPropertyKey:
         return hash(
             (self.actor_path, self.group_prefix, self.property_name, self.property_type)
         )
+
+
+@dataclass
+class EntityPropertyGroupEntry:
+    entity_id: int
+    entity_path: str
+    component_type: str
+    component_display_name: str
+    property_group: ActorPropertyGroup
+
+
+@dataclass
+class FlatPropertyItem:
+    entity_id: int
+    entity_path: str
+    component_type: str
+    component_display_name: str
+    property_name: str
+    property_display_name: str
+    property_type: ActorPropertyType
+    value: Any
+    is_readonly: bool
+    group_prefix: str

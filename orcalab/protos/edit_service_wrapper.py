@@ -20,6 +20,7 @@ from orcalab.actor_property import (
     ActorPropertyKey,
     ActorPropertyType,
     TreePropertyNode,
+    EntityPropertyGroupEntry,
 )
 from orcalab.scene_edit_types import AddActorRequest
 from orcalab.ui.camera.camera_brief import CameraBrief
@@ -704,3 +705,25 @@ class EditServiceWrapper:
                 groups.append(pg)
             result.append(groups)
         return result
+
+    async def get_all_entity_property_groups(
+        self, actor_path: Path
+    ) -> List[EntityPropertyGroupEntry]:
+        request = edit_service_pb2.GetAllEntityPropertyGroupsRequest(
+            actor_path=actor_path.string(),
+        )
+        response = await self.stub.GetAllEntityPropertyGroups(request)
+        self._check_response(response)
+
+        entries: List[EntityPropertyGroupEntry] = []
+        for entry_msg in response.entries:
+            pg = self._parse_property_group_msg(entry_msg.property_group)
+            entry = EntityPropertyGroupEntry(
+                entity_id=entry_msg.entity_id,
+                entity_path=entry_msg.entity_path,
+                component_type=entry_msg.component_type,
+                component_display_name=entry_msg.component_display_name,
+                property_group=pg,
+            )
+            entries.append(entry)
+        return entries
