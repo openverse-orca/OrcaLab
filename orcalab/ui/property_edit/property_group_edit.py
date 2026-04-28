@@ -22,6 +22,7 @@ from orcalab.ui.property_edit.base_property_edit import (
     PropertyEditContext,
 )
 from orcalab.ui.property_edit.bool_property_edit import BooleanPropertyEdit
+from orcalab.ui.property_edit.combo_property_edit import ComboBoxPropertyEdit
 from orcalab.ui.property_edit.float_property_edit import FloatPropertyEdit
 from orcalab.ui.property_edit.int_property_edit import IntegerPropertyEdit
 from orcalab.ui.property_edit.string_property_edit import StringPropertyEdit
@@ -153,6 +154,8 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
             case ActorPropertyType.BOOL:
                 return BooleanPropertyEdit(self, context, label_width)
             case ActorPropertyType.INTEGER:
+                if prop.enum_values():
+                    return ComboBoxPropertyEdit(self, context, label_width)
                 return IntegerPropertyEdit(self, context, label_width)
             case ActorPropertyType.FLOAT:
                 return FloatPropertyEdit(self, context, label_width)

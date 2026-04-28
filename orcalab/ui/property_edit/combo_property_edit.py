@@ -8,7 +8,7 @@ from orcalab.ui.property_edit.base_property_edit import (
 
 
 class ComboBoxPropertyEdit(BasePropertyEdit[int]):
-    """整数枚举属性编辑器：从 editor_hint "options:A,B,C" 解析选项，下拉框选择。"""
+    """整数枚举属性编辑器：从 enum_values 或 editor_hint "options:A,B,C" 解析选项，下拉框选择。"""
 
     def __init__(
         self,
@@ -23,8 +23,12 @@ class ComboBoxPropertyEdit(BasePropertyEdit[int]):
 
         label = self._create_label(label_width)
 
-        hint = context.prop.editor_hint()
-        options = hint[len("options:"):].split(",") if hint.startswith("options:") else []
+        enum_vals = context.prop.enum_values()
+        if enum_vals:
+            options = enum_vals
+        else:
+            hint = context.prop.editor_hint()
+            options = hint[len("options:"):].split(",") if hint.startswith("options:") else []
 
         editor = QtWidgets.QComboBox()
         editor.addItems(options)

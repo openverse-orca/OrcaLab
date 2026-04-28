@@ -32,6 +32,7 @@ class ActorProperty:
         self._original_value = ValueWrapper(value)
         self._read_only = False
         self._editor_hint = ""
+        self._enum_values: List[str] = []
 
     def name(self) -> str:
         return self._name
@@ -99,6 +100,12 @@ class ActorProperty:
     def set_editor_hint(self, hint: str):
         self._editor_hint = hint
 
+    def enum_values(self) -> List[str]:
+        return self._enum_values
+
+    def set_enum_values(self, values: List[str]):
+        self._enum_values = values
+
     def create_alias(self, new_name: str) -> "ActorProperty":
         """创建共享值引用的别名属性，修改别名时原属性也会更新"""
         alias = object.__new__(ActorProperty)
@@ -109,6 +116,7 @@ class ActorProperty:
         alias._original_value = self._original_value  # 共享引用
         alias._read_only = self._read_only
         alias._editor_hint = self._editor_hint
+        alias._enum_values = self._enum_values
         return alias
 
 
