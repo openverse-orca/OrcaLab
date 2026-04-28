@@ -8,6 +8,7 @@ from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
     ActorPropertyKey,
+    ActorPropertyType,
     EntityPropertyGroupEntry,
 )
 from orcalab.actor_util import (
@@ -691,6 +692,63 @@ class RemoteScene(SceneEditNotification):
         print("Restoring state...")
         async with self._grpc_lock:
             await self._service.restore_state()
+
+    async def apply_modified_properties(self):
+        """在进入仿真前，将所有修改过的属性值应用到引擎。
+        遍历场景中每个 AssetActor，收集 is_modified() 的属性，
+        通过 gRPC set_properties 批量写入引擎，确保仿真使用最新的属性值。"""
+        from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
+
+        local_scene = get_local_scene()
+        keys: List[ActorPropertyKey] = []
+        values: List[Any] = []
+
+        for actor_path, actor in local_scene.actors.items():
+            if not isinstance(actor, AssetActor):
+                continue
+            if not actor.property_groups:
+                continue
+
+            modified_entries = SceneLayoutHelper.collect_modified_properties(actor)
+            if not modified_entries:
+                continue
+
+            _type_map = {t.name: t for t in ActorPropertyType}
+
+            for entry in modified_entries:
+                type_str = entry.get("type", "")
+                prop_type = _type_map.get(type_str)
+                if prop_type is None or prop_type.name == "TREE":
+                    continue
+
+                entity_path = entry.get("entity_path")
+                component_type = entry.get("component_type")
+                property_name = entry.get("property_name")
+                value = entry.get("value")
+
+                if not property_name:
+                    continue
+
+                matched_prop, matched_group_prefix, key_prop_name = SceneLayoutHelper._find_prop_v2(
+                    actor, entity_path, component_type, property_name
+                )
+                if matched_prop is None:
+                    continue
+
+                key = ActorPropertyKey(
+                    actor_path,
+                    matched_group_prefix,
+                    key_prop_name,
+                    prop_type,
+                )
+                keys.append(key)
+                values.append(value)
+
+        if not keys:
+            return
+
+        await self.set_properties(keys, values)
+        logger.info("仿真 Override: 已应用 %d 个修改属性到引擎", len(keys))
 
     async def rename_actor(self, actor_path: Path, new_name: str):
         async with self._grpc_lock:

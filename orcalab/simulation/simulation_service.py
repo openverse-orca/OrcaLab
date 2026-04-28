@@ -120,6 +120,7 @@ class SimulationService(SimulationRequest):
 
         await self.remote_scene.publish_scene()
         await asyncio.sleep(0.5)
+        await self.remote_scene.apply_modified_properties()
         await self.remote_scene.save_state()
         await self.remote_scene.change_sim_state(True)
         await asyncio.sleep(0.5)
@@ -162,6 +163,7 @@ class SimulationService(SimulationRequest):
 
         await self.remote_scene.publish_scene()
         await asyncio.sleep(0.5)
+        await self.remote_scene.apply_modified_properties()
         await self.remote_scene.save_state()
         await self.remote_scene.change_sim_state(True)
         await asyncio.sleep(0.5)
