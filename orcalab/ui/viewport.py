@@ -57,12 +57,11 @@ class Viewport(QtWidgets.QWidget):
         ]
 
         # 引擎性能优化参数（通过命令行设置引擎CVAR）
-        # 关闭VSync：vsync_interval默认为1，设为0使用VK_PRESENT_MODE_IMMEDIATE_KHR
-        self.command_line.append("--vsync_interval=0")
-        # 禁用引擎内部帧率限制器：sys_MaxFPS默认为0时被OPVS改为100，
-        # CrySleep(0)忙等会阻塞Python线程，导致Qt无法及时处理鼠标事件
-        # 设为-1禁用引擎端限帧，改由Python端asyncio.sleep控制帧率
-        self.command_line.append("--sys_MaxFPS=-1")
+        # VSync：默认开启（vsync_interval=1），使用 MAILBOX 模式避免 FIFO 阻塞
+        # 关闭 VSync（vsync_interval=0）使用 IMMEDIATE 模式可提高帧率，
+        # 但可能在某些机型（混合GPU笔记本）上导致卡死，需重启生效
+        if not config_service.vsync_enabled():
+            self.command_line.append("--vsync_interval=0")
 
         if config_service.enable_debug_tool():
             self.command_line.append("--debug-tool")

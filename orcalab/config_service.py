@@ -335,6 +335,17 @@ class ConfigService:
 
         self.set_user_config("orcalab", update_func)
 
+    def vsync_enabled(self) -> bool:
+        return self.config.get("orcalab", {}).get("vsync", True)
+
+    def set_vsync(self, enabled: bool) -> None:
+        self.config.setdefault("orcalab", {})["vsync"] = enabled
+
+        def update_func(config):
+            config.setdefault("orcalab", {})["vsync"] = enabled
+
+        self.set_user_config("orcalab", update_func)
+
     def mcp_port(self) -> int:
         return self.config.get("mcp", {}).get("port", 8000)
 
