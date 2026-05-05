@@ -212,7 +212,15 @@ def _get_python_packages() -> Dict[str, str]:
     packages: Dict[str, str] = {}
     distributions = list(importlib_metadata.distributions())
     for dist in distributions:
-        packages[dist.metadata["Name"]] = dist.version
+        if dist.metadata is None:
+            continue
+        name = dist.metadata.get("Name")
+        if not name:
+            continue
+        try:
+            packages[name] = dist.version
+        except TypeError:
+            continue
     return packages
 
 
