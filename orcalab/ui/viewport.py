@@ -1,4 +1,5 @@
 import asyncio
+import time
 from PySide6 import QtCore, QtWidgets, QtGui
 import pathlib
 import logging
@@ -18,6 +19,7 @@ class Viewport(QtWidgets.QWidget):
         super().__init__(parent)
 
         self.setAcceptDrops(True)
+        self._target_frame_time = self._detect_target_frame_time()
 
         # 延迟导入 orcalab_pyside，直到实际需要时
         try:
@@ -50,10 +52,17 @@ class Viewport(QtWidgets.QWidget):
             "pseudo.exe",
             "--LoadLevel",
             config_service.level(),
-            config_service.lock_fps(),
             "-datalink-scheme-host-port",
             f"{base_url}"
         ]
+
+        # 引擎性能优化参数（通过命令行设置引擎CVAR）
+        # 关闭VSync：vsync_interval默认为1，设为0使用VK_PRESENT_MODE_IMMEDIATE_KHR
+        self.command_line.append("--vsync_interval=0")
+        # 禁用引擎内部帧率限制器：sys_MaxFPS默认为0时被OPVS改为100，
+        # CrySleep(0)忙等会阻塞Python线程，导致Qt无法及时处理鼠标事件
+        # 设为-1禁用引擎端限帧，改由Python端asyncio.sleep控制帧率
+        self.command_line.append("--sys_MaxFPS=-1")
 
         if config_service.enable_debug_tool():
             self.command_line.append("--debug-tool")
@@ -97,6 +106,19 @@ class Viewport(QtWidgets.QWidget):
         """安全停止viewport主循环"""
         self._viewport_running = False
 
+    @staticmethod
+    def _detect_target_frame_time() -> float:
+        refresh_rate = 60
+        try:
+            screen = QtWidgets.QApplication.primaryScreen()
+            if screen:
+                refresh_rate = int(screen.refreshRate())
+                if refresh_rate <= 0:
+                    refresh_rate = 60
+        except Exception:
+            pass
+        return 1.0 / refresh_rate
+
     async def _viewport_main_loop(self):
         try:
             # 检查事件循环是否还在运行
@@ -110,13 +132,18 @@ class Viewport(QtWidgets.QWidget):
             if not self._viewport_running:
                 return
 
+            tick_start = time.monotonic()
+
             if self._viewport:
                 self._viewport.main_loop_tick()
 
             # 如果还在运行，继续下一帧
             if self._viewport_running:
-                # 使用asyncio.sleep而不是立即创建新任务，避免递归过深
-                await asyncio.sleep(0.016)  # ~60 FPS
+                # 计算本帧已用时间，只sleep剩余的帧时间
+                # 这样既保证60FPS帧率，又给Qt事件循环足够的处理时间
+                elapsed = time.monotonic() - tick_start
+                sleep_time = max(0.0, self._target_frame_time - elapsed)
+                await asyncio.sleep(sleep_time)
                 asyncio.create_task(self._viewport_main_loop())
         except Exception as e:
             logger.exception("Viewport 主循环错误: %s", e)
