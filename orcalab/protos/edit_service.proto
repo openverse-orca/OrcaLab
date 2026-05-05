@@ -408,6 +408,7 @@ message Property {
     bool read_only = 4;
     string editor_hint = 5;
     repeated string enum_values = 6;
+    string sub_name = 7;
 }
 
 message TreePropertyNode {

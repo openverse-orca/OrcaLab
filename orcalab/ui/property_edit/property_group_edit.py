@@ -107,6 +107,24 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         for prop in group.properties:
             if prop.value_type() == ActorPropertyType.TREE:
                 self._render_tree_data_flat(group.tree_data, content_layout, label_width)
+            elif prop.editor_hint() in ("container", "struct"):
+                editor = self._create_property_edit(prop, label_width)
+                editor.set_read_only(True)
+                self._property_edits.append(editor)
+                content_layout.addWidget(editor)
+            elif prop.sub_name():
+                editor = self._create_property_edit(prop, label_width)
+                if prop.is_read_only():
+                    editor.set_read_only(True)
+                self._property_edits.append(editor)
+
+                row = QtWidgets.QWidget()
+                row_layout = QtWidgets.QHBoxLayout(row)
+                row_layout.setContentsMargins(20, 0, 0, 0)
+                row_layout.setSpacing(0)
+                row_layout.addWidget(editor)
+                row_layout.addStretch()
+                content_layout.addWidget(row)
             else:
                 editor = self._create_property_edit(prop, label_width)
                 if prop.is_read_only():

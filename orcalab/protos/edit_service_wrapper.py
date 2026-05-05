@@ -471,6 +471,8 @@ class EditServiceWrapper:
             prop.set_editor_hint(prop_msg.editor_hint)
             if prop_msg.enum_values:
                 prop.set_enum_values(list(prop_msg.enum_values))
+            if prop_msg.sub_name:
+                prop.set_sub_name(prop_msg.sub_name)
         return prop
 
     def _parse_tree_node_msg(self, node_msg) -> TreePropertyNode:

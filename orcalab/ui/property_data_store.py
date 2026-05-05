@@ -51,6 +51,7 @@ class PropertyDataStore:
                         value=prop.value(),
                         is_readonly=prop.is_read_only(),
                         group_prefix=entry.property_group.prefix,
+                        sub_name=prop.sub_name(),
                     )
                 )
 
@@ -126,6 +127,8 @@ class PropertyDataStore:
                 value=item.value,
             )
             prop.set_read_only(item.is_readonly)
+            if item.sub_name:
+                prop.set_sub_name(item.sub_name)
             group_map[key].properties.append(prop)
 
         return [group_map[key] for key in group_order]

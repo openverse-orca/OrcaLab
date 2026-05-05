@@ -33,6 +33,7 @@ class ActorProperty:
         self._read_only = False
         self._editor_hint = ""
         self._enum_values: List[str] = []
+        self._sub_name: str = ""
 
     def name(self) -> str:
         return self._name
@@ -106,6 +107,12 @@ class ActorProperty:
     def set_enum_values(self, values: List[str]):
         self._enum_values = values
 
+    def sub_name(self) -> str:
+        return self._sub_name
+
+    def set_sub_name(self, sub_name: str):
+        self._sub_name = sub_name
+
     def create_alias(self, new_name: str) -> "ActorProperty":
         """创建共享值引用的别名属性，修改别名时原属性也会更新"""
         alias = object.__new__(ActorProperty)
@@ -117,6 +124,7 @@ class ActorProperty:
         alias._read_only = self._read_only
         alias._editor_hint = self._editor_hint
         alias._enum_values = self._enum_values
+        alias._sub_name = self._sub_name
         return alias
 
 
@@ -191,3 +199,4 @@ class FlatPropertyItem:
     value: Any
     is_readonly: bool
     group_prefix: str
+    sub_name: str = ""
