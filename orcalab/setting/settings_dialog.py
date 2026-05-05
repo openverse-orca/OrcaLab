@@ -8,12 +8,15 @@ from orcalab.remote_scene import RemoteScene
 from orcalab.ui.checkbox import CheckBox
 from orcalab.ui.text_label import TextLabel
 from orcalab.ui.theme_service import ThemeService
+from orcalab.ui.viewport import Viewport
 
 # 设置行内部水平边距；统计区与底部按钮使用相同值，与标题/正文左缘对齐
 _SETTING_BLOCK_H_MARGIN = 12
 
 _MOVE_SENS_RANGE = (0.1, 10.0)
 _ROT_SENS_RANGE = (0.1, 10.0)
+
+_FPS_OPTIONS = [30, 60, 90, 120, 160]
 
 
 class _SettingsNumericLineEdit(QtWidgets.QLineEdit):
@@ -193,6 +196,27 @@ class SettingsDialog(QtWidgets.QDialog):
             )
         )
 
+        self.fps_combo = QtWidgets.QComboBox()
+        self.fps_combo.setObjectName("OrcaSettingsFpsCombo")
+        for fps in _FPS_OPTIONS:
+            self.fps_combo.addItem(f"{fps} FPS", fps)
+        current_fps = config.lock_fps_value()
+        idx = self.fps_combo.findData(current_fps)
+        if idx >= 0:
+            self.fps_combo.setCurrentIndex(idx)
+        else:
+            default_idx = self.fps_combo.findData(120)
+            if default_idx >= 0:
+                self.fps_combo.setCurrentIndex(default_idx)
+        root_layout.addWidget(
+            _vscode_style_setting_row(
+                "帧率限制",
+                "限制视口渲染帧率以降低 GPU 负载",
+                self.fps_combo,
+                self._setting_row_hover_bg,
+            )
+        )
+
         # —— 统计数据：紧挨相机区块下方，间隔由 root_layout.spacing() 控制 ——
         stats_desc = TextLabel("发送用户环境统计数据可以帮助改进OrcaLab。")
         stats_checkbox = CheckBox()
@@ -298,6 +322,30 @@ class SettingsDialog(QtWidgets.QDialog):
                 color: {split_line_color};
                 max-height: 1px;
             }}
+            QComboBox#OrcaSettingsFpsCombo {{
+                border: 1px solid {split_line_color};
+                border-radius: 3px;
+                padding: 3px 6px;
+                background-color: {button_bg};
+                color: {text_color};
+                font-size: 12px;
+                min-width: 96px;
+            }}
+            QComboBox#OrcaSettingsFpsCombo:hover {{
+                border: 1px solid #505050;
+            }}
+            QComboBox#OrcaSettingsFpsCombo::drop-down {{
+                border: none;
+                width: 20px;
+            }}
+            QComboBox#OrcaSettingsFpsCombo QAbstractItemView {{
+                border: 1px solid {split_line_color};
+                background-color: {button_bg};
+                color: {text_color};
+                selection-background-color: {button_bg_hover};
+                selection-color: {text_color};
+                font-size: 12px;
+            }}
         """
         )
 
@@ -316,8 +364,17 @@ class SettingsDialog(QtWidgets.QDialog):
         config.set_camera_move_sensitivity(move)
         config.set_camera_rotation_sensitivity(rot)
         config.set_send_statistics("true" if self.checkbox.checked() else "false")
+
+        fps_value = self.fps_combo.currentData()
+        config.set_lock_fps(fps_value)
+
         if self._remote_scene is not None:
             asyncio.create_task(
                 self._remote_scene.set_move_rotate_sensitivity(move, rot)
             )
+
+        viewport = self.parent().findChild(Viewport) if self.parent() else None
+        if viewport is not None:
+            viewport.set_target_fps(fps_value)
+
         super().accept()
