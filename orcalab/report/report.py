@@ -215,9 +215,12 @@ def _get_python_packages() -> Dict[str, str]:
         if dist.metadata is None:
             continue
         name = dist.metadata.get("Name")
-        if name is None:
+        if not name:
             continue
-        packages[name] = dist.version
+        try:
+            packages[name] = dist.version
+        except TypeError:
+            continue
     return packages
 
 

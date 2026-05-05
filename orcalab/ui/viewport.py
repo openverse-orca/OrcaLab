@@ -19,7 +19,7 @@ class Viewport(QtWidgets.QWidget):
         super().__init__(parent)
 
         self.setAcceptDrops(True)
-        self._target_frame_time = self._detect_target_frame_time()
+        self._target_frame_time = self._calc_target_frame_time()
 
         # 延迟导入 orcalab_pyside，直到实际需要时
         try:
@@ -107,7 +107,7 @@ class Viewport(QtWidgets.QWidget):
         self._viewport_running = False
 
     @staticmethod
-    def _detect_target_frame_time() -> float:
+    def _detect_screen_refresh_rate() -> int:
         refresh_rate = 60
         try:
             screen = QtWidgets.QApplication.primaryScreen()
@@ -117,7 +117,20 @@ class Viewport(QtWidgets.QWidget):
                     refresh_rate = 60
         except Exception:
             pass
-        return 1.0 / refresh_rate
+        return refresh_rate
+
+    @staticmethod
+    def _calc_target_frame_time() -> float:
+        config_fps = ConfigService().lock_fps_value()
+        if config_fps > 0:
+            return 1.0 / config_fps
+        return 1.0 / Viewport._detect_screen_refresh_rate()
+
+    def set_target_fps(self, fps: int) -> None:
+        if fps > 0:
+            self._target_frame_time = 1.0 / fps
+        else:
+            self._target_frame_time = 1.0 / self._detect_screen_refresh_rate()
 
     async def _viewport_main_loop(self):
         try:
