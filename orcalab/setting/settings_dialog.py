@@ -217,6 +217,17 @@ class SettingsDialog(QtWidgets.QDialog):
             )
         )
 
+        self.vsync_checkbox = CheckBox()
+        self.vsync_checkbox.set_checked(config.vsync_enabled())
+        root_layout.addWidget(
+            _vscode_style_setting_row(
+                "垂直同步 (VSync)",
+                "开启 VSync 可防止画面撕裂，并在混合 GPU 笔记本上避免卡死；关闭可提高帧率，但可能在部分机型上导致卡死，需重启生效",
+                self.vsync_checkbox,
+                self._setting_row_hover_bg,
+            )
+        )
+
         # —— 统计数据：紧挨相机区块下方，间隔由 root_layout.spacing() 控制 ——
         stats_desc = TextLabel("发送用户环境统计数据可以帮助改进OrcaLab。")
         stats_checkbox = CheckBox()
@@ -367,6 +378,8 @@ class SettingsDialog(QtWidgets.QDialog):
 
         fps_value = self.fps_combo.currentData()
         config.set_lock_fps(fps_value)
+
+        config.set_vsync(self.vsync_checkbox.checked())
 
         if self._remote_scene is not None:
             asyncio.create_task(
