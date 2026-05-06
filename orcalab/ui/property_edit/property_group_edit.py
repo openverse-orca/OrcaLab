@@ -11,6 +11,7 @@ from orcalab.actor_property import (
 )
 from orcalab.application_util import get_local_scene
 from orcalab.path import Path
+from orcalab.perf_log import perf_timer, perf_log
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
     SceneEditNotificationBus,
@@ -92,45 +93,46 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
 
         self._property_edits: List[BasePropertyEdit] = []
 
-        title_area = PropertyGroupEditTitle(self, group.name, group.hint)
-        title_area.setFixedHeight(24)
-        title_area.toggle_collapse.connect(self.toggle_collapse)
+        with perf_timer(f"property_group_edit.init({group.name})", feature="PROPERTY"):
+            title_area = PropertyGroupEditTitle(self, group.name, group.hint)
+            title_area.setFixedHeight(24)
+            title_area.toggle_collapse.connect(self.toggle_collapse)
 
-        content_area = QtWidgets.QWidget()
-        root_layout.addWidget(title_area)
-        root_layout.addWidget(content_area)
+            content_area = QtWidgets.QWidget()
+            root_layout.addWidget(title_area)
+            root_layout.addWidget(content_area)
 
-        content_layout = QtWidgets.QVBoxLayout(content_area)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(4)
+            content_layout = QtWidgets.QVBoxLayout(content_area)
+            content_layout.setContentsMargins(0, 0, 0, 0)
+            content_layout.setSpacing(4)
 
-        for prop in group.properties:
-            if prop.value_type() == ActorPropertyType.TREE:
-                self._render_tree_data_flat(group.tree_data, content_layout, label_width)
-            elif prop.editor_hint() in ("container", "struct"):
-                editor = self._create_property_edit(prop, label_width)
-                editor.set_read_only(True)
-                self._property_edits.append(editor)
-                content_layout.addWidget(editor)
-            elif prop.sub_name():
-                editor = self._create_property_edit(prop, label_width)
-                if prop.is_read_only():
+            for prop in group.properties:
+                if prop.value_type() == ActorPropertyType.TREE:
+                    self._render_tree_data_flat(group.tree_data, content_layout, label_width)
+                elif prop.editor_hint() in ("container", "struct"):
+                    editor = self._create_property_edit(prop, label_width)
                     editor.set_read_only(True)
-                self._property_edits.append(editor)
+                    self._property_edits.append(editor)
+                    content_layout.addWidget(editor)
+                elif prop.sub_name():
+                    editor = self._create_property_edit(prop, label_width)
+                    if prop.is_read_only():
+                        editor.set_read_only(True)
+                    self._property_edits.append(editor)
 
-                row = QtWidgets.QWidget()
-                row_layout = QtWidgets.QHBoxLayout(row)
-                row_layout.setContentsMargins(20, 0, 0, 0)
-                row_layout.setSpacing(0)
-                row_layout.addWidget(editor)
-                row_layout.addStretch()
-                content_layout.addWidget(row)
-            else:
-                editor = self._create_property_edit(prop, label_width)
-                if prop.is_read_only():
-                    editor.set_read_only(True)
-                self._property_edits.append(editor)
-                content_layout.addWidget(editor)
+                    row = QtWidgets.QWidget()
+                    row_layout = QtWidgets.QHBoxLayout(row)
+                    row_layout.setContentsMargins(20, 0, 0, 0)
+                    row_layout.setSpacing(0)
+                    row_layout.addWidget(editor)
+                    row_layout.addStretch()
+                    content_layout.addWidget(row)
+                else:
+                    editor = self._create_property_edit(prop, label_width)
+                    if prop.is_read_only():
+                        editor.set_read_only(True)
+                    self._property_edits.append(editor)
+                    content_layout.addWidget(editor)
 
         self._title_area = title_area
         self._content_area = content_area

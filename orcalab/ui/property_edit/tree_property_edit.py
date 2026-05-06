@@ -7,6 +7,7 @@ from orcalab.actor_property import (
     ActorPropertyType,
     TreePropertyNode,
 )
+from orcalab.perf_log import perf_timer, perf_log
 from orcalab.ui.icon import Icon
 from orcalab.ui.icon_util import make_color_svg
 from orcalab.ui.property_edit.base_property_edit import (
@@ -403,28 +404,29 @@ def _build_nodes(
     skip_unnamed: bool = True,
 ):
     """递归构建叶节点树到 layout 中。"""
-    if button_cls is None:
-        button_cls = JointButton
-    for node in nodes:
-        if _is_entity_node(node):
-            layout.addWidget(
-                _EntityGroup(None, node, context, label_width, indent, button_registry,
-                             button_cls=button_cls, skip_unnamed=skip_unnamed)
-            )
-        elif skip_unnamed and node.display_name.startswith("未命名"):
-            continue
-        else:
-            eid = _node_entity_id(node)
-            btn = button_cls(None, node, context, label_width, eid in highlight_set if eid else False)
-            if button_registry is not None:
-                button_registry[node.name] = btn
-            row = QtWidgets.QWidget()
-            row_layout = QtWidgets.QHBoxLayout(row)
-            row_layout.setContentsMargins(indent * INDENT_WIDTH, 0, 0, 0)
-            row_layout.setSpacing(0)
-            row_layout.addWidget(btn)
-            row_layout.addStretch()
-            layout.addWidget(row)
+    with perf_timer(f"tree_property_edit._build_nodes(indent={indent}, nodes={len(nodes)})", feature="PROPERTY"):
+        if button_cls is None:
+            button_cls = JointButton
+        for node in nodes:
+            if _is_entity_node(node):
+                layout.addWidget(
+                    _EntityGroup(None, node, context, label_width, indent, button_registry,
+                                 button_cls=button_cls, skip_unnamed=skip_unnamed)
+                )
+            elif skip_unnamed and node.display_name.startswith("未命名"):
+                continue
+            else:
+                eid = _node_entity_id(node)
+                btn = button_cls(None, node, context, label_width, eid in highlight_set if eid else False)
+                if button_registry is not None:
+                    button_registry[node.name] = btn
+                row = QtWidgets.QWidget()
+                row_layout = QtWidgets.QHBoxLayout(row)
+                row_layout.setContentsMargins(indent * INDENT_WIDTH, 0, 0, 0)
+                row_layout.setSpacing(0)
+                row_layout.addWidget(btn)
+                row_layout.addStretch()
+                layout.addWidget(row)
 
 
 class _EntityGroup(QtWidgets.QWidget):

@@ -22,6 +22,7 @@ from orcalab.entity_info import EntityInfo
 from orcalab.math import Transform
 from orcalab.path import Path
 from orcalab.actor import BaseActor, GroupActor, AssetActor
+from orcalab.perf_log import perf_timer, perf_log
 from orcalab.scene_edit_bus import (
     SceneEditNotificationBus,
     SceneEditNotification,
@@ -917,26 +918,29 @@ class RemoteScene(SceneEditNotification):
     async def get_entity_property_groups(
         self, actor_path: Path, entity_id: int
     ) -> list:
-        async with self._grpc_lock:
-            result = await self._service.get_entity_property_groups(
-                actor_path, entity_id
-            )
-            logger.info(
-                f"[gRPC] get_entity_property_groups: actor_path={actor_path}, "
-                f"entity_id={entity_id}, groups={len(result) if result else 'None'}"
-            )
-            return result
+        with perf_timer("remote_scene.get_entity_property_groups", feature="GRPC"):
+            async with self._grpc_lock:
+                result = await self._service.get_entity_property_groups(
+                    actor_path, entity_id
+                )
+                logger.info(
+                    f"[gRPC] get_entity_property_groups: actor_path={actor_path}, "
+                    f"entity_id={entity_id}, groups={len(result) if result else 'None'}"
+                )
+                return result
 
     async def get_entity_property_groups_batch(
         self, actor_path: Path, entity_ids: List[int]
     ) -> List[List[ActorPropertyGroup]]:
-        async with self._grpc_lock:
-            return await self._service.get_entity_property_groups_batch(
-                actor_path, entity_ids
-            )
+        with perf_timer("remote_scene.get_entity_property_groups_batch", feature="GRPC"):
+            async with self._grpc_lock:
+                return await self._service.get_entity_property_groups_batch(
+                    actor_path, entity_ids
+                )
 
     async def get_all_entity_property_groups(
         self, actor_path: Path
     ) -> List[EntityPropertyGroupEntry]:
-        async with self._grpc_lock:
-            return await self._service.get_all_entity_property_groups(actor_path)
+        with perf_timer("remote_scene.get_all_entity_property_groups"):
+            async with self._grpc_lock:
+                return await self._service.get_all_entity_property_groups(actor_path)

@@ -7,6 +7,7 @@ from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.entity_info import EntityInfo
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
+from orcalab.perf_log import perf_timer, perf_log
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
     SceneEditNotificationBus,
@@ -613,18 +614,19 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         entity_root: EntityInfo,
         source: str = "",
     ) -> None:
-        self._register_entity_tree(actor_path, entity_root)
+        with perf_timer("outline_model.on_entity_hierarchy_loaded", feature="OUTLINE"):
+            self._register_entity_tree(actor_path, entity_root)
 
-        actor = self.local_scene.find_actor_by_path(actor_path)
-        if actor is None:
-            return
+            actor = self.local_scene.find_actor_by_path(actor_path)
+            if actor is None:
+                return
 
-        actor_index = self.get_index_from_actor(actor)
-        if not actor_index.isValid():
-            return
+            actor_index = self.get_index_from_actor(actor)
+            if not actor_index.isValid():
+                return
 
-        self.beginInsertRows(actor_index, 0, 0)
-        self.endInsertRows()
+            self.beginInsertRows(actor_index, 0, 0)
+            self.endInsertRows()
 
 
 if __name__ == "__main__":

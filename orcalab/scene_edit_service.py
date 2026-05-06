@@ -19,6 +19,7 @@ from orcalab.local_scene import LocalScene
 from orcalab.remote_scene import RemoteScene
 from orcalab.math import Transform
 from orcalab.path import Path
+from orcalab.perf_log import perf_timer, perf_log
 from orcalab.scene_edit_bus import (
     SceneEditNotificationBus,
     SceneEditRequestBus,
@@ -988,36 +989,41 @@ class SceneEditService(SceneEditRequest):
         undo: bool = True,
         source: str = "",
     ) -> None:
-        old_active_entity = self.local_scene.active_entity
+        with perf_timer("service._set_active_entity", feature="SERVICE"):
+            old_active_entity = self.local_scene.active_entity
 
-        new_active_entity = None
-        if actor_path is not None and entity_id is not None:
-            new_active_entity = (actor_path, entity_id)
+            new_active_entity = None
+            if actor_path is not None and entity_id is not None:
+                new_active_entity = (actor_path, entity_id)
 
-        if new_active_entity == old_active_entity:
-            return
+            if new_active_entity == old_active_entity:
+                perf_log(f"service._set_active_entity: skipped (same entity)", feature="SERVICE")
+                return
 
-        if old_active_entity is not None:
-            old_actor_path, old_entity_id = old_active_entity
-            await self.remote_scene.set_highlight_entity_tree(
-                old_actor_path, old_entity_id, False
-            )
-
-        self.local_scene.active_entity = new_active_entity
-
-        if new_active_entity is not None:
-            new_actor_path, new_entity_id = new_active_entity
-            await self.remote_scene.set_selected_entity(new_actor_path, new_entity_id)
-            await self.remote_scene.set_highlight_entity_tree(
-                new_actor_path, new_entity_id, True
-            )
-        else:
             if old_active_entity is not None:
-                old_actor_path, _ = old_active_entity
-                await self.remote_scene.set_selected_entity(old_actor_path, 0)
+                old_actor_path, old_entity_id = old_active_entity
+                with perf_timer("service._set_active_entity.unhighlight_old", feature="SERVICE"):
+                    await self.remote_scene.set_highlight_entity_tree(
+                        old_actor_path, old_entity_id, False
+                    )
 
-        bus = SceneEditNotificationBus()
-        await bus.on_active_entity_changed(old_active_entity, new_active_entity, source)
+            self.local_scene.active_entity = new_active_entity
+
+            if new_active_entity is not None:
+                new_actor_path, new_entity_id = new_active_entity
+                with perf_timer("service._set_active_entity.select+highlight_new", feature="SERVICE"):
+                    await self.remote_scene.set_selected_entity(new_actor_path, new_entity_id)
+                    await self.remote_scene.set_highlight_entity_tree(
+                        new_actor_path, new_entity_id, True
+                    )
+            else:
+                if old_active_entity is not None:
+                    old_actor_path, _ = old_active_entity
+                    await self.remote_scene.set_selected_entity(old_actor_path, 0)
+
+            with perf_timer("service._set_active_entity.notify", feature="SERVICE"):
+                bus = SceneEditNotificationBus()
+                await bus.on_active_entity_changed(old_active_entity, new_active_entity, source)
 
     @override
     async def fetch_entity_hierarchy(
@@ -1025,20 +1031,24 @@ class SceneEditService(SceneEditRequest):
         actor_path: Path,
         source: str = "",
     ) -> EntityInfo | None:
-        existing = self.local_scene.get_entity_root(actor_path)
-        if existing is not None:
-            return existing
+        with perf_timer("service.fetch_entity_hierarchy", feature="SERVICE"):
+            existing = self.local_scene.get_entity_root(actor_path)
+            if existing is not None:
+                perf_log("service.fetch_entity_hierarchy: cache hit", feature="SERVICE")
+                return existing
 
-        entity_root = await self.remote_scene.get_entity_hierarchy(actor_path)
-        if entity_root is None:
-            return None
+            with perf_timer("service.fetch_entity_hierarchy.grpc", feature="SERVICE"):
+                entity_root = await self.remote_scene.get_entity_hierarchy(actor_path)
+            if entity_root is None:
+                return None
 
-        self.local_scene.set_entity_root(actor_path, entity_root)
+            self.local_scene.set_entity_root(actor_path, entity_root)
 
-        bus = SceneEditNotificationBus()
-        await bus.on_entity_hierarchy_loaded(actor_path, entity_root, source)
+            with perf_timer("service.fetch_entity_hierarchy.notify", feature="SERVICE"):
+                bus = SceneEditNotificationBus()
+                await bus.on_entity_hierarchy_loaded(actor_path, entity_root, source)
 
-        return entity_root
+            return entity_root
 
     @override
     async def get_entity_property_groups(

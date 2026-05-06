@@ -9,6 +9,7 @@ from orcalab.actor_property import ActorPropertyGroup, EntityPropertyGroupEntry
 from orcalab.application_util import get_local_scene, get_remote_scene
 from orcalab.entity_info import EntityInfo
 from orcalab.path import Path
+from orcalab.perf_log import perf_timer, perf_log
 from orcalab.ui.filter_bar import FilterBar
 from orcalab.ui.property_data_store import PropertyDataStore
 from orcalab.ui.property_edit.property_group_edit import PropertyGroupEdit
@@ -88,10 +89,13 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             f"(entity_id={entity.entity_id}), actor_path={actor_path}"
         )
 
+        perf_log(f"property_editor.set_entity: actor={actor.name}, entity={entity.name}, entity_id={entity.entity_id}", feature="PROPERTY")
+
         self._actor = actor
         self._entity = entity
         self._actor_path = actor_path
-        self._load_properties()
+        with perf_timer("property_editor._load_properties", feature="PROPERTY"):
+            self._load_properties()
 
     def clear_selection(self):
         if self._actor is None and self._entity is None:
@@ -199,26 +203,35 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
     def _fetch_and_render_all(self, actor_path: Path):
         async def _fetch():
             try:
-                remote_scene = get_remote_scene()
-                entries = await remote_scene.get_all_entity_property_groups(
-                    actor_path
-                )
+                with perf_timer("property_editor._fetch_and_render_all.total", feature="PROPERTY"):
+                    remote_scene = get_remote_scene()
 
-                if not entries:
-                    logger.info(f"[Actor] no entries for {actor_path}")
-                    return
+                    with perf_timer("property_editor._fetch_and_render_all.grpc_get_all", feature="PROPERTY"):
+                        entries = await remote_scene.get_all_entity_property_groups(
+                            actor_path
+                        )
 
-                self._raw_entries = entries
-                self._data_store.set_data_from_entries(entries)
+                    if not entries:
+                        logger.info(f"[Actor] no entries for {actor_path}")
+                        return
 
-                if isinstance(self._actor, AssetActor):
-                    groups = [e.property_group for e in entries]
-                    self._actor.property_groups = self._sort_property_groups(groups)
+                    perf_log(f"property_editor._fetch_and_render_all: got {len(entries)} entries", feature="PROPERTY")
 
-                self._filter_bar.set_available_types(
-                    self._data_store.available_component_types
-                )
-                self._render_from_data_store()
+                    self._raw_entries = entries
+
+                    with perf_timer("property_editor._fetch_and_render_all.data_store_set", feature="PROPERTY"):
+                        self._data_store.set_data_from_entries(entries)
+
+                    if isinstance(self._actor, AssetActor):
+                        groups = [e.property_group for e in entries]
+                        self._actor.property_groups = self._sort_property_groups(groups)
+
+                    self._filter_bar.set_available_types(
+                        self._data_store.available_component_types
+                    )
+
+                    with perf_timer("property_editor._fetch_and_render_all.render", feature="PROPERTY"):
+                        self._render_from_data_store()
             except Exception as e:
                 logger.warning(f"Failed to load actor components: {e}")
 
@@ -227,25 +240,32 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
     def _fetch_and_render_entity(self, actor_path: Path, entity_id: int):
         async def _fetch():
             try:
-                remote_scene = get_remote_scene()
-                groups = await remote_scene.get_entity_property_groups(
-                    actor_path, entity_id
-                )
+                with perf_timer("property_editor._fetch_and_render_entity.total", feature="PROPERTY"):
+                    remote_scene = get_remote_scene()
 
-                if not groups:
-                    logger.info(
-                        f"[Entity] no groups for entity_id={entity_id}, "
-                        f"falling back to actor-level groups"
-                    )
-                    self._fetch_and_render_all(actor_path)
-                    return
+                    with perf_timer("property_editor._fetch_and_render_entity.grpc_get_groups", feature="PROPERTY"):
+                        groups = await remote_scene.get_entity_property_groups(
+                            actor_path, entity_id
+                        )
 
-                sorted_groups = self._sort_property_groups(groups)
+                    if not groups:
+                        logger.info(
+                            f"[Entity] no groups for entity_id={entity_id}, "
+                            f"falling back to actor-level groups"
+                        )
+                        self._fetch_and_render_all(actor_path)
+                        return
 
-                if isinstance(self._actor, AssetActor):
-                    self._actor.property_groups = sorted_groups
+                    perf_log(f"property_editor._fetch_and_render_entity: got {len(groups)} groups", feature="PROPERTY")
 
-                self._render_property_groups(sorted_groups, 160)
+                    with perf_timer("property_editor._fetch_and_render_entity.sort", feature="PROPERTY"):
+                        sorted_groups = self._sort_property_groups(groups)
+
+                    if isinstance(self._actor, AssetActor):
+                        self._actor.property_groups = sorted_groups
+
+                    with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
+                        self._render_property_groups(sorted_groups, 160)
             except Exception as e:
                 logger.warning(f"Failed to load entity components: {e}", exc_info=True)
 
@@ -303,11 +323,13 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
     ):
         if self._actor is None:
             return
-        for group in groups:
-            edit = PropertyGroupEdit(self, self._actor, group, label_width)
-            edit.connect_buses()
-            self._property_edits.append(edit)
-            self._property_layout.addWidget(edit)
+        perf_log(f"property_editor._render_property_groups: rendering {len(groups)} groups", feature="PROPERTY")
+        for i, group in enumerate(groups):
+            with perf_timer(f"property_editor._render_property_groups.group[{i}]({group.name})", feature="PROPERTY"):
+                edit = PropertyGroupEdit(self, self._actor, group, label_width)
+                edit.connect_buses()
+                self._property_edits.append(edit)
+                self._property_layout.addWidget(edit)
 
     @override
     async def on_active_actor_changed(
@@ -332,31 +354,34 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         new_active_entity: tuple | None,
         source: str = "",
     ) -> None:
-        logger.info(
-            f"[on_active_entity_changed] old={old_active_entity}, new={new_active_entity}, source={source}"
-        )
-        if new_active_entity is None:
-            if self._entity is not None:
-                if self._actor is not None:
-                    self.set_actor(self._actor)
-                else:
-                    self.clear_selection()
-        else:
-            actor_path, entity_id = new_active_entity
-            local_scene = get_local_scene()
-            actor = local_scene.find_actor_by_path(actor_path)
-            if actor is None:
-                logger.warning(
-                    f"[on_active_entity_changed] actor not found for path={actor_path}"
-                )
-                return
+        with perf_timer("property_editor.on_active_entity_changed", feature="PROPERTY"):
+            logger.info(
+                f"[on_active_entity_changed] old={old_active_entity}, new={new_active_entity}, source={source}"
+            )
+            if new_active_entity is None:
+                if self._entity is not None:
+                    if self._actor is not None:
+                        self.set_actor(self._actor)
+                    else:
+                        self.clear_selection()
+            else:
+                actor_path, entity_id = new_active_entity
+                with perf_timer("property_editor.on_active_entity_changed.find_actor", feature="PROPERTY"):
+                    local_scene = get_local_scene()
+                    actor = local_scene.find_actor_by_path(actor_path)
+                if actor is None:
+                    logger.warning(
+                        f"[on_active_entity_changed] actor not found for path={actor_path}"
+                    )
+                    return
 
-            entity_info = local_scene.find_entity_info_by_id(actor_path, entity_id)
-            if entity_info is None:
-                logger.warning(
-                    f"[on_active_entity_changed] entity_info not found for "
-                    f"actor_path={actor_path}, entity_id={entity_id}"
-                )
-                return
+                with perf_timer("property_editor.on_active_entity_changed.find_entity", feature="PROPERTY"):
+                    entity_info = local_scene.find_entity_info_by_id(actor_path, entity_id)
+                if entity_info is None:
+                    logger.warning(
+                        f"[on_active_entity_changed] entity_info not found for "
+                        f"actor_path={actor_path}, entity_id={entity_id}"
+                    )
+                    return
 
-            self.set_entity(actor, entity_info, actor_path)
+                self.set_entity(actor, entity_info, actor_path)

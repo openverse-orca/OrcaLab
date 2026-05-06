@@ -22,6 +22,7 @@ from orcalab.actor_property import (
     TreePropertyNode,
     EntityPropertyGroupEntry,
 )
+from orcalab.perf_log import perf_timer, perf_log
 from orcalab.scene_edit_types import AddActorRequest
 from orcalab.ui.camera.camera_brief import CameraBrief
 
@@ -671,63 +672,76 @@ class EditServiceWrapper:
     async def get_entity_property_groups(
         self, actor_path: Path, entity_id: int
     ) -> List[ActorPropertyGroup]:
-        request = edit_service_pb2.GetEntityPropertyGroupsRequest(
-            actor_path=actor_path.string(),
-            entity_id=entity_id,
-        )
-        response = await self.stub.GetEntityPropertyGroups(request)
-        self._check_response(response)
+        with perf_timer("grpc_wrapper.get_entity_property_groups.total", feature="PARSE"):
+            request = edit_service_pb2.GetEntityPropertyGroupsRequest(
+                actor_path=actor_path.string(),
+                entity_id=entity_id,
+            )
+            with perf_timer("grpc_wrapper.get_entity_property_groups.network", feature="PARSE"):
+                response = await self.stub.GetEntityPropertyGroups(request)
+            self._check_response(response)
 
-        logger.info(
-            f"[gRPC wrapper] get_entity_property_groups: "
-            f"actor_path={actor_path}, entity_id={entity_id}, "
-            f"status={response.status_code}, "
-            f"property_groups_count={len(response.property_groups)}"
-        )
+            logger.info(
+                f"[gRPC wrapper] get_entity_property_groups: "
+                f"actor_path={actor_path}, entity_id={entity_id}, "
+                f"status={response.status_code}, "
+                f"property_groups_count={len(response.property_groups)}"
+            )
 
-        property_groups: List[ActorPropertyGroup] = []
-        for pg_msg in response.property_groups:
-            pg = self._parse_property_group_msg(pg_msg)
-            property_groups.append(pg)
-        return property_groups
+            perf_log(f"grpc_wrapper.get_entity_property_groups: parsing {len(response.property_groups)} groups", feature="PARSE")
+
+            with perf_timer("grpc_wrapper.get_entity_property_groups.parse", feature="PARSE"):
+                property_groups: List[ActorPropertyGroup] = []
+                for pg_msg in response.property_groups:
+                    pg = self._parse_property_group_msg(pg_msg)
+                    property_groups.append(pg)
+            return property_groups
 
     async def get_entity_property_groups_batch(
         self, actor_path: Path, entity_ids: List[int]
     ) -> List[List[ActorPropertyGroup]]:
-        request = edit_service_pb2.GetEntityPropertyGroupsBatchRequest(
-            actor_path=actor_path.string(),
-            entity_ids=entity_ids,
-        )
-        response = await self.stub.GetEntityPropertyGroupsBatch(request)
-        self._check_response(response)
+        with perf_timer("grpc_wrapper.get_entity_property_groups_batch.total", feature="PARSE"):
+            request = edit_service_pb2.GetEntityPropertyGroupsBatchRequest(
+                actor_path=actor_path.string(),
+                entity_ids=entity_ids,
+            )
+            with perf_timer("grpc_wrapper.get_entity_property_groups_batch.network", feature="PARSE"):
+                response = await self.stub.GetEntityPropertyGroupsBatch(request)
+            self._check_response(response)
 
-        result: List[List[ActorPropertyGroup]] = []
-        for pg_list_msg in response.property_group_lists:
-            groups: List[ActorPropertyGroup] = []
-            for pg_msg in pg_list_msg.elements:
-                pg = self._parse_property_group_msg(pg_msg)
-                groups.append(pg)
-            result.append(groups)
-        return result
+            with perf_timer("grpc_wrapper.get_entity_property_groups_batch.parse", feature="PARSE"):
+                result: List[List[ActorPropertyGroup]] = []
+                for pg_list_msg in response.property_group_lists:
+                    groups: List[ActorPropertyGroup] = []
+                    for pg_msg in pg_list_msg.elements:
+                        pg = self._parse_property_group_msg(pg_msg)
+                        groups.append(pg)
+                    result.append(groups)
+            return result
 
     async def get_all_entity_property_groups(
         self, actor_path: Path
     ) -> List[EntityPropertyGroupEntry]:
-        request = edit_service_pb2.GetAllEntityPropertyGroupsRequest(
-            actor_path=actor_path.string(),
-        )
-        response = await self.stub.GetAllEntityPropertyGroups(request)
-        self._check_response(response)
-
-        entries: List[EntityPropertyGroupEntry] = []
-        for entry_msg in response.entries:
-            pg = self._parse_property_group_msg(entry_msg.property_group)
-            entry = EntityPropertyGroupEntry(
-                entity_id=entry_msg.entity_id,
-                entity_path=entry_msg.entity_path,
-                component_type=entry_msg.component_type,
-                component_display_name=entry_msg.component_display_name,
-                property_group=pg,
+        with perf_timer("grpc_wrapper.get_all_entity_property_groups.total", feature="PARSE"):
+            request = edit_service_pb2.GetAllEntityPropertyGroupsRequest(
+                actor_path=actor_path.string(),
             )
-            entries.append(entry)
-        return entries
+            with perf_timer("grpc_wrapper.get_all_entity_property_groups.network", feature="PARSE"):
+                response = await self.stub.GetAllEntityPropertyGroups(request)
+            self._check_response(response)
+
+            perf_log(f"grpc_wrapper.get_all_entity_property_groups: parsing {len(response.entries)} entries", feature="PARSE")
+
+            with perf_timer("grpc_wrapper.get_all_entity_property_groups.parse", feature="PARSE"):
+                entries: List[EntityPropertyGroupEntry] = []
+                for entry_msg in response.entries:
+                    pg = self._parse_property_group_msg(entry_msg.property_group)
+                    entry = EntityPropertyGroupEntry(
+                        entity_id=entry_msg.entity_id,
+                        entity_path=entry_msg.entity_path,
+                        component_type=entry_msg.component_type,
+                        component_display_name=entry_msg.component_display_name,
+                        property_group=pg,
+                    )
+                    entries.append(entry)
+            return entries

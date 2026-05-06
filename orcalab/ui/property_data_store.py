@@ -7,6 +7,7 @@ from orcalab.actor_property import (
     EntityPropertyGroupEntry,
     FlatPropertyItem,
 )
+from orcalab.perf_log import perf_timer, perf_log
 
 logger = logging.getLogger(__name__)
 
@@ -23,37 +24,40 @@ class PropertyDataStore:
         self._available_entity_paths.clear()
 
     def set_data_from_entries(self, entries: List[EntityPropertyGroupEntry]):
-        self.clear()
-        seen_types: Set[str] = set()
-        seen_paths: Set[str] = set()
+        with perf_timer("data_store.set_data_from_entries", feature="PARSE"):
+            self.clear()
+            seen_types: Set[str] = set()
+            seen_paths: Set[str] = set()
 
-        for entry in entries:
-            component_type = entry.component_type
-            if component_type not in seen_types:
-                seen_types.add(component_type)
-                self._available_component_types.append(component_type)
+            for entry in entries:
+                component_type = entry.component_type
+                if component_type not in seen_types:
+                    seen_types.add(component_type)
+                    self._available_component_types.append(component_type)
 
-            entity_path = entry.entity_path
-            if entity_path not in seen_paths:
-                seen_paths.add(entity_path)
-                self._available_entity_paths.append(entity_path)
+                entity_path = entry.entity_path
+                if entity_path not in seen_paths:
+                    seen_paths.add(entity_path)
+                    self._available_entity_paths.append(entity_path)
 
-            for prop in entry.property_group.properties:
-                self._items.append(
-                    FlatPropertyItem(
-                        entity_id=entry.entity_id,
-                        entity_path=entity_path,
-                        component_type=component_type,
-                        component_display_name=entry.component_display_name,
-                        property_name=prop.name(),
-                        property_display_name=prop.display_name(),
-                        property_type=prop.value_type(),
-                        value=prop.value(),
-                        is_readonly=prop.is_read_only(),
-                        group_prefix=entry.property_group.prefix,
-                        sub_name=prop.sub_name(),
+                for prop in entry.property_group.properties:
+                    self._items.append(
+                        FlatPropertyItem(
+                            entity_id=entry.entity_id,
+                            entity_path=entity_path,
+                            component_type=component_type,
+                            component_display_name=entry.component_display_name,
+                            property_name=prop.name(),
+                            property_display_name=prop.display_name(),
+                            property_type=prop.value_type(),
+                            value=prop.value(),
+                            is_readonly=prop.is_read_only(),
+                            group_prefix=entry.property_group.prefix,
+                            sub_name=prop.sub_name(),
+                        )
                     )
-                )
+
+            perf_log(f"data_store.set_data_from_entries: {len(entries)} entries, {len(self._items)} items", feature="PARSE")
 
     @property
     def items(self) -> List[FlatPropertyItem]:

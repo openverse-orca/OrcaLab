@@ -8,6 +8,7 @@ from orcalab.application_util import get_local_scene
 from orcalab.entity_info import EntityInfo
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
+from orcalab.perf_log import perf_timer, perf_log
 from orcalab.pyside_util import connect
 from orcalab.scene_edit_bus import (
     SceneEditRequestBus,
@@ -260,9 +261,10 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         self._fetched_entity_actors.add(actor_path)
 
         async def _fetch():
-            await SceneEditRequestBus().fetch_entity_hierarchy(
-                actor_path, source="actor_outline"
-            )
+            with perf_timer("outline.fetch_entity_hierarchy", feature="OUTLINE"):
+                await SceneEditRequestBus().fetch_entity_hierarchy(
+                    actor_path, source="actor_outline"
+                )
 
         asyncio.create_task(_fetch())
 
@@ -466,9 +468,10 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                     return
 
                 async def _do_select_entity():
-                    await SceneEditRequestBus().set_active_entity(
-                        actor_path, node.entity_id, source="actor_outline"
-                    )
+                    with perf_timer("outline.set_active_entity", feature="OUTLINE"):
+                        await SceneEditRequestBus().set_active_entity(
+                            actor_path, node.entity_id, source="actor_outline"
+                        )
 
                 self._select_entity_index(index)
                 asyncio.create_task(_do_select_entity())
