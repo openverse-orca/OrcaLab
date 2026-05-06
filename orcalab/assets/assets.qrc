@@ -43,6 +43,10 @@
     <file alias="physics.png">icons/opvs_physics.png</file>
     <file alias="orcalab_logo.png">icons/orcalab_logo.png</file>
 
+    <file alias="median_point.svg">icons/pivot_median_point.svg</file>
+    <file alias="boundingbox_center.svg">icons/pivot_boundingbox_center.svg</file>
+    <file alias="individual_center.svg">icons/pivot_individual_center.svg</file>
+    <file alias="active_actor.svg">icons/pivot_active_actor.svg</file>
 
 </qresource>
 </RCC>

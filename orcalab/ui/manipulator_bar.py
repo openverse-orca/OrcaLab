@@ -36,7 +36,8 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         theme = ThemeService()
 
         icon_color = theme.get_color("tool_icon")
-
+        
+        self.icon_color = theme.get_color("tool_icon")
         self.bg_color = theme.get_color("button_bg")
         self.bg_color_selected = theme.get_color("button_bg_selected")
 
@@ -87,10 +88,11 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self.debug_button.setFixedSize(button_size)
         self.debug_button.icon_size = icon_size
 
-        self.pivot_point_button = Button(icon=make_icon(":/icons/move.svg", icon_color))
-        self.pivot_point_button.setToolTip("枢轴点")
+        self.pivot_point_button = Button(icon=make_icon(":/icons/median_point.svg", icon_color))
+        self.pivot_point_button.setToolTip("枢轴点:中位点")
         self.pivot_point_button.setFixedSize(button_size)
         self.pivot_point_button.icon_size = icon_size
+        self.pivot_point_button.bg_color = self.bg_color_selected
 
         # 创建枢轴点下拉菜单
         self.pivot_point_menu = QtWidgets.QMenu()
@@ -289,18 +291,18 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
 
     @override
     def on_pivot_point_type_changed(self, type: PivotPointType):
-        print(type)
-        
-        # 根据选择的类型更新图标
         if type == PivotPointType.IndividualCenter:
-            self.pivot_point_button.setIcon(make_icon(":/icons/distance.svg", self.bg_color))
+            self.pivot_point_button.setIcon(make_icon(":/icons/individual_center.svg", self.icon_color))
+            self.pivot_point_button.setToolTip("枢轴点:各自中心")
         elif type == PivotPointType.BoundingBoxCenter:
-            self.pivot_point_button.setIcon(make_icon(":/icons/move.svg", self.bg_color))
+            self.pivot_point_button.setIcon(make_icon(":/icons/boundingbox_center.svg", self.icon_color))
+            self.pivot_point_button.setToolTip("枢轴点:包围盒中心")
         elif type == PivotPointType.MedianPoint:
-            self.pivot_point_button.setIcon(make_icon(":/icons/rotate.svg", self.bg_color))
+            self.pivot_point_button.setIcon(make_icon(":/icons/median_point.svg", self.icon_color))
+            self.pivot_point_button.setToolTip("枢轴点:中位点")
         elif type == PivotPointType.ActiveActor:
-            self.pivot_point_button.setIcon(make_icon(":/icons/scale.svg", self.bg_color))
-        
+            self.pivot_point_button.setIcon(make_icon(":/icons/active_actor.svg", self.icon_color))
+            self.pivot_point_button.setToolTip("枢轴点:激活的物体")
         self.pivot_point_button.update()
 
     @override
