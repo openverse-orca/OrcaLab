@@ -1,71 +1,23 @@
 from typing import Any, List, override
-from PySide6 import QtCore, QtWidgets, QtGui
+from PySide6 import QtWidgets
 
 from orcalab.actor import BaseActor
 from orcalab.actor_property import (
-    ActorProperty,
-    ActorPropertyGroup,
     ActorPropertyKey,
-    ActorPropertyType,
-    TreePropertyNode,
+    ActorPropertyGroup,
 )
 from orcalab.application_util import get_local_scene
 from orcalab.path import Path
-from orcalab.perf_log import perf_timer, perf_log
+from orcalab.perf_log import perf_timer
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
     SceneEditNotificationBus,
 )
-from orcalab.ui.icon import Icon
-from orcalab.ui.icon_util import make_color_svg
-from orcalab.ui.property_edit.base_property_edit import (
-    BasePropertyEdit,
-    PropertyEditContext,
-)
-from orcalab.ui.property_edit.bool_property_edit import BooleanPropertyEdit
-from orcalab.ui.property_edit.combo_property_edit import ComboBoxPropertyEdit
-from orcalab.ui.property_edit.float_property_edit import FloatPropertyEdit
-from orcalab.ui.property_edit.int_property_edit import IntegerPropertyEdit
-from orcalab.ui.property_edit.string_property_edit import StringPropertyEdit
-
+from orcalab.ui.collapsible.collapsible_section import CollapsibleSection
+from orcalab.ui.property_edit.base_property_edit import BasePropertyEdit
+from orcalab.ui.property_edit.property_group_content import create_property_group_content
 from orcalab.ui.styled_widget import StyledWidget
-from orcalab.ui.text_label import TextLabel
 from orcalab.ui.theme_service import ThemeService
-
-
-class PropertyGroupEditTitle(QtWidgets.QWidget):
-
-    toggle_collapse = QtCore.Signal()
-
-    def __init__(self, parent, name: str, hint: str):
-        super().__init__(parent)
-        root_layout = QtWidgets.QHBoxLayout(self)
-        root_layout.setContentsMargins(4, 4, 4, 4)
-        root_layout.setSpacing(0)
-
-        self.l_indicator = Icon()
-        self.l_indicator.set_icon_size(20)
-
-        l_name = QtWidgets.QLabel(name)
-        l_hint = TextLabel(hint)
-        l_hint.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Fixed
-        )
-        l_hint.text_color = QtGui.QColor("gray")
-        font = l_hint.font()
-        font.setPointSize(12)
-        l_hint.setFont(font)
-        l_hint.elide_mode = QtCore.Qt.TextElideMode.ElideLeft
-
-        root_layout.addWidget(self.l_indicator)
-        root_layout.addWidget(l_name)
-        root_layout.addSpacing(10)
-        root_layout.addStretch()
-        root_layout.addWidget(l_hint)
-
-    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
-        if event.button() == QtCore.Qt.MouseButton.LeftButton:
-            self.toggle_collapse.emit()
 
 
 class PropertyGroupEdit(StyledWidget, SceneEditNotification):
@@ -78,9 +30,6 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         label_width: int,
     ):
         super().__init__(parent)
-        root_layout = QtWidgets.QVBoxLayout(self)
-        root_layout.setContentsMargins(4, 4, 4, 4)
-        root_layout.setSpacing(0)
 
         self._actor = actor
         self._group = group
@@ -93,53 +42,8 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
 
         self._property_edits: List[BasePropertyEdit] = []
 
-        with perf_timer(f"property_group_edit.init({group.name})", feature="PROPERTY"):
-            title_area = PropertyGroupEditTitle(self, group.name, group.hint)
-            title_area.setFixedHeight(24)
-            title_area.toggle_collapse.connect(self.toggle_collapse)
-
-            content_area = QtWidgets.QWidget()
-            root_layout.addWidget(title_area)
-            root_layout.addWidget(content_area)
-
-            content_layout = QtWidgets.QVBoxLayout(content_area)
-            content_layout.setContentsMargins(0, 0, 0, 0)
-            content_layout.setSpacing(4)
-
-            for prop in group.properties:
-                if prop.value_type() == ActorPropertyType.TREE:
-                    self._render_tree_data_flat(group.tree_data, content_layout, label_width)
-                elif prop.editor_hint() in ("container", "struct"):
-                    editor = self._create_property_edit(prop, label_width)
-                    editor.set_read_only(True)
-                    self._property_edits.append(editor)
-                    content_layout.addWidget(editor)
-                elif prop.sub_name():
-                    editor = self._create_property_edit(prop, label_width)
-                    if prop.is_read_only():
-                        editor.set_read_only(True)
-                    self._property_edits.append(editor)
-
-                    row = QtWidgets.QWidget()
-                    row_layout = QtWidgets.QHBoxLayout(row)
-                    row_layout.setContentsMargins(20, 0, 0, 0)
-                    row_layout.setSpacing(0)
-                    row_layout.addWidget(editor)
-                    row_layout.addStretch()
-                    content_layout.addWidget(row)
-                else:
-                    editor = self._create_property_edit(prop, label_width)
-                    if prop.is_read_only():
-                        editor.set_read_only(True)
-                    self._property_edits.append(editor)
-                    content_layout.addWidget(editor)
-
-        self._title_area = title_area
-        self._content_area = content_area
-
         theme = ThemeService()
         bg_color = theme.get_color_hex("property_group_bg")
-        text_color = theme.get_color("text")
         self.setStyleSheet(
             f"""
             QWidget {{
@@ -149,10 +53,31 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
             """
         )
 
-        self._expand_icon = make_color_svg(":/icons/chevron_down.svg", text_color)
-        self._collapse_icon = make_color_svg(":/icons/chevron_right.svg", text_color)
+        with perf_timer(f"property_group_edit.init({group.name})", feature="PROPERTY"):
+            self._section = CollapsibleSection(
+                parent=self,
+                title=group.display_name or group.name,
+                badge=group.hint,
+                collapsed=False,
+                content_factory=lambda: self._create_content(),
+            )
 
-        self._title_area.l_indicator.set_pixmap(self._expand_icon)
+            layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(4, 4, 4, 4)
+            layout.setSpacing(0)
+            layout.addWidget(self._section)
+
+    def _create_content(self) -> QtWidgets.QWidget:
+        with perf_timer(f"PropertyGroupEdit._create_content({self._group.name})", feature="PROPERTY"):
+            content = create_property_group_content(
+                parent=self,
+                actor=self._actor,
+                actor_path=self._actor_path,
+                group=self._group,
+                label_width=self._label_width,
+                property_edits=self._property_edits,
+            )
+            return content
 
     def connect_buses(self):
         SceneEditNotificationBus.connect(self)
@@ -160,89 +85,15 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
     def disconnect_buses(self):
         SceneEditNotificationBus.disconnect(self)
 
-    def _create_property_edit(
-        self, prop: ActorProperty, label_width: int, name_prefix: str = ""
-    ) -> BasePropertyEdit:
-        context = PropertyEditContext(
-            actor=self._actor,
-            actor_path=self._actor_path,
-            group=self._group,
-            prop=prop.create_alias(f"{name_prefix}{prop.name()}") if name_prefix else prop,
-        )
-
-        match prop.value_type():
-            case ActorPropertyType.BOOL:
-                return BooleanPropertyEdit(self, context, label_width)
-            case ActorPropertyType.INTEGER:
-                if prop.enum_values():
-                    return ComboBoxPropertyEdit(self, context, label_width)
-                return IntegerPropertyEdit(self, context, label_width)
-            case ActorPropertyType.FLOAT:
-                return FloatPropertyEdit(self, context, label_width)
-            case ActorPropertyType.STRING:
-                return StringPropertyEdit(self, context, label_width)
-            case _:
-                raise NotImplementedError("Unsupported property type")
-
-    def _render_tree_data_flat(
-        self,
-        nodes: List[TreePropertyNode],
-        layout: QtWidgets.QVBoxLayout,
-        label_width: int,
-        indent: int = 0,
-        name_prefix: str = "",
-    ):
-        theme = ThemeService()
-        text_color = theme.get_color_hex("text")
-        indent_px = indent * 20
-
-        for node in nodes:
-            header_row = QtWidgets.QWidget()
-            header_layout = QtWidgets.QHBoxLayout(header_row)
-            header_layout.setContentsMargins(indent_px, 2, 4, 2)
-            header_layout.setSpacing(4)
-
-            if node.children:
-                indicator = QtWidgets.QLabel("▾")
-                indicator.setStyleSheet(f"color: {text_color}; font-weight: bold;")
-                header_layout.addWidget(indicator)
-
-            name_label = QtWidgets.QLabel(node.display_name)
-            name_label.setStyleSheet(f"color: {text_color}; font-weight: bold;")
-            header_layout.addWidget(name_label)
-            header_layout.addStretch()
-            layout.addWidget(header_row)
-
-            node_prefix = f"{name_prefix}{node.name}." if name_prefix else f"{node.name}."
-
-            for prop in node.properties:
-                editor = self._create_property_edit(prop, label_width, name_prefix=node_prefix)
-                if prop.is_read_only():
-                    editor.set_read_only(True)
-
-                prop_row = QtWidgets.QWidget()
-                row_layout = QtWidgets.QHBoxLayout(prop_row)
-                row_layout.setContentsMargins((indent + 1) * 20, 0, 0, 0)
-                row_layout.setSpacing(0)
-                row_layout.addWidget(editor)
-                row_layout.addStretch()
-
-                self._property_edits.append(editor)
-                layout.addWidget(prop_row)
-
-            if node.children:
-                self._render_tree_data_flat(
-                    node.children, layout, label_width,
-                    indent=indent + 1, name_prefix=node_prefix,
-                )
-
     #
     # SceneEditNotificationBus overrides
     #
 
     def _compute_new_path(self, renamed_path: Path, new_name: str) -> Path | None:
-        """如果重命名操作影响了当前 actor 路径，返回更新后的路径，否则返回 None。"""
-        new_renamed = renamed_path.parent() / new_name
+        parent = renamed_path.parent()
+        if parent is None:
+            return None
+        new_renamed = parent / new_name
         if self._actor_path == renamed_path:
             return new_renamed
         if self._actor_path.is_descendant_of(renamed_path):
@@ -302,15 +153,10 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
                 return
 
     def expand(self):
-        self._content_area.show()
-        self._title_area.l_indicator.set_pixmap(self._expand_icon)
+        self._section.expand()
 
     def collapse(self):
-        self._content_area.hide()
-        self._title_area.l_indicator.set_pixmap(self._collapse_icon)
+        self._section.collapse()
 
     def toggle_collapse(self):
-        if self._content_area.isVisible():
-            self.collapse()
-        else:
-            self.expand()
+        self._section.toggle_collapse()

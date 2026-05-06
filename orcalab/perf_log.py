@@ -10,6 +10,7 @@ PERF_SERVICE = True
 PERF_GRPC = True
 PERF_PARSE = True
 PERF_PROPERTY = True
+PERF_SECTION = True
 
 _FEATURE_SWITCHES = {
     "OUTLINE": lambda: PERF_OUTLINE,
@@ -17,6 +18,7 @@ _FEATURE_SWITCHES = {
     "GRPC": lambda: PERF_GRPC,
     "PARSE": lambda: PERF_PARSE,
     "PROPERTY": lambda: PERF_PROPERTY,
+    "SECTION": lambda: PERF_SECTION,
 }
 
 

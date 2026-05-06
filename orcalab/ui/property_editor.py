@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections import OrderedDict
 from typing import override
 
 from PySide6 import QtCore, QtWidgets
@@ -22,6 +23,9 @@ from orcalab.scene_edit_bus import (
 
 logger = logging.getLogger(__name__)
 
+_MAX_CACHE_SIZE = 10
+_RENDER_BATCH_SIZE = 5
+
 
 class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
@@ -35,6 +39,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._transform_edit: TransformEdit | None = None
         self._property_edits: list[PropertyGroupEdit] = []
         self._raw_entries: list[EntityPropertyGroupEntry] = []
+
+        self._section_cache: OrderedDict[tuple, tuple[TransformEdit | None, list[PropertyGroupEdit]]] = OrderedDict()
+        self._active_cache_key: tuple | None = None
+        self._pending_render_task: asyncio.Task | None = None
 
         self._container = QtWidgets.QWidget()
         self._main_layout = QtWidgets.QVBoxLayout(self._container)
@@ -56,6 +64,13 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self.setWidgetResizable(True)
 
         self._show_empty()
+
+    def _cache_key(self) -> tuple | None:
+        if self._actor_path is None:
+            return None
+        if self._entity is not None:
+            return (str(self._actor_path), self._entity.entity_id)
+        return (str(self._actor_path), None)
 
     def connect_bus(self):
         SceneEditNotificationBus.connect(self)
@@ -106,7 +121,67 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._actor_path = None
         self._data_store.clear()
         self._raw_entries.clear()
+        self._clear_cache()
         self._show_empty()
+
+    def _cancel_pending_render(self):
+        if self._pending_render_task is not None:
+            self._pending_render_task.cancel()
+            self._pending_render_task = None
+
+    def _clear_cache(self):
+        for cached_transform, cached_edits in self._section_cache.values():
+            if cached_transform is not None:
+                cached_transform.disconnect_buses()
+                cached_transform.deleteLater()
+            for edit in cached_edits:
+                edit.disconnect_buses()
+                edit.deleteLater()
+        self._section_cache.clear()
+        self._active_cache_key = None
+
+    def _evict_cache_if_needed(self):
+        while len(self._section_cache) > _MAX_CACHE_SIZE:
+            oldest_key, (oldest_transform, oldest_edits) = next(iter(self._section_cache.items()))
+            if oldest_key == self._active_cache_key:
+                self._section_cache.move_to_end(oldest_key)
+                if len(self._section_cache) <= _MAX_CACHE_SIZE:
+                    break
+                oldest_key, (oldest_transform, oldest_edits) = next(iter(self._section_cache.items()))
+            if oldest_transform is not None:
+                oldest_transform.disconnect_buses()
+                oldest_transform.deleteLater()
+            for edit in oldest_edits:
+                edit.disconnect_buses()
+                edit.deleteLater()
+            del self._section_cache[oldest_key]
+
+    def _hide_active_sections(self):
+        if self._active_cache_key is not None:
+            cached = self._section_cache.get(self._active_cache_key)
+            if cached is not None:
+                cached_transform, cached_edits = cached
+                if cached_transform is not None:
+                    cached_transform.hide()
+                for edit in cached_edits:
+                    edit.hide()
+
+        for edit in self._property_edits:
+            edit.hide()
+        self._property_edits.clear()
+
+        if self._transform_edit is not None:
+            self._transform_edit.hide()
+            self._transform_edit = None
+
+        while self._property_layout.count():
+            item = self._property_layout.takeAt(0)
+            if item.widget():
+                w = item.widget()
+                self._property_layout.removeWidget(w)
+                w.setParent(None)
+            elif item.layout():
+                self._property_layout.removeItem(item)
 
     def _clear_property_layout(self):
         for edit in self._property_edits:
@@ -136,16 +211,60 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._property_layout.addWidget(label)
 
     def _load_properties(self):
-        self._clear_property_layout()
+        self._cancel_pending_render()
+        self._hide_active_sections()
 
         if self._actor is None:
+            self._active_cache_key = None
             self._show_empty()
             return
+
+        cache_key = self._cache_key()
+        self._active_cache_key = cache_key
+
+        if cache_key is not None and cache_key in self._section_cache:
+            perf_log(f"property_editor._load_properties: cache hit for {cache_key}", feature="PROPERTY")
+            self._show_cached_sections(cache_key)
+            return
+
+        self._clear_property_layout()
 
         if self._entity is not None:
             self._load_entity_properties()
         else:
             self._load_actor_properties()
+
+    def _show_cached_sections(self, cache_key: tuple):
+        self._clear_property_layout()
+
+        cached = self._section_cache.get(cache_key)
+        if cached is None:
+            return
+
+        cached_transform, cached_edits = cached
+        self._property_edits = list(cached_edits)
+
+        if self._entity is not None:
+            label = QtWidgets.QLabel(f"Entity: {self._entity.name}")
+            label.setContentsMargins(4, 4, 4, 4)
+            self._property_layout.addWidget(label)
+
+            self._add_entity_transform_display(self._entity)
+        elif self._actor is not None:
+            label = QtWidgets.QLabel(f"Actor: {self._actor.name}")
+            label.setContentsMargins(4, 4, 4, 4)
+            self._property_layout.addWidget(label)
+
+            if cached_transform is not None:
+                self._transform_edit = cached_transform
+                self._property_layout.addWidget(cached_transform)
+                cached_transform.show()
+
+        for edit in cached_edits:
+            self._property_layout.addWidget(edit)
+            edit.show()
+
+        self._section_cache.move_to_end(cache_key)
 
     def _load_actor_properties(self):
         assert self._actor is not None
@@ -235,7 +354,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             except Exception as e:
                 logger.warning(f"Failed to load actor components: {e}")
 
-        asyncio.create_task(_fetch())
+        self._pending_render_task = asyncio.create_task(_fetch())
 
     def _fetch_and_render_entity(self, actor_path: Path, entity_id: int):
         async def _fetch():
@@ -269,7 +388,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             except Exception as e:
                 logger.warning(f"Failed to load entity components: {e}", exc_info=True)
 
-        asyncio.create_task(_fetch())
+        self._pending_render_task = asyncio.create_task(_fetch())
 
     def _render_from_data_store(self):
         self._clear_property_layout()
@@ -304,6 +423,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         if not self._data_store.items:
             return
 
+        cache_key = self._cache_key()
+        if cache_key is not None and cache_key in self._section_cache:
+            del self._section_cache[cache_key]
+
         self._render_from_data_store()
 
     @staticmethod
@@ -323,13 +446,43 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
     ):
         if self._actor is None:
             return
+
+        cache_key = self._cache_key()
+
         perf_log(f"property_editor._render_property_groups: rendering {len(groups)} groups", feature="PROPERTY")
-        for i, group in enumerate(groups):
-            with perf_timer(f"property_editor._render_property_groups.group[{i}]({group.name})", feature="PROPERTY"):
-                edit = PropertyGroupEdit(self, self._actor, group, label_width)
-                edit.connect_buses()
-                self._property_edits.append(edit)
-                self._property_layout.addWidget(edit)
+
+        self._cancel_pending_render()
+
+        actor = self._actor
+
+        async def _render_batched():
+            new_edits: list[PropertyGroupEdit] = []
+            batch_count = 0
+
+            for i, group in enumerate(groups):
+                if self._pending_render_task is None:
+                    return
+
+                with perf_timer(f"property_editor._render_property_groups.group[{i}]({group.name})", feature="PROPERTY"):
+                    edit = PropertyGroupEdit(self, actor, group, label_width)
+                    edit.connect_buses()
+                    new_edits.append(edit)
+                    self._property_edits.append(edit)
+                    self._property_layout.addWidget(edit)
+
+                batch_count += 1
+                if batch_count >= _RENDER_BATCH_SIZE:
+                    batch_count = 0
+                    await asyncio.sleep(0)
+
+            if cache_key is not None:
+                self._section_cache[cache_key] = (self._transform_edit, new_edits)
+                self._active_cache_key = cache_key
+                self._evict_cache_if_needed()
+
+            perf_log(f"property_editor._render_property_groups: {len(new_edits)} groups rendered", feature="PROPERTY")
+
+        self._pending_render_task = asyncio.create_task(_render_batched())
 
     @override
     async def on_active_actor_changed(
