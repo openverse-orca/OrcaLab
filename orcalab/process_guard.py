@@ -263,6 +263,3 @@ def ensure_single_instance_by_file_lock(config_service: ConfigService):
 
     with open(info_path, "w") as f:
         json.dump(info, f)
-
-    print("启动成功，PID =", os.getpid())
-
