@@ -178,7 +178,7 @@ async def send_abnormal_exit_report():
                 url,
                 data=form,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=120),
+                timeout=aiohttp.ClientTimeout(total=10),
             ) as response:
                 logger.info(
                     "Abnormal exit report sent, status=%s", response.status

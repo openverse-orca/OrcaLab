@@ -1331,6 +1331,10 @@ class MainWindow(
         await self.remote_scene.change_measure_type(type)
 
     @override
+    async def set_pivot_point_type(self, type: MeasureType) -> None:
+        await self.remote_scene.change_pivot_point_type(type)
+
+    @override
     async def set_debug_draw(self, enabled: bool):
         if enabled:
             await self.remote_scene.custom_command(f"debug_draw:true")

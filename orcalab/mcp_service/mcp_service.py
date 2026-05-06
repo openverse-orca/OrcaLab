@@ -118,13 +118,13 @@ class OrcaLabMCPServer:
 
         return data
 
-    def get_asset_map(self) -> str:
+    def get_asset_map(self, project_name: str=None, category: str=None) -> str:
         '''
         获取所有已订阅资产的元数据信息
         Args:
-            无需传递参数
+            可选择传入project_name[资产所在项目名称]和category[资产分类]参数，用于筛选资产。
         Returns:
-            所有已订阅资产的元数据信息的json字符串格式
+            筛选后的所有已订阅资产的元数据信息的json字符串格式
         '''
         output = []
         self.metadata_service_bus.get_asset_map(output)
@@ -142,6 +142,17 @@ class OrcaLabMCPServer:
             cat = _category_str(info.get("category"))
             if "scene" in cat.lower():
                 continue
+            
+            if project_name is not None:
+                asset_path = info.get("assetPath") or ""
+                if project_name.lower() not in asset_path.lower():
+                    continue
+
+            if category is not None:
+                category_path = info.get("categoryPath") or ""
+                if category.lower() not in category_path.lower():
+                    continue
+
             result[path] = {
                 "name": info.get("name", ""),
                 "category": cat,
@@ -838,7 +849,20 @@ class OrcaLabMCPServer:
         except Exception as e:
             return json.dumps({"success": False, "message": f"改变Actor父级失败: {e}"}, ensure_ascii=False)
 
-
+    async def duplicate_actors(self, actor_paths: List[str]) -> str:
+        '''
+        复制Actor
+        Args:
+            actor_paths: 要复制的Actor路径列表
+        Returns:
+            复制操作的结果的json字符串格式
+        '''
+        try:
+            paths = [Path(p) for p in actor_paths]
+            await self.scene_edit_bus.duplicate_actors(paths, undo=True, source="mcp")
+            return json.dumps({"success": True, "message": f"成功复制 {len(paths)} 个Actor"}, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"success": False, "message": f"复制Actor失败: {e}"}, ensure_ascii=False)
     # ==================== 仿真状态类 API ====================
 
     def get_simulation_state(self) -> str:
@@ -980,6 +1004,7 @@ class OrcaLabMCPServer:
                 {"action": "另存为", "shortcut": "Ctrl+Shift+S", "scope": "全局"},
                 {"action": "撤销", "shortcut": "Ctrl+Z", "scope": "全局"},
                 {"action": "重做", "shortcut": "Ctrl+Shift+Z", "scope": "全局"},
+                {"action": "复制", "shortcut": "Ctrl+D", "scope": "全局"},
                 {"action": "平移操纵器", "shortcut": "1", "scope": "全局"},
                 {"action": "旋转操纵器", "shortcut": "2", "scope": "全局"},
                 {"action": "缩放操纵器", "shortcut": "3", "scope": "全局"},
@@ -1133,6 +1158,7 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.delete_actor)
         self.mcp.tool(self.rename_actor)
         self.mcp.tool(self.reparent_actor)
+        self.mcp.tool(self.duplicate_actors)
         
         # 选择操作类
         self.mcp.tool(self.set_selection)

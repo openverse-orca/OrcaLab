@@ -324,6 +324,7 @@ async def download_pak_from_url(url: str, target_path: pathlib.Path, cloud_file_
                     logger.error("文件下载不完整，源文件sha256: %s, 下载文件sha256: %s", cloud_file_sha256, local_file_sha256)
                     msg = f"源文件sha256: {cloud_file_sha256}\n下载文件sha256: {local_file_sha256}"
                     QtWidgets.QMessageBox.information(None, "pak 下载不完整, 请重新启动 orcalab", msg)
+                    sys.exit(1)
                     return False
 
                 # 重命名
