@@ -11,10 +11,12 @@ from orcalab.application_util import get_local_scene, get_remote_scene
 from orcalab.entity_info import EntityInfo
 from orcalab.path import Path
 from orcalab.perf_log import perf_timer, perf_log
+from orcalab.ui.collapsible.collapsible_section import CollapsibleSection
 from orcalab.ui.filter_bar import FilterBar
 from orcalab.ui.property_data_store import PropertyDataStore
 from orcalab.ui.property_edit.property_group_edit import PropertyGroupEdit
 from orcalab.ui.property_edit.transform_edit import TransformEdit
+from orcalab.ui.theme_service import ThemeService
 
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
@@ -302,22 +304,32 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
         self._fetch_and_render_entity(self._actor_path, self._entity.entity_id)
 
-    def _add_entity_transform_display(self, entity: EntityInfo):
-        group_box = QtWidgets.QGroupBox("Transform (只读)")
-        group_box.setStyleSheet("QGroupBox { font-weight: bold; }")
-        form = QtWidgets.QFormLayout()
-        form.setContentsMargins(4, 8, 4, 4)
-        form.setSpacing(4)
+    def _add_entity_transform_display(self, _entity: EntityInfo):
+        theme = ThemeService()
+        text_disable = theme.get_color_hex("text_disable")
 
-        label_style = "color: gray; font-style: italic;"
+        def _create_transform_readonly() -> QtWidgets.QWidget:
+            content = QtWidgets.QWidget()
+            form = QtWidgets.QFormLayout(content)
+            form.setContentsMargins(4, 4, 4, 4)
+            form.setSpacing(4)
+            form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
 
-        for field_name in ("Position:", "Rotation:", "Scale:"):
-            lbl = QtWidgets.QLabel("(由引擎驱动)")
-            lbl.setStyleSheet(label_style)
-            form.addRow(field_name, lbl)
+            for field_name in ("Position:", "Rotation:", "Scale:"):
+                lbl = QtWidgets.QLabel("(由引擎驱动)")
+                lbl.setStyleSheet(f"color: {text_disable}; font-style: italic;")
+                form.addRow(field_name, lbl)
 
-        group_box.setLayout(form)
-        self._property_layout.addWidget(group_box)
+            return content
+
+        section = CollapsibleSection(
+            parent=self,
+            title="Transform",
+            badge="只读",
+            collapsed=False,
+            content_factory=_create_transform_readonly,
+        )
+        self._property_layout.addWidget(section)
 
     def _fetch_and_render_all(self, actor_path: Path):
         async def _fetch():
@@ -360,31 +372,58 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         async def _fetch():
             try:
                 with perf_timer("property_editor._fetch_and_render_entity.total", feature="PROPERTY"):
-                    remote_scene = get_remote_scene()
+                    entity_root = get_local_scene().get_entity_root(actor_path)
+                    entity_info = entity_root.find_by_entity_id(entity_id) if entity_root else None
 
-                    with perf_timer("property_editor._fetch_and_render_entity.grpc_get_groups", feature="PROPERTY"):
-                        groups = await remote_scene.get_entity_property_groups(
-                            actor_path, entity_id
-                        )
+                    entity_ids = entity_info.collect_entity_ids() if entity_info else [entity_id]
 
-                    if not groups:
-                        logger.info(
-                            f"[Entity] no groups for entity_id={entity_id}, "
-                            f"falling back to actor-level groups"
-                        )
-                        self._fetch_and_render_all(actor_path)
-                        return
+                    if len(entity_ids) == 1:
+                        with perf_timer("property_editor._fetch_and_render_entity.grpc_single", feature="PROPERTY"):
+                            groups = await get_remote_scene().get_entity_property_groups(
+                                actor_path, entity_id
+                            )
+                        if not groups:
+                            logger.info(
+                                f"[Entity] no groups for entity_id={entity_id}, "
+                                f"skipping property display"
+                            )
+                            return
 
-                    perf_log(f"property_editor._fetch_and_render_entity: got {len(groups)} groups", feature="PROPERTY")
+                        perf_log(f"property_editor._fetch_and_render_entity: got {len(groups)} groups for single entity", feature="PROPERTY")
 
-                    with perf_timer("property_editor._fetch_and_render_entity.sort", feature="PROPERTY"):
                         sorted_groups = self._sort_property_groups(groups)
 
-                    if isinstance(self._actor, AssetActor):
-                        self._actor.property_groups = sorted_groups
+                        if isinstance(self._actor, AssetActor):
+                            self._actor.property_groups = sorted_groups
 
-                    with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
-                        self._render_property_groups(sorted_groups, 160)
+                        with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
+                            self._render_property_groups(sorted_groups, 160)
+                    else:
+                        with perf_timer("property_editor._fetch_and_render_entity.grpc_batch", feature="PROPERTY"):
+                            batch_results = await get_remote_scene().get_entity_property_groups_batch(
+                                actor_path, entity_ids
+                            )
+
+                        perf_log(f"property_editor._fetch_and_render_entity: batch got {len(batch_results)} results for {len(entity_ids)} entities", feature="PROPERTY")
+
+                        all_groups: list[ActorPropertyGroup] = []
+                        for groups in batch_results:
+                            if groups:
+                                sorted_groups = self._sort_property_groups(groups)
+                                all_groups.extend(sorted_groups)
+
+                        if not all_groups:
+                            logger.info(
+                                f"[Entity] no groups for entity_id={entity_id} and children, "
+                                f"skipping property display"
+                            )
+                            return
+
+                        if isinstance(self._actor, AssetActor):
+                            self._actor.property_groups = all_groups
+
+                        with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
+                            self._render_property_groups(all_groups, 160)
             except Exception as e:
                 logger.warning(f"Failed to load entity components: {e}", exc_info=True)
 
@@ -464,7 +503,8 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                     return
 
                 with perf_timer(f"property_editor._render_property_groups.group[{i}]({group.name})", feature="PROPERTY"):
-                    edit = PropertyGroupEdit(self, actor, group, label_width)
+                    collapsed = i > 0
+                    edit = PropertyGroupEdit(self, actor, group, label_width, collapsed=collapsed)
                     edit.connect_buses()
                     new_edits.append(edit)
                     self._property_edits.append(edit)

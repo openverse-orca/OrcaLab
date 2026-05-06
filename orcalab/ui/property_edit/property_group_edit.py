@@ -17,7 +17,6 @@ from orcalab.ui.collapsible.collapsible_section import CollapsibleSection
 from orcalab.ui.property_edit.base_property_edit import BasePropertyEdit
 from orcalab.ui.property_edit.property_group_content import create_property_group_content
 from orcalab.ui.styled_widget import StyledWidget
-from orcalab.ui.theme_service import ThemeService
 
 
 class PropertyGroupEdit(StyledWidget, SceneEditNotification):
@@ -28,6 +27,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         actor: BaseActor,
         group: ActorPropertyGroup,
         label_width: int,
+        collapsed: bool = False,
     ):
         super().__init__(parent)
 
@@ -42,28 +42,17 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
 
         self._property_edits: List[BasePropertyEdit] = []
 
-        theme = ThemeService()
-        bg_color = theme.get_color_hex("property_group_bg")
-        self.setStyleSheet(
-            f"""
-            QWidget {{
-                background-color: {bg_color};
-                border-radius: 4px;
-            }}
-            """
-        )
-
         with perf_timer(f"property_group_edit.init({group.name})", feature="PROPERTY"):
             self._section = CollapsibleSection(
                 parent=self,
                 title=group.display_name or group.name,
                 badge=group.hint,
-                collapsed=False,
+                collapsed=collapsed,
                 content_factory=lambda: self._create_content(),
             )
 
             layout = QtWidgets.QVBoxLayout(self)
-            layout.setContentsMargins(4, 4, 4, 4)
+            layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(0)
             layout.addWidget(self._section)
 

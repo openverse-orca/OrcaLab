@@ -11,7 +11,6 @@ from orcalab.scene_edit_bus import (
 from orcalab.ui.collapsible.collapsible_section import CollapsibleSection
 from orcalab.ui.property_edit.transform_content import TransformContent
 from orcalab.ui.styled_widget import StyledWidget
-from orcalab.ui.theme_service import ThemeService
 
 from orcalab.math import Transform
 
@@ -37,17 +36,6 @@ class TransformEdit(StyledWidget, SceneEditNotification):
 
         self._transform_content: TransformContent | None = None
 
-        theme = ThemeService()
-        bg_color = theme.get_color_hex("property_group_bg")
-        self.setStyleSheet(
-            f"""
-            QWidget {{
-                background-color: {bg_color};
-                border-radius: 4px;
-            }}
-            """
-        )
-
         self._section = CollapsibleSection(
             parent=self,
             title="Transform",
@@ -56,7 +44,7 @@ class TransformEdit(StyledWidget, SceneEditNotification):
         )
 
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self._section)
 

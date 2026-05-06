@@ -5,7 +5,6 @@ from typing import Callable, List
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.perf_log import perf_timer
-from orcalab.ui.icon_util import make_color_svg
 from orcalab.ui.styled_widget import StyledWidget
 from orcalab.ui.theme_service import ThemeService
 
@@ -37,20 +36,34 @@ class SectionHeader(QtWidgets.QWidget):
         self._hovered = False
         self._selected = False
 
-        self._chevron_down: QtGui.QPixmap | None = None
-        self._chevron_right: QtGui.QPixmap | None = None
-        self._init_pixmaps()
-
         fm = self.fontMetrics()
         self._row_height = max(fm.height() + 8, 24)
         self.setFixedHeight(self._row_height)
         self.setMouseTracking(True)
 
-    def _init_pixmaps(self):
-        theme = ThemeService()
-        text_color = theme.get_color("text")
-        self._chevron_down = make_color_svg(":/icons/chevron_down.svg", text_color)
-        self._chevron_right = make_color_svg(":/icons/chevron_right.svg", text_color)
+    def _draw_branch_indicator(self, painter: QtGui.QPainter, x: int, rect: QtCore.QRect):
+        indicator_size = self._CHEVRON_SIZE
+        indicator_rect = QtCore.QRect(x, (rect.height() - indicator_size) // 2, indicator_size, indicator_size)
+
+        option = QtWidgets.QStyleOptionViewItem()
+        option.rect = indicator_rect  # type: ignore[assignment]
+        option.state = QtWidgets.QStyle.StateFlag.State_Children  # type: ignore[assignment]
+
+        if not self._collapsed:
+            option.state |= QtWidgets.QStyle.StateFlag.State_Open  # type: ignore[assignment]
+
+        if self._hovered:
+            option.state |= QtWidgets.QStyle.StateFlag.State_MouseOver  # type: ignore[assignment]
+
+        if self._selected:
+            option.state |= QtWidgets.QStyle.StateFlag.State_Selected  # type: ignore[assignment]
+
+        self.style().drawPrimitive(
+            QtWidgets.QStyle.PrimitiveElement.PE_IndicatorBranch,
+            option,
+            painter,
+            self,
+        )
 
     def set_collapsed(self, collapsed: bool):
         self._collapsed = collapsed
@@ -80,21 +93,15 @@ class SectionHeader(QtWidgets.QWidget):
         elif self._hovered:
             painter.fillRect(rect, theme.get_color("bg_hover"))
 
+        split_color = theme.get_color("split_line")
+        painter.setPen(QtGui.QPen(split_color))
+        painter.drawLine(rect.bottomLeft(), rect.bottomRight())
+
         x = self._HPADDING + self._indent_level * 20
 
         if self._has_children:
-            chevron = self._chevron_down if not self._collapsed else self._chevron_right
-            if chevron is not None:
-                chevron_rect = QtCore.QRect(x, (rect.height() - self._CHEVRON_SIZE) // 2, self._CHEVRON_SIZE, self._CHEVRON_SIZE)
-                scaled = chevron.scaled(
-                    self._CHEVRON_SIZE, self._CHEVRON_SIZE,
-                    QtCore.Qt.AspectRatioMode.KeepAspectRatio,
-                    QtCore.Qt.TransformationMode.SmoothTransformation,
-                )
-                painter.drawPixmap(chevron_rect, scaled)
-            x += self._CHEVRON_SIZE + 4
-        else:
-            x += self._CHEVRON_SIZE + 4
+            self._draw_branch_indicator(painter, x, rect)
+        x += self._CHEVRON_SIZE + 4
 
         if self._icon is not None:
             icon_pixmap = self._icon.pixmap(self._ICON_SIZE, self._ICON_SIZE)
@@ -107,15 +114,17 @@ class SectionHeader(QtWidgets.QWidget):
         painter.setFont(font)
 
         fm = QtGui.QFontMetrics(font)
-        available_width = rect.width() - x - self._HPADDING
+        total_available = rect.width() - x - self._HPADDING
+
+        title_width = fm.horizontalAdvance(self._title)
         badge_width = 0
         if self._badge:
-            badge_fm = QtGui.QFontMetrics(font)
-            badge_width = badge_fm.horizontalAdvance(self._badge) + 8
-            available_width -= badge_width
+            badge_full_width = fm.horizontalAdvance(self._badge) + 8
+            badge_width = min(badge_full_width, max(total_available - title_width - 4, 0))
 
-        title_text = fm.elidedText(self._title, QtCore.Qt.TextElideMode.ElideRight, available_width)
-        text_rect = QtCore.QRect(x, 0, rect.width() - x - self._HPADDING, rect.height())
+        title_available = total_available - badge_width if self._badge else total_available
+        title_text = fm.elidedText(self._title, QtCore.Qt.TextElideMode.ElideRight, title_available)
+        text_rect = QtCore.QRect(x, 0, title_available, rect.height())
         painter.drawText(text_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, title_text)
 
         if self._badge and badge_width > 0:
@@ -125,7 +134,7 @@ class SectionHeader(QtWidgets.QWidget):
             badge_font.setItalic(True)
             painter.setFont(badge_font)
             badge_rect = QtCore.QRect(badge_x, 0, badge_width, rect.height())
-            badge_text = fm.elidedText(self._badge, QtCore.Qt.TextElideMode.ElideLeft, badge_width)
+            badge_text = fm.elidedText(self._badge, QtCore.Qt.TextElideMode.ElideMiddle, badge_width)
             painter.drawText(badge_rect, QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight, badge_text)
             badge_font.setItalic(False)
 
@@ -157,6 +166,7 @@ class SectionHeader(QtWidgets.QWidget):
         hovered: bool = False,
         selected: bool = False,
         indent_level: int = 0,
+        widget: QtWidgets.QWidget | None = None,
     ):
         theme = ThemeService()
 
@@ -165,27 +175,34 @@ class SectionHeader(QtWidgets.QWidget):
         elif hovered:
             painter.fillRect(rect, theme.get_color("bg_hover"))
 
-        text_color = theme.get_color("text")
-        chevron_down = make_color_svg(":/icons/chevron_down.svg", text_color)
-        chevron_right = make_color_svg(":/icons/chevron_right.svg", text_color)
+        split_color = theme.get_color("split_line")
+        painter.setPen(QtGui.QPen(split_color))
+        painter.drawLine(rect.bottomLeft(), rect.bottomRight())
 
         x = 4 + indent_level * 20
         chevron_size = 16
         icon_size = 16
 
         if has_children:
-            chevron = chevron_down if not collapsed else chevron_right
-            if chevron is not None:
-                scaled = chevron.scaled(
-                    chevron_size, chevron_size,
-                    QtCore.Qt.AspectRatioMode.KeepAspectRatio,
-                    QtCore.Qt.TransformationMode.SmoothTransformation,
-                )
-                chevron_rect = QtCore.QRect(x, (rect.height() - chevron_size) // 2, chevron_size, chevron_size)
-                painter.drawPixmap(chevron_rect, scaled)
-            x += chevron_size + 4
-        else:
-            x += chevron_size + 4
+            indicator_rect = QtCore.QRect(x, (rect.height() - chevron_size) // 2, chevron_size, chevron_size)
+            option = QtWidgets.QStyleOptionViewItem()
+            option.rect = indicator_rect  # type: ignore[assignment]
+            option.state = QtWidgets.QStyle.StateFlag.State_Children  # type: ignore[assignment]
+            if not collapsed:
+                option.state |= QtWidgets.QStyle.StateFlag.State_Open  # type: ignore[assignment]
+            if hovered:
+                option.state |= QtWidgets.QStyle.StateFlag.State_MouseOver  # type: ignore[assignment]
+            if selected:
+                option.state |= QtWidgets.QStyle.StateFlag.State_Selected  # type: ignore[assignment]
+
+            style = QtWidgets.QApplication.style() if widget is None else widget.style()
+            style.drawPrimitive(
+                QtWidgets.QStyle.PrimitiveElement.PE_IndicatorBranch,
+                option,
+                painter,
+                widget,
+            )
+        x += chevron_size + 4
 
         if icon is not None:
             icon_pixmap = icon.pixmap(icon_size, icon_size)
@@ -193,17 +210,20 @@ class SectionHeader(QtWidgets.QWidget):
             painter.drawPixmap(icon_rect, icon_pixmap)
             x += icon_size + 4
 
-        painter.setPen(QtGui.QPen(text_color))
+        painter.setPen(QtGui.QPen(theme.get_color("text")))
         font = painter.font()
         fm = QtGui.QFontMetrics(font)
-        available_width = rect.width() - x - 4
+        total_available = rect.width() - x - 4
+
+        title_width = fm.horizontalAdvance(title)
         badge_width = 0
         if badge:
-            badge_width = fm.horizontalAdvance(badge) + 8
-            available_width -= badge_width
+            badge_full_width = fm.horizontalAdvance(badge) + 8
+            badge_width = min(badge_full_width, max(total_available - title_width - 4, 0))
 
-        title_text = fm.elidedText(title, QtCore.Qt.TextElideMode.ElideRight, available_width)
-        text_rect = QtCore.QRect(x, rect.y(), rect.width() - x - 4, rect.height())
+        title_available = total_available - badge_width if badge else total_available
+        title_text = fm.elidedText(title, QtCore.Qt.TextElideMode.ElideRight, title_available)
+        text_rect = QtCore.QRect(x, rect.y(), title_available, rect.height())
         painter.drawText(text_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, title_text)
 
         if badge and badge_width > 0:
@@ -213,7 +233,7 @@ class SectionHeader(QtWidgets.QWidget):
             badge_font.setItalic(True)
             painter.setFont(badge_font)
             badge_rect = QtCore.QRect(badge_x, rect.y(), badge_width, rect.height())
-            badge_text = fm.elidedText(badge, QtCore.Qt.TextElideMode.ElideLeft, badge_width)
+            badge_text = fm.elidedText(badge, QtCore.Qt.TextElideMode.ElideMiddle, badge_width)
             painter.drawText(badge_rect, QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight, badge_text)
             badge_font.setItalic(False)
 
@@ -260,8 +280,8 @@ class CollapsibleSection(StyledWidget):
 
         self._content_area = QtWidgets.QWidget()
         self._content_layout = QtWidgets.QVBoxLayout(self._content_area)
-        self._content_layout.setContentsMargins(0, 0, 0, 0)
-        self._content_layout.setSpacing(0)
+        self._content_layout.setContentsMargins(4, 4, 4, 4)
+        self._content_layout.setSpacing(2)
 
         root_layout = QtWidgets.QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
