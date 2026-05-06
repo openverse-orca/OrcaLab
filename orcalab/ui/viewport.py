@@ -86,6 +86,9 @@ class Viewport(QtWidgets.QWidget):
         ):
             raise RuntimeError("Failed to initialize viewport")
 
+        if config_service.adaptive_frame_wait_enabled():
+            self._viewport.set_adaptive_frame_wait(True)
+
     def _validate_project_path(self, path: str) -> bool:
         project_dir = pathlib.Path(path)
         if not project_dir.exists() or not project_dir.is_dir():

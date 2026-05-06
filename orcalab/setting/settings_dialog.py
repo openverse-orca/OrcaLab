@@ -228,6 +228,17 @@ class SettingsDialog(QtWidgets.QDialog):
             )
         )
 
+        self.adaptive_frame_wait_checkbox = CheckBox()
+        self.adaptive_frame_wait_checkbox.set_checked(config.adaptive_frame_wait_enabled())
+        root_layout.addWidget(
+            _vscode_style_setting_row(
+                "自适应帧等待",
+                "实验特性，可以缓解某些笔记本卡死问题；当上一帧 GPU 渲染未完成时自动等待，避免命令队列堆积导致死锁，需重启生效",
+                self.adaptive_frame_wait_checkbox,
+                self._setting_row_hover_bg,
+            )
+        )
+
         # —— 统计数据：紧挨相机区块下方，间隔由 root_layout.spacing() 控制 ——
         stats_desc = TextLabel("发送用户环境统计数据可以帮助改进OrcaLab。")
         stats_checkbox = CheckBox()
@@ -380,6 +391,8 @@ class SettingsDialog(QtWidgets.QDialog):
         config.set_lock_fps(fps_value)
 
         config.set_vsync(self.vsync_checkbox.checked())
+
+        config.set_adaptive_frame_wait(self.adaptive_frame_wait_checkbox.checked())
 
         if self._remote_scene is not None:
             asyncio.create_task(
