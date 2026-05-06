@@ -118,13 +118,13 @@ class OrcaLabMCPServer:
 
         return data
 
-    def get_asset_map(self) -> str:
+    def get_asset_map(self, project_name: str=None, category: str=None) -> str:
         '''
         获取所有已订阅资产的元数据信息
         Args:
-            无需传递参数
+            可选择传入project_name[资产所在项目名称]和category[资产分类]参数，用于筛选资产。
         Returns:
-            所有已订阅资产的元数据信息的json字符串格式
+            筛选后的所有已订阅资产的元数据信息的json字符串格式
         '''
         output = []
         self.metadata_service_bus.get_asset_map(output)
@@ -142,6 +142,17 @@ class OrcaLabMCPServer:
             cat = _category_str(info.get("category"))
             if "scene" in cat.lower():
                 continue
+            
+            if project_name is not None:
+                asset_path = info.get("assetPath") or ""
+                if project_name.lower() not in asset_path.lower():
+                    continue
+
+            if category is not None:
+                category_path = info.get("categoryPath") or ""
+                if category.lower() not in category_path.lower():
+                    continue
+
             result[path] = {
                 "name": info.get("name", ""),
                 "category": cat,
