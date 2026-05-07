@@ -236,7 +236,7 @@ def main():
             print(exc, file=sys.stderr)
             sys.exit(2)
 
-    logger = setup_logging(console_level=console_level)
+    logger = setup_logging(file_level=logging.DEBUG, console_level=console_level)
 
     logger.info("进程 PID: %d", os.getpid())
 

@@ -263,6 +263,8 @@ def _get_ip_info():
         if response.status_code == 200:
             data = response.json()
             return data
+        else:
+            logger.warning(f"get ip info failed. Status: {response.status_code}")
 
     except Exception:
         return {}
