@@ -346,17 +346,6 @@ class ConfigService:
 
         self.set_user_config("orcalab", update_func)
 
-    def adaptive_frame_wait_enabled(self) -> bool:
-        return self.config.get("orcalab", {}).get("adaptive_frame_wait", False)
-
-    def set_adaptive_frame_wait(self, enabled: bool) -> None:
-        self.config.setdefault("orcalab", {})["adaptive_frame_wait"] = enabled
-
-        def update_func(config):
-            config.setdefault("orcalab", {})["adaptive_frame_wait"] = enabled
-
-        self.set_user_config("orcalab", update_func)
-
     def mcp_port(self) -> int:
         return self.config.get("mcp", {}).get("port", 8000)
 

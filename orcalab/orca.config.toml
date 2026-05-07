@@ -7,7 +7,6 @@ levels = [ "orcalab_day", "orcalab_night", "previewthumbnail_orcalab",]
 level = "orcalab_day"
 lock_fps = 120
 vsync = true
-adaptive_frame_wait = false
 paks = []
 pak_urls = []
 pak_urls_sha256 = []
