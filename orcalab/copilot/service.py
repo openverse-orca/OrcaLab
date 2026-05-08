@@ -10,6 +10,7 @@ import json
 import requests
 import tempfile
 import os
+import time
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 from orcalab.token_storage import TokenStorage
@@ -142,12 +143,16 @@ class CopilotService:
         Returns:
             The HTTP response
         """
-        return requests.post(
+        _start = time.monotonic()
+        response = requests.post(
             f"{self.server_url}/api/generate",
             json={"query": prompt},
             headers=self._get_headers(),
             timeout=self.timeout
         )
+        elapsed = time.monotonic() - _start
+        logger.debug("HTTP POST %s/api/generate 耗时: %.3f 秒 (状态码: %s)", self.server_url, elapsed, response.status_code)
+        return response
     
     async def _parse_scene(self) -> Dict[str, Any]:
         """
@@ -187,11 +192,15 @@ class CopilotService:
         Returns:
             The HTTP response
         """
-        return requests.post(
+        _start = time.monotonic()
+        response = requests.post(
             f"{self.server_url}/api/parse",
             json={},
             timeout=30
         )
+        elapsed = time.monotonic() - _start
+        logger.debug("HTTP POST %s/api/parse 耗时: %.3f 秒 (状态码: %s)", self.server_url, elapsed, response.status_code)
+        return response
     
     async def test_connection(self) -> bool:
         """
@@ -217,11 +226,15 @@ class CopilotService:
         Returns:
             The HTTP response
         """
-        return requests.get(
+        _start = time.monotonic()
+        response = requests.get(
             f"{self.server_url}/api/health",
             headers=self._get_headers(),
             timeout=5
         )
+        elapsed = time.monotonic() - _start
+        logger.debug("HTTP GET %s/api/health 耗时: %.3f 秒 (状态码: %s)", self.server_url, elapsed, response.status_code)
+        return response
     
     async def _show_progress_dots(self, progress_callback):
         """

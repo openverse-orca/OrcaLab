@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import time
 import aiohttp
 
 from orcalab.project_util import get_orca_studio_folder
@@ -174,12 +175,15 @@ async def send_abnormal_exit_report():
 
     try:
         async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
             async with session.post(
                 url,
                 data=form,
                 headers=headers,
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as response:
+                elapsed = time.monotonic() - _start
+                logger.debug("HTTP POST %s 耗时: %.3f 秒 (状态码: %s)", url, elapsed, response.status)
                 logger.info(
                     "Abnormal exit report sent, status=%s", response.status
                 )

@@ -9,6 +9,7 @@ import asyncio
 import sys
 import signal
 import logging
+import time
 
 from orcalab.cli_options import create_argparser, resolve_and_validate_workspace
 from orcalab.config_service import ConfigService
@@ -120,7 +121,10 @@ def select_scene_and_layout(
             "Content-Type": "application/json",
         }
         try:
+            _start = time.monotonic()
             resp = _requests.get(f"{base_url}/is_admin/", headers=headers, timeout=10)
+            elapsed = time.monotonic() - _start
+            logger.debug("HTTP GET %s/is_admin/ 耗时: %.3f 秒 (状态码: %s)", base_url, elapsed, resp.status_code)
             if resp.status_code != 200:
                 return False
             return resp.json().get("isAdmin", False)

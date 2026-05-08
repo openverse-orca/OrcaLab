@@ -260,8 +260,11 @@ def _download_archive(url: str, target_file: Path, progress_callback: Optional[C
         progress_callback: 进度回调函数，接收 (进度百分比, 详细信息) 参数
     """
     target_file.parent.mkdir(parents=True, exist_ok=True)
+    _start = time.monotonic()
     with requests.get(url, stream=True, timeout=60) as r:
         r.raise_for_status()
+        elapsed = time.monotonic() - _start
+        logger.debug("HTTP GET %s 首包耗时: %.3f 秒 (状态码: %s)", url, elapsed, r.status_code)
         total_size = int(r.headers.get('content-length', 0))
         downloaded = 0
         
@@ -354,8 +357,11 @@ def _download_pak_file(url: str, target_path: Path, cloud_file_sha256: str, prog
     """
     try:
         target_path.parent.mkdir(parents=True, exist_ok=True)
+        _start = time.monotonic()
         with requests.get(url, stream=True, timeout=60) as r:
             r.raise_for_status()
+            elapsed = time.monotonic() - _start
+            logger.debug("HTTP GET %s 首包耗时: %.3f 秒 (状态码: %s)", url, elapsed, r.status_code)
             total_size = int(r.headers.get('content-length', 0))
             downloaded = 0
             
