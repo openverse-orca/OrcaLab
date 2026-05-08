@@ -174,6 +174,12 @@ class SceneEditService(SceneEditRequest):
             _, actor_path = self.local_scene.normalize_actor(actor)
         actor_paths = sorted(selection)
 
+        # 必须先清除 active_entity，因为选中 actor 时不应该保留 entity 状态
+        # 这个清除操作必须在 early return 之前执行，否则当 selection 和 active_actor
+        # 都没变化时（例如先选 entity 再点回同一个 actor），active_entity 不会被清除
+        if self.local_scene.active_entity is not None:
+            await self._set_active_entity(None, None, False, source)
+
         if actor_paths == self.local_scene.selection and actor_path == self.local_scene.active_actor:
             return
 
@@ -1007,23 +1013,35 @@ class SceneEditService(SceneEditRequest):
             if old_active_entity is not None:
                 old_actor_path, old_entity_id = old_active_entity
                 with perf_timer("service._set_active_entity.unhighlight_old", feature="SERVICE"):
-                    await self.remote_scene.set_highlight_entity_tree(
-                        old_actor_path, old_entity_id, False
-                    )
+                    try:
+                        await self.remote_scene.set_highlight_entity_tree(
+                            old_actor_path, old_entity_id, False
+                        )
+                    except Exception:
+                        perf_log(f"service._set_active_entity: failed to unhighlight {old_actor_path}", feature="SERVICE")
 
             self.local_scene.active_entity = new_active_entity
 
             if new_active_entity is not None:
                 new_actor_path, new_entity_id = new_active_entity
                 with perf_timer("service._set_active_entity.select+highlight_new", feature="SERVICE"):
-                    await self.remote_scene.set_selected_entity(new_actor_path, new_entity_id)
-                    await self.remote_scene.set_highlight_entity_tree(
-                        new_actor_path, new_entity_id, True
-                    )
+                    try:
+                        await self.remote_scene.set_selected_entity(new_actor_path, new_entity_id)
+                    except Exception:
+                        perf_log(f"service._set_active_entity: failed to select entity on remote", feature="SERVICE")
+                    try:
+                        await self.remote_scene.set_highlight_entity_tree(
+                            new_actor_path, new_entity_id, True
+                        )
+                    except Exception:
+                        perf_log(f"service._set_active_entity: failed to highlight {new_actor_path}", feature="SERVICE")
             else:
                 if old_active_entity is not None:
                     old_actor_path, _ = old_active_entity
-                    await self.remote_scene.set_selected_entity(old_actor_path, 0)
+                    try:
+                        await self.remote_scene.set_selected_entity(old_actor_path, 0)
+                    except Exception:
+                        perf_log(f"service._set_active_entity: failed to deselect on remote", feature="SERVICE")
 
             with perf_timer("service._set_active_entity.notify", feature="SERVICE"):
                 bus = SceneEditNotificationBus()
@@ -1046,11 +1064,15 @@ class SceneEditService(SceneEditRequest):
             if entity_root is None:
                 return None
 
-            self.local_scene.set_entity_root(actor_path, entity_root)
+            try:
+                self.local_scene.set_entity_root(actor_path, entity_root)
 
-            with perf_timer("service.fetch_entity_hierarchy.notify", feature="SERVICE"):
-                bus = SceneEditNotificationBus()
-                await bus.on_entity_hierarchy_loaded(actor_path, entity_root, source)
+                with perf_timer("service.fetch_entity_hierarchy.notify", feature="SERVICE"):
+                    bus = SceneEditNotificationBus()
+                    await bus.on_entity_hierarchy_loaded(actor_path, entity_root, source)
+            except asyncio.CancelledError:
+                self.local_scene.set_entity_root(actor_path, None)
+                raise
 
             return entity_root
 

@@ -1,5 +1,5 @@
 import asyncio
-from typing import Tuple, override
+from typing import Dict, Tuple, override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.actor import BaseActor, GroupActor, AssetActor
@@ -17,6 +17,7 @@ from orcalab.scene_edit_bus import (
 )
 
 from orcalab.ui.actor_outline_model import ActorOutlineModel
+from orcalab.ui.collapsible.collapsible_section import SectionHeader
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.rename_dialog import RenameDialog
 from orcalab.ui.icon_util import make_icon
@@ -31,12 +32,13 @@ OUTLINE_BUTTON_GAP = 2
 def _visibility_lock_button_rects(
     row_rect: QtCore.QRect,
 ) -> Tuple[QtCore.QRect, QtCore.QRect]:
-    h = row_rect.height()
-    y = row_rect.top() + (row_rect.height() - h) // 2
-    r = row_rect.right()
+    tail_size = max(12, row_rect.height() - 8)
+    gap = OUTLINE_BUTTON_GAP
+    y = row_rect.top() + (row_rect.height() - tail_size) // 2
+    r = row_rect.x() + row_rect.width()
 
-    lock_rect = QtCore.QRect(r - h, y, h, h)
-    eye_rect = QtCore.QRect(r - 2 * h - OUTLINE_BUTTON_GAP, y, h, h)
+    lock_rect = QtCore.QRect(r - 4 - tail_size, y, tail_size, tail_size)
+    eye_rect = QtCore.QRect(r - 4 - tail_size - gap - tail_size, y, tail_size, tail_size)
 
     return eye_rect, lock_rect
 
@@ -68,14 +70,27 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
             return
 
         node = index.internalPointer()
+
+        hovered = bool(option.state & QtWidgets.QStyle.StateFlag.State_MouseOver)
+        selected = bool(option.state & QtWidgets.QStyle.StateFlag.State_Selected)
+
+        tree_view = self.parent()
+        is_expanded = tree_view.isExpanded(index) if isinstance(tree_view, QtWidgets.QTreeView) else True
+
         if isinstance(node, EntityInfo):
-            text_option = QtWidgets.QStyleOptionViewItem(option)
-            font = FontService().apply_font_modifiers("entity_info", text_option.font)
-            text_option.font = font
-            text_rect = QtCore.QRect(option.rect)
-            text_rect.setRight(text_rect.right() - 4)
-            text_option.rect = text_rect
-            super().paint(painter, text_option, index)
+            font = FontService().apply_font_modifiers("entity_info", option.font)
+            painter.setFont(font)
+            SectionHeader.paint_at(
+                painter=painter,
+                rect=option.rect,
+                title=node.name,
+                collapsed=not is_expanded,
+                has_children=False,
+                hovered=hovered,
+                selected=selected,
+                widget=tree_view,
+                show_divider=False,
+            )
             return
 
         actor = node
@@ -83,26 +98,32 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
             super().paint(painter, option, index)
             return
 
+        model = index.model()
+        has_children = model.hasChildren(index) if model else False
+
         color = option.palette.color(
             QtGui.QPalette.ColorGroup.Active,
             QtGui.QPalette.ColorRole.Text,
         )
         self._ensure_icons(color)
-        eye_rect, lock_rect = _visibility_lock_button_rects(option.rect)
-        text_rect = QtCore.QRect(option.rect)
-        text_rect.setRight(eye_rect.left() - OUTLINE_BUTTON_GAP)
-        h = option.rect.height()
-        text_option = QtWidgets.QStyleOptionViewItem(option)
-        text_option.rect = text_rect
-        super().paint(painter, text_option, index)
         eye_icon = self._eye_visible_icon if actor.is_visible else self._eye_hidden_icon
-        eye_pixmap = eye_icon.pixmap(QtCore.QSize(h, h))
-        painter.drawPixmap(eye_rect, eye_pixmap)
         lock_icon = (
             self._lock_locked_icon if actor.is_locked else self._lock_unlocked_icon
         )
-        lock_pixmap = lock_icon.pixmap(QtCore.QSize(h, h))
-        painter.drawPixmap(lock_rect, lock_pixmap)
+        assert eye_icon is not None and lock_icon is not None
+
+        SectionHeader.paint_at(
+            painter=painter,
+            rect=option.rect,
+            title=actor.name,
+            collapsed=not is_expanded,
+            has_children=False,
+            hovered=hovered,
+            selected=selected,
+            widget=tree_view,
+            tail_items=[("eye", eye_icon), ("lock", lock_icon)],
+            show_divider=False,
+        )
 
 
 class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
@@ -138,7 +159,8 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
         self._temp_expaned_actor_paths = []
 
-        self._fetched_entity_actors: set[Path] = set()
+        self._entity_fetch_version: Dict[Path, int] = {}
+        self._entity_fetch_tasks: Dict[Path, asyncio.Task] = {}
 
     def connect_bus(self):
         SceneEditNotificationBus.connect(self)
@@ -258,18 +280,28 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         if actor_path is None:
             return
 
-        if actor_path in self._fetched_entity_actors:
+        local_scene = self.actor_model().local_scene
+        existing_root = local_scene.get_entity_root(actor_path)
+        if existing_root is not None:
             return
 
-        self._fetched_entity_actors.add(actor_path)
+        version = self._entity_fetch_version.get(actor_path, 0) + 1
+        self._entity_fetch_version[actor_path] = version
 
-        async def _fetch():
+        old_task = self._entity_fetch_tasks.pop(actor_path, None)
+        if old_task is not None and not old_task.done():
+            old_task.cancel()
+
+        async def _fetch(version: int):
             with perf_timer("outline.fetch_entity_hierarchy", feature="OUTLINE"):
                 await SceneEditRequestBus().fetch_entity_hierarchy(
                     actor_path, source="actor_outline"
                 )
+            if self._entity_fetch_version.get(actor_path) != version:
+                return
 
-        asyncio.create_task(_fetch())
+        task = asyncio.create_task(_fetch(version))
+        self._entity_fetch_tasks[actor_path] = task
 
     def _recursive_expand(self, index: QtCore.QModelIndex, expanded: bool):
         if not index.isValid():
@@ -627,7 +659,12 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
     def _before_reset_model(self):
         self._temp_expaned_actor_paths.clear()
-        self._fetched_entity_actors.clear()
+        self._entity_fetch_version.clear()
+
+        for task in self._entity_fetch_tasks.values():
+            if not task.done():
+                task.cancel()
+        self._entity_fetch_tasks.clear()
 
         model = self.actor_model()
         local_scene = model.local_scene

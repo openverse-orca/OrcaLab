@@ -103,10 +103,6 @@ class SectionHeader(QtWidgets.QWidget):
         elif self._hovered:
             painter.fillRect(rect, theme.get_color("bg_hover"))
 
-        split_color = theme.get_color("split_line")
-        painter.setPen(QtGui.QPen(split_color))
-        painter.drawLine(rect.bottomLeft(), rect.bottomRight())
-
         x = self._HPADDING + self._indent_level * 20
 
         if self._has_children:
@@ -175,7 +171,9 @@ class SectionHeader(QtWidgets.QWidget):
         selected: bool = False,
         indent_level: int = 0,
         widget: QtWidgets.QWidget | None = None,
-    ):
+        tail_items: list[tuple[str, QtGui.QIcon]] | None = None,
+        show_divider: bool = True,
+    ) -> dict[str, QtCore.QRect]:
         theme = ThemeService()
 
         if selected:
@@ -183,16 +181,17 @@ class SectionHeader(QtWidgets.QWidget):
         elif hovered:
             painter.fillRect(rect, theme.get_color("bg_hover"))
 
-        split_color = theme.get_color("split_line")
-        painter.setPen(QtGui.QPen(split_color))
-        painter.drawLine(rect.bottomLeft(), rect.bottomRight())
+        if show_divider:
+            split_color = theme.get_color("split_line")
+            painter.setPen(QtGui.QPen(split_color))
+            painter.drawLine(rect.bottomLeft(), rect.bottomRight())
 
-        x = 4 + indent_level * 20
+        x = rect.x() + 4 + indent_level * 20
         chevron_size = 16
         icon_size = 16
 
         if has_children:
-            indicator_rect = QtCore.QRect(x, (rect.height() - chevron_size) // 2, chevron_size, chevron_size)
+            indicator_rect = QtCore.QRect(x, rect.y() + (rect.height() - chevron_size) // 2, chevron_size, chevron_size)
             option = QtWidgets.QStyleOptionViewItem()
             option.rect = indicator_rect  # type: ignore[assignment]
             option.state = QtWidgets.QStyle.StateFlag.State_Children  # type: ignore[assignment]
@@ -210,18 +209,33 @@ class SectionHeader(QtWidgets.QWidget):
                 painter,
                 widget,
             )
-        x += chevron_size + 4
+            x += chevron_size + 4
 
         if icon is not None:
             icon_pixmap = icon.pixmap(icon_size, icon_size)
-            icon_rect = QtCore.QRect(x, (rect.height() - icon_size) // 2, icon_size, icon_size)
+            icon_rect = QtCore.QRect(x, rect.y() + (rect.height() - icon_size) // 2, icon_size, icon_size)
             painter.drawPixmap(icon_rect, icon_pixmap)
             x += icon_size + 4
+
+        tail_rects: dict[str, QtCore.QRect] = {}
+        tail_width = 0
+        if tail_items:
+            tail_icon_size = max(12, rect.height() - 8)
+            gap = 2
+            right_edge = rect.x() + rect.width() - 4
+            for item_id, item_icon in reversed(tail_items):
+                right_edge -= tail_icon_size
+                item_rect = QtCore.QRect(right_edge, rect.y() + (rect.height() - tail_icon_size) // 2, tail_icon_size, tail_icon_size)
+                item_pixmap = item_icon.pixmap(tail_icon_size, tail_icon_size)
+                painter.drawPixmap(item_rect, item_pixmap)
+                tail_rects[item_id] = item_rect
+                right_edge -= gap
+            tail_width = len(tail_items) * tail_icon_size + (len(tail_items) - 1) * gap
 
         painter.setPen(QtGui.QPen(theme.get_color("text")))
         font = painter.font()
         fm = QtGui.QFontMetrics(font)
-        total_available = rect.width() - x - 4
+        total_available = rect.width() - (x - rect.x()) - 4 - tail_width
 
         title_width = fm.horizontalAdvance(title)
         badge_width = 0
@@ -235,13 +249,15 @@ class SectionHeader(QtWidgets.QWidget):
         painter.drawText(text_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, title_text)
 
         if badge and badge_width > 0:
-            badge_x = rect.width() - 4 - badge_width
+            badge_x = rect.x() + rect.width() - 4 - tail_width - badge_width
             painter.setPen(QtGui.QPen(theme.get_color("text_disable")))
             badge_font = FontService().apply_font_modifiers("badge_text", font)
             painter.setFont(badge_font)
             badge_rect = QtCore.QRect(badge_x, rect.y(), badge_width, rect.height())
             badge_text = fm.elidedText(badge, QtCore.Qt.TextElideMode.ElideMiddle, badge_width)
             painter.drawText(badge_rect, QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight, badge_text)
+
+        return tail_rects
 
 
 class CollapsibleSection(StyledWidget):
@@ -284,6 +300,12 @@ class CollapsibleSection(StyledWidget):
         self._header.set_collapsed(collapsed)
         self._header.clicked.connect(self._on_header_clicked)
 
+        # 创建分隔线
+        self._divider = QtWidgets.QFrame()
+        self._divider.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        self._divider.setFrameShadow(QtWidgets.QFrame.Shadow.Plain)
+        self._divider.hide()
+
         self._content_area = QtWidgets.QWidget()
         self._content_layout = QtWidgets.QVBoxLayout(self._content_area)
         self._content_layout.setContentsMargins(4, 4, 4, 4)
@@ -293,12 +315,14 @@ class CollapsibleSection(StyledWidget):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
         root_layout.addWidget(self._header)
+        root_layout.addWidget(self._divider)
         root_layout.addWidget(self._content_area)
 
         if collapsed:
             self._content_area.hide()
         else:
             self._lazy_create_content()
+            self._update_divider()
 
     @property
     def header(self) -> SectionHeader:
@@ -330,6 +354,27 @@ class CollapsibleSection(StyledWidget):
                 self._children = self._children_factory()
                 for child in self._children:
                     self._content_layout.addWidget(child)
+        
+        self._update_divider()
+
+    def _update_divider(self):
+        # 只有当展开且有内容时才显示分隔线
+        has_content = self._content_widget is not None or (self._children and len(self._children) > 0)
+        if not self._collapsed and has_content:
+            self._divider.show()
+            # 设置分隔线颜色 - 使用样式表，参考 line.py
+            theme = ThemeService()
+            color = theme.get_color_hex("split_line")
+            self._divider.setStyleSheet(
+                f"""
+                QFrame {{
+                    background-color: {color};
+                    color: {color};
+                }}
+                """
+            )
+        else:
+            self._divider.hide()
 
     def expand(self):
         if not self._collapsed:
@@ -338,6 +383,7 @@ class CollapsibleSection(StyledWidget):
         self._collapsed = False
         self._content_area.show()
         self._header.set_collapsed(False)
+        self._update_divider()
         self.collapsed_changed.emit(False)
 
     def collapse(self):
@@ -346,6 +392,7 @@ class CollapsibleSection(StyledWidget):
         self._collapsed = True
         self._content_area.hide()
         self._header.set_collapsed(True)
+        self._update_divider()
         self.collapsed_changed.emit(True)
 
     def toggle_collapse(self):

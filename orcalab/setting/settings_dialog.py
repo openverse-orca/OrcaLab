@@ -282,7 +282,7 @@ class SettingsDialog(QtWidgets.QDialog):
         root_layout.addWidget(
             _vscode_style_setting_row(
                 "界面字体缩放",
-                "调整全局字体大小百分比，按 10% 步进，范围 50%-200%。需重启生效",
+                "调整全局字体大小百分比，按 10% 步进，范围 50%-200%",
                 font_scale_widget,
                 self._setting_row_hover_bg,
             )
