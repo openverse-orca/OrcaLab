@@ -17,6 +17,7 @@ from orcalab.scene_edit_bus import (
 )
 
 from orcalab.ui.actor_outline_model import ActorOutlineModel
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.rename_dialog import RenameDialog
 from orcalab.ui.icon_util import make_icon
 
@@ -69,8 +70,7 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
         node = index.internalPointer()
         if isinstance(node, EntityInfo):
             text_option = QtWidgets.QStyleOptionViewItem(option)
-            font = text_option.font
-            font.setItalic(True)
+            font = FontService().apply_font_modifiers("entity_info", text_option.font)
             text_option.font = font
             text_rect = QtCore.QRect(option.rect)
             text_rect.setRight(text_rect.right() - 4)
@@ -113,6 +113,9 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
         self.setItemDelegate(ActorOutlineDelegate(self))
+
+        self._fs = FontService()
+        self._fs.bind_widget_font(self, "outline")
 
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(True)

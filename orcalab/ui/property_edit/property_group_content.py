@@ -10,6 +10,7 @@ from orcalab.actor_property import (
     TreePropertyNode,
 )
 from orcalab.path import Path
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.icon_util import make_color_svg
 from orcalab.ui.property_edit.base_property_edit import (
     BasePropertyEdit,
@@ -21,7 +22,6 @@ from orcalab.ui.property_edit.float_property_edit import FloatPropertyEdit
 from orcalab.ui.property_edit.int_property_edit import IntegerPropertyEdit
 from orcalab.ui.property_edit.string_property_edit import StringPropertyEdit
 from orcalab.ui.styled_widget import StyledWidget
-from orcalab.ui.theme_service import ThemeService
 
 
 def _create_property_edit(
@@ -67,8 +67,7 @@ def _render_tree_data_flat(
     indent: int = 0,
     name_prefix: str = "",
 ):
-    theme = ThemeService()
-    text_color = theme.get_color_hex("text")
+    fs = FontService()
     indent_px = indent * 20
 
     for node in nodes:
@@ -79,11 +78,11 @@ def _render_tree_data_flat(
 
         if node.children:
             indicator = QtWidgets.QLabel("▾")
-            indicator.setStyleSheet(f"color: {text_color}; font-weight: bold;")
+            fs.bind_widget_font(indicator, 'group_title')
             header_layout.addWidget(indicator)
 
         name_label = QtWidgets.QLabel(node.display_name)
-        name_label.setStyleSheet(f"color: {text_color}; font-weight: bold;")
+        fs.bind_widget_font(name_label, 'group_title')
         header_layout.addWidget(name_label)
         header_layout.addStretch()
         layout.addWidget(header_row)

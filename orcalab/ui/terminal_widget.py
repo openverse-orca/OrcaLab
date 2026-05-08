@@ -6,6 +6,8 @@ import os
 import sys
 import re
 
+from orcalab.ui.fonts.font_service import FontService
+
 
 class TerminalTextEdit(QtWidgets.QTextEdit):
     """支持输入捕获和ANSI颜色的终端文本编辑器"""
@@ -194,6 +196,7 @@ class TerminalWidget(QtWidgets.QWidget):
         self.output_thread = None
         self.is_running = False
         
+        self._fs = FontService()
         self._setup_ui()
         
         # 创建定时器来更新UI
@@ -201,46 +204,47 @@ class TerminalWidget(QtWidgets.QWidget):
         self.update_timer.timeout.connect(self._update_output)
         self.update_timer.start(50)  # 每50ms更新一次
         
-        # 设置样式
-        self.setStyleSheet("""
-            QWidget {
+        self._fs.bind_widget_stylesheet(self, self._build_stylesheet)
+    
+    def _build_stylesheet(self) -> str:
+        return f"""
+            QWidget {{
                 background-color: #1e1e1e;
                 color: #ffffff;
-            }
-            QTextEdit {
+            }}
+            QTextEdit {{
                 background-color: #0d1117;
                 border: 1px solid #30363d;
                 border-radius: 4px;
                 color: #e6edf3;
-                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-                font-size: 12px;
+                {self._fs.get_font_css("terminal")}
                 padding: 8px;
                 selection-background-color: #264f78;
-            }
-            QTextEdit:focus {
+            }}
+            QTextEdit:focus {{
                 border-color: #58a6ff;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 background-color: #21262d;
                 border: 1px solid #30363d;
                 border-radius: 4px;
                 color: #f0f6fc;
                 padding: 6px 12px;
-                font-size: 12px;
-            }
-            QPushButton:hover {
+                {self._fs.get_font_css("terminal")}
+            }}
+            QPushButton:hover {{
                 background-color: #30363d;
                 border-color: #8b949e;
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background-color: #161b22;
-            }
-            QPushButton:disabled {
+            }}
+            QPushButton:disabled {{
                 background-color: #161b22;
                 color: #7d8590;
                 border-color: #21262d;
-            }
-        """)
+            }}
+        """
     
     def _setup_ui(self):
         """设置UI布局"""
@@ -263,7 +267,11 @@ class TerminalWidget(QtWidgets.QWidget):
         
         # 状态标签
         self.status_label = QtWidgets.QLabel("就绪")
-        self.status_label.setStyleSheet("color: #7d8590; font-size: 11px;")
+        self._status_color = "#7d8590"
+        self._fs.bind_widget_stylesheet(
+            self.status_label,
+            lambda: f"color: {self._status_color}; {self._fs.get_font_css('terminal_status')}",
+        )
         toolbar_layout.addWidget(self.status_label)
         
         layout.addLayout(toolbar_layout)
@@ -322,7 +330,7 @@ class TerminalWidget(QtWidgets.QWidget):
             
             self.is_running = True
             self.status_label.setText(f"运行中 (PID: {self.process.pid})")
-            self.status_label.setStyleSheet("color: #3fb950; font-size: 11px;")
+            self._set_status_style("#3fb950")
             
             # 启动输出读取线程
             self.output_thread = threading.Thread(
@@ -341,7 +349,7 @@ class TerminalWidget(QtWidgets.QWidget):
         except Exception as e:
             self._append_output(f"启动进程失败: {str(e)}\n")
             self.status_label.setText("启动失败")
-            self.status_label.setStyleSheet("color: #f85149; font-size: 11px;")
+            self._set_status_style("#f85149")
             return False
     
     def stop_process(self):
@@ -370,7 +378,7 @@ class TerminalWidget(QtWidgets.QWidget):
             self.is_running = False
             self.process = None
             self.status_label.setText("已停止")
-            self.status_label.setStyleSheet("color: #7d8590; font-size: 11px;")
+            self._set_status_style("#7d8590")
             
         except Exception as e:
             self._append_output(f"停止进程时出错: {str(e)}\n")
@@ -466,6 +474,10 @@ class TerminalWidget(QtWidgets.QWidget):
         self.output_text.clear()
         self._append_output("输出已清空\n")
     
+    def _set_status_style(self, color: str):
+        self._status_color = color
+        self.status_label.setStyleSheet(f"color: {color}; {self._fs.get_font_css('terminal_status')}")
+
     def copy_output(self):
         """复制输出到剪贴板"""
         text = self.output_text.toPlainText()
@@ -473,7 +485,7 @@ class TerminalWidget(QtWidgets.QWidget):
             clipboard = QtWidgets.QApplication.clipboard()
             clipboard.setText(text)
             self.status_label.setText("已复制到剪贴板")
-            self.status_label.setStyleSheet("color: #58a6ff; font-size: 11px;")
+            self._set_status_style("#58a6ff")
             
             # 2秒后恢复状态
             QtCore.QTimer.singleShot(2000, lambda: self.status_label.setText(
@@ -489,7 +501,7 @@ class TerminalWidget(QtWidgets.QWidget):
         self.output_text._pty_mode = True
         pid = getattr(win_pty, 'pid', '?')
         self.status_label.setText(f"运行中 (PID: {pid})")
-        self.status_label.setStyleSheet("color: #3fb950; font-size: 11px;")
+        self._set_status_style("#3fb950")
         self.output_text.clear_input_buffer()
 
     def set_external_process(self, process: subprocess.Popen):
@@ -498,7 +510,7 @@ class TerminalWidget(QtWidgets.QWidget):
         self._pty_master_fd = None
         self.is_running = True
         self.status_label.setText(f"运行中 (PID: {process.pid})")
-        self.status_label.setStyleSheet("color: #3fb950; font-size: 11px;")
+        self._set_status_style("#3fb950")
         self.output_text.clear_input_buffer()
     
     def set_pty_process(self, process: subprocess.Popen, master_fd: int):
@@ -508,7 +520,7 @@ class TerminalWidget(QtWidgets.QWidget):
         self.is_running = True
         self.output_text._pty_mode = True
         self.status_label.setText(f"运行中 (PID: {process.pid})")
-        self.status_label.setStyleSheet("color: #3fb950; font-size: 11px;")
+        self._set_status_style("#3fb950")
         self.output_text.clear_input_buffer()
     
     def clear_external_process(self):
@@ -519,7 +531,7 @@ class TerminalWidget(QtWidgets.QWidget):
         self.is_running = False
         self.output_text._pty_mode = False
         self.status_label.setText("已停止")
-        self.status_label.setStyleSheet("color: #7d8590; font-size: 11px;")
+        self._set_status_style("#7d8590")
         self.output_text.clear_input_buffer()
     
     def clear_pty_process(self):

@@ -2,6 +2,7 @@ from typing import override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.ui.checkbox import CheckBox
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.property_edit.base_property_edit import (
     BasePropertyEdit,
     PropertyEditContext,

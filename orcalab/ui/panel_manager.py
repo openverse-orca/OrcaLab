@@ -8,6 +8,7 @@ from orcalab.ui.panel import Panel
 from orcalab.ui.panel_area import PanelArea, PanelAreaVertical, PanelAreaHorizontal
 from orcalab.ui.line import make_horizontal_line, make_vertical_line
 from orcalab.ui.panel_bus import PanelRequest, PanelRequestBus
+from orcalab.ui.fonts.font_service import FontService
 
 
 class PanelManager(QtWidgets.QWidget, PanelRequest):
@@ -16,15 +17,11 @@ class PanelManager(QtWidgets.QWidget, PanelRequest):
 
         # Window partition: Top area, Central area, Bottom area.
 
-        window_top_area_height = 32
-        window_bottom_area_height = 32
-
         window_top_area = QtWidgets.QWidget()
         window_central_area = QtWidgets.QWidget()
         window_bottom_area = QtWidgets.QWidget()
 
-        window_top_area.setFixedHeight(window_top_area_height)
-        window_bottom_area.setFixedHeight(window_bottom_area_height)
+        window_bottom_area.setFixedHeight(32)
 
         window_layout = QtWidgets.QVBoxLayout(self)
         window_layout.setContentsMargins(0, 0, 0, 0)
@@ -49,6 +46,21 @@ class PanelManager(QtWidgets.QWidget, PanelRequest):
         window_top_area_layout.addWidget(manipulator_bar)
         window_top_area_layout.addStretch(1)
         window_top_area_layout.addWidget(tool_bar)
+
+        # Dynamically adjust top area height based on font scale
+
+        fs = FontService()
+
+        def _update_top_area_height():
+            body_font = fs.get_font("body")
+            fm = QtGui.QFontMetrics(body_font)
+            font_height = fm.height()
+            padding = 12
+            min_height = max(32, font_height + padding)
+            window_top_area.setFixedHeight(min_height)
+
+        _update_top_area_height()
+        fs.on_scale_changed(_update_top_area_height)
 
         # Window central area.
 

@@ -3,6 +3,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 
 
 from orcalab.ui.edit.int_edit import IntEdit
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.property_edit.base_property_edit import (
     BasePropertyEdit,
     PropertyEditContext,
@@ -33,6 +34,8 @@ class IntegerPropertyEdit(BasePropertyEdit[int]):
 
         root_layout.addWidget(label)
         root_layout.addWidget(editor)
+
+        FontService().bind_widget_font(editor, 'property_edit')
 
         self._editor = editor
         self._block_events = False

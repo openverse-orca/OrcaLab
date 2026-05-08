@@ -477,6 +477,17 @@ class ConfigService:
 
         self.set_user_config("orcalab", update_func)
 
+    def font_scale_percent(self) -> int:
+        return int(self.config.get("orcalab", {}).get("font_scale_percent", 100))
+
+    def set_font_scale_percent(self, value: int) -> None:
+        self.config.setdefault("orcalab", {})["font_scale_percent"] = value
+
+        def update_func(config):
+            config.setdefault("orcalab", {})["font_scale_percent"] = value
+
+        self.set_user_config("orcalab", update_func)
+
     def set_user_config(self, key: str, cb):
         """更新用户配置文件中的指定键值对"""
         user_config = {}

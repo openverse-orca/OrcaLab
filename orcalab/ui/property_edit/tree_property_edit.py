@@ -8,6 +8,7 @@ from orcalab.actor_property import (
     TreePropertyNode,
 )
 from orcalab.perf_log import perf_timer, perf_log
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.icon import Icon
 from orcalab.ui.icon_util import make_color_svg
 from orcalab.ui.property_edit.base_property_edit import (
@@ -132,7 +133,7 @@ class TreeNodeWidget(StyledWidget):
         self._indicator.set_pixmap(self._expand_icon)
 
         self._title_label = QtWidgets.QLabel(self._node.display_name)
-        self._title_label.setStyleSheet("font-weight: bold;")
+        FontService().bind_widget_font(self._title_label, 'group_title')
 
         title_layout.addWidget(self._indicator)
         title_layout.addWidget(self._title_label)
@@ -310,20 +311,20 @@ class TreeLeafButton(QtWidgets.QPushButton):
         self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_right_click)
         self.clicked.connect(self._on_left_click)
-        self._apply_style()
+        FontService().bind_widget_stylesheet(self, self._build_style)
 
     def _dialog_title(self) -> str:
         """子类覆写以返回右键编辑对话框的标题。"""
         return f"编辑 - {self._node.display_name}"
 
-    def _apply_style(self):
+    def _build_style(self) -> str:
         theme = ThemeService()
         text_color = theme.get_color_hex("text")
         bg_color = theme.get_color_hex("property_group_bg")
         brand_color = theme.get_color_hex("brand")
 
         if self._highlighted:
-            self.setStyleSheet(f"""
+            return f"""
                 QPushButton {{
                     background-color: {brand_color}66;
                     color: {text_color};
@@ -331,12 +332,12 @@ class TreeLeafButton(QtWidgets.QPushButton):
                     border-radius: 3px;
                     padding: 3px 8px;
                     text-align: left;
-                    font-weight: bold;
+                    {FontService().get_font_css("button")}
                 }}
                 QPushButton:hover {{ background-color: {brand_color}88; }}
-            """)
+            """
         else:
-            self.setStyleSheet(f"""
+            return f"""
                 QPushButton {{
                     background-color: {bg_color};
                     color: {text_color};
@@ -344,16 +345,17 @@ class TreeLeafButton(QtWidgets.QPushButton):
                     border-radius: 3px;
                     padding: 3px 8px;
                     text-align: left;
+                    {FontService().get_font_css("button")}
                 }}
                 QPushButton:hover {{
                     background-color: {brand_color}44;
                     border-color: {brand_color}88;
                 }}
-            """)
+            """
 
     def _on_left_click(self):
         self._highlighted = not self._highlighted
-        self._apply_style()
+        self.setStyleSheet(self._build_style())
 
         eid = _node_entity_id(self._node)
         if eid is None:
@@ -473,19 +475,23 @@ class _EntityGroup(QtWidgets.QWidget):
         self._toggle_btn = QtWidgets.QPushButton("▾")
         self._toggle_btn.setFixedSize(18, 22)
         self._toggle_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        self._toggle_btn.setStyleSheet(f"""
+        FontService().bind_widget_font(
+            self._toggle_btn, 'small',
+            use_css=True,
+            extra_css=f"""
             QPushButton {{
                 background: transparent; color: {text_color};
-                border: none; font-size: 11px; padding: 0;
+                border: none; padding: 0;
             }}
             QPushButton:hover {{ color: white; }}
-        """)
+        """,
+        )
         self._toggle_btn.clicked.connect(self._toggle)
         header_layout.addWidget(self._toggle_btn)
 
         # 实体名：普通标签，不可高亮/右键编辑
         entity_label = QtWidgets.QLabel(self._node.display_name)
-        entity_label.setStyleSheet(f"color: {text_color}; font-weight: bold;")
+        FontService().bind_widget_font(entity_label, 'group_title')
         header_layout.addWidget(entity_label)
         header_layout.addStretch()
         root_layout.addWidget(header_row)

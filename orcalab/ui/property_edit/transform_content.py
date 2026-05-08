@@ -5,9 +5,9 @@ from orcalab.math import Transform, as_euler
 from orcalab.pyside_util import connect
 from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.ui.edit.float_edit import FloatEdit
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.property_edit.base_property_edit import get_property_edit_style_sheet
 from orcalab.ui.styled_widget import StyledWidget
-from orcalab.ui.theme_service import ThemeService
 
 import numpy as np
 from scipy.spatial.transform import Rotation
@@ -63,10 +63,12 @@ class TransformContent(StyledWidget):
         label_widget.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
+        FontService().bind_widget_font(label_widget, 'property_edit')
         row.addWidget(label_widget)
         row.addWidget(widget, 1)
 
         widget.setStyleSheet(self._property_style_sheet)
+        FontService().bind_widget_font(widget, 'property_edit')
         connect(widget.value_changed, self._on_value_changed)
         connect(widget.start_drag, self._on_start_drag)
         connect(widget.stop_drag, self._on_stop_drag)

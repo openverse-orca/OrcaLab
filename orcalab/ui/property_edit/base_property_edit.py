@@ -13,6 +13,7 @@ from orcalab.scene_edit_bus import (
 )
 from orcalab.ui.styled_widget import StyledWidget
 from orcalab.ui.theme_service import ThemeService
+from orcalab.ui.fonts.font_service import FontService
 
 
 class PropertyEditContext:
@@ -118,6 +119,7 @@ class BasePropertyEdit[T](StyledWidget):
         label.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
+        FontService().bind_widget_font(label, 'property_edit')
         return label
     
     def set_read_only(self, read_only: bool):

@@ -2,6 +2,7 @@ from typing import List, Dict
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.ui.asset_browser.thumbnail_model import ThumbnailModel
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.text_util import split_text_to_lines
 from orcalab.ui.theme_service import ThemeService
 
@@ -104,9 +105,7 @@ class ThumbnailView(QtWidgets.QWidget):
         self._draw_background(painter, self.rect())
         
         if self._loading_text:
-            font = painter.font()
-            font.setPointSize(14)
-            painter.setFont(font)
+            painter.setFont(FontService().get_font("thumbnail_loading"))
             painter.setPen(QtGui.QColor(255, 255, 255))
             painter.drawText(self.rect(), QtCore.Qt.AlignmentFlag.AlignCenter, self._loading_text)
             return

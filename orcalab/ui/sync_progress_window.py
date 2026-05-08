@@ -14,6 +14,8 @@ import time
 
 from numpy import int64
 
+from orcalab.ui.fonts.font_service import FontService
+
 
 class AssetItemWidget(QtWidgets.QWidget):
     """资产包条目组件"""
@@ -28,21 +30,34 @@ class AssetItemWidget(QtWidgets.QWidget):
         self.setup_ui()
     
     def setup_ui(self):
+        fs = FontService()
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(10, 5, 10, 5)
         
         # 状态图标
         self.status_label = QtWidgets.QLabel()
         self.status_label.setFixedWidth(30)
+        self._status_icon_color = ""
+        self._status_icon_char = ""
+        fs.bind_widget_stylesheet(
+            self.status_label,
+            lambda: f"color: {self._status_icon_color}; {FontService().get_font_css('sync_status')}" if self._status_icon_color else "",
+        )
         self.update_status_icon()
         layout.addWidget(self.status_label)
         
         # 资产包名称和文件名
         info_layout = QtWidgets.QVBoxLayout()
         self.name_label = QtWidgets.QLabel(self.asset_name)
-        self.name_label.setStyleSheet("font-weight: bold;")
+        fs.bind_widget_stylesheet(
+            self.name_label,
+            lambda: f"{FontService().get_font_css('group_title')}",
+        )
         self.file_label = QtWidgets.QLabel(self.file_name)
-        self.file_label.setStyleSheet("color: gray; font-size: 10px;")
+        fs.bind_widget_stylesheet(
+            self.file_label,
+            lambda: f"color: gray; {FontService().get_font_css('tiny')}",
+        )
         info_layout.addWidget(self.name_label)
         info_layout.addWidget(self.file_label)
         layout.addLayout(info_layout)
@@ -70,24 +85,33 @@ class AssetItemWidget(QtWidgets.QWidget):
         layout.addWidget(self.status_text)
     
     def update_status_icon(self):
-        """更新状态图标"""
         if self.status == 'ok':
-            self.status_label.setText("✓")
-            self.status_label.setStyleSheet("color: green; font-size: 20px;")
+            self._status_icon_color = "green"
+            self._status_icon_char = "✓"
         elif self.status == 'delete':
-            self.status_label.setText("✗")
-            self.status_label.setStyleSheet("color: red; font-size: 20px;")
+            self._status_icon_color = "red"
+            self._status_icon_char = "✗"
         elif self.status in ['download', 'downloading']:
-            self.status_label.setText("⬇")
-            self.status_label.setStyleSheet("color: blue; font-size: 20px;")
+            self._status_icon_color = "blue"
+            self._status_icon_char = "⬇"
         elif self.status == 'completed':
-            self.status_label.setText("✓")
-            self.status_label.setStyleSheet("color: green; font-size: 20px;")
+            self._status_icon_color = "green"
+            self._status_icon_char = "✓"
         elif self.status == 'failed':
-            self.status_label.setText("✗")
-            self.status_label.setStyleSheet("color: red; font-size: 20px;")
+            self._status_icon_color = "red"
+            self._status_icon_char = "✗"
         elif self.status == 'incompatible':
-            self.status_label.setText("⚠️")
+            self._status_icon_color = ""
+            self._status_icon_char = "⚠️"
+        else:
+            self._status_icon_color = ""
+            self._status_icon_char = ""
+        self.status_label.setText(self._status_icon_char)
+        self.status_label.setStyleSheet(
+            f"color: {self._status_icon_color}; {FontService().get_font_css('sync_status')}"
+            if self._status_icon_color
+            else FontService().get_font_css('sync_status')
+        )
     
     def update_status_text(self):
         """更新状态文本"""
@@ -191,7 +215,10 @@ class SyncProgressWindow(QtWidgets.QDialog):
         
         # 标题
         title_label = QtWidgets.QLabel("正在同步资产包...")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        FontService().bind_widget_stylesheet(
+            title_label,
+            lambda: FontService().get_font_css("dialog_title"),
+        )
         layout.addWidget(title_label)
         
         # 统计信息

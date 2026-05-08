@@ -8,6 +8,7 @@ from orcalab.ui.property_edit.base_property_edit import (
 )
 from orcalab.ui.edit.string_edit import StringEdit
 from orcalab.ui.edit.multiline_string_edit import MultilineStringEdit
+from orcalab.ui.fonts.font_service import FontService
 
 
 def _normalize_float_vec(text: str) -> str | None:
@@ -48,6 +49,7 @@ class StringPropertyEdit(BasePropertyEdit[str]):
             editor = MultilineStringEdit()
             editor.setText(context.prop.value())
             editor.value_changed.connect(self._on_text_changed)
+            FontService().bind_widget_font(editor, 'property_edit')
             
             root_layout.addWidget(label)
             root_layout.addWidget(editor)
@@ -64,6 +66,7 @@ class StringPropertyEdit(BasePropertyEdit[str]):
             editor.value_changed.connect(self._on_text_changed)
             editor.setStyleSheet(self.base_style)
             editor.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
+            FontService().bind_widget_font(editor, 'property_edit')
 
             root_layout.addWidget(label)
             root_layout.addWidget(editor)

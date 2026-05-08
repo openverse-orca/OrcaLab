@@ -5,6 +5,7 @@ from typing import Callable, List
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.perf_log import perf_timer
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.styled_widget import StyledWidget
 from orcalab.ui.theme_service import ThemeService
 
@@ -36,10 +37,19 @@ class SectionHeader(QtWidgets.QWidget):
         self._hovered = False
         self._selected = False
 
+        self._fs = FontService()
+        self._fs_cb_id = self._fs.on_scale_changed(self._on_font_scale_changed)
+        self._fs.bind_widget_font(self, "collapsible_header")
+
         fm = self.fontMetrics()
         self._row_height = max(fm.height() + 8, 24)
         self.setFixedHeight(self._row_height)
         self.setMouseTracking(True)
+
+    def _on_font_scale_changed(self):
+        fm = self.fontMetrics()
+        self._row_height = max(fm.height() + 8, 24)
+        self.setFixedHeight(self._row_height)
 
     def _draw_branch_indicator(self, painter: QtGui.QPainter, x: int, rect: QtCore.QRect):
         indicator_size = self._CHEVRON_SIZE
@@ -130,13 +140,11 @@ class SectionHeader(QtWidgets.QWidget):
         if self._badge and badge_width > 0:
             badge_x = rect.width() - self._HPADDING - badge_width
             painter.setPen(QtGui.QPen(theme.get_color("text_disable")))
-            badge_font = font
-            badge_font.setItalic(True)
+            badge_font = FontService().apply_font_modifiers("badge_text", font)
             painter.setFont(badge_font)
             badge_rect = QtCore.QRect(badge_x, 0, badge_width, rect.height())
             badge_text = fm.elidedText(self._badge, QtCore.Qt.TextElideMode.ElideMiddle, badge_width)
             painter.drawText(badge_rect, QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight, badge_text)
-            badge_font.setItalic(False)
 
         painter.end()
 
@@ -229,13 +237,11 @@ class SectionHeader(QtWidgets.QWidget):
         if badge and badge_width > 0:
             badge_x = rect.width() - 4 - badge_width
             painter.setPen(QtGui.QPen(theme.get_color("text_disable")))
-            badge_font = font
-            badge_font.setItalic(True)
+            badge_font = FontService().apply_font_modifiers("badge_text", font)
             painter.setFont(badge_font)
             badge_rect = QtCore.QRect(badge_x, rect.y(), badge_width, rect.height())
             badge_text = fm.elidedText(badge, QtCore.Qt.TextElideMode.ElideMiddle, badge_width)
             painter.drawText(badge_rect, QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight, badge_text)
-            badge_font.setItalic(False)
 
 
 class CollapsibleSection(StyledWidget):

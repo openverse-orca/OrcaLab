@@ -14,6 +14,7 @@ import requests
 import importlib.metadata
 
 from orcalab.config_service import ConfigService
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.project_util import project_id, calculate_file_sha256
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,10 @@ class InstallProgressDialog(QtWidgets.QDialog):
         
         # 当前操作标签
         self.status_label = QtWidgets.QLabel("准备安装...")
-        self.status_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        FontService().bind_widget_stylesheet(
+            self.status_label,
+            lambda: FontService().get_font_css("installer_status"),
+        )
         layout.addWidget(self.status_label)
         
         # 详细信息标签
@@ -66,15 +70,17 @@ class InstallProgressDialog(QtWidgets.QDialog):
         self.log_text = QtWidgets.QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setMaximumHeight(150)
-        self.log_text.setStyleSheet("""
-            QTextEdit {
+        FontService().bind_widget_stylesheet(
+            self.log_text,
+            lambda: f"""
+            QTextEdit {{
                 background-color: #f5f5f5;
                 border: 1px solid #cccccc;
                 border-radius: 3px;
-                font-family: monospace;
-                font-size: 10px;
-            }
-        """)
+                {FontService().get_font_css('installer_log')}
+            }}
+        """,
+        )
         layout.addWidget(self.log_text)
         
         layout.addStretch()

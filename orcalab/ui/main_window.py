@@ -46,6 +46,7 @@ from orcalab.ui.camera.camera_bus import (
 from orcalab.ui.camera.camera_selector import CameraSelector
 from orcalab.ui.copilot import CopilotPanel
 from orcalab.ui.icon_util import make_icon, schedule_windows_taskbar_icon_refresh
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.theme_service import ThemeService
 from orcalab.ui.tool_bar import ToolBar
 from orcalab.ui.manipulator_bar import ManipulatorBar
@@ -342,18 +343,172 @@ class MainWindow(
             logger.exception("资产加载失败: %s", e)
             await self.asset_browser_widget.set_assets([])
 
+    def _build_global_stylesheet(self) -> str:
+        from orcalab.ui.theme_service import ThemeService
+        theme = ThemeService()
+        bg_color = theme.get_color_hex("bg")
+        bg_hover_color = theme.get_color_hex("bg_hover")
+        bg_select_color = theme.get_color_hex("button_bg_pressed")
+        text_color = theme.get_color_hex("text")
+        scrollbar_handle_bg = theme.get_color_hex("scrollbar_handle_bg")
+        scrollbar_handle_bg_hover = theme.get_color_hex("scrollbar_handle_bg_hover")
+        split_line_color = theme.get_color_hex("split_line")
+        fs = FontService()
+        return f"""
+            QWidget {{
+                background-color: {bg_color};
+                color: {text_color};
+            }}
+
+            QTreeView, QListView {{
+                outline: none;
+                selection-background-color: #404040;
+                alternate-background-color: #333333;
+            }}
+            QTreeView::item, QListView::item {{
+                border: none;
+                show-decoration-selected: 1;
+            }}
+            QTreeView::item:selected, QListView::item:selected {{
+                background-color: {bg_select_color};
+            }}
+            QTreeView::item:hover, QListView::item:hover {{
+                background-color: {bg_hover_color};
+            }}
+            QHeaderView::section {{
+                color: #ffffff;
+                padding: 4px;
+                {fs.get_font_css('tree_header')}
+            }}
+
+            QScrollBar {{
+                background: transparent;
+                margin: 0;
+                width: 8px;
+                border: none;
+            }}
+            QScrollBar::handle {{
+                border: 1px solid transparent;
+                border-radius: 2px;
+                margin: 1px;
+            }}
+            QScrollBar::handle:vertical {{
+                min-width: 4px;
+                min-height: 20px;
+                background: {scrollbar_handle_bg};
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {scrollbar_handle_bg_hover};
+            }}
+
+            QScrollBar::handle:horizontal {{
+                min-width: 20px;
+                min-height: 4px;
+                background: {scrollbar_handle_bg};
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background: {scrollbar_handle_bg_hover};
+            }}
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical,
+            QScrollBar::add-page:horizontal,
+            QScrollBar::sub-page:horizontal {{
+                background: transparent;
+            }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical,
+            QScrollBar::add-line:horizontal,
+            QScrollBar::sub-line:horizontal {{
+                height: 0;
+                width: 0;
+            }}
+
+            QSplitter::handle {{
+                background-color: {split_line_color};
+            }}
+            QSplitter::handle:horizontal {{
+                width: 2px;
+            }}
+            QSplitter::handle:vertical {{
+                height: 2px;
+            }}
+        """
+
+    def _build_toolbar_stylesheet(self) -> str:
+        fs = FontService()
+        return f"""
+            QWidget {{
+                background-color: #3c3c3c;
+                border-bottom: 1px solid #404040;
+            }}
+            QToolButton {{
+                background-color: #4a4a4a;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                padding: 4px;
+                margin: 2px;
+                {fs.get_font_css('button_paint')}
+            }}
+            QToolButton:hover {{
+                background-color: #5a5a5a;
+                border-color: #666666;
+            }}
+            QToolButton:pressed {{
+                background-color: #2a2a2a;
+            }}
+        """
+
+    def _build_menubar_stylesheet(self) -> str:
+        fs = FontService()
+        return f"""
+            QMenuBar {{
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border-bottom: 1px solid #404040;
+                {fs.get_font_css('body')}
+            }}
+            QMenuBar::item {{
+                background-color: transparent;
+            }}
+            QMenuBar::item:selected {{
+                background-color: #4a4a4a;
+            }}
+            QMenuBar::item:pressed {{
+                background-color: #2a2a2a;
+            }}
+            QMenu {{
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #404040;
+                border-radius: 3px;
+                {fs.get_font_css('body')}
+            }}
+            QMenu::item {{
+                padding: 6px 20px;
+            }}
+            QMenu::item:selected {{
+                background-color: #4a4a4a;
+            }}
+            QMenu::item:disabled {{
+                color: #aaaaaa;
+                background-color: transparent;
+            }}
+        """
+
     async def _init_ui(self):
         # 创建运行时状态指示器（顶部蓝色条带文字）
         self._status_indicator = QtWidgets.QLabel()
         self._status_indicator.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self._status_indicator.setFixedHeight(0)  # 默认隐藏
-        self._status_indicator.setStyleSheet("""
+        FontService().bind_widget_stylesheet(
+            self._status_indicator,
+            lambda: f"""
             background-color: #2196F3;
             color: white;
-            font-weight: bold;
-            font-size: 12px;
+            {FontService().get_font_css("status_bar")}
             padding: 4px;
-        """)
+        """,
+        )
         self._status_indicator.setText("● 运行时模式 (RunTime)")
 
         # 将状态指示器插入到窗口布局的最顶部
@@ -369,26 +524,9 @@ class MainWindow(
         layout.addWidget(self.tool_bar)
 
         # 为工具栏添加样式
-        self.tool_bar.setStyleSheet("""
-            QWidget {
-                background-color: #3c3c3c;
-                border-bottom: 1px solid #404040;
-            }
-            QToolButton {
-                background-color: #4a4a4a;
-                border: 1px solid #555555;
-                border-radius: 3px;
-                padding: 4px;
-                margin: 2px;
-            }
-            QToolButton:hover {
-                background-color: #5a5a5a;
-                border-color: #666666;
-            }
-            QToolButton:pressed {
-                background-color: #2a2a2a;
-            }
-        """)
+        self._fs = FontService()
+        self._fs.bind_widget_stylesheet(self, self._build_global_stylesheet)
+        self._fs.bind_widget_stylesheet(self.tool_bar, self._build_toolbar_stylesheet)
         connect(self.tool_bar.action_start.triggered, self.start_sim)
         connect(self.tool_bar.action_stop.triggered, self.stop_sim)
 
@@ -463,39 +601,7 @@ class MainWindow(
         layout.setSpacing(0)
         layout.addWidget(self.menu_bar)
 
-        # 为菜单栏添加样式
-        self.menu_bar.setStyleSheet("""
-            QMenuBar {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                border-bottom: 1px solid #404040;
-            }
-            QMenuBar::item {
-                background-color: transparent;
-            }
-            QMenuBar::item:selected {
-                background-color: #4a4a4a;
-            }
-            QMenuBar::item:pressed {
-                background-color: #2a2a2a;
-            }
-            QMenu {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                border: 1px solid #404040;
-                border-radius: 3px;
-            }
-            QMenu::item {
-                padding: 6px 20px;
-            }
-            QMenu::item:selected {
-                background-color: #4a4a4a;
-            }
-            QMenu::item:disabled {
-                color: #aaaaaa; /* Light gray text */
-                background-color: transparent;
-            }
-        """)
+        self._fs.bind_widget_stylesheet(self.menu_bar, self._build_menubar_stylesheet)
 
         self.menu_file = self.menu_bar.addMenu("文件")
         self.menu_edit = self.menu_bar.addMenu("编辑")
@@ -535,99 +641,7 @@ class MainWindow(
         connect(self.action_about.triggered, self.show_about_dialog)
 
         # 为主窗体设置背景色
-
-        theme = ThemeService()
-        bg_color = theme.get_color_hex("bg")
-        bg_hover_color = theme.get_color_hex("bg_hover")
-        bg_select_color = theme.get_color_hex("button_bg_pressed")
-        text_color = theme.get_color_hex("text")
-        scrollbar_handle_bg = theme.get_color_hex("scrollbar_handle_bg")
-        scrollbar_handle_bg_hover = theme.get_color_hex("scrollbar_handle_bg_hover")
-        split_line_color = theme.get_color_hex("split_line")
-
-        self.setStyleSheet(f"""
-            QWidget {{
-                background-color: {bg_color};
-                color: {text_color};
-            }}
-
-            QTreeView, QListView {{
-                outline: none;
-                selection-background-color: #404040;
-                alternate-background-color: #333333;
-            }}
-            QTreeView::item, QListView::item {{
-                border: none;
-                show-decoration-selected: 1;
-            }}
-            QTreeView::item:selected, QListView::item:selected {{
-                background-color: {bg_select_color};
-            }}
-            QTreeView::item:hover, QListView::item:hover {{
-                background-color: {bg_hover_color};
-            }}
-            QHeaderView::section {{
-                color: #ffffff;
-                padding: 4px;
-            }}
-
-
-
-            QScrollBar {{
-                background: transparent;
-                margin: 0;
-                width: 8px;
-                width: 8px;
-                border: none;
-            }}
-            QScrollBar::handle {{
-                border: 1px solid transparent;
-                border-radius: 2px;
-                margin: 1px;
-            }}
-            QScrollBar::handle:vertical {{
-                min-width: 4px;
-                min-height: 20px;
-                background: {scrollbar_handle_bg};
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background: {scrollbar_handle_bg_hover};
-            }}
-
-            QScrollBar::handle:horizontal {{
-                min-width: 20px;
-                min-height: 4px;
-                background: {scrollbar_handle_bg};
-            }}
-            QScrollBar::handle:horizontal:hover {{
-                background: {scrollbar_handle_bg_hover};
-            }}
-            QScrollBar::add-page:vertical,
-            QScrollBar::sub-page:vertical,
-            QScrollBar::add-page:horizontal,
-            QScrollBar::sub-page:horizontal {{
-            background: transparent;
-            }}
-            QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical,
-            QScrollBar::add-line:horizontal,
-            QScrollBar::sub-line:horizontal {{
-            height: 0;
-            width: 0;
-            }}
-
-            
-
-            QSplitter::handle {{
-                background-color: {split_line_color};
-            }}
-            QSplitter::handle:horizontal {{
-                width: 2px;
-            }}
-            QSplitter::handle:vertical {{
-                height: 2px;
-            }}
-        """)
+        # (样式表由 _build_global_stylesheet + bind_widget_stylesheet 管理)
 
         # 初始化按钮状态
         self.tool_bar.action_start.setEnabled(True)
@@ -876,9 +890,7 @@ class MainWindow(
             row_label.addStretch()
             label = QtWidgets.QLabel("场景加载中", self._scene_loading_dialog)
             label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            font = label.font()
-            font.setPointSize(10)
-            label.setFont(font)
+            self._fs.bind_widget_font(label, "loading_dialog")
             row_label.addWidget(label)
             row_label.addStretch()
             layout.addLayout(row_label)
@@ -1045,6 +1057,7 @@ class MainWindow(
     def show_about_dialog(self):
         version = self.config_service._get_package_version()
 
+        fs = FontService()
         about_html = f"""
         <div style="font-family: Arial, sans-serif;">
             <h2 style="color: #007acc; margin-bottom: 10px;">OrcaLab</h2>
@@ -1064,7 +1077,7 @@ class MainWindow(
                    https://github.com/openverse-orca/OrcaLab
                 </a>
             </p>
-            <p style="margin: 15px 0 5px 0; color: #666; font-size: 11px;">
+            <p style="margin: 15px 0 5px 0; color: #666; font-size: {fs.get_font_size_px("small")};">
                 云原生机器人仿真平台，提供先进的UI和资产管理功能
             </p>
         </div>
@@ -1077,28 +1090,29 @@ class MainWindow(
         msg_box.setIconPixmap(QtGui.QPixmap())
         msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Ok)
 
-        msg_box.setStyleSheet("""
-            QMessageBox {
+        fs = FontService()
+        msg_box.setStyleSheet(f"""
+            QMessageBox {{
                 background-color: #2b2b2b;
-            }
-            QMessageBox QLabel {
+            }}
+            QMessageBox QLabel {{
                 color: #ffffff;
                 background-color: #2b2b2b;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 background-color: #007acc;
                 color: #ffffff;
                 border: none;
                 border-radius: 3px;
                 padding: 6px 20px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
+                {fs.get_font_css("button")}
+            }}
+            QPushButton:hover {{
                 background-color: #005a9e;
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background-color: #004578;
-            }
+            }}
         """)
 
         msg_box.exec()

@@ -149,3 +149,9 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
 
     def toggle_collapse(self):
         self._section.toggle_collapse()
+
+    def set_read_only(self, read_only: bool):
+        for prop in self._group.properties:
+            prop.set_read_only(read_only)
+        for edit in self._property_edits:
+            edit.set_read_only(read_only)

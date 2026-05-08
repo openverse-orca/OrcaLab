@@ -2,6 +2,8 @@ from typing import Set
 
 from PySide6 import QtCore, QtWidgets
 
+from orcalab.ui.fonts.font_service import FontService
+
 
 class FilterBar(QtWidgets.QWidget):
     filter_changed = QtCore.Signal()
@@ -13,14 +15,18 @@ class FilterBar(QtWidgets.QWidget):
         layout.setContentsMargins(4, 2, 4, 2)
         layout.setSpacing(4)
 
+        fs = FontService()
+
         self._search_edit = QtWidgets.QLineEdit()
         self._search_edit.setPlaceholderText("搜索属性...")
         self._search_edit.textChanged.connect(self._on_filter_changed)
+        fs.bind_widget_font(self._search_edit, 'property_edit')
         layout.addWidget(self._search_edit)
 
         self._type_combo = QtWidgets.QComboBox()
         self._type_combo.addItem("全部类型", None)
         self._type_combo.currentIndexChanged.connect(self._on_filter_changed)
+        fs.bind_widget_font(self._type_combo, 'property_edit')
         layout.addWidget(self._type_combo)
 
     def set_available_types(self, types: list[str]):

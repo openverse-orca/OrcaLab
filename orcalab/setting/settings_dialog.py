@@ -6,6 +6,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from orcalab.config_service import ConfigService
 from orcalab.remote_scene import RemoteScene
 from orcalab.ui.checkbox import CheckBox
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.text_label import TextLabel
 from orcalab.ui.theme_service import ThemeService
 from orcalab.ui.viewport import Viewport
@@ -119,12 +120,19 @@ def _vscode_style_setting_row(
     layout.setContentsMargins(_SETTING_BLOCK_H_MARGIN, 5, _SETTING_BLOCK_H_MARGIN, 5)
     layout.setSpacing(4)
 
+    fs = FontService()
     title_label = TextLabel(title)
-    title_label.setStyleSheet("font-size: 13px; font-weight: 600;")
+    fs.bind_widget_stylesheet(
+        title_label,
+        lambda: fs.get_font_css('setting_title'),
+    )
 
     desc_label = TextLabel(description)
     if style_description:
-        desc_label.setStyleSheet("color: #888888; font-size: 12px;")
+        fs.bind_widget_stylesheet(
+            desc_label,
+            lambda: f"color: #888888; {fs.get_font_css('body')}",
+        )
 
     control_row = QtWidgets.QHBoxLayout()
     control_row.setContentsMargins(0, 8, 0, 0)
@@ -222,8 +230,46 @@ class SettingsDialog(QtWidgets.QDialog):
         root_layout.addWidget(
             _vscode_style_setting_row(
                 "垂直同步 (VSync)",
-                "开启 VSync 可防止画面撕裂，并在混合 GPU 笔记本上避免卡死；关闭可提高帧率，但可能在部分机型上导致卡死，需重启生效",
+                "开启 VSync 可防止画面撕裂，关闭可提高帧率。需重启生效",
                 self.vsync_checkbox,
+                self._setting_row_hover_bg,
+            )
+        )
+
+        # —— 字体缩放 ——
+        font_service = FontService()
+        font_scale_widget = QtWidgets.QWidget()
+        font_scale_layout = QtWidgets.QHBoxLayout(font_scale_widget)
+        font_scale_layout.setContentsMargins(0, 0, 0, 0)
+        font_scale_layout.setSpacing(4)
+
+        self._font_scale_label = QtWidgets.QLabel(f"{font_service.get_scale_percent()}%")
+        self._font_scale_label.setFixedWidth(48)
+        self._font_scale_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        font_scale_down_btn = QtWidgets.QPushButton("-")
+        font_scale_down_btn.setFixedSize(28, 28)
+        font_scale_down_btn.clicked.connect(self._on_font_scale_down)
+
+        font_scale_up_btn = QtWidgets.QPushButton("+")
+        font_scale_up_btn.setFixedSize(28, 28)
+        font_scale_up_btn.clicked.connect(self._on_font_scale_up)
+
+        font_scale_reset_btn = QtWidgets.QPushButton("重置")
+        font_scale_reset_btn.setFixedHeight(28)
+        font_scale_reset_btn.clicked.connect(self._on_font_scale_reset)
+
+        font_scale_layout.addWidget(font_scale_down_btn)
+        font_scale_layout.addWidget(self._font_scale_label)
+        font_scale_layout.addWidget(font_scale_up_btn)
+        font_scale_layout.addWidget(font_scale_reset_btn)
+        font_scale_layout.addStretch()
+
+        root_layout.addWidget(
+            _vscode_style_setting_row(
+                "界面字体缩放",
+                "调整全局字体大小百分比，按 10% 步进，范围 50%-200%。需重启生效",
+                font_scale_widget,
                 self._setting_row_hover_bg,
             )
         )
@@ -285,6 +331,12 @@ class SettingsDialog(QtWidgets.QDialog):
 
     def _apply_theme(self):
         theme = ThemeService()
+        self._theme = theme
+        fs = FontService()
+        fs.bind_widget_stylesheet(self, self._build_stylesheet)
+
+    def _build_stylesheet(self) -> str:
+        theme = self._theme
         bg_color = theme.get_color_hex("bg")
         text_color = theme.get_color_hex("text")
         split_line_color = theme.get_color_hex("split_line")
@@ -293,8 +345,8 @@ class SettingsDialog(QtWidgets.QDialog):
         button_bg_pressed = theme.get_color_hex("button_bg_pressed")
         field_focus_border = theme.get_color_hex("button_bg_selected")
 
-        self.setStyleSheet(
-            f"""
+        fs = FontService()
+        return f"""
             QDialog {{
                 background-color: {bg_color};
                 color: {text_color};
@@ -305,7 +357,7 @@ class SettingsDialog(QtWidgets.QDialog):
                 padding: 3px 6px;
                 background-color: {button_bg};
                 color: {text_color};
-                font-size: 12px;
+                {fs.get_font_css('body')}
             }}
             QLineEdit#OrcaSettingsNumericField:focus {{
                 border: 1px solid {field_focus_border};
@@ -319,7 +371,7 @@ class SettingsDialog(QtWidgets.QDialog):
                 border-radius: 4px;
                 padding: 8px 20px;
                 color: {text_color};
-                font-size: 13px;
+                {fs.get_font_css('setting_title')}
                 min-width: 80px;
             }}
             QPushButton:hover {{
@@ -339,7 +391,7 @@ class SettingsDialog(QtWidgets.QDialog):
                 padding: 3px 6px;
                 background-color: {button_bg};
                 color: {text_color};
-                font-size: 12px;
+                {fs.get_font_css('body')}
                 min-width: 96px;
             }}
             QComboBox#OrcaSettingsFpsCombo:hover {{
@@ -355,10 +407,9 @@ class SettingsDialog(QtWidgets.QDialog):
                 color: {text_color};
                 selection-background-color: {button_bg_hover};
                 selection-color: {text_color};
-                font-size: 12px;
+                {fs.get_font_css('body')}
             }}
         """
-        )
 
     def accept(self):
         config = ConfigService()
@@ -391,3 +442,18 @@ class SettingsDialog(QtWidgets.QDialog):
             viewport.set_target_fps(fps_value)
 
         super().accept()
+
+    def _on_font_scale_up(self):
+        font_service = FontService()
+        font_service.increase_scale()
+        self._font_scale_label.setText(f"{font_service.get_scale_percent()}%")
+
+    def _on_font_scale_down(self):
+        font_service = FontService()
+        font_service.decrease_scale()
+        self._font_scale_label.setText(f"{font_service.get_scale_percent()}%")
+
+    def _on_font_scale_reset(self):
+        font_service = FontService()
+        font_service.reset_scale()
+        self._font_scale_label.setText(f"{font_service.get_scale_percent()}%")

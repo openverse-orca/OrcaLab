@@ -11,12 +11,10 @@ from orcalab.application_util import get_local_scene, get_remote_scene
 from orcalab.entity_info import EntityInfo
 from orcalab.path import Path
 from orcalab.perf_log import perf_timer, perf_log
-from orcalab.ui.collapsible.collapsible_section import CollapsibleSection
 from orcalab.ui.filter_bar import FilterBar
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.property_data_store import PropertyDataStore
 from orcalab.ui.property_edit.property_group_edit import PropertyGroupEdit
-from orcalab.ui.property_edit.transform_edit import TransformEdit
-from orcalab.ui.theme_service import ThemeService
 
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
@@ -38,11 +36,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._actor: BaseActor | None = None
         self._entity: EntityInfo | None = None
         self._actor_path: Path | None = None
-        self._transform_edit: TransformEdit | None = None
         self._property_edits: list[PropertyGroupEdit] = []
         self._raw_entries: list[EntityPropertyGroupEntry] = []
 
-        self._section_cache: OrderedDict[tuple, tuple[TransformEdit | None, list[PropertyGroupEdit]]] = OrderedDict()
+        self._section_cache: OrderedDict[tuple, list[PropertyGroupEdit]] = OrderedDict()
         self._active_cache_key: tuple | None = None
         self._pending_render_task: asyncio.Task | None = None
 
@@ -132,10 +129,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             self._pending_render_task = None
 
     def _clear_cache(self):
-        for cached_transform, cached_edits in self._section_cache.values():
-            if cached_transform is not None:
-                cached_transform.disconnect_buses()
-                cached_transform.deleteLater()
+        for cached_edits in self._section_cache.values():
             for edit in cached_edits:
                 edit.disconnect_buses()
                 edit.deleteLater()
@@ -144,44 +138,44 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
     def _evict_cache_if_needed(self):
         while len(self._section_cache) > _MAX_CACHE_SIZE:
-            oldest_key, (oldest_transform, oldest_edits) = next(iter(self._section_cache.items()))
+            oldest_key, oldest_edits = next(iter(self._section_cache.items()))
             if oldest_key == self._active_cache_key:
                 self._section_cache.move_to_end(oldest_key)
                 if len(self._section_cache) <= _MAX_CACHE_SIZE:
                     break
-                oldest_key, (oldest_transform, oldest_edits) = next(iter(self._section_cache.items()))
-            if oldest_transform is not None:
-                oldest_transform.disconnect_buses()
-                oldest_transform.deleteLater()
+                oldest_key, oldest_edits = next(iter(self._section_cache.items()))
             for edit in oldest_edits:
                 edit.disconnect_buses()
                 edit.deleteLater()
             del self._section_cache[oldest_key]
 
+    def _cached_widget_ids(self) -> set[int]:
+        ids = set()
+        for edits in self._section_cache.values():
+            for edit in edits:
+                ids.add(id(edit))
+        return ids
+
     def _hide_active_sections(self):
         if self._active_cache_key is not None:
             cached = self._section_cache.get(self._active_cache_key)
             if cached is not None:
-                cached_transform, cached_edits = cached
-                if cached_transform is not None:
-                    cached_transform.hide()
-                for edit in cached_edits:
+                for edit in cached:
                     edit.hide()
 
         for edit in self._property_edits:
             edit.hide()
         self._property_edits.clear()
 
-        if self._transform_edit is not None:
-            self._transform_edit.hide()
-            self._transform_edit = None
-
+        cached_ids = self._cached_widget_ids()
         while self._property_layout.count():
             item = self._property_layout.takeAt(0)
             if item.widget():
                 w = item.widget()
                 self._property_layout.removeWidget(w)
-                w.setParent(None)
+                w.hide()
+                if id(w) not in cached_ids:
+                    w.deleteLater()
             elif item.layout():
                 self._property_layout.removeItem(item)
 
@@ -190,16 +184,15 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             edit.disconnect_buses()
         self._property_edits.clear()
 
-        if self._transform_edit:
-            self._transform_edit.disconnect_buses()
-            self._transform_edit = None
-
+        cached_ids = self._cached_widget_ids()
         while self._property_layout.count():
             item = self._property_layout.takeAt(0)
             if item.widget():
                 w = item.widget()
                 self._property_layout.removeWidget(w)
-                w.setParent(None)
+                w.hide()
+                if id(w) not in cached_ids:
+                    w.deleteLater()
             elif item.layout():
                 self._property_layout.removeItem(item)
 
@@ -210,6 +203,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             QtCore.Qt.AlignmentFlag.AlignCenter
             | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
+        FontService().bind_widget_font(label, 'body')
         self._property_layout.addWidget(label)
 
     def _load_properties(self):
@@ -243,26 +237,21 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         if cached is None:
             return
 
-        cached_transform, cached_edits = cached
-        self._property_edits = list(cached_edits)
+        self._property_edits = list(cached)
 
+        fs = FontService()
         if self._entity is not None:
             label = QtWidgets.QLabel(f"Entity: {self._entity.name}")
             label.setContentsMargins(4, 4, 4, 4)
+            fs.bind_widget_font(label, 'group_title')
             self._property_layout.addWidget(label)
-
-            self._add_entity_transform_display(self._entity)
         elif self._actor is not None:
             label = QtWidgets.QLabel(f"Actor: {self._actor.name}")
             label.setContentsMargins(4, 4, 4, 4)
+            fs.bind_widget_font(label, 'group_title')
             self._property_layout.addWidget(label)
 
-            if cached_transform is not None:
-                self._transform_edit = cached_transform
-                self._property_layout.addWidget(cached_transform)
-                cached_transform.show()
-
-        for edit in cached_edits:
+        for edit in cached:
             self._property_layout.addWidget(edit)
             edit.show()
 
@@ -271,13 +260,11 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
     def _load_actor_properties(self):
         assert self._actor is not None
 
+        fs = FontService()
         label = QtWidgets.QLabel(f"Actor: {self._actor.name}")
         label.setContentsMargins(4, 4, 4, 4)
+        fs.bind_widget_font(label, 'group_title')
         self._property_layout.addWidget(label)
-
-        self._transform_edit = TransformEdit(self, self._actor, 160)
-        self._transform_edit.connect_buses()
-        self._property_layout.addWidget(self._transform_edit)
 
         if self._actor_path is None:
             return
@@ -293,43 +280,16 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         assert self._entity is not None
         assert self._actor is not None
 
+        fs = FontService()
         label = QtWidgets.QLabel(f"Entity: {self._entity.name}")
         label.setContentsMargins(4, 4, 4, 4)
+        fs.bind_widget_font(label, 'group_title')
         self._property_layout.addWidget(label)
-
-        self._add_entity_transform_display(self._entity)
 
         if self._actor_path is None:
             return
 
         self._fetch_and_render_entity(self._actor_path, self._entity.entity_id)
-
-    def _add_entity_transform_display(self, _entity: EntityInfo):
-        theme = ThemeService()
-        text_disable = theme.get_color_hex("text_disable")
-
-        def _create_transform_readonly() -> QtWidgets.QWidget:
-            content = QtWidgets.QWidget()
-            form = QtWidgets.QFormLayout(content)
-            form.setContentsMargins(4, 4, 4, 4)
-            form.setSpacing(4)
-            form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
-
-            for field_name in ("Position:", "Rotation:", "Scale:"):
-                lbl = QtWidgets.QLabel("(由引擎驱动)")
-                lbl.setStyleSheet(f"color: {text_disable}; font-style: italic;")
-                form.addRow(field_name, lbl)
-
-            return content
-
-        section = CollapsibleSection(
-            parent=self,
-            title="Transform",
-            badge="只读",
-            collapsed=False,
-            content_factory=_create_transform_readonly,
-        )
-        self._property_layout.addWidget(section)
 
     def _fetch_and_render_all(self, actor_path: Path):
         async def _fetch():
@@ -397,7 +357,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                             self._actor.property_groups = sorted_groups
 
                         with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
-                            self._render_property_groups(sorted_groups, 160)
+                            self._render_property_groups(sorted_groups, 160, read_only=True)
                     else:
                         with perf_timer("property_editor._fetch_and_render_entity.grpc_batch", feature="PROPERTY"):
                             batch_results = await get_remote_scene().get_entity_property_groups_batch(
@@ -423,14 +383,31 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                             self._actor.property_groups = all_groups
 
                         with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
-                            self._render_property_groups(all_groups, 160)
+                            self._render_property_groups(all_groups, 160, read_only=True)
             except Exception as e:
                 logger.warning(f"Failed to load entity components: {e}", exc_info=True)
 
         self._pending_render_task = asyncio.create_task(_fetch())
 
+    def _clear_property_groups_only(self):
+        for edit in self._property_edits:
+            edit.disconnect_buses()
+        self._property_edits.clear()
+
+        cached_ids = self._cached_widget_ids()
+        i = self._property_layout.count() - 1
+        while i >= 0:
+            item = self._property_layout.itemAt(i)
+            if item and item.widget() and isinstance(item.widget(), PropertyGroupEdit):
+                w = item.widget()
+                self._property_layout.removeWidget(w)
+                w.hide()
+                if id(w) not in cached_ids:
+                    w.deleteLater()
+            i -= 1
+
     def _render_from_data_store(self):
-        self._clear_property_layout()
+        self._clear_property_groups_only()
 
         if self._actor is None:
             return
@@ -446,6 +423,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         if not groups:
             label = QtWidgets.QLabel("无匹配属性")
             label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            FontService().bind_widget_font(label, 'body')
             self._property_layout.addWidget(label)
             return
 
@@ -481,7 +459,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         return sorted(groups, key=_sort_key)
 
     def _render_property_groups(
-        self, groups: list[ActorPropertyGroup], label_width: int
+        self, groups: list[ActorPropertyGroup], label_width: int, read_only: bool = False
     ):
         if self._actor is None:
             return
@@ -506,6 +484,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                     collapsed = i > 0
                     edit = PropertyGroupEdit(self, actor, group, label_width, collapsed=collapsed)
                     edit.connect_buses()
+
+                    if read_only:
+                        edit.set_read_only(True)
+
                     new_edits.append(edit)
                     self._property_edits.append(edit)
                     self._property_layout.addWidget(edit)
@@ -516,7 +498,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                     await asyncio.sleep(0)
 
             if cache_key is not None:
-                self._section_cache[cache_key] = (self._transform_edit, new_edits)
+                self._section_cache[cache_key] = new_edits
                 self._active_cache_key = cache_key
                 self._evict_cache_if_needed()
 
@@ -559,22 +541,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                         self.clear_selection()
             else:
                 actor_path, entity_id = new_active_entity
-                with perf_timer("property_editor.on_active_entity_changed.find_actor", feature="PROPERTY"):
-                    local_scene = get_local_scene()
-                    actor = local_scene.find_actor_by_path(actor_path)
-                if actor is None:
-                    logger.warning(
-                        f"[on_active_entity_changed] actor not found for path={actor_path}"
-                    )
-                    return
-
-                with perf_timer("property_editor.on_active_entity_changed.find_entity", feature="PROPERTY"):
-                    entity_info = local_scene.find_entity_info_by_id(actor_path, entity_id)
-                if entity_info is None:
-                    logger.warning(
-                        f"[on_active_entity_changed] entity_info not found for "
-                        f"actor_path={actor_path}, entity_id={entity_id}"
-                    )
-                    return
-
-                self.set_entity(actor, entity_info, actor_path)
+                local_scene = get_local_scene()
+                actor = local_scene.find_actor_by_path(actor_path)
+                if actor is not None:
+                    entity_root = local_scene.get_entity_root(actor_path)
+                    entity_info = entity_root.find_by_entity_id(entity_id) if entity_root else None
+                    if entity_info is not None:
+                        self.set_entity(actor, entity_info, actor_path)

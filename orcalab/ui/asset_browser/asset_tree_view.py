@@ -1,6 +1,7 @@
 from typing import List
 from PySide6 import QtCore, QtWidgets
 from orcalab.ui.asset_browser.asset_info import AssetInfo
+from orcalab.ui.fonts.font_service import FontService
 
 
 class AssetTreeView(QtWidgets.QTreeWidget):
@@ -13,7 +14,11 @@ class AssetTreeView(QtWidgets.QTreeWidget):
         self.setMaximumWidth(300)
         
         self._assets: List[AssetInfo] = []
-        # self._setup_style()
+        
+        fs = FontService()
+        header = self.header()
+        header.setFont(fs.get_font("tree_header"))
+        fs.bind_widget_font(header, "tree_header")
         
         self.itemClicked.connect(self._on_item_clicked)
 

@@ -1,6 +1,7 @@
 from typing import override
 from PySide6 import QtWidgets
 
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.property_edit.base_property_edit import (
     BasePropertyEdit,
     PropertyEditContext,
@@ -39,6 +40,8 @@ class ComboBoxPropertyEdit(BasePropertyEdit[int]):
 
         root_layout.addWidget(label)
         root_layout.addWidget(editor)
+
+        FontService().bind_widget_font(editor, 'property_edit')
 
         self._editor = editor
         self._block_events = False
