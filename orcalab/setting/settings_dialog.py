@@ -16,7 +16,20 @@ _SETTING_BLOCK_H_MARGIN = 12
 _MOVE_SENS_RANGE = (0.1, 10.0)
 _ROT_SENS_RANGE = (0.1, 10.0)
 
-_FPS_OPTIONS = [30, 60, 90, 120, 160]
+_FPS_OPTIONS = [0, 30, 60, 90, 120, 144, 160, 240]
+
+_AUTO_FPS_LABEL = "自动"
+
+
+def _filtered_fps_options() -> list:
+    screen_fps = Viewport._detect_screen_refresh_rate()
+    result = [0]
+    for fps in _FPS_OPTIONS:
+        if fps > 0 and fps <= screen_fps:
+            result.append(fps)
+    if len(result) == 1:
+        result.append(screen_fps)
+    return result
 
 
 class _SettingsNumericLineEdit(QtWidgets.QLineEdit):
@@ -198,14 +211,15 @@ class SettingsDialog(QtWidgets.QDialog):
 
         self.fps_combo = QtWidgets.QComboBox()
         self.fps_combo.setObjectName("OrcaSettingsFpsCombo")
-        for fps in _FPS_OPTIONS:
-            self.fps_combo.addItem(f"{fps} FPS", fps)
+        for fps in _filtered_fps_options():
+            label = f"{_AUTO_FPS_LABEL} ({Viewport._detect_screen_refresh_rate()} FPS)" if fps == 0 else f"{fps} FPS"
+            self.fps_combo.addItem(label, fps)
         current_fps = config.lock_fps_value()
         idx = self.fps_combo.findData(current_fps)
         if idx >= 0:
             self.fps_combo.setCurrentIndex(idx)
         else:
-            default_idx = self.fps_combo.findData(120)
+            default_idx = self.fps_combo.findData(0)
             if default_idx >= 0:
                 self.fps_combo.setCurrentIndex(default_idx)
         root_layout.addWidget(
