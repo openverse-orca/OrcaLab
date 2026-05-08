@@ -1196,6 +1196,7 @@ class MainWindow(
             # 6. 停止MCP服务
             if hasattr(self, 'mcp_service'):
                 self.mcp_service.stop()
+                self.config_service.clear_mcp_status()
                 logger.info("cleanup: MCP服务已停止")
 
             # 7. 强制垃圾回收

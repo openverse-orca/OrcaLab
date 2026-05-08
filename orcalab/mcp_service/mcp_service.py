@@ -1197,6 +1197,7 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.load_layout)
 
     async def run(self):
+        self.config_service.mark_mcp_ready()
         await self.mcp.run_async(transport="http", port=self.port)
 
     def stop(self):
