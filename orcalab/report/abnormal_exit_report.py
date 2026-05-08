@@ -136,7 +136,7 @@ async def send_abnormal_exit_report():
     username = token_data.get("username", "") if token_data else ""
     access_token = token_data.get("access_token", "") if token_data else ""
 
-    url = f"http://47.100.47.219/api/orcalab/abnormal_report/"
+    url = f"{config_service.web_server_url()}api/orcalab/abnormal_report/"
     headers = {
         'Authorization': f'Bearer {access_token}',
         'username': username,
