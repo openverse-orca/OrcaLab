@@ -635,6 +635,7 @@ class SceneEditService(SceneEditRequest):
             AddActorRequest(
                 new_root_actor,
                 root_actor_parent_path,
+                root_actor_path,
                 insert_pos,
                 root_actor,
             )
@@ -728,9 +729,12 @@ class SceneEditService(SceneEditRequest):
 
         for request in requests:
             if isinstance(request.actor, AssetActor):
-                bias = random.uniform(0.1, 0.2)
+                aabb = []
+                await self.remote_scene.get_actor_asset_aabb(request.root_actor_path, aabb)
+                bias_x = aabb[3] - aabb[0]
+                bias_y = aabb[4] - aabb[1]
                 transform_bias = Transform(
-                    position=np.array([bias, bias, 0.0]),
+                    position=np.array([bias_x, bias_y, 0.0]),
                     rotation=np.array([1.0, 0.0, 0.0, 0.0]),
                     scale=1.0
                 )

@@ -113,12 +113,14 @@ class SceneLayoutHelper:
 
     @staticmethod
     def _find_tree_node_by_display_name(nodes, display_name: str):
+        if not nodes:
+            return None
         for node in nodes:
-            if node.display_name == display_name:
-                return node
             found = SceneLayoutHelper._find_tree_node_by_display_name(node.children, display_name)
             if found is not None:
                 return found
+            if node.display_name == display_name:
+                    return node
         return None
 
     @staticmethod

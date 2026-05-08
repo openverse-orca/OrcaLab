@@ -316,7 +316,7 @@ class ConfigService:
         return self.config["orcalab"].get("init_paks", True)
 
     def lock_fps(self) -> str:
-        fps = self.config.get("orcalab", {}).get("lock_fps", 120)
+        fps = self.config.get("orcalab", {}).get("lock_fps", 0)
         if fps == 30:
             return "--lockFps30"
         elif fps == 60:
@@ -325,7 +325,7 @@ class ConfigService:
             return ""
 
     def lock_fps_value(self) -> int:
-        return int(self.config.get("orcalab", {}).get("lock_fps", 120))
+        return int(self.config.get("orcalab", {}).get("lock_fps", 0))
 
     def set_lock_fps(self, value: int) -> None:
         self.config.setdefault("orcalab", {})["lock_fps"] = value

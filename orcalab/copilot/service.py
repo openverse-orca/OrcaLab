@@ -13,6 +13,8 @@ import os
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 from orcalab.token_storage import TokenStorage
+import logging
+logger = logging.getLogger(__name__)
 
 
 class CopilotService:
@@ -104,6 +106,7 @@ class CopilotService:
                     pass
             
             if response.status_code != 200:
+                logger.debug(f"Server error: {response.status_code} - {response.text}")
                 raise Exception(f"Server error: {response.status_code} - {response.text}")
             
             generation_data = response.json()
@@ -165,13 +168,16 @@ class CopilotService:
             )
             
             if response.status_code != 200:
+                logger.debug(f"Parse error: {response.status_code} - {response.text}")
                 raise Exception(f"Parse error: {response.status_code} - {response.text}")
             
             return response.json()
             
         except requests.exceptions.RequestException as e:
+            logger.debug(f"Parse request error: {str(e)}")
             raise Exception(f"Parse request error: {str(e)}")
         except Exception as e:
+            logger.debug(f"Parse error: {str(e)}")
             raise Exception(f"Parse error: {str(e)}")
     
     def _make_parse_request(self) -> requests.Response:

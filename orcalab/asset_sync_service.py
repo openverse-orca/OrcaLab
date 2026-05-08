@@ -171,11 +171,11 @@ class AssetSyncService:
             response = requests.get(url, headers=self.get_headers(), timeout=self.timeout)
             
             if response.status_code == 401:
-                self.log("❌ 认证失败（Token 可能已过期）")
+                logger.debug("认证失败（Token 可能已过期）. Status code: %d", response.status_code)
                 raise TokenExpiredException("Token 已过期")
             
             if response.status_code != 200:
-                self.log(f"❌ 查询失败: HTTP {response.status_code}")
+                logger.debug("查询失败: HTTP %d", response.status_code)
                 return [],[]
             
             data = response.json()
@@ -183,19 +183,19 @@ class AssetSyncService:
             incompatible_packages = data.get('incompatiblePackages', [])
             
             self.callbacks.on_query_complete(packages)
-            self.log(f"✓ 查询成功: {len(packages) + len(incompatible_packages)} 个资产包")
+            logger.debug(f"✓ 查询成功: {len(packages) + len(incompatible_packages)} 个资产包")
             
             return packages, incompatible_packages
 
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-            self.log(f"❌ 连接资产库失败: {e}")
+            logger.debug(f"❌ 连接资产库失败: {e}")
             raise ConnectionFailedException("连接资产库失败")
             
         except TokenExpiredException:
             raise
             
         except Exception as e:
-            self.log(f"❌ 查询失败: {e}")
+            logger.debug(f"❌ 查询失败: {e}")
             return [],[]
     
     def check_local_packages(self, packages: List[Dict], incompatible_packages: List[Dict]) -> tuple[List[Dict], List[str]]:
@@ -289,19 +289,20 @@ class AssetSyncService:
             response = requests.get(url, headers=self.get_headers(), timeout=self.timeout)
             
             if response.status_code != 200:
-                self.log(f"❌ 获取下载链接失败: HTTP {response.status_code}")
+                logger.debug(f"❌ 获取下载链接失败: HTTP {response.status_code}")
                 return None
             
             return response.json()
             
         except Exception as e:
-            self.log(f"❌ 获取下载链接失败: {e}")
+            logger.debug(f"❌ 获取下载链接失败: {e}")
             return None
     
     def get_image_url(self, asset_id: str) -> str:
         get_asset_metadata_url = f"{self.base_url}/asset/{asset_id}/"
         response = requests.get(get_asset_metadata_url, headers=self.get_headers(), timeout=self.timeout)
         if response.status_code != 200:
+            logger.debug(f"Get image url failed. Asset Id: {asset_id} Status: {response.status_code}")
             return None
         asset_metadata = response.json()
         return json.dumps(asset_metadata, ensure_ascii=False, indent=2)
@@ -401,13 +402,13 @@ class AssetSyncService:
             
             response = requests.get(f"{self.base_url}/meta/?isPublished=true", headers=self.get_headers(), timeout=self.timeout)
             if response.status_code != 200:
-                self.log(f"❌ 获取metadata失败: HTTP {response.status_code}")
+                logger.debug(f"❌ 获取metadata失败: HTTP {response.status_code}")
                 return
             remote_metadata_published = response.json()
             
             response = requests.get(f"{self.base_url}/meta/?isPublished=false", headers=self.get_headers(), timeout=self.timeout)
             if response.status_code != 200:
-                self.log(f"❌ 获取metadata失败: HTTP {response.status_code}")
+                logger.debug(f"❌ 获取metadata失败: HTTP {response.status_code}")
                 return
             remote_metadata_unpublished = response.json()
             remote_metadata = remote_metadata_published + remote_metadata_unpublished
@@ -416,7 +417,7 @@ class AssetSyncService:
             total_remote = len(remote_metadata)
             for index, sub_metadata in enumerate(remote_metadata, start=1):
                 if self._cancelled():
-                    self.log("元数据同步已取消")
+                    logger.debug("元数据同步已取消")
                     return
                 if total_remote > 0 and (index == 1 or index % 20 == 0 or index == total_remote):
                     self.callbacks.on_metadata_sync('scanning', index, total_remote)
@@ -458,7 +459,7 @@ class AssetSyncService:
             response = requests.get(download_url, stream=True, timeout=self.timeout * 2)
 
             if response.status_code != 200:
-                self.log(f"❌ 下载失败: HTTP {response.status_code}")
+                logger.debug(f"❌ 下载失败: HTTP {response.status_code}")
                 self.callbacks.on_download_complete(package_id, False, f"HTTP {response.status_code}")
                 return False
             
@@ -470,7 +471,7 @@ class AssetSyncService:
             with open(temp_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if self._cancelled():
-                        self.log(f"下载已取消: {file_name}")
+                        logger.debug(f"下载已取消: {file_name}")
                         if temp_path.exists():
                             temp_path.unlink()
                         self.callbacks.on_download_complete(package_id, False, "已取消")
@@ -512,11 +513,11 @@ class AssetSyncService:
             temp_path.rename(local_path)
             
             self.callbacks.on_download_complete(package_id, True)
-            self.log(f"✓ {file_name} 下载完成")
+            logger.debug(f"✓ {file_name} 下载完成")
             return True
             
         except Exception as e:
-            self.log(f"❌ 下载失败: {e}")
+            logger.debug(f"❌ 下载失败: {e}")
             if temp_path.exists():
                 temp_path.unlink()
             self.callbacks.on_download_complete(package_id, False, str(e))
@@ -529,9 +530,9 @@ class AssetSyncService:
                 pak_file = self.cache_folder / file_name
                 shutil.copy2(pak_file, self.downloaded_packages_folder / file_name)
                 pak_file.unlink()
-                self.log(f"✓ 已删除 {file_name}")
+                logger.debug(f"✓ 已删除 {file_name}")
             except Exception as e:
-                self.log(f"✗ 删除失败 {file_name}: {e}")
+                logger.debug(f"✗ 删除失败 {file_name}: {e}")
     
     def sync_packages(self, init_paks: bool = False) -> bool:
         """

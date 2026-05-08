@@ -54,10 +54,12 @@ class HttpService(HttpServiceRequest):
         async with aiohttp.ClientSession() as session:
             async with session.get(metadata_url, headers=self._get_headers()) as response:
                 if response.status != 200:
+                    logger.debug(f"get all metadata failed. Status: {response.status}. MetadataUrl: {metadata_url}")
                     return None
                 metadata_published = await response.json()
                 async with session.get(metadata_url_unpublished, headers=self._get_headers()) as response:
                     if response.status != 200:
+                        logger.debug(f"get all metadata failed. Status: {response.status} MetadataUrl: {metadata_url_unpublished}")
                         return None
                     metadata_unpublished = await response.json()
                 metadata = metadata_published + metadata_unpublished
@@ -122,6 +124,7 @@ class HttpService(HttpServiceRequest):
         async with aiohttp.ClientSession() as session:
             async with session.get(subscriptions_url, headers=self._get_headers()) as response:
                 if response.status != 200:
+                    logger.debug(f"get subscriptions failed. Status: {response.status}")
                     return None
                 subscriptions = await response.json()
                 subscriptions = json.dumps(subscriptions, ensure_ascii=False, indent=2)
@@ -177,6 +180,7 @@ class HttpService(HttpServiceRequest):
         async with aiohttp.ClientSession() as session:
             async with session.get(asset_url) as response:
                 if response.status != 200:
+                    logger.debug(f"get asset thumbnail to cache failed. Status: {response.status}")
                     return None
                 data = await response.read()
                 if not os.path.exists(os.path.dirname(asset_save_path)):
@@ -191,6 +195,7 @@ class HttpService(HttpServiceRequest):
         async with aiohttp.ClientSession() as session:
             async with session.get(get_asset_metadata_url, headers=self._get_headers()) as response:
                 if response.status != 200:
+                    logger.debug(f"get image url failed. Status: {response.status}")
                     return None
                 asset_metadata = await response.json()
                 return json.dumps(asset_metadata, ensure_ascii=False, indent=2)
@@ -212,6 +217,7 @@ class HttpService(HttpServiceRequest):
                 try:
                     body_json = json.loads(body) if body.strip() else {}
                 except json.JSONDecodeError:
+                    logger.exception("post_asset_subscribe: 请求异常")
                     body_json = {"raw": body}
                 ok = response.status in (200, 201, 204)
                 msg = json.dumps(

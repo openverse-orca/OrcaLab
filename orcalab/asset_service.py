@@ -7,6 +7,8 @@ import aiofiles
 
 from typing import override
 
+import logging
+logger = logging.getLogger(__name__)
 
 class AssetService(AssetServiceRequest):
 
@@ -23,6 +25,7 @@ class AssetService(AssetServiceRequest):
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:
                     if response.status != 200:
+                        logger.debug("Failed to download asset. Status code: %d , Response Text: %s...", response.status, response.text[:200])
                         raise Exception(
                             f"Failed to download asset. Status code: {response.status}"
                         )

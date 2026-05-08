@@ -63,6 +63,11 @@ class Viewport(QtWidgets.QWidget):
         if not config_service.vsync_enabled():
             self.command_line.append("--vsync_interval=0")
 
+        # 引擎端帧率限制：与 Python 端 _target_frame_time 保持一致，
+        # 防止引擎内部以更高帧率渲染浪费 GPU 资源
+        engine_fps = int(round(1.0 / self._target_frame_time))
+        self.command_line.append(f"--sys_MaxFPS={engine_fps}")
+
         if config_service.enable_debug_tool():
             self.command_line.append("--debug-tool")
 
@@ -119,17 +124,19 @@ class Viewport(QtWidgets.QWidget):
         return refresh_rate
 
     @staticmethod
+    def _effective_fps(config_fps: int) -> int:
+        screen_fps = Viewport._detect_screen_refresh_rate()
+        if config_fps <= 0:
+            return screen_fps
+        return min(config_fps, screen_fps)
+
+    @staticmethod
     def _calc_target_frame_time() -> float:
         config_fps = ConfigService().lock_fps_value()
-        if config_fps > 0:
-            return 1.0 / config_fps
-        return 1.0 / Viewport._detect_screen_refresh_rate()
+        return 1.0 / Viewport._effective_fps(config_fps)
 
     def set_target_fps(self, fps: int) -> None:
-        if fps > 0:
-            self._target_frame_time = 1.0 / fps
-        else:
-            self._target_frame_time = 1.0 / self._detect_screen_refresh_rate()
+        self._target_frame_time = 1.0 / self._effective_fps(fps)
 
     async def _viewport_main_loop(self):
         try:
