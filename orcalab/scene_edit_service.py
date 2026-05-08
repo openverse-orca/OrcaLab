@@ -1026,15 +1026,19 @@ class SceneEditService(SceneEditRequest):
                 new_actor_path, new_entity_id = new_active_entity
                 with perf_timer("service._set_active_entity.select+highlight_new", feature="SERVICE"):
                     try:
+                        await self.remote_scene.set_selection([])
+                    except Exception:
+                        perf_log(f"service._set_active_entity: failed to clear selection", feature="SERVICE")
+                    try:
                         await self.remote_scene.set_selected_entity(new_actor_path, new_entity_id)
                     except Exception:
-                        perf_log(f"service._set_active_entity: failed to select entity on remote", feature="SERVICE")
+                        perf_log(f"service._set_active_entity: failed to select entity", feature="SERVICE")
                     try:
                         await self.remote_scene.set_highlight_entity_tree(
                             new_actor_path, new_entity_id, True
                         )
                     except Exception:
-                        perf_log(f"service._set_active_entity: failed to highlight {new_actor_path}", feature="SERVICE")
+                        perf_log(f"service._set_active_entity: failed to highlight entity tree", feature="SERVICE")
             else:
                 if old_active_entity is not None:
                     old_actor_path, _ = old_active_entity

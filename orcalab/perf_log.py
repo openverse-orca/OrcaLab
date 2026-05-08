@@ -5,12 +5,12 @@ from typing import Generator
 
 _perf_logger = logging.getLogger("orcalab.perf")
 
-PERF_OUTLINE = True
-PERF_SERVICE = True
-PERF_GRPC = True
-PERF_PARSE = True
-PERF_PROPERTY = True
-PERF_SECTION = True
+PERF_OUTLINE = False
+PERF_SERVICE = False
+PERF_GRPC = False
+PERF_PARSE = False
+PERF_PROPERTY = False
+PERF_SECTION = False
 
 _FEATURE_SWITCHES = {
     "OUTLINE": lambda: PERF_OUTLINE,

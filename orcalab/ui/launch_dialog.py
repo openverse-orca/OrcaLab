@@ -14,14 +14,14 @@ class LaunchDialog(QtWidgets.QDialog):
         self.setWindowTitle("选择仿真程序")
         self.setModal(True)
         self.resize(500, 400)
-        
+
         self.config_service = ConfigService()
         self.selected_program = None
-        
+
+        self._fs = FontService()
         self._setup_ui()
         self._load_programs()
-        
-        self._fs = FontService()
+
         self._fs.bind_widget_stylesheet(self, self._build_stylesheet)
     
     def _build_stylesheet(self) -> str:
