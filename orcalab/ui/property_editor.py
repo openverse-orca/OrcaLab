@@ -382,7 +382,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                             self._actor.property_groups = sorted_groups
 
                         with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
-                            self._render_property_groups(sorted_groups, 160, read_only=True)
+                            self._render_property_groups(sorted_groups, 160)
                     else:
                         with perf_timer("property_editor._fetch_and_render_entity.grpc_batch", feature="PROPERTY"):
                             batch_results = await get_remote_scene().get_entity_property_groups_batch(
@@ -419,7 +419,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                             self._actor.property_groups = all_groups
 
                         with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
-                            self._render_property_groups(all_groups, 160, read_only=True)
+                            self._render_property_groups(all_groups, 160)
             except Exception as e:
                 logger.warning(f"Failed to load entity components: {e}", exc_info=True)
 
