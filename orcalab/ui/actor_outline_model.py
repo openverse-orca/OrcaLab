@@ -44,6 +44,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         self.reparent_mime = "application/x-orca-actor-reparent"
         self.local_scene = local_scene
         self._entity_actor_path_cache: dict[int, Path] = {}
+        self._inserted_entity_actors: set[Path] = set()
 
     def connect_bus(self):
         SceneEditNotificationBus.connect(self)
@@ -109,6 +110,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
 
     def _rebuild_entity_cache(self):
         self._entity_actor_path_cache.clear()
+        self._inserted_entity_actors.clear()
         for path, actor in self.local_scene._actors.items():
             if isinstance(actor, AssetActor) and actor.entity_root is not None:
                 self._register_entity_tree(path, actor.entity_root)
@@ -615,6 +617,10 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         source: str = "",
     ) -> None:
         with perf_timer("outline_model.on_entity_hierarchy_loaded", feature="OUTLINE"):
+            if actor_path in self._inserted_entity_actors:
+                return
+
+            self._inserted_entity_actors.add(actor_path)
             self._register_entity_tree(actor_path, entity_root)
 
             actor = self.local_scene.find_actor_by_path(actor_path)
@@ -664,5 +670,61 @@ if __name__ == "__main__":
 
             mode = QAbstractItemModelTester.FailureReportingMode.Fatal
             tester = QAbstractItemModelTester(model, mode)
+
+    class TestEntityHierarchyRaceCondition(unittest.TestCase):
+        def setUp(self):
+            self.local_scene = LocalScene()
+            self.local_scene.add_actor(GroupActor("g1"), Path("/"))
+            self.local_scene.add_actor(AssetActor("a1", "spw_name"), Path("/g1"))
+            self.model = ActorOutlineModel(self.local_scene)
+            self.model.set_root_group(self.local_scene.root_actor)
+            self.actor_path = Path("/g1/a1")
+
+        def _get_actor_index(self):
+            return self.model.index(0, 0, QModelIndex())
+
+        def _call_on_entity_hierarchy_loaded(self):
+            entity_root = EntityInfo(1, "root", "/")
+            asyncio.run(
+                self.model.on_entity_hierarchy_loaded(self.actor_path, entity_root)
+            )
+
+        def test_duplicate_insert_is_skipped(self):
+            self._call_on_entity_hierarchy_loaded()
+            self.assertEqual(self.model.rowCount(self._get_actor_index()), 1)
+
+            self._call_on_entity_hierarchy_loaded()
+            self.assertEqual(self.model.rowCount(self._get_actor_index()), 1)
+
+        def test_rebuild_cache_resets_guard(self):
+            self._call_on_entity_hierarchy_loaded()
+            self.assertEqual(self.model.rowCount(self._get_actor_index()), 1)
+
+            self.model.beginResetModel()
+            self.model.endResetModel()
+            self.model._rebuild_entity_cache()
+
+            self._call_on_entity_hierarchy_loaded()
+            self.assertEqual(self.model.rowCount(self._get_actor_index()), 1)
+
+        def test_different_actor_paths_not_affected(self):
+            self.local_scene.add_actor(AssetActor("a2", "spw_name"), Path("/g1"))
+            self.model.beginResetModel()
+            self.model.endResetModel()
+            self.model._rebuild_entity_cache()
+
+            entity_root_1 = EntityInfo(1, "root1", "/")
+            asyncio.run(
+                self.model.on_entity_hierarchy_loaded(Path("/g1/a1"), entity_root_1)
+            )
+
+            entity_root_2 = EntityInfo(2, "root2", "/")
+            asyncio.run(
+                self.model.on_entity_hierarchy_loaded(Path("/g1/a2"), entity_root_2)
+            )
+
+            self.assertEqual(self.model.rowCount(QModelIndex()), 1)
+            g1_index = self.model.index(0, 0, QModelIndex())
+            self.assertEqual(self.model.rowCount(g1_index), 2)
 
     unittest.main()

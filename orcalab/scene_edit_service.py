@@ -1106,7 +1106,7 @@ class SceneEditService(SceneEditRequest):
                     bus = SceneEditNotificationBus()
                     await bus.on_entity_hierarchy_loaded(actor_path, entity_root, source)
             except asyncio.CancelledError:
-                self.local_scene.set_entity_root(actor_path, None)
+                # 不清理缓存：事件可能已被模型处理，清理会导致后续重复插入
                 raise
 
             return entity_root
