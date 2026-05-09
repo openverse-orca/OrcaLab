@@ -265,8 +265,7 @@ class RemoteScene(SceneEditNotification):
             elif value == "scale":
                 manipulator_type = ManipulatorType.Scale
             else:
-                print(f"Unknown manipulator type: {value}")
-                return
+                manipulator_type = ManipulatorType.ManipulatorNone
 
             bus = StateSyncNotificationBus()
             bus.on_manipulator_type_changed(manipulator_type)

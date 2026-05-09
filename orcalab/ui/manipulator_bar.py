@@ -183,41 +183,69 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
     def disconnect_bus(self):
         StateSyncNotificationBus.disconnect(self)
 
+    def start_sim(self):
+        self.scale_button.setEnabled(False)
+        self.scale_button.setToolTip("仿真时无法缩放物体")
+        self.measure_distance_button.setEnabled(False)
+        self.measure_distance_button.setToolTip("仿真时不可用")
+        self.measure_angle_button.setEnabled(False)
+        self.measure_angle_button.setToolTip("仿真时不可用")
+
+    def end_sim(self):
+        self.scale_button.setEnabled(True)
+        self.scale_button.setToolTip("缩放(快捷键:3)")
+        self.measure_distance_button.setEnabled(True)
+        self.measure_distance_button.setToolTip("测距离")
+        self.measure_angle_button.setEnabled(True)
+        self.measure_angle_button.setToolTip("测角度")
+
     async def set_translation(self):
         bus = StateSyncRequestBus()
         await bus.set_manipulator_type(ManipulatorType.Translate)
+        await bus.set_camera_movement_type(CameraMovementType.CameraNone)
+        await bus.set_measure_type(MeasureType.MeasureNone)
 
     async def set_rotation(self):
         bus = StateSyncRequestBus()
         await bus.set_manipulator_type(ManipulatorType.Rotate)
+        await bus.set_camera_movement_type(CameraMovementType.CameraNone)
+        await bus.set_measure_type(MeasureType.MeasureNone)
 
     async def set_scale(self):
         bus = StateSyncRequestBus()
         await bus.set_manipulator_type(ManipulatorType.Scale)
+        await bus.set_camera_movement_type(CameraMovementType.CameraNone)
+        await bus.set_measure_type(MeasureType.MeasureNone)
 
     async def set_camera_translation(self):
         bus = StateSyncRequestBus()
         await bus.set_camera_movement_type(CameraMovementType.CameraTranslate)
+        await bus.set_manipulator_type(ManipulatorType.ManipulatorNone)
+        await bus.set_measure_type(MeasureType.MeasureNone)
 
     async def set_camera_rotation(self):
         bus = StateSyncRequestBus()
         await bus.set_camera_movement_type(CameraMovementType.CameraRotate)
+        await bus.set_manipulator_type(ManipulatorType.ManipulatorNone)
+        await bus.set_measure_type(MeasureType.MeasureNone)
 
     async def set_camera_scale(self):
         bus = StateSyncRequestBus()
         await bus.set_camera_movement_type(CameraMovementType.CameraScale)
-
-    async def set_measure(self):
-        bus = StateSyncRequestBus()
-        await bus.set_measure_type(MeasureType.Distance)
+        await bus.set_manipulator_type(ManipulatorType.ManipulatorNone)
+        await bus.set_measure_type(MeasureType.MeasureNone)
 
     async def set_measure_distance(self):
         bus = StateSyncRequestBus()
         await bus.set_measure_type(MeasureType.Distance)
+        await bus.set_manipulator_type(ManipulatorType.ManipulatorNone)
+        await bus.set_camera_movement_type(CameraMovementType.CameraNone)
 
     async def set_measure_angle(self):
         bus = StateSyncRequestBus()
         await bus.set_measure_type(MeasureType.Angle)
+        await bus.set_manipulator_type(ManipulatorType.ManipulatorNone)
+        await bus.set_camera_movement_type(CameraMovementType.CameraNone)
 
     def show_pivot_menu(self):
         self.pivot_point_menu.exec(self.pivot_point_button.mapToGlobal(QtCore.QPoint(0, self.pivot_point_button.height())))
