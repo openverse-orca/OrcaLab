@@ -19,6 +19,8 @@ from orcalab.ui.theme_service import ThemeService
 
 
 class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
+    recursive_display_changed = QtCore.Signal(bool)
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -29,6 +31,7 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
 
         self._debug_draw = False
         self._grab = False
+        self._recursive = False
 
         button_size = QtCore.QSize(32, 32)
         icon_size = 24
@@ -139,6 +142,11 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self.runtime_grab_button.setFixedSize(button_size)
         self.runtime_grab_button.icon_size = icon_size
 
+        self.recursive_button = Button(icon=make_icon(":/icons/recursive.svg", icon_color))
+        self.recursive_button.setToolTip("递归显示")
+        self.recursive_button.setFixedSize(button_size)
+        self.recursive_button.icon_size = icon_size
+
         self.sep_1 = make_vertical_line(2)
         self.sep_2 = make_vertical_line(2)
         self.sep_3 = make_vertical_line(2)
@@ -161,6 +169,7 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self._layout.addWidget(self.debug_button)
         self._layout.addWidget(self.sep_5)
         self._layout.addWidget(self.runtime_grab_button)
+        self._layout.addWidget(self.recursive_button)
 
         connect(self.move_button.mouse_pressed, self.set_translation)
         connect(self.rotate_button.mouse_pressed, self.set_rotation)
@@ -172,6 +181,7 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         connect(self.measure_angle_button.mouse_pressed, self.set_measure_angle)
         connect(self.debug_button.mouse_pressed, self.set_debug_draw)
         connect(self.runtime_grab_button.mouse_pressed, self.set_runtime_grab)
+        connect(self.recursive_button.mouse_pressed, self.set_recursive_display)
         connect(self.pivot_individual_origin_action.triggered, self.set_pivot_individual_center)
         connect(self.pivot_bounding_box_action.triggered, self.set_pivot_bounding_box)
         connect(self.pivot_meadian_point_action.triggered, self.set_pivot_median_point)
@@ -318,6 +328,15 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
     async def set_runtime_grab(self):
         bus = StateSyncRequestBus()
         await bus.set_runtime_grab(not self._grab)
+
+    async def set_recursive_display(self):
+        self._recursive = not self._recursive
+        if self._recursive:
+            self.recursive_button.bg_color = self.bg_color_selected
+        else:
+            self.recursive_button.bg_color = self.bg_color
+        self.recursive_button.update()
+        self.recursive_display_changed.emit(self._recursive)
 
     @override
     def on_runtime_grab_changed(self, enabled: bool):

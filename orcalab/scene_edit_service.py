@@ -60,6 +60,31 @@ class SceneEditService(SceneEditRequest):
         # 防止多个编辑操作中的异步操作交叉导致状态混乱。
         self._edit_lock = asyncio.Lock()
 
+        self._recursive = False
+
+    def set_recursive_display(self, enabled: bool):
+        old_recursive = self._recursive
+        self._recursive = enabled
+
+        active_entity = self.local_scene.active_entity
+        if active_entity is not None and old_recursive != enabled:
+            actor_path, entity_id = active_entity
+            asyncio.create_task(self._refresh_entity_highlight(actor_path, entity_id))
+
+    async def _refresh_entity_highlight(self, actor_path: Path, entity_id: int):
+        try:
+            await self.remote_scene.set_highlight_entity_tree(
+                actor_path, entity_id, False
+            )
+            if self._recursive:
+                await self.remote_scene.set_highlight_entity_tree(
+                    actor_path, entity_id, True
+                )
+            else:
+                await self.remote_scene.set_highlight_entity(entity_id, True)
+        except Exception:
+            perf_log(f"service._refresh_entity_highlight: failed for {actor_path}", feature="SERVICE")
+
     def connect_bus(self):
         SceneEditRequestBus.connect(self)
 
@@ -1033,12 +1058,18 @@ class SceneEditService(SceneEditRequest):
                         await self.remote_scene.set_selected_entity(new_actor_path, new_entity_id)
                     except Exception:
                         perf_log(f"service._set_active_entity: failed to select entity", feature="SERVICE")
-                    try:
-                        await self.remote_scene.set_highlight_entity_tree(
-                            new_actor_path, new_entity_id, True
-                        )
-                    except Exception:
-                        perf_log(f"service._set_active_entity: failed to highlight entity tree", feature="SERVICE")
+                    if self._recursive:
+                        try:
+                            await self.remote_scene.set_highlight_entity_tree(
+                                new_actor_path, new_entity_id, True
+                            )
+                        except Exception:
+                            perf_log(f"service._set_active_entity: failed to highlight entity tree", feature="SERVICE")
+                    else:
+                        try:
+                            await self.remote_scene.set_highlight_entity(new_entity_id, True)
+                        except Exception:
+                            perf_log(f"service._set_active_entity: failed to highlight entity", feature="SERVICE")
             else:
                 if old_active_entity is not None:
                     old_actor_path, _ = old_active_entity

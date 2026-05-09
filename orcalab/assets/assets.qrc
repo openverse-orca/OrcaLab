@@ -41,6 +41,7 @@
 
     <file alias="grab.png">icons/opvs_grab.png</file>
     <file alias="physics.png">icons/opvs_physics.png</file>
+    <file alias="recursive.svg">icons/recursive.svg</file>
     <file alias="orcalab_logo.png">icons/orcalab_logo.png</file>
 
     <file alias="median_point.svg">icons/pivot_median_point.svg</file>

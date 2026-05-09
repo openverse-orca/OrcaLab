@@ -564,6 +564,9 @@ class MainWindow(
         panel.panel_icon = make_icon(":/icons/circle_edit.svg", panel_icon_color)
         self.add_panel(panel, "right")
 
+        connect(self.manipulator_bar.recursive_display_changed, self.actor_editor_widget.set_recursive_display)
+        connect(self.manipulator_bar.recursive_display_changed, self.scene_edit_service.set_recursive_display)
+
         logger.info("创建资产浏览器…")
         self.asset_browser_widget = AssetBrowser()
         panel = Panel("资产", self.asset_browser_widget)

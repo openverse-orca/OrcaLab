@@ -43,6 +43,8 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._active_cache_key: tuple | None = None
         self._pending_render_task: asyncio.Task | None = None
 
+        self._recursive = False
+
         self._container = QtWidgets.QWidget()
         self._main_layout = QtWidgets.QVBoxLayout(self._container)
         self._main_layout.setContentsMargins(4, 4, 4, 4)
@@ -68,8 +70,8 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         if self._actor_path is None:
             return None
         if self._entity is not None:
-            return (str(self._actor_path), self._entity.entity_id)
-        return (str(self._actor_path), None)
+            return (str(self._actor_path), self._entity.entity_id, self._recursive)
+        return (str(self._actor_path), None, self._recursive)
 
     def connect_bus(self):
         SceneEditNotificationBus.connect(self)
@@ -122,6 +124,11 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._raw_entries.clear()
         self._clear_cache()
         self._show_empty()
+
+    def set_recursive_display(self, enabled: bool):
+        self._recursive = enabled
+        if self._entity is not None and self._actor is not None and self._actor_path is not None:
+            self._load_properties()
 
     def _cancel_pending_render(self):
         if self._pending_render_task is not None:
@@ -335,7 +342,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                     entity_root = get_local_scene().get_entity_root(actor_path)
                     entity_info = entity_root.find_by_entity_id(entity_id) if entity_root else None
 
-                    entity_ids = entity_info.collect_entity_ids() if entity_info else [entity_id]
+                    entity_ids = entity_info.collect_entity_ids() if (entity_info and self._recursive) else [entity_id]
 
                     if len(entity_ids) == 1:
                         with perf_timer("property_editor._fetch_and_render_entity.grpc_single", feature="PROPERTY"):
@@ -481,7 +488,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                     return
 
                 with perf_timer(f"property_editor._render_property_groups.group[{i}]({group.name})", feature="PROPERTY"):
-                    collapsed = i > 0
+                    collapsed = self._recursive
                     edit = PropertyGroupEdit(self, actor, group, label_width, collapsed=collapsed)
                     edit.connect_buses()
 
