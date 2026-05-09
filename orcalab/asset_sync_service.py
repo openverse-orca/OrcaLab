@@ -168,7 +168,10 @@ class AssetSyncService:
         
         try:
             url = f"{self.base_url}/orcalab/subscribed_packages/{params}"
+            _start = time.monotonic()
             response = requests.get(url, headers=self.get_headers(), timeout=self.timeout)
+            elapsed = time.monotonic() - _start
+            logger.debug("HTTP GET %s/orcalab/subscribed_packages/ 耗时: %.3f 秒 (状态码: %s)", self.base_url, elapsed, response.status_code)
             
             if response.status_code == 401:
                 logger.debug("认证失败（Token 可能已过期）. Status code: %d", response.status_code)
@@ -286,7 +289,10 @@ class AssetSyncService:
 
         try:
             url = f"{self.base_url}/orcalab/package/{package_id}/download_url/{params}"
+            _start = time.monotonic()
             response = requests.get(url, headers=self.get_headers(), timeout=self.timeout)
+            elapsed = time.monotonic() - _start
+            logger.debug("HTTP GET %s/orcalab/package/.../download_url/ 耗时: %.3f 秒 (状态码: %s)", self.base_url, elapsed, response.status_code)
             
             if response.status_code != 200:
                 logger.debug(f"❌ 获取下载链接失败: HTTP {response.status_code}")
@@ -300,7 +306,10 @@ class AssetSyncService:
     
     def get_image_url(self, asset_id: str) -> str:
         get_asset_metadata_url = f"{self.base_url}/asset/{asset_id}/"
+        _start = time.monotonic()
         response = requests.get(get_asset_metadata_url, headers=self.get_headers(), timeout=self.timeout)
+        elapsed = time.monotonic() - _start
+        logger.debug("HTTP GET %s/asset/%s/ 耗时: %.3f 秒 (状态码: %s)", self.base_url, asset_id, elapsed, response.status_code)
         if response.status_code != 200:
             logger.debug(f"Get image url failed. Asset Id: {asset_id} Status: {response.status_code}")
             return None
@@ -400,13 +409,19 @@ class AssetSyncService:
             self.callbacks.on_metadata_sync('start', 0, len(to_update_metadata))
             self.callbacks.on_metadata_sync('fetching', 0, 0)
             
+            _start = time.monotonic()
             response = requests.get(f"{self.base_url}/meta/?isPublished=true", headers=self.get_headers(), timeout=self.timeout)
+            elapsed = time.monotonic() - _start
+            logger.debug("HTTP GET %s/meta/?isPublished=true 耗时: %.3f 秒 (状态码: %s)", self.base_url, elapsed, response.status_code)
             if response.status_code != 200:
                 logger.debug(f"❌ 获取metadata失败: HTTP {response.status_code}")
                 return
             remote_metadata_published = response.json()
             
+            _start = time.monotonic()
             response = requests.get(f"{self.base_url}/meta/?isPublished=false", headers=self.get_headers(), timeout=self.timeout)
+            elapsed = time.monotonic() - _start
+            logger.debug("HTTP GET %s/meta/?isPublished=false 耗时: %.3f 秒 (状态码: %s)", self.base_url, elapsed, response.status_code)
             if response.status_code != 200:
                 logger.debug(f"❌ 获取metadata失败: HTTP {response.status_code}")
                 return
@@ -456,7 +471,10 @@ class AssetSyncService:
             self.callbacks.on_download_start(package_id, file_name)
             
             # 流式下载
+            _start = time.monotonic()
             response = requests.get(download_url, stream=True, timeout=self.timeout * 2)
+            elapsed = time.monotonic() - _start
+            logger.debug("HTTP GET %s 首包耗时: %.3f 秒 (状态码: %s)", download_url, elapsed, response.status_code)
 
             if response.status_code != 200:
                 logger.debug(f"❌ 下载失败: HTTP {response.status_code}")

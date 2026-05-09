@@ -1,8 +1,13 @@
 import grpc
+import logging
+import time
 import orcalab.protos.url_service_pb2_grpc as url_service_pb2_grpc
 import orcalab.protos.url_service_pb2 as url_service_pb2
 
 from orcalab.asset_service_bus import AssetServiceRequestBus
+
+
+logger = logging.getLogger(__name__)
 
 
 address = "localhost:50651"
@@ -47,5 +52,8 @@ class UrlServiceClient:
 
     async def process_url(self, url):
         request = url_service_pb2.ProcessUrlRequest(url=url)
+        _start = time.monotonic()
         response = await self.stub.ProcessUrl(request)
+        elapsed = time.monotonic() - _start
+        logger.debug("gRPC ProcessUrl 耗时: %.3f 秒", elapsed)
         return response

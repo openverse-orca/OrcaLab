@@ -655,6 +655,8 @@ class MainWindow(
 
     async def start_sim(self):
         await SimulationRequestBus().start_simulation()
+        await self.manipulator_bar.set_translation()
+        await self.scene_edit_service.set_selection_and_active_actor([], None, True)
 
     async def stop_sim(self):
         await SimulationRequestBus().stop_simulation()
@@ -682,6 +684,7 @@ class MainWindow(
             self.copilot_widget.setEnabled(False)
             self.copilot_widget.setAttribute(t, True)
         self.menu_edit.setEnabled(False)
+        self.manipulator_bar.start_sim()
 
     def _enable_edit(self):
         t = QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents
@@ -695,6 +698,7 @@ class MainWindow(
             self.copilot_widget.setEnabled(True)
             self.copilot_widget.setAttribute(t, False)
         self.menu_edit.setEnabled(True)
+        self.manipulator_bar.end_sim()
 
     @override
     async def on_simulation_state_changed(self, old_state: SimulationState, new_state: SimulationState) -> None:
@@ -1213,6 +1217,7 @@ class MainWindow(
             # 6. 停止MCP服务
             if hasattr(self, 'mcp_service'):
                 self.mcp_service.stop()
+                self.config_service.clear_mcp_status()
                 logger.info("cleanup: MCP服务已停止")
 
             # 7. 强制垃圾回收

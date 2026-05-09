@@ -5,6 +5,8 @@ import pathlib
 import importlib.metadata
 import logging
 import tomli_w
+import json
+import time
 
 from orcalab.project_util import get_project_dir
 
@@ -531,6 +533,42 @@ class ConfigService:
             config.setdefault("orcalab", {})["abnormal_exit_pending"] = False
 
         self.set_user_config("orcalab", update_func)
+
+    def _get_mcp_status_file_path(self) -> pathlib.Path:
+        return pathlib.Path.home() / ".orcalab" / "mcp_status.json"
+
+    def is_mcp_ready(self) -> bool:
+        status_file = self._get_mcp_status_file_path()
+        if not status_file.exists():
+            return False
+        try:
+            with open(status_file, "r", encoding="utf-8") as f:
+                status = json.load(f)
+                return status.get("ready", False) and status.get("port") == self.mcp_port()
+        except (json.JSONDecodeError, IOError):
+            return False
+
+    def mark_mcp_ready(self) -> None:
+        status_file = self._get_mcp_status_file_path()
+        status_file.parent.mkdir(parents=True, exist_ok=True)
+        status = {
+            "ready": True,
+            "port": self.mcp_port(),
+            "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        }
+        try:
+            with open(status_file, "w", encoding="utf-8") as f:
+                json.dump(status, f, ensure_ascii=False, indent=2)
+        except IOError as e:
+            logger.warning(f"无法写入MCP状态文件: {e}")
+
+    def clear_mcp_status(self) -> None:
+        status_file = self._get_mcp_status_file_path()
+        if status_file.exists():
+            try:
+                status_file.unlink()
+            except IOError as e:
+                logger.warning(f"无法删除MCP状态文件: {e}")
 
     def set_send_statistics(self, value: str):
         self.config.setdefault("orcalab", {})["send_statistics"] = value

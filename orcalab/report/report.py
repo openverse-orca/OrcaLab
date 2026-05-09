@@ -4,6 +4,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
 from typing import Dict, List, Optional
 import json
 import importlib.metadata as importlib_metadata
@@ -259,7 +260,10 @@ def _get_ip_info():
     import requests
 
     try:
+        _start = time.monotonic()
         response = requests.get("http://ip-api.com/json", timeout=5)
+        elapsed = time.monotonic() - _start
+        logger.debug("HTTP GET http://ip-api.com/json 耗时: %.3f 秒 (状态码: %s)", elapsed, response.status_code)
         if response.status_code == 200:
             data = response.json()
             return data
@@ -343,9 +347,12 @@ async def send_report_directly():
 
     try:
         async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
             async with session.post(
                 url, json=data, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
             ) as response:
+                elapsed = time.monotonic() - _start
+                logger.debug("HTTP POST %s 耗时: %.3f 秒 (状态码: %s)", url, elapsed, response.status)
                 logger.info(
                     "Statistics report sent, status=%s", response.status
                 )

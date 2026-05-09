@@ -9,6 +9,7 @@ import asyncio
 import sys
 import signal
 import logging
+import time
 
 from orcalab.cli_options import create_argparser, resolve_and_validate_workspace
 from orcalab.config_service import ConfigService
@@ -63,6 +64,10 @@ def _start_force_exit_watchdog(timeout: int = 10) -> None:
 def signal_handler(signum, frame):
     """Handle system signals to ensure cleanup"""
     logger.info("Received signal %s, exiting...", signum)
+    try:
+        ConfigService().clear_mcp_status()
+    except Exception:
+        pass
     os._exit(0)
 
 
@@ -120,7 +125,10 @@ def select_scene_and_layout(
             "Content-Type": "application/json",
         }
         try:
+            _start = time.monotonic()
             resp = _requests.get(f"{base_url}/is_admin/", headers=headers, timeout=10)
+            elapsed = time.monotonic() - _start
+            logger.debug("HTTP GET %s/is_admin/ 耗时: %.3f 秒 (状态码: %s)", base_url, elapsed, resp.status_code)
             if resp.status_code != 200:
                 return False
             return resp.json().get("isAdmin", False)
@@ -333,6 +341,12 @@ def main():
         logger.exception("Application error: %s", e)
     finally:
         event_loop.close()
+
+    # 确保MCP状态文件被清理
+    try:
+        ConfigService().clear_mcp_status()
+    except Exception:
+        pass
 
     # 直接终止进程，跳过 Python atexit 和 C++ 静态析构。
     # 引擎资源已在 main_async → cleanup 中清理完毕，

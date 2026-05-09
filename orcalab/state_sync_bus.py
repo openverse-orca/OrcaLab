@@ -6,6 +6,7 @@ class ManipulatorType(Enum):
     Translate = 0
     Rotate = 1
     Scale = 2
+    ManipulatorNone = 3
 
 class CameraMovementType(Enum):
     CameraTranslate = 0

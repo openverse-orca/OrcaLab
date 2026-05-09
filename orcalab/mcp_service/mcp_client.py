@@ -192,6 +192,14 @@ def mcp_main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     workspace = pathlib.Path(args.workspace).resolve()
+
+    if args.tool == "wait_for_mcp_ready":
+        if wait_for_mcp_ready(workspace):
+            print("MCP服务已就绪")
+            return True
+        print("MCP服务未就绪", file=sys.stderr)
+        return False
+
     url = args.url if args.url else _default_mcp_url(workspace)
 
     import asyncio
@@ -208,3 +216,17 @@ def mcp_main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+
+
+def wait_for_mcp_ready(workspace: pathlib.Path, timeout: float = 60.0, interval: float = 0.5) -> bool:
+    import time
+    
+    config = ConfigService()
+    config.init_config(workspace.resolve(), workspace.resolve())
+    
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        if config.is_mcp_ready():
+            return True
+        time.sleep(interval)
+    return False

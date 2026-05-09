@@ -107,6 +107,7 @@ class UndoService(UndoRequest):
         match command:
             case CommandGroup():
                 for cmd in reversed(command.commands):
+                    print(cmd)
                     await self._undo_command(cmd)
             case SelectionCommand():
                 await SceneEditRequestBus().set_selection(
