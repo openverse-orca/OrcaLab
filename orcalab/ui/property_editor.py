@@ -6,7 +6,8 @@ from typing import override
 from PySide6 import QtCore, QtWidgets
 
 from orcalab.actor import BaseActor, AssetActor
-from orcalab.actor_property import ActorPropertyGroup, EntityPropertyGroupEntry
+from orcalab.actor_property import ActorProperty, ActorPropertyGroup, ActorPropertyKey, EntityPropertyGroupEntry
+from orcalab.actor_util import collect_properties
 from orcalab.application_util import get_local_scene, get_remote_scene
 from orcalab.entity_info import EntityInfo
 from orcalab.path import Path
@@ -56,7 +57,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
         self._property_layout = QtWidgets.QVBoxLayout()
         self._property_layout.setContentsMargins(0, 0, 0, 0)
-        self._property_layout.setSpacing(4)
+        self._property_layout.setSpacing(2)
         self._main_layout.addLayout(self._property_layout)
 
         self._main_layout.addStretch()
@@ -99,11 +100,6 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
     def set_entity(self, actor: BaseActor, entity: EntityInfo, actor_path: Path):
         if self._actor == actor and self._entity is entity:
             return
-
-        logger.info(
-            f"[set_entity] actor={actor.name}, entity={entity.name} "
-            f"(entity_id={entity.entity_id}), actor_path={actor_path}"
-        )
 
         perf_log(f"property_editor.set_entity: actor={actor.name}, entity={entity.name}, entity_id={entity.entity_id}", feature="PROPERTY")
 
@@ -315,13 +311,24 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
                     perf_log(f"property_editor._fetch_and_render_all: got {len(entries)} entries", feature="PROPERTY")
 
+                    groups = [e.property_group for e in entries]
+                    keys: list[ActorPropertyKey] = []
+                    props: list[ActorProperty] = []
+                    collect_properties(keys, props, groups, actor_path)
+                    if keys:
+                        with perf_timer("property_editor._fetch_and_render_all.grpc_get_values", feature="PROPERTY"):
+                            values = await remote_scene.get_properties(keys)
+                        for prop, value in zip(props, values):
+                            if value is not None:
+                                prop.set_value(value)
+                                prop.set_original_value(value)
+
                     self._raw_entries = entries
 
                     with perf_timer("property_editor._fetch_and_render_all.data_store_set", feature="PROPERTY"):
                         self._data_store.set_data_from_entries(entries)
 
                     if isinstance(self._actor, AssetActor):
-                        groups = [e.property_group for e in entries]
                         self._actor.property_groups = self._sort_property_groups(groups)
 
                     self._filter_bar.set_available_types(
@@ -358,6 +365,17 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
                         perf_log(f"property_editor._fetch_and_render_entity: got {len(groups)} groups for single entity", feature="PROPERTY")
 
+                        keys: list[ActorPropertyKey] = []
+                        props: list[ActorProperty] = []
+                        collect_properties(keys, props, groups, actor_path)
+                        if keys:
+                            with perf_timer("property_editor._fetch_and_render_entity.grpc_get_values", feature="PROPERTY"):
+                                values = await get_remote_scene().get_properties(keys)
+                            for prop, value in zip(props, values):
+                                if value is not None:
+                                    prop.set_value(value)
+                                    prop.set_original_value(value)
+
                         sorted_groups = self._sort_property_groups(groups)
 
                         if isinstance(self._actor, AssetActor):
@@ -385,6 +403,17 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                                 f"skipping property display"
                             )
                             return
+
+                        keys: list[ActorPropertyKey] = []
+                        props: list[ActorProperty] = []
+                        collect_properties(keys, props, all_groups, actor_path)
+                        if keys:
+                            with perf_timer("property_editor._fetch_and_render_entity.grpc_get_values_batch", feature="PROPERTY"):
+                                values = await get_remote_scene().get_properties(keys)
+                            for prop, value in zip(props, values):
+                                if value is not None:
+                                    prop.set_value(value)
+                                    prop.set_original_value(value)
 
                         if isinstance(self._actor, AssetActor):
                             self._actor.property_groups = all_groups
@@ -537,9 +566,6 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         source: str = "",
     ) -> None:
         with perf_timer("property_editor.on_active_entity_changed", feature="PROPERTY"):
-            logger.info(
-                f"[on_active_entity_changed] old={old_active_entity}, new={new_active_entity}, source={source}"
-            )
             if new_active_entity is None:
                 if self._entity is not None:
                     if self._actor is not None:

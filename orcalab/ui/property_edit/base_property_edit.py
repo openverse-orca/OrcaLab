@@ -50,13 +50,13 @@ def get_property_edit_style_sheet() -> str:
             background-color: {bg_color};
             border-radius: 2px;
             border-bottom: 1px solid {bg_color};
-            padding: 4px 8px;
+            padding: 2px 8px;
         }}
         QLineEdit[readOnly="true"] {{
             background-color: {property_group_bg_color};
             border-radius: 2px;
             border: 1px solid {bg_color};
-            padding: 4px 8px;
+            padding: 2px 8px;
         }}
         QLineEdit[readOnly="false"]:hover {{
             background-color: {bg_hover_color};
@@ -69,7 +69,7 @@ def get_property_edit_style_sheet() -> str:
             background-color: {bg_focus_color};
             border-radius: 2px;
             border-bottom: 1px solid {bg_focus_color};
-            padding: 4px 8px;
+            padding: 2px 8px;
         }}
         """
     return base_style
@@ -117,7 +117,7 @@ class BasePropertyEdit[T](StyledWidget):
         label = QtWidgets.QLabel(display_name)
         label.setFixedWidth(label_width)
         label.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
         FontService().bind_widget_font(label, 'property_edit')
         return label

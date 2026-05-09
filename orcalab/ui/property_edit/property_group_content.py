@@ -126,7 +126,7 @@ def create_property_group_content(
     content = StyledWidget()
     content_layout = QtWidgets.QVBoxLayout(content)
     content_layout.setContentsMargins(0, 0, 0, 0)
-    content_layout.setSpacing(4)
+    content_layout.setSpacing(2)
 
     for prop in group.properties:
         if prop.value_type() == ActorPropertyType.TREE:
