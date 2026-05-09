@@ -524,7 +524,7 @@ class ConfigService:
         self.set_user_config("orcalab", update_func)
 
     def _get_mcp_status_file_path(self) -> pathlib.Path:
-        return self.workspace_data_folder() / "mcp_status.json"
+        return pathlib.Path.home() / ".orcalab" / "mcp_status.json"
 
     def is_mcp_ready(self) -> bool:
         status_file = self._get_mcp_status_file_path()
