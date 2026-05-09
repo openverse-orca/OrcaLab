@@ -180,17 +180,6 @@ def mcp_main(argv: list[str] | None = None) -> int:
         help="覆盖 MCP 地址，例如 http://127.0.0.1:8000/mcp",
     )
     parser.add_argument(
-        "--wait-ready",
-        action="store_true",
-        help="等待MCP服务就绪后再执行命令（等待最多30秒）",
-    )
-    parser.add_argument(
-        "--timeout",
-        type=float,
-        default=30.0,
-        help="等待MCP就绪的超时时间（秒），默认30秒",
-    )
-    parser.add_argument(
         "tool",
         help="工具名；使用 list 列出全部工具",
     )
@@ -203,13 +192,14 @@ def mcp_main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     workspace = pathlib.Path(args.workspace).resolve()
-    
-    if args.wait_ready:
-        if not wait_for_mcp_ready(workspace, timeout=args.timeout):
-            print(f"orcalab-cli: MCP服务在{args.timeout}秒内未就绪", file=sys.stderr)
-            return 1
-        print(f"orcalab-cli: MCP服务已就绪", file=sys.stderr)
-    
+
+    if args.tool == "wait_for_mcp_ready":
+        if wait_for_mcp_ready(workspace):
+            print("MCP服务已就绪")
+            return True
+        print("MCP服务未就绪", file=sys.stderr)
+        return False
+
     url = args.url if args.url else _default_mcp_url(workspace)
 
     import asyncio
@@ -228,7 +218,7 @@ def mcp_main(argv: list[str] | None = None) -> int:
         return 1
 
 
-def wait_for_mcp_ready(workspace: pathlib.Path, timeout: float = 30.0, interval: float = 0.5) -> bool:
+def wait_for_mcp_ready(workspace: pathlib.Path, timeout: float = 60.0, interval: float = 0.5) -> bool:
     import time
     
     config = ConfigService()
