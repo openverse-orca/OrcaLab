@@ -347,8 +347,10 @@ class AssetBrowser(QtWidgets.QWidget):
             self._loading_thumbnails.add(info.path)
             
             try:
-                # 从服务器获取 URL 并下载
-                url_result = await self._http_service.get_image_url(info.metadata['id'])
+                asset_id = info.metadata.get('id') if info.metadata else None
+                if not asset_id:
+                    return
+                url_result = await self._http_service.get_image_url(asset_id)
                 if url_result is None or isinstance(url_result, Exception):
                     return
                 

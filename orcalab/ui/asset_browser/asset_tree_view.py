@@ -53,7 +53,9 @@ class AssetTreeView(QtWidgets.QTreeWidget):
 
         for asset in self._assets:
             if asset.metadata is not None:
-                self._build_branch(asset.metadata['categoryPath'], category_map)
+                category_path = asset.metadata.get('categoryPath', '')
+                if isinstance(category_path, str) and category_path:
+                    self._build_branch(category_path, category_map)
         
         self.expandAll()
 
