@@ -64,6 +64,10 @@ def _start_force_exit_watchdog(timeout: int = 10) -> None:
 def signal_handler(signum, frame):
     """Handle system signals to ensure cleanup"""
     logger.info("Received signal %s, exiting...", signum)
+    try:
+        ConfigService().clear_mcp_status()
+    except Exception:
+        pass
     os._exit(0)
 
 
@@ -337,6 +341,12 @@ def main():
         logger.exception("Application error: %s", e)
     finally:
         event_loop.close()
+
+    # 确保MCP状态文件被清理
+    try:
+        ConfigService().clear_mcp_status()
+    except Exception:
+        pass
 
     # 直接终止进程，跳过 Python atexit 和 C++ 静态析构。
     # 引擎资源已在 main_async → cleanup 中清理完毕，
