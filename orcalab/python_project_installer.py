@@ -384,7 +384,6 @@ def _download_pak_file(url: str, target_path: Path, cloud_file_sha256: str, prog
 
         # 验证文件完整性
         local_file_sha256 = calculate_file_sha256(target_path)
-        print(local_file_sha256, cloud_file_sha256)
         if local_file_sha256.lower() != cloud_file_sha256.lower():
             logger.error("下载出错，文件不完整，源文件sha256: %s, 下载文件sha256: %s", cloud_file_sha256, local_file_sha256)
             return False
@@ -610,7 +609,7 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
                     progress_dialog.set_progress(percent)
                 
                 progress_dialog.log(f"开始下载 pak 文件: {filename}")
-                success = _download_pak_file(pak_url, target_path, pak_download_progress)
+                success = _download_pak_file(pak_url, target_path, clound_file_sha256, pak_download_progress)
                 
                 if success:
                     progress_dialog.log(f"pak 文件下载完成: {filename}")
