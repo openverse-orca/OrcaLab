@@ -65,6 +65,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
                 group=self._group,
                 label_width=self._label_width,
                 property_edits=self._property_edits,
+                collapsed=False,
             )
             return content
 

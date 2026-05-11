@@ -26,6 +26,10 @@ from orcalab.ui.property_edit.string_property_edit import StringPropertyEdit
 from orcalab.ui.styled_widget import StyledWidget
 
 
+def _indent_unit() -> int:
+    return FontService().indent_unit_px(20)
+
+
 def _create_property_edit(
     parent: QtWidgets.QWidget,
     actor: BaseActor,
@@ -70,7 +74,7 @@ def _render_tree_data_flat(
     name_prefix: str = "",
 ):
     fs = FontService()
-    indent_px = indent * 20
+    indent_px = indent * _indent_unit()
 
     for node in nodes:
         header_row = QtWidgets.QWidget()
@@ -100,7 +104,7 @@ def _render_tree_data_flat(
 
             prop_row = QtWidgets.QWidget()
             row_layout = QtWidgets.QHBoxLayout(prop_row)
-            row_layout.setContentsMargins((indent + 1) * 20, 0, 0, 0)
+            row_layout.setContentsMargins((indent + 1) * _indent_unit(), 0, 0, 0)
             row_layout.setSpacing(0)
             row_layout.addWidget(editor)
             row_layout.addStretch()
@@ -131,20 +135,27 @@ def _build_struct_tree(
         else:
             standalone_props.append(prop)
 
-    def _build(name: str, props: List[ActorProperty]) -> StructPropertyGroup:
-        display = props[0].struct_display_name() or name
+    def _build(name: str, props: List[ActorProperty], display_override: str | None = None) -> StructPropertyGroup:
+        display = display_override or props[0].struct_display_name() or name
         direct_props: List[ActorProperty] = []
         child_groups: dict[str, List[ActorProperty]] = {}
 
         for p in props:
-            remaining = p.name()[len(name) + 1:]
+            search = f".{name}."
+            pos = p.name().rfind(search)
+            if pos != -1:
+                remaining = p.name()[pos + len(search):]
+            elif p.name().startswith(f"{name}."):
+                remaining = p.name()[len(name) + 1:]
+            else:
+                remaining = p.name()
             if "." in remaining:
                 child_name = remaining.split(".")[0]
                 child_groups.setdefault(child_name, []).append(p)
             else:
                 direct_props.append(p)
 
-        children = [_build(cn, cp) for cn, cp in child_groups.items()]
+        children = [_build(cn, cp, cn.capitalize()) for cn, cp in child_groups.items()]
         return StructPropertyGroup(name, display, direct_props, children)
 
     result = []
@@ -163,15 +174,20 @@ def _render_struct_group(
     label_width: int,
     property_edits: List[BasePropertyEdit],
     layout: QtWidgets.QVBoxLayout,
+    indent_level: int = 0,
+    collapsed: bool = True,
 ):
     """递归渲染结构体组为 CollapsibleSection"""
     section = CollapsibleSection(
         parent=parent,
         title=struct_group.display_name,
-        collapsed=True,
+        collapsed=collapsed,
+        indent_level=indent_level,
         content_factory=lambda sg=struct_group: _create_struct_content(
             parent, actor, actor_path, group,
             sg, label_width, property_edits,
+            indent_level=indent_level,
+            collapsed=collapsed,
         ),
     )
     layout.addWidget(section)
@@ -185,6 +201,8 @@ def _create_struct_content(
     struct_group: StructPropertyGroup,
     label_width: int,
     property_edits: List[BasePropertyEdit],
+    indent_level: int = 0,
+    collapsed: bool = True,
 ) -> QtWidgets.QWidget:
     """创建结构体折叠区的内容（递归）"""
     content = StyledWidget()
@@ -192,6 +210,7 @@ def _create_struct_content(
     content_layout.setContentsMargins(0, 0, 0, 0)
     content_layout.setSpacing(2)
 
+    prop_indent = (indent_level + 1) * _indent_unit()
     for prop in struct_group.properties:
         editor = _create_property_edit(parent, actor, actor_path, group, prop, label_width)
         if prop.is_read_only():
@@ -200,7 +219,7 @@ def _create_struct_content(
 
         row = QtWidgets.QWidget()
         row_layout = QtWidgets.QHBoxLayout(row)
-        row_layout.setContentsMargins(20, 0, 0, 0)
+        row_layout.setContentsMargins(prop_indent, 0, 0, 0)
         row_layout.setSpacing(0)
         row_layout.addWidget(editor)
         row_layout.addStretch()
@@ -211,6 +230,8 @@ def _create_struct_content(
             parent, actor, actor_path, group,
             child, label_width, property_edits,
             content_layout,
+            indent_level=indent_level + 1,
+            collapsed=collapsed,
         )
 
     return content
@@ -223,6 +244,7 @@ def create_property_group_content(
     group: ActorPropertyGroup,
     label_width: int,
     property_edits: List[BasePropertyEdit],
+    collapsed: bool = True,
 ) -> QtWidgets.QWidget:
     content = StyledWidget()
     content_layout = QtWidgets.QVBoxLayout(content)
@@ -271,6 +293,7 @@ def create_property_group_content(
             parent, actor, actor_path, group,
             struct_root, label_width, property_edits,
             content_layout,
+            collapsed=collapsed,
         )
 
     return content

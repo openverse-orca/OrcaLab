@@ -103,7 +103,7 @@ class SectionHeader(QtWidgets.QWidget):
         elif self._hovered:
             painter.fillRect(rect, theme.get_color("bg_hover"))
 
-        x = self._HPADDING + self._indent_level * 20
+        x = self._HPADDING + self._indent_level * FontService().indent_unit_px(20)
 
         if self._has_children:
             self._draw_branch_indicator(painter, x, rect)
@@ -186,7 +186,7 @@ class SectionHeader(QtWidgets.QWidget):
             painter.setPen(QtGui.QPen(split_color))
             painter.drawLine(rect.bottomLeft(), rect.bottomRight())
 
-        x = rect.x() + 4 + indent_level * 20
+        x = rect.x() + 4 + indent_level * FontService().indent_unit_px(20)
         chevron_size = 16
         icon_size = 16
 

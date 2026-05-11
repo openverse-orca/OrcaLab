@@ -178,6 +178,13 @@ class FontService:
             return max(1, math.floor(scaled * dpi / 72.0))
         return scaled
 
+    def indent_unit_px(self, base: int = 20) -> int:
+        """计算缩进单位（像素），基于字体缩放系数和屏幕 DPI。"""
+        scaled = self._scaled_size(base)
+        screen = QtGui.QGuiApplication.primaryScreen()
+        dpi = screen.logicalDotsPerInch() if screen else 96.0
+        return max(1, math.floor(scaled * dpi / 96.0))
+
     def get_font(self, key: str) -> QtGui.QFont:
         cfg = self.get_config(key)
         font = QtGui.QFont()
