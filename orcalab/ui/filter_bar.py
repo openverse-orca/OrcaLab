@@ -29,13 +29,21 @@ class FilterBar(QtWidgets.QWidget):
         fs.bind_widget_font(self._type_combo, 'property_edit')
         layout.addWidget(self._type_combo)
 
+    @staticmethod
+    def _strip_component_suffix(name: str) -> str:
+        suffix = "Component"
+        if len(name) > len(suffix) and name.endswith(suffix):
+            return name[:-len(suffix)]
+        return name
+
     def set_available_types(self, types: list[str]):
         current_data = self._type_combo.currentData()
         self._type_combo.blockSignals(True)
         self._type_combo.clear()
         self._type_combo.addItem("全部类型", None)
         for t in types:
-            self._type_combo.addItem(t, t)
+            display_text = self._strip_component_suffix(t)
+            self._type_combo.addItem(display_text, t)
         for i in range(self._type_combo.count()):
             if self._type_combo.itemData(i) == current_data:
                 self._type_combo.setCurrentIndex(i)

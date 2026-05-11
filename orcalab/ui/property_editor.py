@@ -16,6 +16,7 @@ from orcalab.ui.filter_bar import FilterBar
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.property_data_store import PropertyDataStore
 from orcalab.ui.property_edit.property_group_edit import PropertyGroupEdit
+from orcalab.ui.property_edit.transform_edit import TransformEdit
 
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
@@ -39,6 +40,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._actor_path: Path | None = None
         self._property_edits: list[PropertyGroupEdit] = []
         self._raw_entries: list[EntityPropertyGroupEntry] = []
+        self._transform_edit: TransformEdit | None = None
 
         self._section_cache: OrderedDict[tuple, list[PropertyGroupEdit]] = OrderedDict()
         self._active_cache_key: tuple | None = None
@@ -170,6 +172,8 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             edit.hide()
         self._property_edits.clear()
 
+        self._transform_edit = None
+
         cached_ids = self._cached_widget_ids()
         while self._property_layout.count():
             item = self._property_layout.takeAt(0)
@@ -186,6 +190,8 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         for edit in self._property_edits:
             edit.disconnect_buses()
         self._property_edits.clear()
+
+        self._transform_edit = None
 
         cached_ids = self._cached_widget_ids()
         while self._property_layout.count():
@@ -208,6 +214,19 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         )
         FontService().bind_widget_font(label, 'body')
         self._property_layout.addWidget(label)
+
+    def _add_transform_edit(self):
+        if self._transform_edit is not None:
+            self._transform_edit.deleteLater()
+            self._transform_edit = None
+
+        if self._actor is None:
+            return
+
+        self._transform_edit = TransformEdit(self, self._actor, 160)
+        self._transform_edit.connect_buses()
+        self._property_layout.addWidget(self._transform_edit)
+        self._transform_edit.show()
 
     def _load_properties(self):
         self._cancel_pending_render()
@@ -240,19 +259,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         if cached is None:
             return
 
-        self._property_edits = list(cached)
+        if cache_key[1] is None:
+            self._add_transform_edit()
 
-        fs = FontService()
-        if self._entity is not None:
-            label = QtWidgets.QLabel(f"Entity: {self._entity.name}")
-            label.setContentsMargins(4, 4, 4, 4)
-            fs.bind_widget_font(label, 'group_title')
-            self._property_layout.addWidget(label)
-        elif self._actor is not None:
-            label = QtWidgets.QLabel(f"Actor: {self._actor.name}")
-            label.setContentsMargins(4, 4, 4, 4)
-            fs.bind_widget_font(label, 'group_title')
-            self._property_layout.addWidget(label)
+        self._property_edits = list(cached)
 
         for edit in cached:
             self._property_layout.addWidget(edit)
@@ -262,12 +272,6 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
     def _load_actor_properties(self):
         assert self._actor is not None
-
-        fs = FontService()
-        label = QtWidgets.QLabel(f"Actor: {self._actor.name}")
-        label.setContentsMargins(4, 4, 4, 4)
-        fs.bind_widget_font(label, 'group_title')
-        self._property_layout.addWidget(label)
 
         if self._actor_path is None:
             return
@@ -282,12 +286,6 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
     def _load_entity_properties(self):
         assert self._entity is not None
         assert self._actor is not None
-
-        fs = FontService()
-        label = QtWidgets.QLabel(f"Entity: {self._entity.name}")
-        label.setContentsMargins(4, 4, 4, 4)
-        fs.bind_widget_font(label, 'group_title')
-        self._property_layout.addWidget(label)
 
         if self._actor_path is None:
             return
@@ -381,6 +379,8 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                         if isinstance(self._actor, AssetActor):
                             self._actor.property_groups = sorted_groups
 
+                        self._set_transform_read_only(sorted_groups)
+
                         with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
                             self._render_property_groups(sorted_groups, 160)
                     else:
@@ -418,6 +418,8 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                         if isinstance(self._actor, AssetActor):
                             self._actor.property_groups = all_groups
 
+                        self._set_transform_read_only(all_groups)
+
                         with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
                             self._render_property_groups(all_groups, 160)
             except Exception as e:
@@ -448,6 +450,8 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         if self._actor is None:
             return
 
+        self._add_transform_edit()
+
         search_text = self._filter_bar.get_search_text()
         selected_types = self._filter_bar.get_selected_component_types()
 
@@ -457,10 +461,6 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         )
 
         if not groups:
-            label = QtWidgets.QLabel("无匹配属性")
-            label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            FontService().bind_widget_font(label, 'body')
-            self._property_layout.addWidget(label)
             return
 
         sorted_groups = self._sort_property_groups(groups)
@@ -493,6 +493,13 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             return 1
 
         return sorted(groups, key=_sort_key)
+
+    @staticmethod
+    def _set_transform_read_only(groups: list[ActorPropertyGroup]):
+        for group in groups:
+            if "transform" in group.name.lower():
+                for prop in group.properties:
+                    prop.set_read_only(True)
 
     def _render_property_groups(
         self, groups: list[ActorPropertyGroup], label_width: int, read_only: bool = False

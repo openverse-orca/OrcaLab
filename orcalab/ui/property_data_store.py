@@ -104,6 +104,13 @@ class PropertyDataStore:
         return self._items_to_property_groups(filtered)
 
     @staticmethod
+    def _strip_component_suffix(name: str) -> str:
+        suffix = "Component"
+        if len(name) > len(suffix) and name.endswith(suffix):
+            return name[:-len(suffix)]
+        return name
+
+    @staticmethod
     def _items_to_property_groups(
         items: List[FlatPropertyItem],
     ) -> List[ActorPropertyGroup]:
@@ -117,7 +124,7 @@ class PropertyDataStore:
             if key not in group_map:
                 group = ActorPropertyGroup(
                     prefix=item.group_prefix,
-                    name=item.component_type,
+                    name=PropertyDataStore._strip_component_suffix(item.component_type),
                     hint=item.entity_path,
                 )
                 group.display_name = item.component_display_name

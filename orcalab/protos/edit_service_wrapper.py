@@ -513,10 +513,21 @@ class EditServiceWrapper:
             node.children.append(child_node)
         return node
 
+    @staticmethod
+    def _strip_component_suffix(name: str) -> str:
+        suffix = "Component"
+        if len(name) > len(suffix) and name.endswith(suffix):
+            return name[:-len(suffix)]
+        return name
+
     def _parse_property_group_msg(self, pg_msg) -> ActorPropertyGroup:
+        name = self._strip_component_suffix(pg_msg.name)
         pg = ActorPropertyGroup(
-            prefix=pg_msg.prefix, name=pg_msg.name, hint=pg_msg.hint
+            prefix=pg_msg.prefix, name=name, hint=pg_msg.hint
         )
+
+        if pg_msg.display_name:
+            pg.display_name = pg_msg.display_name
 
         for prop_msg in pg_msg.properties:
             prop = self._parse_property_msg(prop_msg)
