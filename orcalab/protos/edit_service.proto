@@ -409,6 +409,8 @@ message Property {
     string editor_hint = 5;
     repeated string enum_values = 6;
     string sub_name = 7;
+    string parent_struct_name = 8;
+    string struct_display_name = 9;
 }
 
 message TreePropertyNode {

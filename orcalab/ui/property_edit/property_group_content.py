@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 
 from PySide6 import QtWidgets
 
@@ -7,9 +7,11 @@ from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
     ActorPropertyType,
+    StructPropertyGroup,
     TreePropertyNode,
 )
 from orcalab.path import Path
+from orcalab.ui.collapsible.collapsible_section import CollapsibleSection
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.icon_util import make_color_svg
 from orcalab.ui.property_edit.base_property_edit import (
@@ -115,6 +117,105 @@ def _render_tree_data_flat(
             )
 
 
+def _build_struct_tree(
+    group: ActorPropertyGroup,
+) -> Tuple[List[StructPropertyGroup], List[ActorProperty]]:
+    """将扁平属性列表按 parent_struct_name 重建为树形结构"""
+    struct_groups: dict[str, List[ActorProperty]] = {}
+    standalone_props: List[ActorProperty] = []
+
+    for prop in group.properties:
+        parent_name = prop.parent_struct_name()
+        if parent_name:
+            struct_groups.setdefault(parent_name, []).append(prop)
+        else:
+            standalone_props.append(prop)
+
+    def _build(name: str, props: List[ActorProperty]) -> StructPropertyGroup:
+        display = props[0].struct_display_name() or name
+        direct_props: List[ActorProperty] = []
+        child_groups: dict[str, List[ActorProperty]] = {}
+
+        for p in props:
+            remaining = p.name()[len(name) + 1:]
+            if "." in remaining:
+                child_name = remaining.split(".")[0]
+                child_groups.setdefault(child_name, []).append(p)
+            else:
+                direct_props.append(p)
+
+        children = [_build(cn, cp) for cn, cp in child_groups.items()]
+        return StructPropertyGroup(name, display, direct_props, children)
+
+    result = []
+    for struct_name, props in struct_groups.items():
+        result.append(_build(struct_name, props))
+
+    return result, standalone_props
+
+
+def _render_struct_group(
+    parent: QtWidgets.QWidget,
+    actor: BaseActor,
+    actor_path: Path,
+    group: ActorPropertyGroup,
+    struct_group: StructPropertyGroup,
+    label_width: int,
+    property_edits: List[BasePropertyEdit],
+    layout: QtWidgets.QVBoxLayout,
+):
+    """递归渲染结构体组为 CollapsibleSection"""
+    section = CollapsibleSection(
+        parent=parent,
+        title=struct_group.display_name,
+        collapsed=True,
+        content_factory=lambda sg=struct_group: _create_struct_content(
+            parent, actor, actor_path, group,
+            sg, label_width, property_edits,
+        ),
+    )
+    layout.addWidget(section)
+
+
+def _create_struct_content(
+    parent: QtWidgets.QWidget,
+    actor: BaseActor,
+    actor_path: Path,
+    group: ActorPropertyGroup,
+    struct_group: StructPropertyGroup,
+    label_width: int,
+    property_edits: List[BasePropertyEdit],
+) -> QtWidgets.QWidget:
+    """创建结构体折叠区的内容（递归）"""
+    content = StyledWidget()
+    content_layout = QtWidgets.QVBoxLayout(content)
+    content_layout.setContentsMargins(0, 0, 0, 0)
+    content_layout.setSpacing(2)
+
+    for prop in struct_group.properties:
+        editor = _create_property_edit(parent, actor, actor_path, group, prop, label_width)
+        if prop.is_read_only():
+            editor.set_read_only(True)
+        property_edits.append(editor)
+
+        row = QtWidgets.QWidget()
+        row_layout = QtWidgets.QHBoxLayout(row)
+        row_layout.setContentsMargins(20, 0, 0, 0)
+        row_layout.setSpacing(0)
+        row_layout.addWidget(editor)
+        row_layout.addStretch()
+        content_layout.addWidget(row)
+
+    for child in struct_group.children:
+        _render_struct_group(
+            parent, actor, actor_path, group,
+            child, label_width, property_edits,
+            content_layout,
+        )
+
+    return content
+
+
 def create_property_group_content(
     parent: QtWidgets.QWidget,
     actor: BaseActor,
@@ -128,7 +229,11 @@ def create_property_group_content(
     content_layout.setContentsMargins(0, 0, 0, 0)
     content_layout.setSpacing(2)
 
-    for prop in group.properties:
+    # 第一步：重建结构体树
+    struct_roots, standalone_props = _build_struct_tree(group)
+
+    # 第二步：渲染非结构体属性
+    for prop in standalone_props:
         if prop.value_type() == ActorPropertyType.TREE:
             _render_tree_data_flat(
                 parent, actor, actor_path, group,
@@ -159,5 +264,13 @@ def create_property_group_content(
                 editor.set_read_only(True)
             property_edits.append(editor)
             content_layout.addWidget(editor)
+
+    # 第三步：递归渲染结构体树
+    for struct_root in struct_roots:
+        _render_struct_group(
+            parent, actor, actor_path, group,
+            struct_root, label_width, property_edits,
+            content_layout,
+        )
 
     return content

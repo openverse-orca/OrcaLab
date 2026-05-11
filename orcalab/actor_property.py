@@ -34,6 +34,8 @@ class ActorProperty:
         self._editor_hint = ""
         self._enum_values: List[str] = []
         self._sub_name: str = ""
+        self._parent_struct_name: str = ""
+        self._struct_display_name: str = ""
 
     def name(self) -> str:
         return self._name
@@ -113,6 +115,18 @@ class ActorProperty:
     def set_sub_name(self, sub_name: str):
         self._sub_name = sub_name
 
+    def parent_struct_name(self) -> str:
+        return self._parent_struct_name
+
+    def set_parent_struct_name(self, name: str):
+        self._parent_struct_name = name
+
+    def struct_display_name(self) -> str:
+        return self._struct_display_name
+
+    def set_struct_display_name(self, name: str):
+        self._struct_display_name = name
+
     def create_alias(self, new_name: str) -> "ActorProperty":
         """创建共享值引用的别名属性，修改别名时原属性也会更新"""
         alias = object.__new__(ActorProperty)
@@ -125,6 +139,8 @@ class ActorProperty:
         alias._editor_hint = self._editor_hint
         alias._enum_values = self._enum_values
         alias._sub_name = self._sub_name
+        alias._parent_struct_name = self._parent_struct_name
+        alias._struct_display_name = self._struct_display_name
         return alias
 
 
@@ -176,6 +192,15 @@ class ActorPropertyKey:
         return hash(
             (self.actor_path, self.group_prefix, self.property_name, self.property_type)
         )
+
+
+@dataclass
+class StructPropertyGroup:
+    """结构体属性组（树形结构）"""
+    name: str
+    display_name: str
+    properties: List[ActorProperty]
+    children: List["StructPropertyGroup"]
 
 
 @dataclass
