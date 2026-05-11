@@ -199,10 +199,12 @@ class MainWindow(
         message_box.setText("正在初始化引擎，请稍候...   ")
         message_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.NoButton)
         message_box.show()
-
+        
+        await asyncio.sleep(0.2) 
         self._viewport_widget.init_viewport()
         self._viewport_widget.start_viewport_main_loop()
         await asyncio.sleep(0.5)
+        
         message_box.accept()
         logger.info("引擎初始化完成, 耗时: %.2f 秒", time.monotonic() - start_time)
 

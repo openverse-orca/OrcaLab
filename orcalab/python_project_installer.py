@@ -15,7 +15,8 @@ import requests
 import importlib.metadata
 
 from orcalab.config_service import ConfigService
-from orcalab.project_util import project_id, calculate_file_sha256
+from orcalab.project_util import project_id, calculate_file_sha256, get_cache_folder
+from orcalab.ui.viewport import Viewport
 
 logger = logging.getLogger(__name__)
 
@@ -485,6 +486,9 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
     progress_dialog.set_progress(0)
     
     try:
+        cache_folder = get_cache_folder()
+        cache_folder.mkdir(parents=True, exist_ok=True)
+
         orcalab_cfg = cfg.config.get("orcalab", {})
         local_path = str(orcalab_cfg.get("python_project_path", "") or "").strip()
         download_url = str(orcalab_cfg.get("python_project_url", "") or "").strip()
@@ -529,32 +533,33 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
                 progress_dialog.set_status("正在下载 python-project...")
                 progress_dialog.set_detail(detail)
                 progress_dialog.set_progress(percent // 2)  # 0-50%
+
+            expected_sha256 = orcalab_cfg.get("python_project_sha256", "")
             
-            progress_dialog.log(f"开始下载: {download_url}")
-            _download_archive(download_url, archive_path, download_progress)
-            progress_dialog.log(f"下载完成: {archive_path.name}")
+            if archive_path.exists() and expected_sha256 == calculate_file_sha256(archive_path):
+                progress_dialog.log(f"下载完成: {archive_path.name}")
+            else:
+                progress_dialog.log(f"开始下载: {download_url}")
+                _download_archive(download_url, archive_path, download_progress)
+                progress_dialog.log(f"下载完成: {archive_path.name}")
 
-            from orcalab.project_util import calculate_file_sha256
+                progress_dialog.set_status("正在校验文件完整性...")
 
-            progress_dialog.set_status("正在校验文件完整性...")
+                if expected_sha256:
+                    actual_sha256 = calculate_file_sha256(archive_path)
 
-            expected_sha256 = orcalab_cfg.get("python_project_sha256")
+                    progress_dialog.log(f"expected: {expected_sha256}")
+                    progress_dialog.log(f"actual:   {actual_sha256}")
 
-            if expected_sha256:
-                actual_sha256 = calculate_file_sha256(archive_path)
+                    if actual_sha256.lower() != expected_sha256:
+                        raise ValueError(
+                            f"SHA256 mismatch! 文件下载不完整，请重新安装\n"
+                            f"expected: {expected_sha256}\n"
+                            f"actual:   {actual_sha256}"
+                        )
 
-                progress_dialog.log(f"expected: {expected_sha256}")
-                progress_dialog.log(f"actual:   {actual_sha256}")
-
-                if actual_sha256.lower() != expected_sha256:
-                    raise ValueError(
-                        f"SHA256 mismatch! 文件下载不完整，请重新安装\n"
-                        f"expected: {expected_sha256}\n"
-                        f"actual:   {actual_sha256}"
-                    )
-
-            progress_dialog.set_progress(50)
-            progress_dialog.log("SHA256 校验通过")
+                progress_dialog.set_progress(50)
+                progress_dialog.log("SHA256 校验通过")
 
             # 解压进度回调
             def extract_progress(percent: int, detail: str):
@@ -587,10 +592,6 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
             progress_dialog.set_determinate()
             progress_dialog.log(f"检测到 {len(pak_urls)} 个 pak 文件需要下载")
             
-            from orcalab.project_util import get_cache_folder, calculate_file_sha256
-            cache_folder = get_cache_folder()
-            cache_folder.mkdir(parents=True, exist_ok=True)
-            
             for i, pak_url in enumerate(pak_urls):
                 filename = pak_url.split("/")[-1]
                 target_path = cache_folder / filename
@@ -619,6 +620,14 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         # 保存安装状态
         state_update["installed_at"] = str(Path.cwd())
         _save_install_state(state_update)
+
+
+        # Warmup Engine
+        progress_dialog.set_status("优化程序集...")
+        progress_dialog.set_detail("优化程序集, 提高响应速度")
+        viewport = Viewport()
+        viewport.warmup()
+
         
         progress_dialog.set_determinate()
         progress_dialog.set_progress(100)
