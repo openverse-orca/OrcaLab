@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# Generated installer icon
+orcalab/assets/icons/orcalab_logo.ico
+
 # Distribution / packaging
 .Python
 build/

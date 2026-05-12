@@ -47,6 +47,11 @@ def create_argparser():
         不指定会弹出配置选择界面。这个参数只有在'--full-screen'模式下才会生效。",
     )
     parser.add_argument("--full-screen", action="store_true", help="以全屏模式启动应用")
+    parser.add_argument(
+        "--port",
+        type=int,
+        help="URL服务端口号（默认：50651）。如果端口被占用，程序会自动尝试其他端口。",
+    )
 
     return parser
 

@@ -2,8 +2,9 @@ import argparse
 import urllib
 import asyncio
 import pathlib
+import json
 
-from orcalab.url_service.url_service import UrlServiceClient, UrlServiceServer
+from orcalab.url_service.url_service import UrlServiceClient, UrlServiceServer, DEFAULT_PORT
 
 
 def _log_file_path():
@@ -13,6 +14,20 @@ def _log_file_path():
     return log_dir / "url_service.log"
 
 
+def _resolve_port() -> int:
+    status_file = pathlib.Path.home() / "Orca" / "OrcaLab" / "url_service_port.json"
+    try:
+        if status_file.exists():
+            with open(status_file, "r", encoding="utf-8") as f:
+                status = json.load(f)
+                port = status.get("port")
+                if port is not None:
+                    return port
+    except Exception:
+        pass
+    return DEFAULT_PORT
+
+
 async def serve():
     server = UrlServiceServer()
     await server.start()
@@ -20,13 +35,8 @@ async def serve():
 
 
 async def send_url(url):
-    client = UrlServiceClient()
-
-    # Decode the URL
-    # url = urllib.parse.unquote_plus(url)
-
-    # with open(_log_file_path(), "a") as f:
-    #     f.write(f"Sending URL: {url}\n")
+    port = _resolve_port()
+    client = UrlServiceClient(port=port)
 
     try:
         response = await client.process_url(url)

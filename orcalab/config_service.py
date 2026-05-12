@@ -211,6 +211,9 @@ class ConfigService:
     def sim_port(self) -> int:
         return self.config["orcalab"]["sim_port"]
 
+    def url_service_port(self) -> int:
+        return self.config["orcalab"].get("url_service_port", 50651)
+
     def executable(self) -> str:
         # return self.config["orcalab"]["executable"]
         return "pseudo.exe"
@@ -558,6 +561,40 @@ class ConfigService:
                 status_file.unlink()
             except IOError as e:
                 logger.warning(f"无法删除MCP状态文件: {e}")
+
+    def _get_url_service_status_file_path(self) -> pathlib.Path:
+        home = pathlib.Path.home()
+        status_dir = home / "Orca" / "OrcaLab"
+        return status_dir / "url_service_port.json"
+
+    def write_url_service_port(self, port: int) -> None:
+        status_file = self._get_url_service_status_file_path()
+        status_file.parent.mkdir(parents=True, exist_ok=True)
+        status = {"port": port}
+        try:
+            with open(status_file, "w", encoding="utf-8") as f:
+                json.dump(status, f, ensure_ascii=False, indent=2)
+        except IOError as e:
+            logger.warning(f"无法写入URL服务状态文件: {e}")
+
+    def read_url_service_port(self) -> int | None:
+        status_file = self._get_url_service_status_file_path()
+        if not status_file.exists():
+            return None
+        try:
+            with open(status_file, "r", encoding="utf-8") as f:
+                status = json.load(f)
+                return status.get("port")
+        except (json.JSONDecodeError, IOError):
+            return None
+
+    def clear_url_service_status(self) -> None:
+        status_file = self._get_url_service_status_file_path()
+        if status_file.exists():
+            try:
+                status_file.unlink()
+            except IOError as e:
+                logger.warning(f"无法删除URL服务状态文件: {e}")
 
     def set_send_statistics(self, value: str):
         self.config.setdefault("orcalab", {})["send_statistics"] = value
