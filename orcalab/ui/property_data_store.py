@@ -102,11 +102,12 @@ class PropertyDataStore:
                 self._component_display_names[component_type] = component_display_name
 
             group_entity_path = group.hint or entity_path
+            group_entity_id = group.entity_id or entity_id
 
             for prop in group.properties:
                 self._items.append(
                     FlatPropertyItem(
-                        entity_id=entity_id,
+                        entity_id=group_entity_id,
                         entity_path=group_entity_path,
                         component_type=component_type,
                         component_display_name=component_display_name,
@@ -122,6 +123,15 @@ class PropertyDataStore:
                         group_id=group_idx,
                     )
                 )
+
+        stored_ids = set(item.entity_id for item in self._items)
+        stored_paths = set(item.entity_path for item in self._items)
+        logger.info(
+            f"[PropertyDataStore] set_data_from_groups: {len(groups)} groups, "
+            f"{len(self._items)} items, "
+            f"unique_entity_ids={stored_ids}, "
+            f"unique_entity_paths={stored_paths}"
+        )
 
     def filter_items(
         self,
@@ -139,11 +149,18 @@ class PropertyDataStore:
             result = [
                 i
                 for i in result
-                if text_lower in i.property_display_name.lower()
-                or text_lower in i.component_display_name.lower()
-                or text_lower in i.property_name.lower()
-                or text_lower in i.component_type.lower()
+                if text_lower in i.entity_path.lower()
             ]
+
+        if entity_paths is not None:
+            logger.info(
+                f"[PropertyDataStore] filter_items: total={len(self._items)}, "
+                f"filtered={len(result)}, "
+                f"entity_paths={entity_paths}, "
+                f"component_types={component_types}, "
+                f"search_text='{search_text}'"
+            )
+
         return result
 
     def get_property_groups_for_display(

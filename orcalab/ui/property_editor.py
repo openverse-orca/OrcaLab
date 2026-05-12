@@ -366,6 +366,13 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
                     entity_ids = entity_info.collect_entity_ids() if (entity_info and self._recursive) else [entity_id]
 
+                    logger.info(
+                        f"[PropertyEditor] _fetch_and_render_entity: actor_path={actor_path}, "
+                        f"requested_entity_id={entity_id}, "
+                        f"_recursive={self._recursive}, "
+                        f"resolved_entity_ids={entity_ids}"
+                    )
+
                     if len(entity_ids) == 1:
                         with perf_timer("property_editor._fetch_and_render_entity.grpc_single", feature="PROPERTY"):
                             groups = await get_remote_scene().get_entity_property_groups(
@@ -393,6 +400,9 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
                         sorted_groups = self._sort_property_groups(groups)
 
+                        for g in sorted_groups:
+                            g.entity_id = entity_id
+
                         if isinstance(self._actor, AssetActor):
                             self._actor.property_groups = sorted_groups
 
@@ -416,9 +426,12 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                         perf_log(f"property_editor._fetch_and_render_entity: batch got {len(batch_results)} results for {len(entity_ids)} entities", feature="PROPERTY")
 
                         all_groups: list[ActorPropertyGroup] = []
-                        for groups in batch_results:
+                        for entity_idx, groups in enumerate(batch_results):
                             if groups:
                                 sorted_groups = self._sort_property_groups(groups)
+                                child_entity_id = entity_ids[entity_idx]
+                                for g in sorted_groups:
+                                    g.entity_id = child_entity_id
                                 all_groups.extend(sorted_groups)
 
                         if not all_groups:
@@ -491,6 +504,18 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
         search_text = self._filter_bar.get_search_text()
         selected_types = self._filter_bar.get_selected_component_types()
+
+        # Log data store contents before filtering
+        all_ids = set(item.entity_id for item in self._data_store.items)
+        all_paths = set(item.entity_path for item in self._data_store.items)
+        logger.info(
+            f"[PropertyEditor] _render_from_data_store: "
+            f"current_entity_id={self._entity.entity_id}, "
+            f"data_store_items={len(self._data_store.items)}, "
+            f"unique_entity_ids={all_ids}, "
+            f"unique_entity_paths={all_paths}, "
+            f"selected_types={selected_types}"
+        )
 
         groups = self._data_store.get_property_groups_for_display(
             component_types=selected_types,

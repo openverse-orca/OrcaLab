@@ -19,7 +19,7 @@ class FilterBar(QtWidgets.QWidget):
         fs = FontService()
 
         self._search_edit = QtWidgets.QLineEdit()
-        self._search_edit.setPlaceholderText("搜索属性...")
+        self._search_edit.setPlaceholderText("搜索实体...")
         self._search_edit.textChanged.connect(self._on_filter_changed)
         fs.bind_widget_font(self._search_edit, 'property_edit')
         layout.addWidget(self._search_edit)

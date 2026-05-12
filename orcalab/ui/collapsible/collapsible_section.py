@@ -46,6 +46,8 @@ class SectionHeader(QtWidgets.QWidget):
         self.setFixedHeight(self._row_height)
         self.setMouseTracking(True)
 
+        self._update_tooltip()
+
     def _on_font_scale_changed(self):
         fm = self.fontMetrics()
         self._row_height = max(fm.height() + 8, 24)
@@ -89,6 +91,7 @@ class SectionHeader(QtWidgets.QWidget):
 
     def set_badge(self, badge: str):
         self._badge = badge
+        self._update_tooltip()
         self.update()
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
@@ -157,6 +160,38 @@ class SectionHeader(QtWidgets.QWidget):
         self._hovered = False
         self.update()
         super().leaveEvent(event)
+
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self._update_tooltip()
+
+    def _update_tooltip(self):
+        if not self._badge:
+            self.setToolTip("")
+            return
+        max_width = max(self.width() - 10, 200)
+        escaped = (
+            self._badge.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+        tooltip_html = (
+            f'<p style="white-space:normal;word-wrap:break-word;max-width:{max_width}px;">'
+            f'{escaped}</p>'
+        )
+        self.setToolTip(tooltip_html)
+
+    def contextMenuEvent(self, event: QtGui.QContextMenuEvent) -> None:
+        if not self._badge:
+            return
+        menu = QtWidgets.QMenu(self)
+        copy_action = menu.addAction("复制path")
+        copy_action.triggered.connect(self._copy_path_to_clipboard)
+        menu.exec(event.globalPos())
+
+    def _copy_path_to_clipboard(self):
+        clipboard = QtWidgets.QApplication.clipboard()
+        clipboard.setText(self._badge)
 
     @staticmethod
     def paint_at(

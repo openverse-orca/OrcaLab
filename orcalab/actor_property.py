@@ -162,6 +162,7 @@ class ActorPropertyGroup:
         self.hint = hint
         self.properties: List[ActorProperty] = []
         self.tree_data: List[TreePropertyNode] = []
+        self.entity_id: int = 0
 
 
 class ActorPropertyKey:
