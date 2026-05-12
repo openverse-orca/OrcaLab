@@ -1,5 +1,6 @@
 import asyncio
 import math
+import time
 import webbrowser
 
 from typing import Any, Dict, List, Tuple, override
@@ -191,10 +192,22 @@ class MainWindow(
         await asyncio.sleep(0.5)
 
         logger.info("初始化引擎...")
+        start_time = time.monotonic()
+
+        message_box = QtWidgets.QMessageBox(self)
+        message_box.setWindowTitle("请稍候")
+        message_box.setModal(True)
+        message_box.setText("正在初始化引擎，请稍候...   ")
+        message_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.NoButton)
+        message_box.show()
+        
+        await asyncio.sleep(0.2) 
         self._viewport_widget.init_viewport()
         self._viewport_widget.start_viewport_main_loop()
         await asyncio.sleep(0.5)
-        logger.info("引擎初始化完成")
+        
+        message_box.accept()
+        logger.info("引擎初始化完成, 耗时: %.2f 秒", time.monotonic() - start_time)
 
         connect(self.actor_outline_model.add_item, self.add_item_to_scene)
 
@@ -976,7 +989,6 @@ class MainWindow(
             await self.duplicate_selection("menu")
         connect(action_duplicate.triggered, duplicate_wrapper)
 
-
         action_delete = self.menu_edit.addAction("删除")
         action_delete.setEnabled(self.can_delete_selection())
         action_delete.setShortcut(QtGui.QKeySequence("Delete"))
@@ -1329,7 +1341,7 @@ class MainWindow(
         if output is not None:
             output.append(transform)
         return transform
-        
+
     #
     # CameraNotificationBus overrides
     #
@@ -1433,7 +1445,7 @@ class MainWindow(
 
     def open_settings(self):
         SettingsDialog(self, remote_scene=self.remote_scene).exec()
-    
+
     def can_duplicate_selection(self) -> bool:
         if not self.local_scene.selection:
             return False
@@ -1474,7 +1486,7 @@ class MainWindow(
             assert isinstance(event, QtGui.QKeyEvent)
             ctrl = event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier
             shift = event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
-            
+
             if event.key() == QtCore.Qt.Key.Key_Z:
                 if ctrl and not event.isAutoRepeat():
                     if shift and not event.isAutoRepeat():
@@ -1487,7 +1499,7 @@ class MainWindow(
                 if ctrl and not event.isAutoRepeat():
                     asyncio.create_task(self.duplicate_selection("main window"))
                     return True
-                
+
             if event.key() == QtCore.Qt.Key.Key_Delete and not event.isAutoRepeat():
                 asyncio.create_task(self.delete_selection("main window"))
                 return True

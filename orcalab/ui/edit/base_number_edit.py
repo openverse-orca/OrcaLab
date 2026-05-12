@@ -65,7 +65,7 @@ class BaseNumberEdit[T: (int, float)](QtWidgets.QLineEdit):
                 value = self.value()
                 assert self._original_value is not None
                 self._set_value_only(self._original_value)
-                if self._set_value_only(value):
+                if self._set_value_and_text(value):
                     self.value_changed.emit()
                 self.set_state(BaseNumberEditState.Idle)
                 self._original_value = self.value()
@@ -129,8 +129,8 @@ class BaseNumberEdit[T: (int, float)](QtWidgets.QLineEdit):
             if not self._real_time_type:
                 value = self.value()
                 assert self._original_value is not None
-                self._set_value_only(self._original_value)
-                if self._set_value_only(value):
+                self._set_value_and_text(self._original_value)
+                if self._set_value_and_text(value):
                     self.value_changed.emit()
 
             # clearFocus will trigger FocusOut event, which will set state to Idle

@@ -1,5 +1,6 @@
 import asyncio
 import time
+from typing import override
 from PySide6 import QtCore, QtWidgets, QtGui
 import pathlib
 import logging
@@ -90,6 +91,25 @@ class Viewport(QtWidgets.QWidget):
             custom_event_filter=None,
         ):
             raise RuntimeError("Failed to initialize viewport")
+
+    def warmup(self):
+        if self._viewport is None:
+            return
+        
+        config_service = ConfigService()
+        project_path = config_service.orca_project_folder()
+
+        if config_service.is_development():
+            project_path = config_service.dev_project_path()
+
+        if not self._validate_project_path(project_path):
+            raise RuntimeError(f"Invalid project path: {project_path}")
+
+        command_line = ["pseudo.exe"]
+        command_line.append(f"--project-path={project_path}")
+        self._viewport.init_viewport(command_line, False)
+
+        # self._viewport.destroy_viewport()
 
     def _validate_project_path(self, path: str) -> bool:
         project_dir = pathlib.Path(path)
@@ -243,3 +263,9 @@ class Viewport(QtWidgets.QWidget):
                 UserEventRequestBus().queue_mouse_event(x, y, button, MouseAction.Move)
 
         return super().eventFilter(watched, event)
+
+    @override
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        painter = QtGui.QPainter(self)
+        painter.fillRect(self.rect(), QtGui.QColor(0, 0, 0))  # Clear with black background
+        return super().paintEvent(event)

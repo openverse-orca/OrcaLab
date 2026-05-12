@@ -344,7 +344,7 @@ class RemoteScene(SceneEditNotification):
             bus.on_runtime_grab_changed(enabled)
             return
 
-        print(f"Unknown pending operation: {op}")
+        logger.debug(f"Unknown pending operation: {op}")
 
     def _is_transform_change(self, op: str) -> bool:
         return op.startswith("transform_change:")

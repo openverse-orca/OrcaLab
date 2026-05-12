@@ -16,6 +16,7 @@ class FloatEdit(BaseNumberEdit[float]):
         self._value = 0.0
         self.setText("0.0")
         self._step = step
+        self.max_float_before_precision_loss = 100000.0
 
     @override
     def _text_to_value(self, text: str) -> float | None:
@@ -35,10 +36,23 @@ class FloatEdit(BaseNumberEdit[float]):
 
     @override
     def _set_value_only(self, value: float) -> bool:
-        if is_close(value, self._value):
+        clamped = max(
+            -self.max_float_before_precision_loss,
+            min(value, self.max_float_before_precision_loss),
+        )
+
+        is_clamped = False
+        if clamped == self.max_float_before_precision_loss or clamped == -self.max_float_before_precision_loss:
+            is_clamped = True
+
+        if is_close(clamped, self._value) and not is_clamped:
             return False
 
-        self._value = value
+        self._value = clamped
+        
+        text = self._value_to_text(self.value())
+        if self.text() != text:
+            self.setText(text)
         return True
 
     @override

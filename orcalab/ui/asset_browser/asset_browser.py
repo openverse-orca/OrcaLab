@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import shutil
+import time
 import webbrowser
 from typing import List, override
 from PySide6 import QtCore, QtWidgets, QtGui
@@ -477,6 +478,9 @@ class AssetBrowser(QtWidgets.QWidget):
         if 'prefabs/mujococamera512' in asset_paths:
             all_assets.pop(asset_paths.index('prefabs/mujococamera512'))
             asset_paths.pop(asset_paths.index('prefabs/mujococamera512'))
+        if 'prefabs/agentcamera' in asset_paths:
+            all_assets.pop(asset_paths.index('prefabs/agentcamera'))
+            asset_paths.pop(asset_paths.index('prefabs/agentcamera'))
         # 预处理：拷贝本地缩略图，收集需要下载的任务
         new_assets = []
         download_tasks = []
@@ -516,15 +520,19 @@ class AssetBrowser(QtWidgets.QWidget):
         
         # 并行下载所有缩略图
         if download_tasks:
+            start_time = time.monotonic()
             await asyncio.gather(*download_tasks, return_exceptions=True)
+            logger.info(f"Downloaded {len(download_tasks)} thumbnails in {time.monotonic() - start_time:.2f} seconds")
             
             # 为下载成功的资产创建播放器
+            start_time = time.monotonic()
             for asset_idx, cache_path in download_info:
                 if os.path.exists(cache_path):
                     player = ApngPlayer(str(cache_path))
                     if player.is_valid():
                         player.set_scaled_size(QtCore.QSize(96, 96))
                         new_assets[asset_idx].apng_player = player
+            logger.info(f"Created players for {len(download_info)} assets in {time.monotonic() - start_time:.2f} seconds")
         
         self._model.set_assets(new_assets)
         self._tree_view.set_assets(new_assets)
