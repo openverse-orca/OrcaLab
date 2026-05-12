@@ -1,9 +1,8 @@
 import logging
-from typing import Any, List, Set
+from typing import Dict, List, Set
 
 from orcalab.actor_property import (
     ActorPropertyGroup,
-    ActorPropertyType,
     EntityPropertyGroupEntry,
     FlatPropertyItem,
 )
@@ -16,11 +15,13 @@ class PropertyDataStore:
     def __init__(self):
         self._items: List[FlatPropertyItem] = []
         self._available_component_types: List[str] = []
+        self._component_display_names: Dict[str, str] = {}
         self._available_entity_paths: List[str] = []
 
     def clear(self):
         self._items.clear()
         self._available_component_types.clear()
+        self._component_display_names.clear()
         self._available_entity_paths.clear()
 
     def set_data_from_entries(self, entries: List[EntityPropertyGroupEntry]):
@@ -29,11 +30,12 @@ class PropertyDataStore:
             seen_types: Set[str] = set()
             seen_paths: Set[str] = set()
 
-            for entry in entries:
+            for entry_idx, entry in enumerate(entries):
                 component_type = entry.component_type
                 if component_type not in seen_types:
                     seen_types.add(component_type)
                     self._available_component_types.append(component_type)
+                    self._component_display_names[component_type] = entry.component_display_name
 
                 entity_path = entry.entity_path
                 if entity_path not in seen_paths:
@@ -54,6 +56,9 @@ class PropertyDataStore:
                             is_readonly=prop.is_read_only(),
                             group_prefix=entry.property_group.prefix,
                             sub_name=prop.sub_name(),
+                            parent_struct_name=prop.parent_struct_name(),
+                            struct_display_name=prop.struct_display_name(),
+                            group_id=entry_idx,
                         )
                     )
 
@@ -67,9 +72,56 @@ class PropertyDataStore:
     def available_component_types(self) -> List[str]:
         return self._available_component_types
 
+    def get_component_type_items(self) -> List[tuple[str, str]]:
+        """返回 [(内部名, 显示名), ...] 列表"""
+        return [
+            (t, self._component_display_names.get(t, t))
+            for t in self._available_component_types
+        ]
+
     @property
     def available_entity_paths(self) -> List[str]:
         return self._available_entity_paths
+
+    def set_data_from_groups(
+        self,
+        groups: List[ActorPropertyGroup],
+        entity_id: int,
+        entity_path: str,
+    ):
+        """直接从 ActorPropertyGroup 列表填充数据（用于 entity 路径）"""
+        self.clear()
+        seen_types: Set[str] = set()
+
+        for group_idx, group in enumerate(groups):
+            component_type = group.name
+            component_display_name = group.display_name
+            if component_type not in seen_types:
+                seen_types.add(component_type)
+                self._available_component_types.append(component_type)
+                self._component_display_names[component_type] = component_display_name
+
+            group_entity_path = group.hint or entity_path
+
+            for prop in group.properties:
+                self._items.append(
+                    FlatPropertyItem(
+                        entity_id=entity_id,
+                        entity_path=group_entity_path,
+                        component_type=component_type,
+                        component_display_name=component_display_name,
+                        property_name=prop.name(),
+                        property_display_name=prop.display_name(),
+                        property_type=prop.value_type(),
+                        value=prop.value(),
+                        is_readonly=prop.is_read_only(),
+                        group_prefix=group.prefix,
+                        sub_name=prop.sub_name(),
+                        parent_struct_name=prop.parent_struct_name(),
+                        struct_display_name=prop.struct_display_name(),
+                        group_id=group_idx,
+                    )
+                )
 
     def filter_items(
         self,
@@ -116,11 +168,11 @@ class PropertyDataStore:
     ) -> List[ActorPropertyGroup]:
         from orcalab.actor_property import ActorProperty
 
-        group_map: dict[tuple[str, str, str, int], ActorPropertyGroup] = {}
-        group_order: list[tuple[str, str, str, int]] = []
+        group_map: dict[tuple[str, str, str, int, int], ActorPropertyGroup] = {}
+        group_order: list[tuple[str, str, str, int, int]] = []
 
         for item in items:
-            key = (item.entity_path, item.component_type, item.group_prefix, item.entity_id)
+            key = (item.entity_path, item.component_type, item.group_prefix, item.entity_id, item.group_id)
             if key not in group_map:
                 group = ActorPropertyGroup(
                     prefix=item.group_prefix,
@@ -140,6 +192,16 @@ class PropertyDataStore:
             prop.set_read_only(item.is_readonly)
             if item.sub_name:
                 prop.set_sub_name(item.sub_name)
+            if item.parent_struct_name:
+                prop.set_parent_struct_name(item.parent_struct_name)
+            if item.struct_display_name:
+                prop.set_struct_display_name(item.struct_display_name)
             group_map[key].properties.append(prop)
+
+        perf_log(
+            f"data_store._items_to_property_groups: {len(items)} items -> {len(group_order)} groups, "
+            f"keys={[(k[1], k[2], k[4]) for k in group_order]}",
+            feature="PARSE"
+        )
 
         return [group_map[key] for key in group_order]

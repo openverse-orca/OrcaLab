@@ -201,6 +201,7 @@ class StructPropertyGroup:
     display_name: str
     properties: List[ActorProperty]
     children: List["StructPropertyGroup"]
+    layout: str = "vertical"
 
 
 @dataclass
@@ -225,3 +226,6 @@ class FlatPropertyItem:
     is_readonly: bool
     group_prefix: str
     sub_name: str = ""
+    parent_struct_name: str = ""
+    struct_display_name: str = ""
+    group_id: int = 0

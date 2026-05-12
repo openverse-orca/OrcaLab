@@ -1,8 +1,9 @@
-from typing import Set
+from typing import List, Set
 
 from PySide6 import QtCore, QtWidgets
 
 from orcalab.ui.fonts.font_service import FontService
+from orcalab.ui.multi_select_combo import MultiSelectCombo
 
 
 class FilterBar(QtWidgets.QWidget):
@@ -23,41 +24,18 @@ class FilterBar(QtWidgets.QWidget):
         fs.bind_widget_font(self._search_edit, 'property_edit')
         layout.addWidget(self._search_edit)
 
-        self._type_combo = QtWidgets.QComboBox()
-        self._type_combo.addItem("全部类型", None)
-        self._type_combo.currentIndexChanged.connect(self._on_filter_changed)
-        fs.bind_widget_font(self._type_combo, 'property_edit')
+        self._type_combo = MultiSelectCombo()
+        self._type_combo.selection_changed.connect(self._on_filter_changed)
         layout.addWidget(self._type_combo)
 
-    @staticmethod
-    def _strip_component_suffix(name: str) -> str:
-        suffix = "Component"
-        if len(name) > len(suffix) and name.endswith(suffix):
-            return name[:-len(suffix)]
-        return name
-
-    def set_available_types(self, types: list[str]):
-        current_data = self._type_combo.currentData()
-        self._type_combo.blockSignals(True)
-        self._type_combo.clear()
-        self._type_combo.addItem("全部类型", None)
-        for t in types:
-            display_text = self._strip_component_suffix(t)
-            self._type_combo.addItem(display_text, t)
-        for i in range(self._type_combo.count()):
-            if self._type_combo.itemData(i) == current_data:
-                self._type_combo.setCurrentIndex(i)
-                break
-        self._type_combo.blockSignals(False)
+    def set_available_types(self, type_items: List[tuple[str, str]]):
+        self._type_combo.set_items(type_items)
 
     def get_search_text(self) -> str:
         return self._search_edit.text().strip()
 
     def get_selected_component_types(self) -> Set[str] | None:
-        data = self._type_combo.currentData()
-        if data is None:
-            return None
-        return {data}
+        return self._type_combo.selected_items()
 
     def _on_filter_changed(self):
         self.filter_changed.emit()

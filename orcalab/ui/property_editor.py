@@ -247,6 +247,13 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
         self._clear_property_layout()
 
+        logger.info(
+            f"[PropertyEditor] _load_properties: actor={self._actor.name}, "
+            f"entity={self._entity.name if self._entity else None}, "
+            f"cache_key={cache_key}, "
+            f"cache_hit={cache_key in self._section_cache if cache_key else False}"
+        )
+
         if self._entity is not None:
             self._load_entity_properties()
         else:
@@ -277,7 +284,17 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             return
 
         if isinstance(self._actor, AssetActor) and self._actor.property_groups:
-            self._data_store.set_data_from_entries(self._raw_entries) if self._raw_entries else None
+            logger.info(
+                f"[PropertyEditor] _load_actor_properties: actor={self._actor.name}, "
+                f"has_raw_entries={bool(self._raw_entries)}, "
+                f"raw_entries_count={len(self._raw_entries)}, "
+                f"property_groups_count={len(self._actor.property_groups)}"
+            )
+            if self._raw_entries:
+                self._data_store.set_data_from_entries(self._raw_entries)
+                self._filter_bar.set_available_types(
+                    self._data_store.get_component_type_items()
+                )
             self._render_from_data_store()
             return
 
@@ -330,7 +347,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                         self._actor.property_groups = self._sort_property_groups(groups)
 
                     self._filter_bar.set_available_types(
-                        self._data_store.available_component_types
+                        self._data_store.get_component_type_items()
                     )
 
                     with perf_timer("property_editor._fetch_and_render_all.render", feature="PROPERTY"):
@@ -381,8 +398,15 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
                         self._set_transform_read_only(sorted_groups)
 
+                        self._data_store.set_data_from_groups(
+                            sorted_groups, entity_id, str(actor_path)
+                        )
+                        self._filter_bar.set_available_types(
+                            self._data_store.get_component_type_items()
+                        )
+
                         with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
-                            self._render_property_groups(sorted_groups, 160)
+                            self._render_from_data_store()
                     else:
                         with perf_timer("property_editor._fetch_and_render_entity.grpc_batch", feature="PROPERTY"):
                             batch_results = await get_remote_scene().get_entity_property_groups_batch(
@@ -420,8 +444,15 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
                         self._set_transform_read_only(all_groups)
 
+                        self._data_store.set_data_from_groups(
+                            all_groups, entity_id, str(actor_path)
+                        )
+                        self._filter_bar.set_available_types(
+                            self._data_store.get_component_type_items()
+                        )
+
                         with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
-                            self._render_property_groups(all_groups, 160)
+                            self._render_from_data_store()
             except Exception as e:
                 logger.warning(f"Failed to load entity components: {e}", exc_info=True)
 
@@ -450,7 +481,13 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         if self._actor is None:
             return
 
-        self._add_transform_edit()
+        if self._entity is None:
+            self._add_transform_edit()
+            logger.info(
+                f"[PropertyEditor] actor selected (entity=None), "
+                f"skipping entity component groups, data_store has {len(self._data_store.items)} items"
+            )
+            return
 
         search_text = self._filter_bar.get_search_text()
         selected_types = self._filter_bar.get_selected_component_types()
@@ -458,6 +495,13 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         groups = self._data_store.get_property_groups_for_display(
             component_types=selected_types,
             search_text=search_text,
+        )
+
+        logger.info(
+            f"[PropertyEditor] _render_from_data_store: entity_id={self._entity.entity_id}, "
+            f"data_store items={len(self._data_store.items)}, "
+            f"groups={len(groups)}, "
+            f"selected_types={selected_types}"
         )
 
         if not groups:
@@ -468,9 +512,6 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
     def _apply_filter(self):
         if self._actor is None:
-            return
-
-        if self._entity is not None:
             return
 
         if not self._data_store.items:

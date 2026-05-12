@@ -139,7 +139,7 @@ class SectionHeader(QtWidgets.QWidget):
             badge_font = FontService().apply_font_modifiers("badge_text", font)
             painter.setFont(badge_font)
             badge_rect = QtCore.QRect(badge_x, 0, badge_width, rect.height())
-            badge_text = fm.elidedText(self._badge, QtCore.Qt.TextElideMode.ElideMiddle, badge_width)
+            badge_text = fm.elidedText(self._badge, QtCore.Qt.TextElideMode.ElideLeft, badge_width)
             painter.drawText(badge_rect, QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight, badge_text)
 
         painter.end()
@@ -254,7 +254,7 @@ class SectionHeader(QtWidgets.QWidget):
             badge_font = FontService().apply_font_modifiers("badge_text", font)
             painter.setFont(badge_font)
             badge_rect = QtCore.QRect(badge_x, rect.y(), badge_width, rect.height())
-            badge_text = fm.elidedText(badge, QtCore.Qt.TextElideMode.ElideMiddle, badge_width)
+            badge_text = fm.elidedText(badge, QtCore.Qt.TextElideMode.ElideLeft, badge_width)
             painter.drawText(badge_rect, QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight, badge_text)
 
         return tail_rects

@@ -135,6 +135,21 @@ def _build_struct_tree(
         else:
             standalone_props.append(prop)
 
+    def _is_tuple_group(g: StructPropertyGroup) -> bool:
+        """检测是否为三元组/四元组（Vector2/3/4, Quaternion等），应采用横向平铺"""
+        if g.children:
+            return False
+        if not g.properties:
+            return False
+        for p in g.properties:
+            if p.value_type() != ActorPropertyType.FLOAT:
+                return False
+            sub = p.sub_name()
+            name = p.display_name()
+            if not ((sub and len(sub) == 1) or (name and len(name) == 1)):
+                return False
+        return True
+
     def _build(name: str, props: List[ActorProperty], display_override: str | None = None) -> StructPropertyGroup:
         display = display_override or props[0].struct_display_name() or name
         direct_props: List[ActorProperty] = []
@@ -156,7 +171,10 @@ def _build_struct_tree(
                 direct_props.append(p)
 
         children = [_build(cn, cp, cn.capitalize()) for cn, cp in child_groups.items()]
-        return StructPropertyGroup(name, display, direct_props, children)
+        group = StructPropertyGroup(name, display, direct_props, children)
+        if _is_tuple_group(group):
+            group.layout = "horizontal"
+        return group
 
     result = []
     for struct_name, props in struct_groups.items():
@@ -193,6 +211,35 @@ def _render_struct_group(
     layout.addWidget(section)
 
 
+def _create_horizontal_tuple_content(
+    parent: QtWidgets.QWidget,
+    actor: BaseActor,
+    actor_path: Path,
+    group: ActorPropertyGroup,
+    struct_group: StructPropertyGroup,
+    property_edits: List[BasePropertyEdit],
+    indent: int,
+) -> QtWidgets.QWidget:
+    """创建横向平铺的三元组/四元组内容行"""
+    row = QtWidgets.QWidget()
+    row_layout = QtWidgets.QHBoxLayout(row)
+    row_layout.setContentsMargins(indent, 0, 0, 0)
+    row_layout.setSpacing(8)
+
+    fs = FontService()
+    compact_label_width = fs.indent_unit_px(14)
+
+    for prop in struct_group.properties:
+        editor = _create_property_edit(parent, actor, actor_path, group, prop, compact_label_width)
+        if prop.is_read_only():
+            editor.set_read_only(True)
+        property_edits.append(editor)
+        row_layout.addWidget(editor)
+
+    row_layout.addStretch()
+    return row
+
+
 def _create_struct_content(
     parent: QtWidgets.QWidget,
     actor: BaseActor,
@@ -210,20 +257,28 @@ def _create_struct_content(
     content_layout.setContentsMargins(0, 0, 0, 0)
     content_layout.setSpacing(2)
 
-    prop_indent = (indent_level + 1) * _indent_unit()
-    for prop in struct_group.properties:
-        editor = _create_property_edit(parent, actor, actor_path, group, prop, label_width)
-        if prop.is_read_only():
-            editor.set_read_only(True)
-        property_edits.append(editor)
-
-        row = QtWidgets.QWidget()
-        row_layout = QtWidgets.QHBoxLayout(row)
-        row_layout.setContentsMargins(prop_indent, 0, 0, 0)
-        row_layout.setSpacing(0)
-        row_layout.addWidget(editor)
-        row_layout.addStretch()
+    if struct_group.layout == "horizontal":
+        prop_indent = (indent_level + 1) * _indent_unit()
+        row = _create_horizontal_tuple_content(
+            parent, actor, actor_path, group,
+            struct_group, property_edits, prop_indent,
+        )
         content_layout.addWidget(row)
+    else:
+        prop_indent = (indent_level + 1) * _indent_unit()
+        for prop in struct_group.properties:
+            editor = _create_property_edit(parent, actor, actor_path, group, prop, label_width)
+            if prop.is_read_only():
+                editor.set_read_only(True)
+            property_edits.append(editor)
+
+            row = QtWidgets.QWidget()
+            row_layout = QtWidgets.QHBoxLayout(row)
+            row_layout.setContentsMargins(prop_indent, 0, 0, 0)
+            row_layout.setSpacing(0)
+            row_layout.addWidget(editor)
+            row_layout.addStretch()
+            content_layout.addWidget(row)
 
     for child in struct_group.children:
         _render_struct_group(
