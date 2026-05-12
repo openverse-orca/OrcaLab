@@ -256,7 +256,7 @@ class AssetBrowser(QtWidgets.QWidget):
             self.create_panorama_apng_button.setDisabled(True)
         infos = []
         thumbnail_cache_path = get_cache_folder() / "thumbnail"
-        exclude_assets = ['prefabs/mujococamera1080', 'prefabs/mujococamera256', 'prefabs/mujococamera512']
+        exclude_assets = ['prefabs/mujococamera1080', 'prefabs/mujococamera256', 'prefabs/mujococamera512', 'prefabs/agentcamera']
         
         # 只检查本地缓存，不从服务器下载
         for asset in assets:
@@ -469,9 +469,6 @@ class AssetBrowser(QtWidgets.QWidget):
         if 'prefabs/mujococamera512' in asset_paths:
             all_assets.pop(asset_paths.index('prefabs/mujococamera512'))
             asset_paths.pop(asset_paths.index('prefabs/mujococamera512'))
-        if 'prefabs/agentcamera' in asset_paths:
-            all_assets.pop(asset_paths.index('prefabs/agentcamera'))
-            asset_paths.pop(asset_paths.index('prefabs/agentcamera'))
         # 预处理：拷贝本地缩略图，收集需要下载的任务
         new_assets = []
         download_tasks = []
