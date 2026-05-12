@@ -476,11 +476,14 @@ class EditServiceWrapper:
                     value=0.0,
                 )
             case edit_service_pb2.PropertyType.String:
+                value = ""
+                if prop_msg.editor_hint in ("struct", "container"):
+                    value = prop_msg.editor_hint
                 prop = ActorProperty(
                     name=prop_msg.name,
                     display_name=prop_msg.display_name,
                     type=ActorPropertyType.STRING,
-                    value="",
+                    value=value,
                 )
             case edit_service_pb2.PropertyType.Tree:
                 prop = ActorProperty(
