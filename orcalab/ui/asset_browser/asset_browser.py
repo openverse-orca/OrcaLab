@@ -469,6 +469,9 @@ class AssetBrowser(QtWidgets.QWidget):
         if 'prefabs/mujococamera512' in asset_paths:
             all_assets.pop(asset_paths.index('prefabs/mujococamera512'))
             asset_paths.pop(asset_paths.index('prefabs/mujococamera512'))
+        if 'prefabs/agentcamera.spawnable' in asset_paths:
+            all_assets.pop(asset_paths.index('prefabs/agentcamera.spawnable'))
+            asset_paths.pop(asset_paths.index('prefabs/agentcamera.spawnable'))
         # 预处理：拷贝本地缩略图，收集需要下载的任务
         new_assets = []
         download_tasks = []
