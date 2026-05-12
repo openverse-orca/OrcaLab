@@ -55,12 +55,12 @@ if [ "$BUILD_MODE" = "test" ]; then
         echo "Replacing URLs for TestPyPI environment..."
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS
-            sed -i '' 's|https://simassets.orca3d.cn/api|http://47.100.47.219/api|g' "$CONFIG_FILE"
-            sed -i '' 's|https://simassets.orca3d.cn/|http://47.100.47.219/|g' "$CONFIG_FILE"
+            sed -i '' 's|https://simassets.orca3d.cn/api| https://simassets.test.orca3d.cn/api|g' "$CONFIG_FILE"
+            sed -i '' 's|https://simassets.orca3d.cn/|https://simassets.test.orca3d.cn/|g' "$CONFIG_FILE"
         else
             # Linux
-            sed -i 's|https://simassets.orca3d.cn/api|http://47.100.47.219/api|g' "$CONFIG_FILE"
-            sed -i 's|https://simassets.orca3d.cn/|http://47.100.47.219/|g' "$CONFIG_FILE"
+            sed -i 's|https://simassets.orca3d.cn/api| https://simassets.test.orca3d.cn/api|g' "$CONFIG_FILE"
+            sed -i 's|https://simassets.orca3d.cn/|https://simassets.test.orca3d.cn/|g' "$CONFIG_FILE"
         fi
     fi
 
