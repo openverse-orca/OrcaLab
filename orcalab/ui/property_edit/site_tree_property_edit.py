@@ -15,7 +15,7 @@ _site_highlight_store: dict[str, Set[int]] = {}
 
 
 class SiteButton(TreeLeafButton):
-    """站点叶节点按钮。"""
+    """标记点叶节点按钮。"""
 
     def __init__(
         self,
@@ -31,11 +31,11 @@ class SiteButton(TreeLeafButton):
         )
 
     def _dialog_title(self) -> str:
-        return f"编辑站点 - {self._node.display_name}"
+        return f"编辑标记点 - {self._node.display_name}"
 
 
 class SiteTreePropertyEdit(BasePropertyEdit):
-    """Site 站点树属性编辑器：左键高亮线框，右键属性对话框。"""
+    """Site 标记点树属性编辑器：左键高亮线框，右键属性对话框。"""
 
     def __init__(
         self,

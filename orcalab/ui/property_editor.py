@@ -47,6 +47,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._pending_render_task: asyncio.Task | None = None
 
         self._recursive = False
+        self._show_transform = False
 
         self._container = QtWidgets.QWidget()
         self._main_layout = QtWidgets.QVBoxLayout(self._container)
@@ -55,6 +56,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
         self._filter_bar = FilterBar()
         self._filter_bar.filter_changed.connect(self._apply_filter)
+        self._filter_bar.show_transform_changed.connect(self._on_show_transform_changed)
         self._main_layout.addWidget(self._filter_bar)
 
         self._property_layout = QtWidgets.QVBoxLayout()
@@ -73,8 +75,8 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         if self._actor_path is None:
             return None
         if self._entity is not None:
-            return (str(self._actor_path), self._entity.entity_id, self._recursive)
-        return (str(self._actor_path), None, self._recursive)
+            return (str(self._actor_path), self._entity.entity_id, self._recursive, self._show_transform)
+        return (str(self._actor_path), None, self._recursive, self._show_transform)
 
     def connect_bus(self):
         SceneEditNotificationBus.connect(self)
@@ -127,6 +129,11 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._recursive = enabled
         if self._entity is not None and self._actor is not None and self._actor_path is not None:
             self._load_properties()
+
+    def _on_show_transform_changed(self, visible: bool):
+        self._show_transform = visible
+        if self._actor is not None:
+            self._apply_filter()
 
     def _cancel_pending_render(self):
         if self._pending_render_task is not None:
@@ -504,6 +511,17 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
         search_text = self._filter_bar.get_search_text()
         selected_types = self._filter_bar.get_selected_component_types()
+
+        if not self._show_transform:
+            all_types = set(self._data_store.available_component_types)
+            transform_types = {
+                t for t in all_types
+                if 'transform' in t.lower()
+            }
+            if selected_types is not None:
+                selected_types = selected_types - transform_types
+            else:
+                selected_types = all_types - transform_types
 
         # Log data store contents before filtering
         all_ids = set(item.entity_id for item in self._data_store.items)

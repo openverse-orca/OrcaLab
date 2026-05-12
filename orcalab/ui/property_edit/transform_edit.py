@@ -39,6 +39,7 @@ class TransformEdit(StyledWidget, SceneEditNotification):
         self._section = CollapsibleSection(
             parent=self,
             title="Transform",
+            badge=actor_path.string(),
             collapsed=False,
             content_factory=lambda: self._create_content(label_width),
         )

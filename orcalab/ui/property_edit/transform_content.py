@@ -4,6 +4,7 @@ from orcalab.actor import BaseActor
 from orcalab.math import Transform, as_euler
 from orcalab.pyside_util import connect
 from orcalab.scene_edit_bus import SceneEditRequestBus
+from orcalab.ui.collapsible.collapsible_section import CollapsibleSection
 from orcalab.ui.edit.float_edit import FloatEdit
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.property_edit.base_property_edit import get_property_edit_style_sheet
@@ -33,47 +34,94 @@ class TransformContent(StyledWidget):
         self._block_signals = False
 
         self._property_style_sheet = get_property_edit_style_sheet()
+        indent_unit = FontService().indent_unit_px(20)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(2)
 
-        self._pos_x = self._add_line("Position  X", FloatEdit(), layout)
-        self._pos_y = self._add_line("Y", FloatEdit(), layout)
-        self._pos_z = self._add_line("Z", FloatEdit(), layout)
+        # Position section
+        self._pos_x = FloatEdit()
+        self._pos_y = FloatEdit()
+        self._pos_z = FloatEdit()
+        self._connect_edits([self._pos_x, self._pos_y, self._pos_z])
+        pos_indent = 2 * indent_unit
+        pos_section = CollapsibleSection(
+            parent=self, title="Position", collapsed=False, indent_level=1,
+            content_factory=lambda: self._create_horizontal_row([
+                ("X", self._pos_x), ("Y", self._pos_y), ("Z", self._pos_z),
+            ], indent=pos_indent),
+        )
+        layout.addWidget(pos_section)
 
-        self._rot_x = self._add_line("Rotation  X", FloatEdit(step=1.0), layout)
-        self._rot_y = self._add_line("Y", FloatEdit(step=1.0), layout)
-        self._rot_z = self._add_line("Z", FloatEdit(step=1.0), layout)
+        # Rotation section
+        self._rot_x = FloatEdit(step=1.0)
+        self._rot_y = FloatEdit(step=1.0)
+        self._rot_z = FloatEdit(step=1.0)
+        self._connect_edits([self._rot_x, self._rot_y, self._rot_z])
+        rot_indent = 2 * indent_unit
+        rot_section = CollapsibleSection(
+            parent=self, title="Rotation", collapsed=False, indent_level=1,
+            content_factory=lambda: self._create_horizontal_row([
+                ("X", self._rot_x), ("Y", self._rot_y), ("Z", self._rot_z),
+            ], indent=rot_indent),
+        )
+        layout.addWidget(rot_section)
 
-        self._scale_uniform = self._add_line("Uniform Scale", FloatEdit(), layout)
+        # Scale row
+        self._scale_uniform = FloatEdit()
+        self._connect_edits([self._scale_uniform])
+        scale_row = self._create_scale_row(indent_unit)
+        layout.addWidget(scale_row)
 
         self._block_signals = True
         self.set_transform(actor.transform)
         self._block_signals = False
 
-    def _add_line(self, label: str, widget: FloatEdit, layout: QtWidgets.QVBoxLayout):
-        row = QtWidgets.QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(4)
-        layout.addLayout(row)
+    def _connect_edits(self, edits):
+        for edit in edits:
+            edit.setStyleSheet(self._property_style_sheet)
+            FontService().bind_widget_font(edit, 'property_edit')
+            connect(edit.value_changed, self._on_value_changed)
+            connect(edit.start_drag, self._on_start_drag)
+            connect(edit.stop_drag, self._on_stop_drag)
 
-        label_widget = QtWidgets.QLabel(label)
-        label_widget.setFixedWidth(self._label_width)
-        label_widget.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+    def _create_horizontal_row(self, items, indent=0):
+        row = QtWidgets.QWidget()
+        row_layout = QtWidgets.QHBoxLayout(row)
+        row_layout.setContentsMargins(indent, 0, 0, 0)
+        row_layout.setSpacing(8)
+        for label_text, edit in items:
+            sub_layout = QtWidgets.QHBoxLayout()
+            sub_layout.setContentsMargins(0, 0, 0, 0)
+            sub_layout.setSpacing(4)
+            label = QtWidgets.QLabel(label_text)
+            label.setFixedWidth(20)
+            label.setAlignment(
+                QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+            )
+            FontService().bind_widget_font(label, 'property_edit')
+            sub_layout.addWidget(label)
+            sub_layout.addWidget(edit, 1)
+            row_layout.addLayout(sub_layout)
+        row_layout.addStretch()
+        return row
+
+    def _create_scale_row(self, indent_unit):
+        row = QtWidgets.QWidget()
+        row_layout = QtWidgets.QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(4)
+        row_layout.addSpacing(indent_unit)
+        label = QtWidgets.QLabel("Uniform Scale")
+        label.setFixedWidth(self._label_width)
+        label.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
-        FontService().bind_widget_font(label_widget, 'property_edit')
-        row.addWidget(label_widget)
-        row.addWidget(widget, 1)
-
-        widget.setStyleSheet(self._property_style_sheet)
-        FontService().bind_widget_font(widget, 'property_edit')
-        connect(widget.value_changed, self._on_value_changed)
-        connect(widget.start_drag, self._on_start_drag)
-        connect(widget.stop_drag, self._on_stop_drag)
-
-        return widget
+        FontService().bind_widget_font(label, 'property_edit')
+        row_layout.addWidget(label)
+        row_layout.addWidget(self._scale_uniform, 1)
+        return row
 
     async def _on_value_changed(self):
         if self._block_signals:

@@ -199,13 +199,16 @@ class SceneEditService(SceneEditRequest):
             _, actor_path = self.local_scene.normalize_actor(actor)
         actor_paths = sorted(selection)
 
+        had_active_entity = self.local_scene.active_entity is not None
+
         # 必须先清除 active_entity，因为选中 actor 时不应该保留 entity 状态
-        # 这个清除操作必须在 early return 之前执行，否则当 selection 和 active_actor
-        # 都没变化时（例如先选 entity 再点回同一个 actor），active_entity 不会被清除
         if self.local_scene.active_entity is not None:
             await self._set_active_entity(None, None, False, source)
 
         if actor_paths == self.local_scene.selection and actor_path == self.local_scene.active_actor:
+            if had_active_entity and source != "remote_scene":
+                await self.remote_scene.set_selection(actor_paths)
+                await self.remote_scene.set_active_actor(actor_path)
             return
 
         old_selection = deepcopy(self.local_scene.selection)

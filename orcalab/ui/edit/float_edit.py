@@ -28,7 +28,7 @@ class FloatEdit(BaseNumberEdit[float]):
 
     @override
     def _value_to_text(self, value: float) -> str:
-        return f"{value:.2f}"
+        return f"{value:.5f}"
 
     @override
     def value(self) -> float:
@@ -49,10 +49,6 @@ class FloatEdit(BaseNumberEdit[float]):
             return False
 
         self._value = clamped
-        
-        text = self._value_to_text(self.value())
-        if self.text() != text:
-            self.setText(text)
         return True
 
     @override
