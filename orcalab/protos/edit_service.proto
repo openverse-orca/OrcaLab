@@ -13,9 +13,9 @@ enum Space {
 }
 
 message Transform {
-    repeated double pos = 1;        // 位置 (3 elements)
-    repeated double quat = 2;       // 旋转四元数 (4 elements)
-    double scale = 3;               // 等比缩放 (1 elements)
+    repeated double pos = 1;
+    repeated double quat = 2;
+    double scale = 3;
 }
 
 
@@ -30,8 +30,8 @@ message AlohaResponse {
 
 
 message AddGroupRequest {
-    string actor_name = 2;          // Actor Entity 的名字
-    string parent_actor_path = 3;   // Parent Actor 的路径
+    string actor_name = 2;
+    string parent_actor_path = 3;
     Transform transform = 4;
     Space space = 5;
 }
@@ -59,7 +59,6 @@ message AddActorBatchResponse {
 }
 
 
-
 message DeleteActorBatchRequest {
     repeated string actor_paths = 1;
 }
@@ -68,7 +67,6 @@ message DeleteActorBatchResponse {
     string error_message = 2;
     repeated string errors = 3;
 }
-
 
 
 message SetActorTransformRequest {
@@ -81,7 +79,6 @@ message SetActorTransformResponse {
     string error_message = 2;
 }
 
-// In local space.
 message SetActorTransformBatchRequest {
     repeated string actor_paths = 1;
     repeated Transform transforms = 2;
@@ -118,24 +115,6 @@ message GetPendingActorTransformBatchResponse {
     StatusCode status_code = 1;
     string error_message = 2;
     repeated Transform transforms = 3;
-}
-
-message GetSyncFromMujocoToSceneRequest {
-}
-message GetSyncFromMujocoToSceneResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-    bool value = 3;
-}
-
-
-message SetSyncFromMujocoToSceneRequest {
-    bool value = 1;
-}
-message SetSyncFromMujocoToSceneResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-    bool value = 3;
 }
 
 message ClearSceneRequest {
@@ -249,6 +228,25 @@ message GetCacheFolderResponse {
 }
 
 
+message ChangeManipulatorTypeRequest {
+    int32 manipulator_type = 1;
+}
+message ChangeManipulatorTypeResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+message GetCameraPNGRequest {
+    string camera_name = 1;
+    string png_path = 2;
+    string png_name = 3;
+}
+
+message GetCameraPNGResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
 message LoadPackageRequest {
     string file_path = 1;
 }
@@ -265,21 +263,25 @@ message ChangeSimStateResponse {
     string error_message = 2;
 }
 
-message ChangeManipulatorTypeRequest {
-    int32 manipulator_type = 1;
+message GetSyncFromMujocoToSceneRequest {
 }
-message ChangeManipulatorTypeResponse {
+message GetSyncFromMujocoToSceneResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    bool value = 3;
+}
+
+message SetSyncFromMujocoToSceneRequest {
+    bool value = 1;
+}
+message SetSyncFromMujocoToSceneResponse {
     StatusCode status_code = 1;
     string error_message = 2;
 }
 
-message GetCameraPNGRequest {
-    string camera_name = 1;
-    string png_path = 2;
-    string png_name = 3;
+message PublishSceneRequest {
 }
-
-message GetCameraPNGResponse {
+message PublishSceneResponse {
     StatusCode status_code = 1;
     string error_message = 2;
 }
@@ -480,14 +482,6 @@ message GetPropertyGroupsBatchResponse {
     repeated PropertyGroupList property_group_lists = 3;
 }
 
-
-message PublishSceneRequest {
-}
-message PublishSceneResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-}
-
 // Entity hierarchy messages
 
 message EntityInfoMessage {
@@ -617,9 +611,6 @@ service GrpcService {
     rpc GetPendingActorTransformBatch(GetPendingActorTransformBatchRequest) returns (GetPendingActorTransformBatchResponse);
     rpc SetActorTransformBatch(SetActorTransformBatchRequest) returns (SetActorTransformBatchResponse);
 
-    rpc GetSyncFromMujocoToScene(GetSyncFromMujocoToSceneRequest) returns (GetSyncFromMujocoToSceneResponse);
-    rpc SetSyncFromMujocoToScene(SetSyncFromMujocoToSceneRequest) returns (SetSyncFromMujocoToSceneResponse);
-
     rpc ClearScene(ClearSceneRequest) returns (ClearSceneResponse);
     rpc GetActorAssets(GetActorAssetsRequest) returns (GetActorAssetsResponse);
 
@@ -639,6 +630,9 @@ service GrpcService {
     rpc GetCacheFolder(GetCacheFolderRequest) returns (GetCacheFolderResponse);
     rpc LoadPackage(LoadPackageRequest) returns (LoadPackageResponse);
     rpc ChangeSimState(ChangeSimStateRequest) returns (ChangeSimStateResponse);
+    rpc GetSyncFromMujocoToScene(GetSyncFromMujocoToSceneRequest) returns (GetSyncFromMujocoToSceneResponse);
+    rpc SetSyncFromMujocoToScene(SetSyncFromMujocoToSceneRequest) returns (SetSyncFromMujocoToSceneResponse);
+    rpc PublishScene(PublishSceneRequest) returns (PublishSceneResponse);
     rpc ChangeManipulatorType(ChangeManipulatorTypeRequest) returns (ChangeManipulatorTypeResponse);
 
     rpc GetCameraPNG(GetCameraPNGRequest) returns (GetCameraPNGResponse);
@@ -659,7 +653,6 @@ service GrpcService {
     rpc GetProperties(GetPropertiesRequest) returns (GetPropertiesResponse);
     rpc SetProperties(SetPropertiesRequest) returns (SetPropertiesResponse);
 
-
     rpc SetHighlightJoint(SetHighlightJointRequest) returns (SetHighlightJointResponse);
     rpc CustomCommand(CustomCommandRequest) returns (CustomCommandResponse);
 
@@ -668,8 +661,6 @@ service GrpcService {
 
     rpc SetMoveRotateSensitivity(SetMoveRotateSensitivityRequest) returns (SetMoveRotateSensitivityResponse);
 
-    rpc PublishScene(PublishSceneRequest) returns (PublishSceneResponse);
-
     // Entity hierarchy related RPCs
     rpc GetEntityHierarchy(GetEntityHierarchyRequest) returns (GetEntityHierarchyResponse);
     rpc SetSelectedEntity(SetSelectedEntityRequest) returns (SetSelectedEntityResponse);
@@ -677,5 +668,4 @@ service GrpcService {
     rpc GetEntityPropertyGroups(GetEntityPropertyGroupsRequest) returns (GetEntityPropertyGroupsResponse);
     rpc GetEntityPropertyGroupsBatch(GetEntityPropertyGroupsBatchRequest) returns (GetEntityPropertyGroupsBatchResponse);
     rpc GetAllEntityPropertyGroups(GetAllEntityPropertyGroupsRequest) returns (GetAllEntityPropertyGroupsResponse);
-
 }
