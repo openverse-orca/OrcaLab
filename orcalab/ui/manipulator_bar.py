@@ -127,11 +127,28 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
                 color: #aaaaaa; /* Light gray text */
                 background-color: transparent;
             }
+             QMenu::item:checked {
+                background-color: #2a2a2a;
+                color: #ffffff;
+            }
+
+            QMenu::item:checked:selected {
+                background-color: #555555;
+            }
         """)
         self.pivot_individual_origin_action = self.pivot_point_menu.addAction("各自中心")
         self.pivot_bounding_box_action = self.pivot_point_menu.addAction("包围盒中心")
         self.pivot_meadian_point_action = self.pivot_point_menu.addAction("中位点")
         self.pivot_active_actor_action = self.pivot_point_menu.addAction("激活的物体")
+
+        for action in [
+            self.pivot_individual_origin_action,
+            self.pivot_bounding_box_action,
+            self.pivot_meadian_point_action,
+            self.pivot_active_actor_action,
+        ]:
+            action.setCheckable(True)
+        self.pivot_meadian_point_action.setChecked(True)
         connect(self.pivot_point_button.mouse_pressed, self.show_pivot_menu)
 
         self.runtime_grab_button = Button(icon=make_icon(":/icons/grab.png", icon_color))
@@ -319,18 +336,29 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
 
     @override
     def on_pivot_point_type_changed(self, type: PivotPointType):
+        for action in [
+            self.pivot_individual_origin_action,
+            self.pivot_bounding_box_action,
+            self.pivot_meadian_point_action,
+            self.pivot_active_actor_action,
+        ]:
+            action.setChecked(False)
         if type == PivotPointType.IndividualCenter:
             self.pivot_point_button.setIcon(make_icon(":/icons/individual_center.svg", self.icon_color))
             self.pivot_point_button.setToolTip("枢轴点:各自中心")
+            self.pivot_individual_origin_action.setChecked(True)
         elif type == PivotPointType.BoundingBoxCenter:
             self.pivot_point_button.setIcon(make_icon(":/icons/boundingbox_center.svg", self.icon_color))
             self.pivot_point_button.setToolTip("枢轴点:包围盒中心")
+            self.pivot_bounding_box_action.setChecked(True)
         elif type == PivotPointType.MedianPoint:
             self.pivot_point_button.setIcon(make_icon(":/icons/median_point.svg", self.icon_color))
             self.pivot_point_button.setToolTip("枢轴点:中位点")
+            self.pivot_meadian_point_action.setChecked(True)
         elif type == PivotPointType.ActiveActor:
             self.pivot_point_button.setIcon(make_icon(":/icons/active_actor.svg", self.icon_color))
             self.pivot_point_button.setToolTip("枢轴点:激活的物体")
+            self.pivot_active_actor_action.setChecked(True)
         self.pivot_point_button.update()
 
     @override
