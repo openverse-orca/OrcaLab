@@ -118,7 +118,7 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
                 border-radius: 3px;
             }
             QMenu::item {
-                padding: 6px 20px;
+                padding: 6px 20px 6px 0px;
             }
             QMenu::item:selected {
                 background-color: #4a4a4a;
@@ -131,10 +131,16 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
                 background-color: #2a2a2a;
                 color: #ffffff;
             }
-
             QMenu::item:checked:selected {
                 background-color: #555555;
             }
+            QMenu::indicator {
+                width: 14px;
+                height: 14px;
+
+                margin-left: 8px;
+                margin-right: 6px;
+            }    
         """)
         self.pivot_individual_origin_action = self.pivot_point_menu.addAction("各自中心")
         self.pivot_bounding_box_action = self.pivot_point_menu.addAction("包围盒中心")
