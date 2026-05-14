@@ -266,6 +266,12 @@ def main():
     project_root = current_dir.parent  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root, workspace)
 
+    # 命令行参数覆盖配置文件中的 GPU 适配器设置
+    if getattr(args, "force_adapter", None):
+        config_service.config.setdefault("orcalab", {})["force_adapter"] = args.force_adapter
+    if getattr(args, "adapter_index", None) is not None:
+        config_service.config.setdefault("orcalab", {})["adapter_index"] = args.adapter_index
+
     if config_service.had_previous_abnormal_exit():
         logger.warning("检测到上次 OrcaLab 未正常退出")
         schedule_abnormal_exit_report()

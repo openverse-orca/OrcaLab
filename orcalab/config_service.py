@@ -460,6 +460,12 @@ class ConfigService:
     def enable_debug_tool(self) -> bool:
         return self.config.get("orcalab", {}).get("debug_tool", False)
 
+    def force_adapter(self) -> str:
+        return self.config.get("orcalab", {}).get("force_adapter", "")
+
+    def adapter_index(self) -> int:
+        return int(self.config.get("orcalab", {}).get("adapter_index", 0))
+
     def camera_move_sensitivity(self) -> float:
         return float(self.config.get("orcalab", {}).get("camera_move_sensitivity", 1.0))
 

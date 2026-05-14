@@ -52,6 +52,16 @@ def create_argparser():
         type=int,
         help="URL服务端口号（默认：50651）。如果端口被占用，程序会自动尝试其他端口。",
     )
+    parser.add_argument(
+        "--force-adapter",
+        type=str,
+        help="强制指定 GPU 适配器名称（子串匹配，不区分大小写），例如 NVIDIA、RTX、MTT",
+    )
+    parser.add_argument(
+        "--adapter-index",
+        type=int,
+        help="当 --force-adapter 匹配到多个 GPU 时，选择第几个（默认 0）",
+    )
 
     return parser
 

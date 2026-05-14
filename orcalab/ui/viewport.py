@@ -72,6 +72,13 @@ class Viewport(QtWidgets.QWidget):
         if config_service.enable_debug_tool():
             self.command_line.append("--debug-tool")
 
+        force_adapter = config_service.force_adapter()
+        adapter_index = config_service.adapter_index()
+        if force_adapter:
+            self.command_line.extend(["--forceAdapter", force_adapter])
+            if adapter_index > 0:
+                self.command_line.extend(["--adapterIndex", str(adapter_index)])
+
         project_path = config_service.orca_project_folder()
         connect_builder_hub = False
 
