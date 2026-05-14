@@ -625,7 +625,6 @@ class SceneEditService(SceneEditRequest):
             AddActorRequest(
                 new_root_actor,
                 root_actor_parent_path,
-                root_actor_path,
                 insert_pos,
                 root_actor,
             )
@@ -637,7 +636,7 @@ class SceneEditService(SceneEditRequest):
             dst_path = actor_path.replace_parent(root_actor_path, new_root_actor_path)
             new_parent_path = dst_path.parent()
             assert new_parent_path is not None
-            requests.append(AddActorRequest(new_actor, new_parent_path, actor_path, -1, actor))
+            requests.append(AddActorRequest(new_actor, new_parent_path, -1, actor))
 
         return new_root_actor_path
 
@@ -720,7 +719,8 @@ class SceneEditService(SceneEditRequest):
         for request in requests:
             if isinstance(request.actor, AssetActor):
                 aabb = []
-                await self.remote_scene.get_actor_asset_aabb(request.root_actor_path, aabb)
+                _, actor_template_path = self.local_scene.normalize_actor(request.actor_template)
+                await self.remote_scene.get_actor_asset_aabb(actor_template_path, aabb)
                 bias_x = aabb[3] - aabb[0]
                 bias_y = aabb[4] - aabb[1]
 
