@@ -187,8 +187,9 @@ class Viewport(QtWidgets.QWidget):
             if self._viewport_running:
                 # 计算本帧已用时间，只sleep剩余的帧时间
                 # 这样既保证60FPS帧率，又给Qt事件循环足够的处理时间
+                # 当达不到目标帧率时，至少 sleep 3毫秒，给Qt事件循环一些处理时间，避免编辑场景时出现明显卡顿
                 elapsed = time.monotonic() - tick_start
-                sleep_time = max(0.0, self._target_frame_time - elapsed)
+                sleep_time = max(0.003, self._target_frame_time - elapsed)
                 await asyncio.sleep(sleep_time)
                 asyncio.create_task(self._viewport_main_loop())
         except Exception as e:
