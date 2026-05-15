@@ -773,6 +773,15 @@ class SceneEditService(SceneEditRequest):
         # Note: Property is already modified by ui before calling this method.
         # Currently, property will not sync from remote to python.
 
+        if property_key.property_name.endswith(".Name") and isinstance(value, str):
+            actor, group, prop = self.local_scene.parse_property_key(property_key)
+            node_key = property_key.property_name.rsplit(".", 1)[0]
+            existing_names = self._collect_joint_names(group.tree_data, exclude_node_key=node_key)
+            if value in existing_names:
+                logger.warning(f"Joint name '{value}' already exists, rename rejected. Existing names: {existing_names}")
+                self._show_duplicate_name_warning(value, existing_names)
+                return
+
         bus = SceneEditNotificationBus()
 
         await bus.on_property_changed(property_key, value, source)
@@ -786,6 +795,51 @@ class SceneEditService(SceneEditRequest):
 
             command = PropertyChangeCommand(property_key, old_value, value)
             UndoRequestBus().add_command(command)
+
+    @staticmethod
+    def _collect_joint_names(tree_nodes: list, exclude_node_key: str = "") -> set:
+        result = set()
+        for node in tree_nodes:
+            if node.name.startswith("e:"):
+                result.update(SceneEditService._collect_joint_names(node.children, exclude_node_key))
+                continue
+            for prop in node.properties:
+                if prop.name() == "Name" and node.name != exclude_node_key:
+                    val = prop.value()
+                    if isinstance(val, str) and val:
+                        result.add(val)
+        return result
+
+    @staticmethod
+    def _collect_all_names(tree_nodes: list, result: list, group_hint: str = ""):
+        for node in tree_nodes:
+            if node.name.startswith("e:"):
+                SceneEditService._collect_all_names(node.children, result, group_hint)
+                continue
+            for prop in node.properties:
+                if prop.name() == "Name":
+                    val = prop.value()
+                    if isinstance(val, str) and val:
+                        result.append(val)
+                    break
+
+    @staticmethod
+    def _show_duplicate_name_warning(name: str, existing_names: set):
+        try:
+            from PySide6 import QtWidgets, QtCore
+            parent = QtWidgets.QApplication.activeWindow()
+            msg_box = QtWidgets.QMessageBox(parent)
+            msg_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("关节名称重复")
+            msg_box.setText(
+                f"关节名称 '{name}' 已存在，无法使用重复名称。\n\n"
+                f"请使用不同的名称，或移除有问题的资产后重新操作。"
+            )
+            msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Ok)
+            msg_box.setModal(False)
+            msg_box.show()
+        except Exception:
+            logger.warning(f"Joint name '{name}' already exists, rename rejected.")
 
     @override
     def start_change_property(self, property_key: ActorPropertyKey):
