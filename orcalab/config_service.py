@@ -282,6 +282,12 @@ class ConfigService:
 
         self.config.setdefault("orcalab", {})["level"] = level_data
 
+    def set_verbose(self, verbose: bool):
+        self._verbose = verbose
+
+    def is_verbose(self) -> bool:
+        return getattr(self, '_verbose', False)
+
     def _normalize_level_item(self, item):
         if isinstance(item, str):
             name = self._to_spawnable_path(item)

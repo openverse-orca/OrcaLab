@@ -6,6 +6,7 @@ import pathlib
 import logging
 
 from orcalab.config_service import ConfigService
+from orcalab.project_util import project_id
 from orcalab.ui.user_event_bus import UserEventRequestBus
 from orcalab.ui.user_event import MouseAction, MouseButton, KeyAction
 from orcalab.ui.user_event_util import convert_key_code
@@ -72,6 +73,9 @@ class Viewport(QtWidgets.QWidget):
         if config_service.enable_debug_tool():
             self.command_line.append("--debug-tool")
 
+        if config_service.is_verbose():
+            self.command_line.append("--verbose")
+
         project_path = config_service.orca_project_folder()
         connect_builder_hub = False
 
@@ -83,6 +87,7 @@ class Viewport(QtWidgets.QWidget):
             raise RuntimeError(f"Invalid project path: {project_path}")
 
         self.command_line.append(f"--project-path={project_path}")
+        self.command_line.append(f"--project-id={project_id}")
 
         if not self._viewport.init_viewport(
             self.command_line,
@@ -107,6 +112,7 @@ class Viewport(QtWidgets.QWidget):
 
         command_line = ["pseudo.exe"]
         command_line.append(f"--project-path={project_path}")
+        command_line.append(f"--project-id={project_id}")
         self._viewport.init_viewport(command_line, False)
 
         # self._viewport.destroy_viewport()

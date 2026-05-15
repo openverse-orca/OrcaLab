@@ -126,12 +126,12 @@ class PropertyDataStore:
 
         stored_ids = set(item.entity_id for item in self._items)
         stored_paths = set(item.entity_path for item in self._items)
-        logger.info(
-            f"[PropertyDataStore] set_data_from_groups: {len(groups)} groups, "
-            f"{len(self._items)} items, "
-            f"unique_entity_ids={stored_ids}, "
-            f"unique_entity_paths={stored_paths}"
-        )
+        # logger.info(
+        #     f"[PropertyDataStore] set_data_from_groups: {len(groups)} groups, "
+        #     f"{len(self._items)} items, "
+        #     f"unique_entity_ids={stored_ids}, "
+        #     f"unique_entity_paths={stored_paths}"
+        # )
 
     def filter_items(
         self,

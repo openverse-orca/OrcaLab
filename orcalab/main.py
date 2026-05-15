@@ -265,6 +265,9 @@ def main():
     project_root = current_dir.parent  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root, workspace)
 
+    verbose = getattr(args, "verbose", False)
+    config_service.set_verbose(verbose)
+
     if config_service.had_previous_abnormal_exit():
         logger.warning("检测到上次 OrcaLab 未正常退出")
         schedule_abnormal_exit_report()

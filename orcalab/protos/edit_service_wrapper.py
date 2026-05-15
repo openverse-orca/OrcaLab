@@ -721,12 +721,12 @@ class EditServiceWrapper:
                 response = await self.stub.GetEntityPropertyGroups(request)
             self._check_response(response)
 
-            logger.info(
-                f"[gRPC wrapper] get_entity_property_groups: "
-                f"actor_path={actor_path}, entity_id={entity_id}, "
-                f"status={response.status_code}, "
-                f"property_groups_count={len(response.property_groups)}"
-            )
+            # logger.info(
+            #     f"[gRPC wrapper] get_entity_property_groups: "
+            #     f"actor_path={actor_path}, entity_id={entity_id}, "
+            #     f"status={response.status_code}, "
+            #     f"property_groups_count={len(response.property_groups)}"
+            # )
 
             perf_log(f"grpc_wrapper.get_entity_property_groups: parsing {len(response.property_groups)} groups", feature="PARSE")
 

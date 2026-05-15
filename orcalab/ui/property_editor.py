@@ -248,18 +248,18 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._active_cache_key = cache_key
 
         if cache_key is not None and cache_key in self._section_cache:
-            perf_log(f"property_editor._load_properties: cache hit for {cache_key}", feature="PROPERTY")
+            # perf_log(f"property_editor._load_properties: cache hit for {cache_key}", feature="PROPERTY")
             self._show_cached_sections(cache_key)
             return
 
         self._clear_property_layout()
 
-        logger.info(
-            f"[PropertyEditor] _load_properties: actor={self._actor.name}, "
-            f"entity={self._entity.name if self._entity else None}, "
-            f"cache_key={cache_key}, "
-            f"cache_hit={cache_key in self._section_cache if cache_key else False}"
-        )
+        # logger.info(
+        #     f"[PropertyEditor] _load_properties: actor={self._actor.name}, "
+        #     f"entity={self._entity.name if self._entity else None}, "
+        #     f"cache_key={cache_key}, "
+        #     f"cache_hit={cache_key in self._section_cache if cache_key else False}"
+        # )
 
         if self._entity is not None:
             self._load_entity_properties()
@@ -291,12 +291,12 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             return
 
         if isinstance(self._actor, AssetActor) and self._actor.property_groups:
-            logger.info(
-                f"[PropertyEditor] _load_actor_properties: actor={self._actor.name}, "
-                f"has_raw_entries={bool(self._raw_entries)}, "
-                f"raw_entries_count={len(self._raw_entries)}, "
-                f"property_groups_count={len(self._actor.property_groups)}"
-            )
+            # logger.info(
+            #     f"[PropertyEditor] _load_actor_properties: actor={self._actor.name}, "
+            #     f"has_raw_entries={bool(self._raw_entries)}, "
+            #     f"raw_entries_count={len(self._raw_entries)}, "
+            #     f"property_groups_count={len(self._actor.property_groups)}"
+            # )
             if self._raw_entries:
                 self._data_store.set_data_from_entries(self._raw_entries)
                 self._filter_bar.set_available_types(
@@ -373,12 +373,12 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
                     entity_ids = entity_info.collect_entity_ids() if (entity_info and self._recursive) else [entity_id]
 
-                    logger.info(
-                        f"[PropertyEditor] _fetch_and_render_entity: actor_path={actor_path}, "
-                        f"requested_entity_id={entity_id}, "
-                        f"_recursive={self._recursive}, "
-                        f"resolved_entity_ids={entity_ids}"
-                    )
+                    # logger.info(
+                    #     f"[PropertyEditor] _fetch_and_render_entity: actor_path={actor_path}, "
+                    #     f"requested_entity_id={entity_id}, "
+                    #     f"_recursive={self._recursive}, "
+                    #     f"resolved_entity_ids={entity_ids}"
+                    # )
 
                     if len(entity_ids) == 1:
                         with perf_timer("property_editor._fetch_and_render_entity.grpc_single", feature="PROPERTY"):
@@ -392,7 +392,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                             )
                             return
 
-                        perf_log(f"property_editor._fetch_and_render_entity: got {len(groups)} groups for single entity", feature="PROPERTY")
+                        # perf_log(f"property_editor._fetch_and_render_entity: got {len(groups)} groups for single entity", feature="PROPERTY")
 
                         keys: list[ActorPropertyKey] = []
                         props: list[ActorProperty] = []
@@ -503,10 +503,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
         if self._entity is None:
             self._add_transform_edit()
-            logger.info(
-                f"[PropertyEditor] actor selected (entity=None), "
-                f"skipping entity component groups, data_store has {len(self._data_store.items)} items"
-            )
+            # logger.info(
+            #     f"[PropertyEditor] actor selected (entity=None), "
+            #     f"skipping entity component groups, data_store has {len(self._data_store.items)} items"
+            # )
             return
 
         search_text = self._filter_bar.get_search_text()
@@ -526,26 +526,26 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         # Log data store contents before filtering
         all_ids = set(item.entity_id for item in self._data_store.items)
         all_paths = set(item.entity_path for item in self._data_store.items)
-        logger.info(
-            f"[PropertyEditor] _render_from_data_store: "
-            f"current_entity_id={self._entity.entity_id}, "
-            f"data_store_items={len(self._data_store.items)}, "
-            f"unique_entity_ids={all_ids}, "
-            f"unique_entity_paths={all_paths}, "
-            f"selected_types={selected_types}"
-        )
+        # logger.info(
+        #     f"[PropertyEditor] _render_from_data_store: "
+        #     f"current_entity_id={self._entity.entity_id}, "
+        #     f"data_store_items={len(self._data_store.items)}, "
+        #     f"unique_entity_ids={all_ids}, "
+        #     f"unique_entity_paths={all_paths}, "
+        #     f"selected_types={selected_types}"
+        # )
 
         groups = self._data_store.get_property_groups_for_display(
             component_types=selected_types,
             search_text=search_text,
         )
 
-        logger.info(
-            f"[PropertyEditor] _render_from_data_store: entity_id={self._entity.entity_id}, "
-            f"data_store items={len(self._data_store.items)}, "
-            f"groups={len(groups)}, "
-            f"selected_types={selected_types}"
-        )
+        # logger.info(
+        #     f"[PropertyEditor] _render_from_data_store: entity_id={self._entity.entity_id}, "
+        #     f"data_store items={len(self._data_store.items)}, "
+        #     f"groups={len(groups)}, "
+        #     f"selected_types={selected_types}"
+        # )
 
         if not groups:
             return
