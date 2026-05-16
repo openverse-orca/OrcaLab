@@ -90,7 +90,7 @@ class MainWindow(
     add_item_by_drag = QtCore.Signal(str, Transform)
     load_scene_layout_sig = QtCore.Signal(str)
 
-    def __init__(self):
+    def __init__(self, url_service_port: int = 50651):
         super().__init__()
         self.cwd = os.getcwd()
         self.config_service = ConfigService()
@@ -100,6 +100,7 @@ class MainWindow(
         self._cleanup_in_progress = False
         self._cleanup_completed = False
         self._is_runtime_mode = False
+        self._url_service_port = url_service_port
 
         # 状态指示器（顶部蓝色条）
         self._status_indicator = None
@@ -142,7 +143,7 @@ class MainWindow(
         self.remote_scene = RemoteScene(self.config_service)
 
         self.asset_service = AssetService()
-        self.url_server = UrlServiceServer()
+        self.url_server = UrlServiceServer(port=self._url_service_port)
         self.simulation_service = SimulationService()
         self.undo_service = UndoService()
 

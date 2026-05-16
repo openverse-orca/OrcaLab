@@ -219,6 +219,10 @@ class AssetSyncService:
             size = pkg['size']
             
             download_info = self.get_download_url(pkg_id)
+            if download_info == None:
+                self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'failed')
+                logger.debug("%s 获取 download url 失败", file_name)
+                continue
             cloud_file_sha256 = download_info.get("sha256")
             if local_path.exists():
                 if cloud_file_sha256:
