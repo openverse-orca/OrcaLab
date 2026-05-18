@@ -46,6 +46,19 @@ class AssetSyncCallbacks:
         status: 'ok' (已最新), 'download' (待下载), 'delete' (待删除)
         """
         pass
+
+    def on_set_status(self, asset_id: str, asset_name: str, file_name: str, size: int, status: str):
+        """
+        设置资产包状态
+        status: 'ok' (已最新), 'download' (待下载), 'delete' (待删除)
+        """
+        pass
+
+    def on_set_name_size(self, asset_id: str, name: str, size: int):
+        """
+        设置资产包名字和大小
+        """
+        pass
     
     def on_download_start(self, asset_id: str, asset_name: str):
         """开始下载"""
@@ -210,6 +223,27 @@ class AssetSyncService:
         """
         missing_packages = []
         
+        self.base_pkg_map = {}
+        self.patch_to_base_map = {}
+
+        for pkg in packages:
+            file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
+            if "_patch_" in file_name:
+                continue
+            base_name = file_name.removesuffix(".pak")
+            self.base_pkg_map[base_name] = pkg['id']
+
+        for pkg in packages:
+            file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
+
+            if "_patch_" not in file_name:
+                continue
+
+            base_name = file_name.split("_patch_")[0]
+            base_pkg_id = self.base_pkg_map.get(base_name)
+            if base_pkg_id:
+                self.patch_to_base_map[pkg['id']] = base_pkg_id
+
         for pkg in packages:
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
             local_path = self.cache_folder / file_name
@@ -217,10 +251,15 @@ class AssetSyncService:
             pkg_id = pkg['id']
             pkg_name = pkg['name']
             size = pkg['size']
-            
+
+            if "_patch_" in file_name:
+                pkg_id = self.patch_to_base_map[pkg['id']] 
+            else:
+                self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
+
             download_info = self.get_download_url(pkg_id)
             if download_info == None:
-                self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'failed')
+                self.callbacks.on_set_status(pkg_id, 'failed')
                 logger.debug("%s 获取 download url 失败", file_name)
                 continue
             cloud_file_sha256 = download_info.get("sha256")
@@ -228,32 +267,32 @@ class AssetSyncService:
                 if cloud_file_sha256:
                     local_file_sha256 = calculate_file_sha256(local_path)
                     if local_file_sha256.lower() == cloud_file_sha256:
-                        self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'ok')
+                        self.callbacks.on_set_status(pkg_id, 'ok')
                         logger.info("%s 已最新", file_name)
                     else:
-                        self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
+                        self.callbacks.on_set_status(pkg_id, 'download')
                         missing_packages.append(pkg)
                         logger.info("%s hash 不匹配，需重新下载", file_name)
                 else:
-                    self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'ok')
+                    self.callbacks.on_set_status(pkg_id, 'ok')
                     logger.info("%s 已最新", file_name)
             elif downloaded_path.exists():
                 if cloud_file_sha256:
                     local_file_sha256 = calculate_file_sha256(downloaded_path)
                     if local_file_sha256.lower() == cloud_file_sha256:
                         shutil.copy2(downloaded_path, local_path)
-                        self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'ok')
+                        self.callbacks.on_set_status(pkg_id, 'ok')
                         logger.info("%s 已最新", file_name)
                     else:
-                        self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
+                        self.callbacks.on_set_status(pkg_id, 'download')
                         missing_packages.append(pkg)
                         logger.info("%s hash 不匹配，需重新下载", file_name)
                 else:
                     shutil.copy2(downloaded_path, local_path)
-                    self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'ok')
+                    self.callbacks.on_set_status(pkg_id, 'ok')
                     logger.info("%s 已最新", file_name)
             else:
-                self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
+                self.callbacks.on_set_status(pkg_id, 'download')
                 missing_packages.append(pkg)
                 logger.info("%s 需要下载", file_name)
 
@@ -261,7 +300,8 @@ class AssetSyncService:
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
             pkg_id = pkg['id']
             pkg_name = pkg['name']
-            self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, 0, 'incompatible')
+            if "_patch_" not in file_name:
+                self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, 0, 'incompatible')
             logger.info("%s 没有与当前版本兼容的资产", file_name)
         
         # 检查需要删除的文件
@@ -471,7 +511,7 @@ class AssetSyncService:
         try:
             local_path = self.cache_folder / file_name
             temp_path = self.cache_folder / f"{file_name}.tmp"
-            
+            self.callbacks.on_set_name_size(package_id, file_name, expected_size)
             self.callbacks.on_download_start(package_id, file_name)
             
             # 流式下载
@@ -645,6 +685,8 @@ class AssetSyncService:
             cloud_file_sha256 = download_info.get("sha256")
             
             # 下载
+            if "_patch_" in file_name:
+                package_id = self.patch_to_base_map[pkg['id']]
             if self.download_package(package_id, file_name, download_url, size, cloud_file_sha256):
                 success_count += 1
             else:

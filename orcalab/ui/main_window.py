@@ -690,6 +690,8 @@ class MainWindow(
 
     async def stop_sim(self):
         await SimulationRequestBus().stop_simulation()
+        if self.manipulator_bar._grab == True:
+            await self.manipulator_bar.set_runtime_grab()
 
     def _set_window_border_style(self, is_runtime: bool):
         """设置运行时状态指示：运行时显示蓝色指示器，编辑模式隐藏"""
