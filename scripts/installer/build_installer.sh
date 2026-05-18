@@ -44,6 +44,22 @@ BAT_FILE="$SCRIPT_DIR/orcalab.bat"
 cp "$BAT_FILE" "$BAT_FILE.bak"
 sed -i "s/__ORCALAB_VERSION__/$VERSION/g" "$BAT_FILE"
 
+# Inject pip extra index URLs based on pip_source
+PIP_SOURCE="${1:-test}"
+if [ "$PIP_SOURCE" = "test" ]; then
+    EXTRA_INDEX_URLS="--extra-index-url https://pypi.org/simple --extra-index-url https://test.pypi.org/simple"
+else
+    EXTRA_INDEX_URLS=""
+fi
+sed -i "s|__PIP_EXTRA_INDEX_URLS__|$EXTRA_INDEX_URLS|g" "$BAT_FILE"
+
+# Inject version into setup.nsi
+NSI_FILE="$SCRIPT_DIR/setup.nsi"
+cp "$NSI_FILE" "$NSI_FILE.bak"
+sed -i "s/!define PRODUCT_VERSION \".*\"/!define PRODUCT_VERSION \"$VERSION\"/g" "$NSI_FILE"
+VI_VERSION=$(echo "$VERSION" | awk -F. '{if (NF==3) print $0".0"; else print $0}')
+sed -i "s/VIProductVersion \".*\"/VIProductVersion \"$VI_VERSION\"/g" "$NSI_FILE"
+
 # Build installer
 mkdir -p "$DIST_DIR"
 echo ""
@@ -52,6 +68,9 @@ makensis setup.nsi
 
 # Restore orcalab.bat
 mv "$BAT_FILE.bak" "$BAT_FILE"
+
+# Restore setup.nsi
+mv "$NSI_FILE.bak" "$NSI_FILE"
 
 echo ""
 echo "✅ Installer built: $DIST_DIR/OrcaLab-*-Setup.exe"
