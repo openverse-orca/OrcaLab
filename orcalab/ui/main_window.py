@@ -138,6 +138,8 @@ class MainWindow(
     #     self._viewport_widget.start_viewport_main_loop()
 
     async def init(self):
+        _init_start = time.monotonic()
+
         self.local_scene = LocalScene()
         self.remote_scene = RemoteScene(self.config_service)
 
@@ -166,7 +168,7 @@ class MainWindow(
 
         logger.info("开始初始化 UI…")
         await self._init_ui()
-        logger.info("UI 初始化完成")
+        logger.info("UI 初始化完成, 耗时: %.2f 秒", time.monotonic() - _init_start)
 
         rect = self.screen().availableGeometry()
         self.resize(rect.width(), rect.height())
@@ -178,20 +180,19 @@ class MainWindow(
 
         if await ask_user_consent():
             logger.info("用户允许发送统计数据")
-            await send_report_directly()
+            asyncio.create_task(send_report_directly())
         else:
             logger.info("用户拒绝发送统计数据")
+        logger.info("ask_user_consent 完成, 耗时: %.2f 秒", time.monotonic() - _init_start)
 
         # 若上次异常退出，上传上次运行的 log 文件
         if take_pending_abnormal_exit_report():
-            try:
-                await send_abnormal_exit_report()
-            except Exception:
-                logger.exception("crash_reports 上传失败")
+            asyncio.create_task(self._send_abnormal_exit_report_async())
 
         await asyncio.sleep(0.5)
 
         logger.info("初始化引擎...")
+        _engine_start = time.monotonic()
         start_time = time.monotonic()
 
         message_box = QtWidgets.QMessageBox(self)
@@ -203,8 +204,12 @@ class MainWindow(
         
         await asyncio.sleep(0.2) 
         self._viewport_widget.init_viewport()
+        logger.info("init_viewport 完成, 耗时: %.2f 秒", time.monotonic() - _engine_start)
+
+        _vp_loop_start = time.monotonic()
         self._viewport_widget.start_viewport_main_loop()
         await asyncio.sleep(0.5)
+        logger.info("start_viewport_main_loop + sleep(0.5) 完成, 耗时: %.2f 秒", time.monotonic() - _vp_loop_start)
         
         message_box.accept()
         logger.info("引擎初始化完成, 耗时: %.2f 秒", time.monotonic() - start_time)
@@ -241,15 +246,22 @@ class MainWindow(
 
         self.connect_buses()
 
+        _grpc_start = time.monotonic()
         await self.remote_scene.init_grpc()
+        logger.info("init_grpc 完成, 耗时: %.2f 秒", time.monotonic() - _grpc_start)
+
+        _post_grpc_start = time.monotonic()
         await self.remote_scene.set_sync_from_mujoco_to_scene(False)
         await self.remote_scene.set_selection([])
         await self.remote_scene.clear_scene()
+        logger.info("set_sync + set_selection + clear_scene 完成, 耗时: %.2f 秒", time.monotonic() - _post_grpc_start)
 
         self.default_layout_path = self._resolve_path(self.config_service.default_layout_file())
         if self.default_layout_path and SystemPath(self.default_layout_path).exists():
+            _layout_start = time.monotonic()
             try:
                 await self.load_scene_layout(self.default_layout_path)
+                logger.info("load_scene_layout 完成, 耗时: %.2f 秒", time.monotonic() - _layout_start)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("加载默认布局失败: %s", exc)
                 import traceback
@@ -268,35 +280,56 @@ class MainWindow(
             else:
                 self._mark_layout_clean()
 
+        _cache_start = time.monotonic()
         self.cache_folder = await self.remote_scene.get_cache_folder()
+        logger.info("get_cache_folder 完成, 耗时: %.2f 秒", time.monotonic() - _cache_start)
+
+        _url_start = time.monotonic()
         await self.url_server.start()
+        logger.info("url_server.start 完成, 耗时: %.2f 秒", time.monotonic() - _url_start)
 
         logger.info("启动异步资产加载…")
         asyncio.create_task(self._load_assets_async())
 
         # Load cameras from remote scene.
+        _cam_start = time.monotonic()
         cameras = await self.remote_scene. get_cameras()
         viewport_camera_index = await self.remote_scene.get_active_camera()
         self.on_cameras_changed(cameras, viewport_camera_index)
+        logger.info("get_cameras 完成, 耗时: %.2f 秒", time.monotonic() - _cam_start)
 
+        _mcp_start = time.monotonic()
         self.mcp_service = OrcaLabMCPServer(port=self.config_service.mcp_port())
         self.mcp_service.add_tools()
         self.mcp_service._task = asyncio.create_task(self.mcp_service.run())
+        logger.info("MCP 服务启动完成, 耗时: %.2f 秒", time.monotonic() - _mcp_start)
 
         # Reset camera's move & rotate sensitivity
+        _sens_start = time.monotonic()
         await self.remote_scene.set_move_rotate_sensitivity(
             move_sensitivity=self.config_service.camera_move_sensitivity(),
             rotate_sensitivity=self.config_service.camera_rotation_sensitivity()
         )
+        logger.info("set_move_rotate_sensitivity 完成, 耗时: %.2f 秒", time.monotonic() - _sens_start)
 
         # 发送匿名统计数据
-        await self.send_statistics()
+        _stats_start = time.monotonic()
+        asyncio.create_task(self.send_statistics())
+        logger.info("send_statistics 已提交异步任务, 耗时: %.2f 秒", time.monotonic() - _stats_start)
 
         # 在Viewport之前拦截事件。
         # Note: filters invoked in reverse order of installation, so we install it last.
         qapp = QtCore.QCoreApplication.instance()
         assert qapp is not None
         qapp.installEventFilter(self)
+
+        logger.info("MainWindow.init 全部完成, 总耗时: %.2f 秒", time.monotonic() - _init_start)
+
+    async def _send_abnormal_exit_report_async(self):
+        try:
+            await send_abnormal_exit_report()
+        except Exception:
+            logger.exception("crash_reports 上传失败")
 
     def stop_viewport_main_loop(self):
         """停止viewport主循环"""

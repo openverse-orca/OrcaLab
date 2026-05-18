@@ -2,6 +2,7 @@ import asyncio
 from typing import Any, List, Tuple, override
 
 import logging
+import time
 
 
 from orcalab.actor_property import (
@@ -123,13 +124,19 @@ class RemoteScene(SceneEditNotification):
         SceneEditNotificationBus.disconnect(self)
 
     async def init_grpc(self):
+        _t0 = time.monotonic()
         self._service.init_grpc(self.edit_grpc_addr)
+        logger.info("init_grpc channel 创建完成, 耗时: %.2f 秒", time.monotonic() - _t0)
 
+        _t1 = time.monotonic()
         await self.change_sim_state(False)
+        logger.info("change_sim_state(False) 完成, 耗时: %.2f 秒", time.monotonic() - _t1)
         logger.info("已连接到服务器")
 
         # Start the pending operation loop.
+        _t2 = time.monotonic()
         await self._query_pending_operation_loop()
+        logger.info("_query_pending_operation_loop 首次完成, 耗时: %.2f 秒", time.monotonic() - _t2)
 
     async def destroy_grpc(self):
         self.shutdown = True

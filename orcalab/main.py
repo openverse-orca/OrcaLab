@@ -234,6 +234,7 @@ def select_scene_and_layout(
 
 def main():
     """Main entry point for the orcalab application"""
+    _main_start = time.monotonic()
     parser = create_argparser()
     args, unknown = parser.parse_known_args()
 
@@ -299,6 +300,7 @@ def main():
 
     # 处理pak包
     logger.info("正在准备资产包...")
+    _pak_start = time.monotonic()
     if config_service.init_paks():
         paks = config_service.paks()
         if paks:
@@ -312,9 +314,12 @@ def main():
     if pak_urls:
         logger.info("正在同步pak_urls列表...")
         sync_pak_urls(pak_urls, pak_urls_sha256)
+    logger.info("pak包处理完成, 耗时: %.2f 秒", time.monotonic() - _pak_start)
 
     # 同步订阅的资产包（带UI）
+    _sync_start = time.monotonic()
     run_asset_sync_ui(config_service)
+    logger.info("资产同步完成, 耗时: %.2f 秒", time.monotonic() - _sync_start)
 
     from orcalab.level_discovery import discover_levels_from_cache
 
@@ -335,6 +340,7 @@ def main():
         level_cli=level_cli,
         layout_cli=layout_cli,
     )
+    logger.info("场景选择完成, 总耗时: %.2f 秒", time.monotonic() - _main_start)
 
     event_loop = QEventLoop(q_app)
     asyncio.set_event_loop(event_loop)
