@@ -251,13 +251,14 @@ class AssetSyncService:
             pkg_id = pkg['id']
             pkg_name = pkg['name']
             size = pkg['size']
+            
+            download_info = self.get_download_url(pkg_id)
 
             if "_patch_" in file_name:
                 pkg_id = self.patch_to_base_map[pkg['id']] 
             else:
                 self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
 
-            download_info = self.get_download_url(pkg_id)
             if download_info == None:
                 self.callbacks.on_set_status(pkg_id, 'failed')
                 logger.debug("%s 获取 download url 失败", file_name)
@@ -336,7 +337,7 @@ class AssetSyncService:
             _start = time.monotonic()
             response = requests.get(url, headers=self.get_headers(), timeout=self.timeout)
             elapsed = time.monotonic() - _start
-            logger.debug("HTTP GET %s/orcalab/package/.../download_url/ 耗时: %.3f 秒 (状态码: %s)", self.base_url, elapsed, response.status_code)
+            logger.debug("HTTP GET %s 耗时: %.3f 秒 (状态码: %s)", url, elapsed, response.status_code)
             
             if response.status_code != 200:
                 logger.debug(f"❌ 获取下载链接失败: HTTP {response.status_code}")
