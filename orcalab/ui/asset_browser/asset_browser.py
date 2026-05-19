@@ -550,8 +550,10 @@ class AssetBrowser(QtWidgets.QWidget):
         def do_render_thumbnail():
             asyncio.create_task(self._on_create_panorama_apng_for(asset_path))
 
-        action_render = QtGui.QAction("Render Thumbnail")
+        action_render = QtGui.QAction("渲染缩略图", self)
         connect(action_render.triggered, do_render_thumbnail)
+        # 和渲染按钮同步状态
+        action_render.setEnabled(self.create_panorama_apng_button.isEnabled()) # type: ignore
         menu.addAction(action_render)
 
         menu.exec(self.mapToGlobal(position))
