@@ -13,9 +13,9 @@ SetCompressor /SOLID lzma
 
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}"
 OutFile "..\..\dist\OrcaLab-${PRODUCT_VERSION}-Setup.exe"
-InstallDir "$PROGRAMFILES\OrcaLab"
-InstallDirRegKey HKLM "${PRODUCT_DIR_REGKEY}" ""
-RequestExecutionLevel admin
+InstallDir "$LOCALAPPDATA\OrcaLab"
+InstallDirRegKey HKCU "${PRODUCT_DIR_REGKEY}" ""
+RequestExecutionLevel user
 
 VIProductVersion "${PRODUCT_VERSION}.0"
 VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
@@ -58,14 +58,14 @@ Section "Install"
     CreateShortCut "$SMPROGRAMS\OrcaLab\Uninstall.lnk" "$INSTDIR\uninst.exe"
 
     ; Registry for Add/Remove Programs
-    WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "DisplayName" "${PRODUCT_NAME}"
-    WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\uninst.exe"
-    WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\orcalab_logo.ico"
-    WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
-    WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
-    WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB_SITE}"
-    WriteRegDWORD HKLM "${PRODUCT_UNINST_KEY}" "NoModify" 1
-    WriteRegDWORD HKLM "${PRODUCT_UNINST_KEY}" "NoRepair" 1
+    WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayName" "${PRODUCT_NAME}"
+    WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\uninst.exe"
+    WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\orcalab_logo.ico"
+    WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
+    WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
+    WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB_SITE}"
+    WriteRegDWORD HKCU "${PRODUCT_UNINST_KEY}" "NoModify" 1
+    WriteRegDWORD HKCU "${PRODUCT_UNINST_KEY}" "NoRepair" 1
 
     ; Uninstaller
     WriteUninstaller "$INSTDIR\uninst.exe"
@@ -81,6 +81,6 @@ Section "Uninstall"
     Delete "$DESKTOP\OrcaLab.lnk"
     RMDir /r "$SMPROGRAMS\OrcaLab"
 
-    DeleteRegKey HKLM "${PRODUCT_UNINST_KEY}"
-    DeleteRegKey HKLM "${PRODUCT_DIR_REGKEY}"
+    DeleteRegKey HKCU "${PRODUCT_UNINST_KEY}"
+    DeleteRegKey HKCU "${PRODUCT_DIR_REGKEY}"
 SectionEnd

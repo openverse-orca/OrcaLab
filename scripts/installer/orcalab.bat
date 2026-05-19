@@ -10,6 +10,7 @@ echo   OrcaLab Launcher
 echo ========================================
 echo.
 
+
 REM -- Locate conda ------------------------------------------
 set "CONDA_ROOT="
 for %%d in (
@@ -54,16 +55,14 @@ echo [OK] Miniconda installed.
 REM -- Ensure orcalab conda environment ---------------------
 :check_env
 set "CONDA_EXE=%CONDA_ROOT%\Scripts\conda.exe"
-set "ENV_PYTHON=%CONDA_ROOT%\envs\%ENV_NAME%\python.exe"
-set "ENV_PIP=%CONDA_ROOT%\envs\%ENV_NAME%\Scripts\pip.exe"
+set "ENV_PREFIX=%USERPROFILE%\.conda\envs\%ENV_NAME%"
 
-"%CONDA_EXE%" info --envs 2>nul | findstr /C:"%ENV_NAME% " >nul
-if %ERRORLEVEL% NEQ 0 (
+if not exist "%ENV_PREFIX%\python.exe" (
     echo [INFO] Creating conda environment: %ENV_NAME%
     "%CONDA_EXE%" tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main >nul 2>&1
     "%CONDA_EXE%" tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r >nul 2>&1
     "%CONDA_EXE%" tos accept --override-channels --channel https://repo.anaconda.com/pkgs/msys2 >nul 2>&1
-    "%CONDA_EXE%" create -n %ENV_NAME% python=3.12 -y
+    "%CONDA_EXE%" create --prefix "%ENV_PREFIX%" python=3.12 -y
     if !ERRORLEVEL! NEQ 0 (
         echo [ERROR] Failed to create conda environment.
         pause
@@ -74,7 +73,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 REM -- Ensure orca-lab is installed -------------------------
 echo [INFO] Ensuring orca-lab==__ORCALAB_VERSION__ ...
-"%ENV_PIP%" install orca-lab==__ORCALAB_VERSION__ -i https://pypi.tuna.tsinghua.edu.cn/simple __PIP_EXTRA_INDEX_URLS__
+"%CONDA_EXE%" run --no-capture-output --prefix "%ENV_PREFIX%" pip install orca-lab==__ORCALAB_VERSION__ -i https://pypi.tuna.tsinghua.edu.cn/simple __PIP_EXTRA_INDEX_URLS__
 if !ERRORLEVEL! NEQ 0 (
     echo [ERROR] Failed to install orca-lab.
     pause
@@ -85,7 +84,7 @@ echo [OK] orca-lab ready.
 REM -- Launch -----------------------------------------------
 echo.
 echo Starting OrcaLab...
-"%ENV_PYTHON%" -m orcalab %*
+"%CONDA_EXE%" run --no-capture-output --prefix "%ENV_PREFIX%" python -m orcalab %*
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
