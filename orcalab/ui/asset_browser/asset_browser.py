@@ -4,12 +4,13 @@ import os
 import shutil
 import time
 import webbrowser
-from typing import List, override
+from typing import List, Tuple, override
 from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import Qt
 import logging
 from orcalab.actor import BaseActor, GroupActor
 
+from orcalab.pyside_util import connect
 from orcalab.ui.asset_browser.asset_info import AssetInfo
 from orcalab.ui.asset_browser.asset_view import AssetView
 from orcalab.ui.asset_browser.asset_model import AssetModel
@@ -29,8 +30,6 @@ class AssetBrowser(QtWidgets.QWidget):
     add_item = QtCore.Signal(str, BaseActor)
 
     render_thumbnail = QtCore.Signal(list)
-    on_render_thumbnail_finished = QtCore.Signal(list)
-    on_upload_thumbnail_finished = QtCore.Signal()
     request_load_thumbnail = QtCore.Signal(int)
 
     def __init__(self):
@@ -51,7 +50,6 @@ class AssetBrowser(QtWidgets.QWidget):
             return False
         current_level = self._config_service.level()
         return "previewthumbnail_orcalab" in current_level
-
 
     def _setup_ui(self):
 
@@ -167,11 +165,14 @@ class AssetBrowser(QtWidgets.QWidget):
         )
 
         self._tree_view = AssetTreeView()
-        
+
         self._view = AssetView()
         self._model = AssetModel()
         self._view.set_model(self._model)
         self._view.set_loading_text("正在加载资产缩略图...")
+
+        self._view.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
+        self._view.customContextMenuRequested.connect(self.show_context_menu)
 
         self._info_view = AssetInfoView()
         self._info_view.setMinimumWidth(200)
@@ -201,7 +202,7 @@ class AssetBrowser(QtWidgets.QWidget):
         center_layout.addWidget(self._view, 1)
 
         # 使用 QSplitter 实现可拖动调整宽度
-        splitter = QtWidgets.QSplitter(Qt.Horizontal)
+        splitter = QtWidgets.QSplitter(Qt.Orientation.Horizontal)
         splitter.setHandleWidth(4)
         splitter.setStyleSheet("""
             QSplitter::handle {
@@ -236,21 +237,16 @@ class AssetBrowser(QtWidgets.QWidget):
             self.create_panorama_apng_button.clicked.connect(
                 lambda: asyncio.create_task(self._on_create_panorama_apng_clicked())
             )
-            self.on_render_thumbnail_finished.connect(
-                lambda asset_paths: asyncio.create_task(self._on_render_thumbnail_finished(asset_paths))
-            )
-            self.on_upload_thumbnail_finished.connect(
-                lambda: asyncio.create_task(self._on_upload_thumbnail_finished())
-            )
+           
         self.request_load_thumbnail.connect(
             lambda index: asyncio.create_task(self._load_thumbnail_for_index(index))
         )
-    
+
     def _on_category_selected(self, category: str):
         self._model.category_filter = category
         self._model.apply_filters()
         self._view._scroll_bar.setValue(0)
-        
+
     async def set_assets(self, assets: List[str]):
         if self._can_render_thumbnail:
             self.create_panorama_apng_button.setDisabled(True)
@@ -266,7 +262,7 @@ class AssetBrowser(QtWidgets.QWidget):
             if info.path in exclude_assets:
                 continue
             info.metadata = self._metadata_service.get_asset_info(asset)
-            
+
             # 检查本地缓存，如果已下载则直接加载
             thumbnail_path = thumbnail_cache_path / (asset + "_panorama.apng")
             if thumbnail_path.exists():
@@ -274,23 +270,23 @@ class AssetBrowser(QtWidgets.QWidget):
                 if player.is_valid():
                     player.set_scaled_size(QtCore.QSize(96, 96))
                     info.apng_player = player
-            
+
             infos.append(info)
-        
+
         self._view.set_loading_text(None)
         self._model.set_assets(infos)
-        
+
         # 只在第一次连接信号
         if not self._model_connected:
             self._model.request_load_thumbnail.connect(self.request_load_thumbnail.emit)
             self._model_connected = True
-        
+
         self._tree_view.set_assets(infos)
         if self._can_render_thumbnail:
             self.create_panorama_apng_button.setText("渲染缩略图")
             self.create_panorama_apng_button.setDisabled(False)
         self.status_label.setText(f"{len(infos)} assets")
-        
+
         # 主动触发一次可见项更新，加载初始可见的缩略图
         await asyncio.sleep(0.05)
         self._trigger_initial_thumbnail_load()
@@ -310,7 +306,7 @@ class AssetBrowser(QtWidgets.QWidget):
             logger.info(f"Opening asset store: {asset_store_url}")
         except Exception as e:
             logger.error(f"Failed to open asset store: {e}")
-    
+
     def _trigger_initial_thumbnail_load(self):
         """触发初始可见项的缩略图加载"""
         for item in self._view.visible_items:
@@ -318,24 +314,24 @@ class AssetBrowser(QtWidgets.QWidget):
             if info.apng_player is None and info.metadata is not None:
                 if info.path not in self._loading_thumbnails:
                     self.request_load_thumbnail.emit(item.index)
-    
+
     async def _load_thumbnail_for_index(self, index: int):
         """按需加载指定索引的缩略图"""
         try:
             info = self._model.info_at(index)
             if info.apng_player is not None:
                 return
-            
+
             if info.metadata is None:
                 return
-            
+
             # 避免重复下载
             if info.path in self._loading_thumbnails:
                 return
-            
+
             thumbnail_cache_path = get_cache_folder() / "thumbnail"
             thumbnail_path = thumbnail_cache_path / (info.path + "_panorama.apng")
-            
+
             if thumbnail_path.exists():
                 player = ApngPlayer(str(thumbnail_path))
                 if player.is_valid():
@@ -343,10 +339,10 @@ class AssetBrowser(QtWidgets.QWidget):
                     info.apng_player = player
                     self._model.notify_item_updated(index)
                 return
-            
+
             # 标记为正在加载
             self._loading_thumbnails.add(info.path)
-            
+
             try:
                 asset_id = info.metadata.get('id') if info.metadata else None
                 if not asset_id:
@@ -354,13 +350,13 @@ class AssetBrowser(QtWidgets.QWidget):
                 url_result = await self._http_service.get_image_url(asset_id)
                 if url_result is None or isinstance(url_result, Exception):
                     return
-                
+
                 image_url = json.loads(url_result)
                 load_result = False
                 for picture_url in image_url['pictures']:
                     if picture_url['viewType'] == "dynamic":
                         await self._http_service.get_asset_thumbnail2cache(picture_url['imgUrl'], thumbnail_path)
-                        
+
                         if thumbnail_path.exists():
                             player = ApngPlayer(str(thumbnail_path))
                             if player.is_valid():
@@ -382,7 +378,7 @@ class AssetBrowser(QtWidgets.QWidget):
             finally:
                 # 下载完成，移除标记
                 self._loading_thumbnails.discard(info.path)
-                
+
         except Exception as e:
             logger.error(f"Failed to load thumbnail for index {index}: {e}")
             self._loading_thumbnails.discard(info.path)
@@ -431,7 +427,21 @@ class AssetBrowser(QtWidgets.QWidget):
             self.create_panorama_apng_button.setDisabled(False)
             return
         await self._thumbnail_render_service.render_thumbnail(asset_paths)
-        self.on_render_thumbnail_finished.emit(asset_paths)
+        await self._on_render_thumbnail_finished(asset_paths)
+
+    async def _on_create_panorama_apng_for(self, asset_path: str):
+        """创建APNG全景图"""
+        self.create_panorama_apng_button.setDisabled(True)
+        self.create_panorama_apng_button.setText("渲染中...")
+        assets = self._model.get_all_assets()
+        asset_paths = []
+        asset_paths.append(asset_path.removesuffix('.spawnable'))
+        if len(assets) == 0:
+            self.create_panorama_apng_button.setText("渲染缩略图")
+            self.create_panorama_apng_button.setDisabled(False)
+            return
+        await self._thumbnail_render_service.render_thumbnail(asset_paths)
+        await self._on_render_thumbnail_finished(asset_paths)
 
     async def _on_render_thumbnail_finished(self, asset_paths: List[str]):
         asset_map = self._metadata_service.get_asset_map()
@@ -442,10 +452,9 @@ class AssetBrowser(QtWidgets.QWidget):
         self.create_panorama_apng_button.setText("加载中...")
         self.create_panorama_apng_button.setDisabled(True)
         await self._http_service.wait_for_upload_finished()
+        await self._on_upload_thumbnail_finished(asset_paths)
 
-        self.on_upload_thumbnail_finished.emit()
-
-    async def _on_upload_thumbnail_finished(self):
+    async def _on_upload_thumbnail_finished(self, asset_paths: List[str]):
         tmp_path = os.path.join(os.path.expanduser("~"), ".orcalab", "tmp")
         subscription_metadata = await self._http_service.get_subscription_metadata()
         if subscription_metadata is None:
@@ -458,30 +467,22 @@ class AssetBrowser(QtWidgets.QWidget):
 
         self._metadata_service.reload_metadata()
         all_assets = self._model.get_all_assets()
-        # 移除相机
-        asset_paths = [asset.path for asset in all_assets]
-        if 'prefabs/mujococamera1080' in asset_paths:
-            all_assets.pop(asset_paths.index('prefabs/mujococamera1080'))
-            asset_paths.pop(asset_paths.index('prefabs/mujococamera1080'))
-        if 'prefabs/mujococamera256' in asset_paths:
-            all_assets.pop(asset_paths.index('prefabs/mujococamera256'))
-            asset_paths.pop(asset_paths.index('prefabs/mujococamera256'))
-        if 'prefabs/mujococamera512' in asset_paths:
-            all_assets.pop(asset_paths.index('prefabs/mujococamera512'))
-            asset_paths.pop(asset_paths.index('prefabs/mujococamera512'))
+
         # 预处理：拷贝本地缩略图，收集需要下载的任务
-        new_assets = []
+        new_assets : List[AssetInfo] = []
         download_tasks = []
-        download_info = []  # (asset_index, cache_path)
-        
+        download_info : List[Tuple[int, str]] = []  # (asset_index, cache_path)
+
         for asset in all_assets:
             new_assets.append(asset)
             tmp_thumbnail_path = os.path.join(tmp_path, f"{asset.path}_panorama.apng").__str__()
             cache_thumbnail_path = os.path.join(get_cache_folder(), "thumbnail", f"{asset.path}_panorama.apng").__str__()
             asset.metadata = self._metadata_service.get_asset_info(asset.path)
-            if asset.metadata is None:
-                if not os.path.exists(cache_thumbnail_path):
-                    os.makedirs(os.path.dirname(cache_thumbnail_path), exist_ok=True)
+            os.makedirs(os.path.dirname(cache_thumbnail_path), exist_ok=True)
+
+            if asset.path in asset_paths:
+                # 更新本次渲染的资产
+                if os.path.exists(tmp_thumbnail_path):
                     try:
                         shutil.copy(tmp_thumbnail_path, cache_thumbnail_path)
                     except Exception as e:
@@ -491,27 +492,28 @@ class AssetBrowser(QtWidgets.QWidget):
                     if player.is_valid():
                         player.set_scaled_size(QtCore.QSize(96, 96))
                         asset.apng_player = player
-            else:
-                if not os.path.exists(cache_thumbnail_path):
-                    try:
-                        pictures_url = asset.metadata['pictures']
-                    except Exception as e:
-                        logger.error(f"failed to get pictures url for {asset.path}: {e}")
-                        continue
-                    for picture_url in pictures_url:
-                        if picture_url['viewType'] == "dynamic":
-                            download_tasks.append(
-                                self._http_service.get_asset_thumbnail2cache(picture_url['imgUrl'], cache_thumbnail_path)
-                            )
-                            download_info.append((len(new_assets) - 1, cache_thumbnail_path))
-                            break
-        
+
+            elif (asset.metadata is not None) and (not os.path.exists(cache_thumbnail_path)):
+                # 更新不再本次渲染中，并且之前不存在的资产
+                try:
+                    pictures_url = asset.metadata['pictures']
+                except Exception as e:
+                    logger.error(f"failed to get pictures url for {asset.path}: {e}")
+                    continue
+                for picture_url in pictures_url:
+                    if picture_url['viewType'] == "dynamic":
+                        download_tasks.append(
+                            self._http_service.get_asset_thumbnail2cache(picture_url['imgUrl'], cache_thumbnail_path)
+                        )
+                        download_info.append((len(new_assets) - 1, cache_thumbnail_path))
+                        break
+
         # 并行下载所有缩略图
         if download_tasks:
             start_time = time.monotonic()
             await asyncio.gather(*download_tasks, return_exceptions=True)
             logger.info(f"Downloaded {len(download_tasks)} thumbnails in {time.monotonic() - start_time:.2f} seconds")
-            
+
             # 为下载成功的资产创建播放器
             start_time = time.monotonic()
             for asset_idx, cache_path in download_info:
@@ -521,7 +523,7 @@ class AssetBrowser(QtWidgets.QWidget):
                         player.set_scaled_size(QtCore.QSize(96, 96))
                         new_assets[asset_idx].apng_player = player
             logger.info(f"Created players for {len(download_info)} assets in {time.monotonic() - start_time:.2f} seconds")
-        
+
         self._model.set_assets(new_assets)
         self._tree_view.set_assets(new_assets)
 
@@ -531,3 +533,25 @@ class AssetBrowser(QtWidgets.QWidget):
         self.create_panorama_apng_button.setText("渲染缩略图")
         self.create_panorama_apng_button.setDisabled(False)
 
+    @QtCore.Slot()
+    def show_context_menu(self, position):
+        if not self._can_render_thumbnail:
+            return
+
+        index = self._view.hovered_index()
+        if index == -1:
+            return
+
+        info = self._model.info_at(index)
+        asset_path = info.path
+
+        menu = QtWidgets.QMenu()
+
+        def do_render_thumbnail():
+            asyncio.create_task(self._on_create_panorama_apng_for(asset_path))
+
+        action_render = QtGui.QAction("Render Thumbnail")
+        connect(action_render.triggered, do_render_thumbnail)
+        menu.addAction(action_render)
+
+        menu.exec(self.mapToGlobal(position))
