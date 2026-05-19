@@ -288,6 +288,27 @@ def main():
     q_app = QtWidgets.QApplication(sys.argv)
     q_app.setWindowIcon(app_window_icon())
 
+    # 检测 GPU 驱动状态，驱动缺失或异常时弹窗提示用户
+    from orcalab.gpu_driver_check import check_gpu_drivers, show_gpu_driver_warning
+
+    _gpu_check_result = check_gpu_drivers()
+    if not _gpu_check_result.has_working_driver:
+        logger.warning(
+            "GPU 驱动异常: has_gpu=%s, has_driver=%s, devices=%s",
+            _gpu_check_result.has_gpu_hardware,
+            _gpu_check_result.has_working_driver,
+            [(d.vendor.value, d.name, d.driver_status.value) for d in _gpu_check_result.devices],
+        )
+        _should_continue = show_gpu_driver_warning(_gpu_check_result)
+        if not _should_continue:
+            logger.info("用户因 GPU 驱动问题选择退出")
+            os._exit(0)
+    else:
+        logger.info(
+            "GPU 驱动检测通过: %s",
+            [(d.vendor.value, d.name, d.driver_version) for d in _gpu_check_result.devices_with_driver_ok()],
+        )
+
     # 确保不会同时运行多个 OrcaLab 实例
     ensure_single_instance_by_file_lock(config_service)
 
