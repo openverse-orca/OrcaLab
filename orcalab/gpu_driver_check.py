@@ -66,6 +66,23 @@ _VENDOR_LSPCI_PATTERNS: List[Tuple[GpuVendor, str]] = [
     (GpuVendor.METAX, "MetaX"),
 ]
 
+_VENDOR_WINDOWS_PATTERNS: List[Tuple[GpuVendor, str]] = [
+    (GpuVendor.NVIDIA, "NVIDIA"),
+    (GpuVendor.AMD, "AMD"),
+    (GpuVendor.INTEL, "Intel"),
+    (GpuVendor.MOORE_THREADS, "Moore Threads"),
+    (GpuVendor.MOORE_THREADS, "MTT"),
+    (GpuVendor.CORERISE, "Corerise"),
+    (GpuVendor.ILUVATAR, "Iluvatar"),
+    (GpuVendor.METAX, "MetaX"),
+]
+
+_VIRTUAL_GPU_KEYWORDS: List[str] = [
+    "IddDriver",
+    "Microsoft Basic Render",
+    "Microsoft Hyper-V",
+]
+
 _VENDOR_DRIVER_TOOLS: Dict[GpuVendor, List[str]] = {
     GpuVendor.NVIDIA: ["nvidia-smi"],
     GpuVendor.AMD: ["amd-smi", "rocm-smi"],
@@ -144,6 +161,31 @@ def _run_cmd(cmd: List[str], timeout: float = 5.0) -> Optional[str]:
         return out.decode(errors="ignore").strip()
     except Exception:
         return None
+
+
+def _is_virtual_gpu(name: str) -> bool:
+    name_lower = name.lower()
+    for keyword in _VIRTUAL_GPU_KEYWORDS:
+        if keyword.lower() in name_lower:
+            return True
+    return False
+
+
+def _match_vendor_windows(compat: str, name: str = "") -> GpuVendor:
+    if compat:
+        compat_lower = compat.lower()
+        for known_vendor, pattern in _VENDOR_WINDOWS_PATTERNS:
+            if pattern.lower() in compat_lower:
+                return known_vendor
+        for known_vendor, pattern in _VENDOR_LSPCI_PATTERNS:
+            if pattern.lower() in compat_lower:
+                return known_vendor
+    if name:
+        name_lower = name.lower()
+        for known_vendor, pattern in _VENDOR_WINDOWS_PATTERNS:
+            if pattern.lower() in name_lower:
+                return known_vendor
+    return GpuVendor.UNKNOWN
 
 
 def _detect_gpu_hardware_linux() -> List[GpuDeviceInfo]:
@@ -417,6 +459,8 @@ def check_gpu_drivers() -> GpuDriverCheckResult:
     result.has_gpu_hardware = len(devices) > 0
 
     for device in devices:
+        if device.driver_status != DriverStatus.UNKNOWN:
+            continue
         checker = _DRIVER_CHECK_DISPATCH.get(device.vendor)
         if checker:
             checker(device)
@@ -449,16 +493,15 @@ def _detect_gpu_hardware_windows() -> List[GpuDeviceInfo]:
             data = [data]
         for item in data:
             name = item.get("Name", "Unknown GPU")
-            compat = item.get("AdapterCompatibility", "")
-            driver_ver = item.get("DriverVersion", "")
+            compat = item.get("AdapterCompatibility", "") or ""
+            driver_ver = item.get("DriverVersion", "") or ""
             adapter_ram = item.get("AdapterRAM", 0)
 
-            vendor = GpuVendor.UNKNOWN
-            compat_lower = compat.lower()
-            for known_vendor, pattern in _VENDOR_LSPCI_PATTERNS:
-                if pattern.lower() in compat_lower:
-                    vendor = known_vendor
-                    break
+            if _is_virtual_gpu(name):
+                logger.debug("跳过虚拟/软件 GPU: %s", name)
+                continue
+
+            vendor = _match_vendor_windows(compat, name)
 
             mem_mb = str(adapter_ram // (1024 * 1024)) if isinstance(adapter_ram, (int, float)) and adapter_ram > 0 else ""
 
@@ -469,10 +512,9 @@ def _detect_gpu_hardware_windows() -> List[GpuDeviceInfo]:
                 memory_total_mb=mem_mb,
             )
 
-            if vendor in _DRIVER_CHECK_DISPATCH:
-                _DRIVER_CHECK_DISPATCH[vendor](device)
-            elif driver_ver:
+            if driver_ver:
                 device.driver_status = DriverStatus.OK
+                device.driver_cli_tool = "WMI (Win32_VideoController)"
             else:
                 device.driver_status = DriverStatus.NOT_INSTALLED
 
