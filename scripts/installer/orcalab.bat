@@ -73,17 +73,14 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 REM -- Ensure orca-lab is installed -------------------------
-"%ENV_PYTHON%" -c "import orcalab" 2>nul
-if %ERRORLEVEL% NEQ 0 (
-    echo [INFO] Installing orca-lab...
-    "%ENV_PIP%" install orca-lab==__ORCALAB_VERSION__ -i https://pypi.tuna.tsinghua.edu.cn/simple __PIP_EXTRA_INDEX_URLS__
-    if !ERRORLEVEL! NEQ 0 (
-        echo [ERROR] Failed to install orca-lab.
-        pause
-        exit /b 1
-    )
-    echo [OK] orca-lab installed.
+echo [INFO] Ensuring orca-lab==__ORCALAB_VERSION__ ...
+"%ENV_PIP%" install orca-lab==__ORCALAB_VERSION__ -i https://pypi.tuna.tsinghua.edu.cn/simple __PIP_EXTRA_INDEX_URLS__
+if !ERRORLEVEL! NEQ 0 (
+    echo [ERROR] Failed to install orca-lab.
+    pause
+    exit /b 1
 )
+echo [OK] orca-lab ready.
 
 REM -- Launch -----------------------------------------------
 echo.
