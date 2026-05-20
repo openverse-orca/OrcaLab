@@ -286,7 +286,6 @@ class AssetSyncService:
             else:
                 self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
 
-            download_info = self.download_info_cache.get(pkg_id)            
             if download_info == None:
                 self.callbacks.on_set_status(pkg_id, 'failed')
                 logger.debug("%s 获取 download url 失败", file_name)
