@@ -3,9 +3,12 @@ import shutil
 import pathlib
 import sys
 import os
+import threading
+from datetime import datetime
 
 from orcalab.config_service import ConfigService
 from orcalab.cli_options import create_argparser, resolve_and_validate_workspace
+from orcalab.project_util import get_user_log_folder
 
 
 def _try_mcp_subcommand_argv(argv_tail: list[str]) -> list[str] | None:
@@ -38,6 +41,25 @@ def create_config_file(workspace: pathlib.Path):
     shutil.copy(template_config, config_service.workspace_config_file())
 
 
+def _build_verbose_log_file_path() -> pathlib.Path:
+    log_dir = get_user_log_folder()
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return log_dir / f"orcalab_console_{timestamp}.log"
+
+
+def _tee_output(source, dest_file, dest_console):
+    """将 source (stdout/stderr) 同时输出到文件和控制台。"""
+    for line in source:
+        if not line:
+            break
+        dest_file.write(line)
+        dest_file.flush()
+        dest_console.write(line)
+        dest_console.flush()
+    source.close()
+
+
 def launch_orcalab_gui(verbose: bool = False):
     try:
         envs = os.environ.copy()
@@ -45,17 +67,46 @@ def launch_orcalab_gui(verbose: bool = False):
             del envs["LD_LIBRARY_PATH"]
 
         args = [sys.executable, "-m", "orcalab.main"] + sys.argv[1:]
-        
+
         if verbose:
-            subprocess.run(args, env=envs)
+            log_file_path = _build_verbose_log_file_path()
+            print(f"[verbose] 控制台输出将同时写入: {log_file_path}", file=sys.stderr)
+
+            with open(log_file_path, "w", encoding="utf-8") as log_file:
+                process = subprocess.Popen(
+                    args,
+                    env=envs,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+
+                stdout_thread = threading.Thread(
+                    target=_tee_output,
+                    args=(process.stdout, log_file, sys.stdout),
+                    daemon=True,
+                )
+                stderr_thread = threading.Thread(
+                    target=_tee_output,
+                    args=(process.stderr, log_file, sys.stderr),
+                    daemon=True,
+                )
+                stdout_thread.start()
+                stderr_thread.start()
+
+                process.wait()
+                stdout_thread.join(timeout=2)
+                stderr_thread.join(timeout=2)
+                sys.exit(process.returncode)
         else:
             subprocess.run(
-                args, 
-                env=envs, 
-                stdout=subprocess.DEVNULL, 
-                stderr=subprocess.DEVNULL
+                args,
+                env=envs,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
-        sys.exit(0)
+            sys.exit(0)
     except KeyboardInterrupt:
         sys.exit(0)
     except Exception as e:

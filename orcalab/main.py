@@ -7,9 +7,14 @@ import pathlib
 from typing import List
 import asyncio
 import sys
+import io
 import signal
 import logging
 import time
+
+# Ensure UTF-8 encoding for stdout/stderr on Windows
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
 from orcalab.cli_options import create_argparser, resolve_and_validate_workspace
 from orcalab.config_service import ConfigService
