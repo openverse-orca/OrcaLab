@@ -101,6 +101,8 @@ class MainWindow(
         self._is_runtime_mode = False
         self._url_service_port = url_service_port
 
+        self.flycamera_transform = Transform()
+
         # 状态指示器（顶部蓝色条）
         self._status_indicator = None
 
@@ -798,25 +800,31 @@ class MainWindow(
             logger.debug("_write_scene_layout_file: 保存完成 path=%s", self.current_layout_path)
             self._update_title()
 
-    def save_scene_layout(self):
+    async def save_scene_layout(self):       
         if not self.current_layout_path or self._is_default_layout(self.current_layout_path):
-            self.save_scene_layout_as()
+            await self.save_scene_layout_as()
             return
+        self.flycamera_transform = await self.remote_scene.get_flycamera_transform()
         self._write_scene_layout_file(self.current_layout_path)
 
-    def save_scene_layout_as(self):
-        filename, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self,
-            "保存场景布局",
-            self.cwd,
-            "布局文件 (*.json);;所有文件 (*)"
-        )
+    async def save_scene_layout_as(self):
+        def select_file():
+            filename, _ = QtWidgets.QFileDialog.getSaveFileName(
+                self,
+                "保存场景布局",
+                self.cwd,
+                "布局文件 (*.json);;所有文件 (*)"
+            )
+            return filename
+
+        filename = await asyncWrap(select_file)
 
         if not filename:
             return
         if not filename.lower().endswith(".json"):
             filename += ".json"
 
+        self.flycamera_transform = await self.remote_scene.get_flycamera_transform()
         self._write_scene_layout_file(filename)
         self.cwd = os.path.dirname(filename)
 
@@ -842,7 +850,14 @@ class MainWindow(
         }
 
         if actor.name == "root":
-            new_fields = {"version": "1.0"}
+            new_fields = {
+                "version": "1.0",
+                "flycamera_transform": {
+                    "position": compact_array(to_list(self.flycamera_transform.position)),
+                    "rotation": compact_array(to_list(self.flycamera_transform.rotation)),
+                    "scale": self.flycamera_transform.scale,
+                }
+            }
             data = {**new_fields, **data}
 
         if isinstance(actor, AssetActor):
@@ -975,6 +990,7 @@ class MainWindow(
             self._mark_layout_clean()
             self.undo_service.command_history = []
             self.undo_service.command_history_index = -1
+            self.flycamera_transform = helper.flycamera_transform
 
             logger.debug("create_actor_from_scene_layout: 标记布局已修改")
         finally:
@@ -1448,8 +1464,11 @@ class MainWindow(
         if clicked == cancel_button:
             return False
         if clicked == save_button:
-            self.save_scene_layout()
-            return not self._layout_modified
+            async def save_and_close():
+                await self.save_scene_layout()
+                self.close()
+            asyncio.create_task(save_and_close())
+            return False
         # 放弃修改
         logger.debug("_confirm_discard_changes: 用户选择放弃修改，重置状态")
         self._mark_layout_clean()

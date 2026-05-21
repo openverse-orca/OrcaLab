@@ -836,6 +836,14 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             await self._service.set_active_camera(camera_index)
 
+    async def get_flycamera_transform(self) -> Transform:
+        async with self._grpc_lock:
+            return await self._service.get_flycamera_transform()
+
+    async def set_flycamera_transform(self, flycamera_transform: Transform) -> None:
+        async with self._grpc_lock:
+            await self._service.set_flycamera_transform(flycamera_transform)
+
     async def get_viewport_camera_transform(self) -> Transform:
         async with self._grpc_lock:
             return await self._service.get_viewport_camera_transform()

@@ -38,6 +38,7 @@ class SceneLayoutHelper:
     def __init__(self, local_scene: LocalScene) -> None:
         self.local_scene = local_scene
         self.version = "1.0"
+        self.flycamera_transform = Transform()
 
     @staticmethod
     def _node_stable_key(node) -> str:
@@ -191,6 +192,15 @@ class SceneLayoutHelper:
         
         if name == "root":
             actor = self.local_scene.root_actor
+            flycamera_transform_data = actor_data.get("flycamera_transform", {})
+            if flycamera_transform_data:
+                flycamera_position = np.array(
+                    ast.literal_eval(flycamera_transform_data["position"]), dtype=float
+                ).reshape(3)
+                flycamera_rotation = np.array(ast.literal_eval(flycamera_transform_data["rotation"]), dtype=float)
+                flycamera_scale = flycamera_transform_data.get("scale", 1.0)
+                self.flycamera_transform = Transform(flycamera_position, flycamera_rotation, flycamera_scale)
+                await SceneEditRequestBus().set_flycamera_transform(self.flycamera_transform)
         else:
 
             if actor_type == "AssetActor":

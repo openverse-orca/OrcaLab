@@ -1021,3 +1021,7 @@ class SceneEditService(SceneEditRequest):
             await SceneEditNotificationBus().on_actor_locked_changed(
                 _actor_path, paths_to_update, locked, source
             )
+
+    @override
+    async def set_flycamera_transform(self, transform: Transform) -> None:
+        await self.remote_scene.set_flycamera_transform(transform)
