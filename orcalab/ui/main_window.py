@@ -1036,8 +1036,20 @@ class MainWindow(
 
         self.menu_edit.addSeparator()
 
+        action_set_flycamera_transform = self.menu_edit.addAction("恢复视角")
+        action_set_flycamera_transform.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
+        async def set_flycamera_transform_wrapper():
+            await self.set_flycamera_transform()
+        connect(action_set_flycamera_transform.triggered, set_flycamera_transform_wrapper)
+
+        self.menu_edit.addSeparator()
+
         action_settings = self.menu_edit.addAction("配置")
         connect(action_settings.triggered, self.open_settings)
+
+    async def set_flycamera_transform(self):
+        await self.remote_scene.set_flycamera_transform(self.flycamera_transform)
+        logger.info("恢复视角")
 
     def prepare_run_menu(self):
         self.menu_run.clear()
