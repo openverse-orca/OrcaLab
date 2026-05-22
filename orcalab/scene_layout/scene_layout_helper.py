@@ -13,7 +13,7 @@ from orcalab.path import Path
 from orcalab.scene_edit_bus import SceneEditRequestBus
 
 from PySide6 import QtCore, QtWidgets, QtGui
-
+from orcalab.application_util import get_remote_scene
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +201,8 @@ class SceneLayoutHelper:
                 flycamera_scale = flycamera_transform_data.get("scale", 1.0)
                 self.flycamera_transform = Transform(flycamera_position, flycamera_rotation, flycamera_scale)
                 await SceneEditRequestBus().set_flycamera_transform(self.flycamera_transform)
+            else:
+                await self.get_flycamera_transform()
         else:
 
             if actor_type == "AssetActor":
@@ -302,3 +304,10 @@ class SceneLayoutHelper:
                 await SceneEditRequestBus().set_property(key, value, undo=False, source="layout")
             except Exception as e:
                 logger.warning("应用属性失败 %s.%s: %s", group_prefix, prop_name, e)
+
+    async def set_flycamera_transform(self):
+        await SceneEditRequestBus().set_flycamera_transform(self.flycamera_transform)
+
+    async def get_flycamera_transform(self):
+        remote_scene = get_remote_scene()
+        self.flycamera_transform = await remote_scene.get_flycamera_transform()

@@ -101,8 +101,6 @@ class MainWindow(
         self._is_runtime_mode = False
         self._url_service_port = url_service_port
 
-        self.flycamera_transform = Transform()
-
         # 状态指示器（顶部蓝色条）
         self._status_indicator = None
 
@@ -163,6 +161,8 @@ class MainWindow(
         self.scene_edit_service = SceneEditService(self.local_scene, self.remote_scene)
 
         self._viewport_widget = Viewport()
+
+        self.scene_layout_helper = SceneLayoutHelper(self.local_scene)
 
         self._current_scene_name: str | None = None
         self._current_layout_name: str | None = None
@@ -292,6 +292,8 @@ class MainWindow(
 
         logger.info("启动异步资产加载…")
         asyncio.create_task(self._load_assets_async())
+
+        await self.scene_layout_helper.get_flycamera_transform()
 
         # Load cameras from remote scene.
         _cam_start = time.monotonic()
@@ -804,7 +806,7 @@ class MainWindow(
         if not self.current_layout_path or self._is_default_layout(self.current_layout_path):
             await self.save_scene_layout_as()
             return
-        self.flycamera_transform = await self.remote_scene.get_flycamera_transform()
+        self.scene_layout_helper.flycamera_transform = await self.remote_scene.get_flycamera_transform()
         self._write_scene_layout_file(self.current_layout_path)
 
     async def save_scene_layout_as(self):
@@ -824,7 +826,7 @@ class MainWindow(
         if not filename.lower().endswith(".json"):
             filename += ".json"
 
-        self.flycamera_transform = await self.remote_scene.get_flycamera_transform()
+        self.scene_layout_helper.flycamera_transform = await self.remote_scene.get_flycamera_transform()
         self._write_scene_layout_file(filename)
         self.cwd = os.path.dirname(filename)
 
@@ -850,12 +852,13 @@ class MainWindow(
         }
 
         if actor.name == "root":
+            flycamera_transform = self.scene_layout_helper.flycamera_transform
             new_fields = {
                 "version": "1.0",
                 "flycamera_transform": {
-                    "position": compact_array(to_list(self.flycamera_transform.position)),
-                    "rotation": compact_array(to_list(self.flycamera_transform.rotation)),
-                    "scale": self.flycamera_transform.scale,
+                    "position": compact_array(to_list(flycamera_transform.position)),
+                    "rotation": compact_array(to_list(flycamera_transform.rotation)),
+                    "scale": flycamera_transform.scale,
                 }
             }
             data = {**new_fields, **data}
@@ -891,10 +894,9 @@ class MainWindow(
         if not await asyncWrap(self._confirm_discard_changes):
             return
 
-        helper = SceneLayoutHelper(self.local_scene)
-        helper.create_empty_layout(filename)
+        self.scene_layout_helper.create_empty_layout(filename)
 
-        await helper.clear_layout()
+        await self.scene_layout_helper.clear_layout()
 
         self.cwd = os.path.dirname(filename)
         self.current_layout_path = filename
@@ -981,8 +983,7 @@ class MainWindow(
         if show_loading:
             self._show_scene_loading_dialog()
         try:
-            helper = SceneLayoutHelper(self.local_scene)
-            if not await helper.load_scene_layout(self, filename):
+            if not await self.scene_layout_helper.load_scene_layout(self, filename):
                 return
 
             self.current_layout_path = resolved
@@ -990,7 +991,6 @@ class MainWindow(
             self._mark_layout_clean()
             self.undo_service.command_history = []
             self.undo_service.command_history_index = -1
-            self.flycamera_transform = helper.flycamera_transform
 
             logger.debug("create_actor_from_scene_layout: 标记布局已修改")
         finally:
@@ -1039,7 +1039,8 @@ class MainWindow(
         action_set_flycamera_transform = self.menu_edit.addAction("恢复视角")
         action_set_flycamera_transform.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
         async def set_flycamera_transform_wrapper():
-            await self.set_flycamera_transform()
+            await self.scene_layout_helper.set_flycamera_transform()
+            logger.info("恢复视角")
         connect(action_set_flycamera_transform.triggered, set_flycamera_transform_wrapper)
 
         self.menu_edit.addSeparator()
@@ -1047,9 +1048,6 @@ class MainWindow(
         action_settings = self.menu_edit.addAction("配置")
         connect(action_settings.triggered, self.open_settings)
 
-    async def set_flycamera_transform(self):
-        await self.remote_scene.set_flycamera_transform(self.flycamera_transform)
-        logger.info("恢复视角")
 
     def prepare_run_menu(self):
         self.menu_run.clear()
