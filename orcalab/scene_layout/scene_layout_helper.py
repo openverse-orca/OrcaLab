@@ -296,9 +296,10 @@ class SceneLayoutHelper:
             matched_prop = None
             matched_group_prefix = group_prefix
             matched_key_prop_name = property_name or prop_name or ""
+            matched_group = None
 
             if entity_path is not None and property_name is not None:
-                matched_prop, matched_group_prefix, matched_key_prop_name = self._find_prop_v2(
+                matched_prop, matched_group_prefix, matched_key_prop_name, matched_group = self._find_prop_v2(
                     actor, entity_path, component_type, property_name
                 )
 
@@ -320,6 +321,8 @@ class SceneLayoutHelper:
                     actor_path, matched_group_prefix,
                     matched_key_prop_name,
                     prop_type,
+                    entity_id=matched_group.entity_id if matched_group else 0,
+                    component_type=matched_group.component_type_id if matched_group else "",
                 )
                 try:
                     await SceneEditRequestBus().set_property(key, value, undo=False, source="layout")
@@ -332,12 +335,12 @@ class SceneLayoutHelper:
         entity_path: str,
         component_type: str | None,
         property_name: str,
-    ) -> tuple | tuple[None, str, str]:
+    ) -> tuple | tuple[None, str, str, None]:
         """v2.0 格式：使用 entity_path + component_type + property_name 三元组寻址。
         group.hint 存储 entity_path，group.name 存储 component_type。
         对于普通属性：group.hint == entity_path 直接匹配。
         对于树形属性：entity_path 可能是子实体路径，需在 group 的 tree_data 中搜索。
-        返回 (prop, group_prefix, key_property_name)，key_property_name 用于 ActorPropertyKey。"""
+        返回 (prop, group_prefix, key_property_name, group)"""
         for group in actor.property_groups:
             if group.hint != entity_path:
                 continue
@@ -346,13 +349,13 @@ class SceneLayoutHelper:
 
             for prop in group.properties:
                 if prop.name() == property_name:
-                    return prop, group.prefix, property_name
+                    return prop, group.prefix, property_name, group
 
             matched_prop, key_prop_name = SceneLayoutHelper._find_prop_in_tree_by_entity_id_for_path(
                 actor, group.tree_data, entity_path, property_name
             )
             if matched_prop is not None:
-                return matched_prop, group.prefix, key_prop_name
+                return matched_prop, group.prefix, key_prop_name, group
 
         for group in actor.property_groups:
             if component_type is not None and group.name != component_type:
@@ -362,9 +365,9 @@ class SceneLayoutHelper:
                 actor, group.tree_data, entity_path, property_name
             )
             if matched_prop is not None:
-                return matched_prop, group.prefix, key_prop_name
+                return matched_prop, group.prefix, key_prop_name, group
 
-        return None, "", ""
+        return None, "", "", None
 
     @staticmethod
     def _find_prop_in_tree_by_entity_id_for_path(

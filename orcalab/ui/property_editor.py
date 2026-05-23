@@ -334,6 +334,8 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                     perf_log(f"property_editor._fetch_and_render_all: got {len(entries)} entries", feature="PROPERTY")
 
                     groups = [e.property_group for e in entries]
+                    for e in entries:
+                        e.property_group.entity_id = e.entity_id
                     keys: list[ActorPropertyKey] = []
                     props: list[ActorProperty] = []
                     collect_properties(keys, props, groups, actor_path)

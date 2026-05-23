@@ -497,12 +497,6 @@ class EditServiceWrapper:
             prop.set_editor_hint(prop_msg.editor_hint)
             if prop_msg.enum_values:
                 prop.set_enum_values(list(prop_msg.enum_values))
-            if prop_msg.sub_name:
-                prop.set_sub_name(prop_msg.sub_name)
-            if prop_msg.parent_struct_name:
-                prop.set_parent_struct_name(prop_msg.parent_struct_name)
-            if prop_msg.struct_display_name:
-                prop.set_struct_display_name(prop_msg.struct_display_name)
         return prop
 
     def _parse_tree_node_msg(self, node_msg) -> TreePropertyNode:
@@ -533,6 +527,11 @@ class EditServiceWrapper:
             prefix=pg_msg.prefix, name=name, hint=pg_msg.hint
         )
 
+        if pg_msg.entity_id:
+            pg.entity_id = pg_msg.entity_id
+        if pg_msg.component_type_id:
+            pg.component_type_id = pg_msg.component_type_id
+
         if pg_msg.display_name:
             pg.display_name = pg_msg.display_name
 
@@ -551,8 +550,9 @@ class EditServiceWrapper:
     def _create_property_key_message(self, key: ActorPropertyKey):
         key_msg = edit_service_pb2.PropertyKey()
         key_msg.actor_path = key.actor_path.string()
-        key_msg.group_prefix = key.group_prefix
-        key_msg.property_name = key.property_name
+        key_msg.entity_id = key.entity_id
+        key_msg.component_type = key.component_type
+        key_msg.field_path = key.property_name
         key_msg.property_type = key.property_type.value
         return key_msg
 

@@ -139,6 +139,8 @@ def collect_tree_propertys(
     actor_path: Path,
     group_prefix: str,
     node: TreePropertyNode,
+    entity_id: int = 0,
+    component_type: str = "",
 ):
     """递归收集树形属性的子属性"""
     for prop in node.properties:
@@ -148,12 +150,14 @@ def collect_tree_propertys(
             group_prefix,
             full_name,
             prop.value_type(),
+            entity_id=entity_id,
+            component_type=component_type,
         )
         keys.append(key)
         props.append(prop)
 
     for child in node.children:
-        collect_tree_propertys(keys, props, actor_path, group_prefix, child)
+        collect_tree_propertys(keys, props, actor_path, group_prefix, child, entity_id=entity_id, component_type=component_type)
 
 
 def collect_properties(
@@ -164,18 +168,17 @@ def collect_properties(
 ):
     for group in properties:
         for prop in group.properties:
-            # TREE 类型的属性没有直接值，跳过获取
             if prop.value_type() == ActorPropertyType.TREE:
                 continue
             key = ActorPropertyKey(
-                actor_path, group.prefix, prop.name(), prop.value_type()
+                actor_path, group.prefix, prop.name(), prop.value_type(),
+                entity_id=group.entity_id, component_type=group.component_type_id,
             )
             props.append(prop)
             keys.append(key)
 
-        # 收集树形属性的子属性
         for tree_node in group.tree_data:
-            collect_tree_propertys(keys, props, actor_path, group.prefix, tree_node)
+            collect_tree_propertys(keys, props, actor_path, group.prefix, tree_node, entity_id=group.entity_id, component_type=group.component_type_id)
 
 
 class TreePropertyNode_PairIterator:
@@ -223,17 +226,16 @@ def collect_properties_duplicate_data(
 ):
     for src_group, dst_group in zip(src_properties, dst_properties):
         for prop in src_group.properties:
-            # TREE 类型的属性没有直接值，跳过获取
             if prop.value_type() == ActorPropertyType.TREE:
                 continue
             key = ActorPropertyKey(
-                dst_actor_path, src_group.prefix, prop.name(), prop.value_type()
+                dst_actor_path, src_group.prefix, prop.name(), prop.value_type(),
+                entity_id=dst_group.entity_id, component_type=dst_group.component_type_id,
             )
             keys.append(key)
             props.append(prop)
             values.append(prop.value())
 
-        # 收集树形属性的子属性
         for src_node, dst_node in TreePropertyNode_PairIterator(
             src_group.tree_data, dst_group.tree_data
         ):
@@ -244,6 +246,8 @@ def collect_properties_duplicate_data(
                     dst_group.prefix,
                     full_name,
                     dst_prop.value_type(),
+                    entity_id=dst_group.entity_id,
+                    component_type=dst_group.component_type_id,
                 )
                 keys.append(key)
                 props.append(dst_prop)

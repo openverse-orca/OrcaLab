@@ -163,6 +163,7 @@ class ActorPropertyGroup:
         self.properties: List[ActorProperty] = []
         self.tree_data: List[TreePropertyNode] = []
         self.entity_id: int = 0
+        self.component_type_id: str = ""
 
 
 class ActorPropertyKey:
@@ -172,11 +173,15 @@ class ActorPropertyKey:
         group_prefix: str,
         property_name: str,
         property_type: ActorPropertyType,
+        entity_id: int = 0,
+        component_type: str = "",
     ):
         self.actor_path = actor_path
         self.group_prefix = group_prefix
         self.property_name = property_name
         self.property_type = property_type
+        self.entity_id = entity_id
+        self.component_type = component_type
 
     def __eq__(self, other):
         if not isinstance(other, ActorPropertyKey):

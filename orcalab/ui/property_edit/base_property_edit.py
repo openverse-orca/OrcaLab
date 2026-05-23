@@ -34,6 +34,8 @@ class PropertyEditContext:
             self.group.prefix,
             prop.name(),
             prop.value_type(),
+            entity_id=self.group.entity_id,
+            component_type=self.group.component_type_id,
         )
 
 

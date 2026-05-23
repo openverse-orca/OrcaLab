@@ -55,9 +55,6 @@ class PropertyDataStore:
                             value=prop.value(),
                             is_readonly=prop.is_read_only(),
                             group_prefix=entry.property_group.prefix,
-                            sub_name=prop.sub_name(),
-                            parent_struct_name=prop.parent_struct_name(),
-                            struct_display_name=prop.struct_display_name(),
                             group_id=entry_idx,
                         )
                     )
@@ -117,9 +114,6 @@ class PropertyDataStore:
                         value=prop.value(),
                         is_readonly=prop.is_read_only(),
                         group_prefix=group.prefix,
-                        sub_name=prop.sub_name(),
-                        parent_struct_name=prop.parent_struct_name(),
-                        struct_display_name=prop.struct_display_name(),
                         group_id=group_idx,
                     )
                 )
@@ -207,12 +201,6 @@ class PropertyDataStore:
                 value=item.value,
             )
             prop.set_read_only(item.is_readonly)
-            if item.sub_name:
-                prop.set_sub_name(item.sub_name)
-            if item.parent_struct_name:
-                prop.set_parent_struct_name(item.parent_struct_name)
-            if item.struct_display_name:
-                prop.set_struct_display_name(item.struct_display_name)
             group_map[key].properties.append(prop)
 
         perf_log(

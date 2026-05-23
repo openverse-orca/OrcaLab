@@ -124,19 +124,30 @@ def _render_tree_data_flat(
 def _build_struct_tree(
     group: ActorPropertyGroup,
 ) -> Tuple[List[StructPropertyGroup], List[ActorProperty]]:
-    """将扁平属性列表按 parent_struct_name 重建为树形结构"""
+    """V2: 从属性名的点号分隔符自动推断 struct 分组关系。
+
+    C++ 侧 FlattenField 跳过 "Config" 前缀后，属性名如 "axis.x"、"axis.y"、"axis.z"
+    仍然保留了父结构名和子字段名的点号分隔关系。由此可自动推断：
+    - 父结构名: 点号前的部分 (如 "axis")
+    - 子字段名: 点号后的部分 (如 "x", "y", "z")
+    - 横排判定: 子字段名均为单字符且类型为 Float → Vector2/3/4 横排绘制
+    """
     struct_groups: dict[str, List[ActorProperty]] = {}
     standalone_props: List[ActorProperty] = []
 
     for prop in group.properties:
-        parent_name = prop.parent_struct_name()
-        if parent_name:
+        name = prop.name()
+        dot_pos = name.find(".")
+        if dot_pos != -1:
+            parent_name = name[:dot_pos]
             struct_groups.setdefault(parent_name, []).append(prop)
         else:
             standalone_props.append(prop)
 
+    if not struct_groups:
+        return [], standalone_props
+
     def _is_tuple_group(g: StructPropertyGroup) -> bool:
-        """检测是否为三元组/四元组（Vector2/3/4, Quaternion等），应采用横向平铺"""
         if g.children:
             return False
         if not g.properties:
@@ -144,37 +155,36 @@ def _build_struct_tree(
         for p in g.properties:
             if p.value_type() != ActorPropertyType.FLOAT:
                 return False
-            sub = p.sub_name()
-            name = p.display_name()
-            if not ((sub and len(sub) == 1) or (name and len(name) == 1)):
+            name = p.name()
+            dot_pos = name.rfind(".")
+            sub = name[dot_pos + 1:] if dot_pos != -1 else name
+            if len(sub) != 1:
                 return False
         return True
 
     def _build(name: str, props: List[ActorProperty], display_override: str | None = None) -> StructPropertyGroup:
-        display = display_override or props[0].struct_display_name() or name
+        display = display_override or name.capitalize()
         direct_props: List[ActorProperty] = []
         child_groups: dict[str, List[ActorProperty]] = {}
 
         for p in props:
-            search = f".{name}."
-            pos = p.name().rfind(search)
-            if pos != -1:
-                remaining = p.name()[pos + len(search):]
-            elif p.name().startswith(f"{name}."):
-                remaining = p.name()[len(name) + 1:]
-            else:
-                remaining = p.name()
-            if "." in remaining:
-                child_name = remaining.split(".")[0]
-                child_groups.setdefault(child_name, []).append(p)
+            dot_pos = p.name().find(".")
+            if dot_pos != -1:
+                remaining = p.name()[dot_pos + 1:]
+                next_dot = remaining.find(".")
+                if next_dot != -1:
+                    child_name = remaining[:next_dot]
+                    child_groups.setdefault(child_name, []).append(p)
+                else:
+                    direct_props.append(p)
             else:
                 direct_props.append(p)
 
         children = [_build(cn, cp, cn.capitalize()) for cn, cp in child_groups.items()]
-        group = StructPropertyGroup(name, display, direct_props, children)
-        if _is_tuple_group(group):
-            group.layout = "horizontal"
-        return group
+        sg = StructPropertyGroup(name, display, direct_props, children)
+        if _is_tuple_group(sg):
+            sg.layout = "horizontal"
+        return sg
 
     result = []
     for struct_name, props in struct_groups.items():
@@ -230,7 +240,11 @@ def _create_horizontal_tuple_content(
     compact_label_width = fs.indent_unit_px(14)
 
     for prop in struct_group.properties:
-        editor = _create_property_edit(parent, actor, actor_path, group, prop, compact_label_width)
+        dot_pos = prop.name().rfind(".")
+        sub_name = prop.name()[dot_pos + 1:] if dot_pos != -1 else prop.name()
+        display_alias = prop.create_alias(prop.name())
+        display_alias._display_name = sub_name.upper()
+        editor = _create_property_edit(parent, actor, actor_path, group, display_alias, compact_label_width)
         if prop.is_read_only():
             editor.set_read_only(True)
         property_edits.append(editor)
@@ -322,19 +336,6 @@ def create_property_group_content(
             editor.set_read_only(True)
             property_edits.append(editor)
             content_layout.addWidget(editor)
-        elif prop.sub_name():
-            editor = _create_property_edit(parent, actor, actor_path, group, prop, label_width)
-            if prop.is_read_only():
-                editor.set_read_only(True)
-            property_edits.append(editor)
-
-            row = QtWidgets.QWidget()
-            row_layout = QtWidgets.QHBoxLayout(row)
-            row_layout.setContentsMargins(20, 0, 0, 0)
-            row_layout.setSpacing(0)
-            row_layout.addWidget(editor)
-            row_layout.addStretch()
-            content_layout.addWidget(row)
         else:
             editor = _create_property_edit(parent, actor, actor_path, group, prop, label_width)
             if prop.is_read_only():

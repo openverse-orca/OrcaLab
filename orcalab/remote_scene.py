@@ -561,6 +561,7 @@ class RemoteScene(SceneEditNotification):
 
             groups: List[ActorPropertyGroup] = []
             for entry in entries:
+                entry.property_group.entity_id = entry.entity_id
                 groups.append(entry.property_group)
             all_property_groups.append(groups)
 
@@ -748,7 +749,7 @@ class RemoteScene(SceneEditNotification):
                 if not property_name:
                     continue
 
-                matched_prop, matched_group_prefix, key_prop_name = SceneLayoutHelper._find_prop_v2(
+                matched_prop, matched_group_prefix, key_prop_name, matched_group = SceneLayoutHelper._find_prop_v2(
                     actor, entity_path, component_type, property_name
                 )
                 if matched_prop is None:
@@ -759,6 +760,8 @@ class RemoteScene(SceneEditNotification):
                     matched_group_prefix,
                     key_prop_name,
                     prop_type,
+                    entity_id=matched_group.entity_id if matched_group else 0,
+                    component_type=matched_group.component_type_id if matched_group else "",
                 )
                 keys.append(key)
                 values.append(value)

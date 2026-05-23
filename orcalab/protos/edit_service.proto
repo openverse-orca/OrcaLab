@@ -426,6 +426,8 @@ message PropertyGroup {
     string hint = 4;
     repeated Property properties = 5;
     repeated TreePropertyNode tree_data = 6;
+    uint64 entity_id = 7;
+    string component_type_id = 8;
 }
 
 message PropertyKey {
