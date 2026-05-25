@@ -279,10 +279,14 @@ class AssetSyncService:
             pkg_name = pkg['name']
             size = pkg['size']
             
-            download_info = self.download_info_cache[pkg_id]
+            download_info = self.download_info_cache.get(pkg_id)
+            if download_info is None:
+                logger.debug("download_info_cache 中未找到包 %s 的下载信息", pkg_id)
 
             if "_patch_" in file_name:
-                pkg_id = self.patch_to_base_map[pkg['id']] 
+                pkg_id = self.patch_to_base_map.get(pkg['id'])
+                if pkg_id is None:
+                    logger.debug("patch_to_base_map 中未找到包 %s 对应的全量包映射", pkg['id'])
             else:
                 self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
 
@@ -554,7 +558,7 @@ class AssetSyncService:
         for pkg in packages:
             download_info = self.download_info_cache.get(pkg['id'])
             if not download_info:
-                print("未找到缓存的下载信息，正在获取:", pkg['id'])
+                logger.debug("download_info_cache 中未找到包 %s 的下载信息，尝试重新获取", pkg['id'])
                 download_info = await self.get_download_url(pkg['id'])
                 self.download_info_cache[pkg['id']] = download_info
             if download_info:
@@ -573,6 +577,7 @@ class AssetSyncService:
             
             download_info = self.download_info_cache.get(package_id)
             if not download_info:
+                logger.debug("download_info_cache 中未找到包 %s 的下载信息，尝试重新获取", package_id)
                 download_info = await self.get_download_url(package_id)
             
             if not download_info:
@@ -807,6 +812,8 @@ class AssetSyncService:
             if "_patch_" in file_name and pkg['id'] in self.patch_to_base_map:
                 group_id = self.patch_to_base_map[pkg['id']]
             else:
+                if "_patch_" in file_name:
+                    logger.debug("patch_to_base_map 中未找到增量包 %s 对应的全量包映射，将使用自身ID作为分组", pkg['id'])
                 group_id = package_id
             
             if group_id not in base_package_groups:
