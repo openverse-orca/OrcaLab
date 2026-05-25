@@ -1,7 +1,7 @@
 from typing import override
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from orcalab.ui.edit.base_number_edit import BaseNumberEdit
+from orcalab.ui.edit.base_number_edit import BaseNumberEdit, BaseNumberEditState
 
 
 def is_close(a: float, b: float, tol: float = 1e-6) -> bool:
@@ -49,10 +49,11 @@ class FloatEdit(BaseNumberEdit[float]):
             return False
 
         self._value = clamped
-        
-        text = self._value_to_text(self.value())
-        if self.text() != text:
-            self.setText(text)
+
+        if self._state != BaseNumberEditState.Typing:
+            text = self._value_to_text(self.value())
+            if self.text() != text:
+                self.setText(text)
         return True
 
     @override
