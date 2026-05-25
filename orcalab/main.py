@@ -29,7 +29,7 @@ import orcalab.assets.rc_assets
 
 from qasync import QEventLoop
 from orcalab.python_project_installer import ensure_python_project_installed
-from orcalab.ui.icon_util import app_window_icon
+from orcalab.ui.icon_util import app_window_icon, set_windows_app_user_model_id
 from orcalab.url_service.url_service import find_free_port, DEFAULT_PORT as URL_SERVICE_DEFAULT_PORT
 
 # This is needed to display the app icon on the taskbar on Windows
@@ -284,6 +284,8 @@ def main():
 
     # Register signal handlers for graceful shutdown
     register_signal_handlers()
+
+    set_windows_app_user_model_id()
 
     q_app = QtWidgets.QApplication(sys.argv)
     q_app.setWindowIcon(app_window_icon())
