@@ -297,7 +297,7 @@ class AuthService:
                     'username': username,
                     'access_token': access_token
                 },
-                timeout=self.timeout
+                timeout=10
             )
             
             return response.status_code == 200

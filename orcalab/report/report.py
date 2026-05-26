@@ -117,38 +117,22 @@ def _run_cmd(cmd: List[str], timeout: float = 5.0) -> Optional[str]:
 
 
 def _get_gpu_info() -> List[Dict[str, Optional[object]]]:
+    from orcalab.gpu_driver_check import check_gpu_drivers, DriverStatus
+
+    result = check_gpu_drivers()
     gpus: List[Dict[str, Optional[object]]] = []
-
-    # 1) nvidia-smi parsing
-    if shutil.which("nvidia-smi"):
-        out = _run_cmd(
-            [
-                "nvidia-smi",
-                "--query-gpu=index,name,driver_version,memory.total",
-                "--format=csv,noheader,nounits",
-            ]
+    for device in result.devices:
+        gpus.append(
+            {
+                "vendor": device.vendor.value,
+                "name": device.name,
+                "pci_address": device.pci_address or None,
+                "driver_status": device.driver_status.value,
+                "driver_version": device.driver_version or None,
+                "driver_cli_tool": device.driver_cli_tool or None,
+                "memory_total_mb": device.memory_total_mb or None,
+            }
         )
-        if out:
-            for line in out.splitlines():
-                parts = [p.strip() for p in line.split(",")]
-                if len(parts) >= 4:
-                    gpus.append(
-                        {
-                            "index": parts[0],
-                            "name": parts[1],
-                            "driver_version": parts[2],
-                            "memory_total_mb": parts[3],
-                        }
-                    )
-            if gpus:
-                return gpus
-
-    if shutil.which("amd-smi"):
-        out = _run_cmd(["amd-smi", "static", "--asic", "--vram", "--json"])
-        if out:
-            json_data = json.loads(out)
-            return json_data
-
     return gpus
 
 

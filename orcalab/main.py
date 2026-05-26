@@ -34,7 +34,7 @@ import orcalab.assets.rc_assets
 
 from qasync import QEventLoop
 from orcalab.python_project_installer import ensure_python_project_installed
-from orcalab.ui.icon_util import app_window_icon
+from orcalab.ui.icon_util import app_window_icon, set_windows_app_user_model_id
 from orcalab.url_service.url_service import find_free_port, DEFAULT_PORT as URL_SERVICE_DEFAULT_PORT
 
 # This is needed to display the app icon on the taskbar on Windows
@@ -239,6 +239,7 @@ def select_scene_and_layout(
 
 def main():
     """Main entry point for the orcalab application"""
+    _main_start = time.monotonic()
     parser = create_argparser()
     args, unknown = parser.parse_known_args()
 
@@ -295,8 +296,31 @@ def main():
     # Register signal handlers for graceful shutdown
     register_signal_handlers()
 
+    set_windows_app_user_model_id()
+
     q_app = QtWidgets.QApplication(sys.argv)
     q_app.setWindowIcon(app_window_icon())
+
+    # 检测 GPU 驱动状态，驱动缺失或异常时弹窗提示用户
+    from orcalab.gpu_driver_check import check_gpu_drivers, show_gpu_driver_warning
+
+    _gpu_check_result = check_gpu_drivers()
+    if not _gpu_check_result.has_working_driver:
+        logger.warning(
+            "GPU 驱动异常: has_gpu=%s, has_driver=%s, devices=%s",
+            _gpu_check_result.has_gpu_hardware,
+            _gpu_check_result.has_working_driver,
+            [(d.vendor.value, d.name, d.driver_status.value) for d in _gpu_check_result.devices],
+        )
+        _should_continue = show_gpu_driver_warning(_gpu_check_result)
+        if not _should_continue:
+            logger.info("用户因 GPU 驱动问题选择退出")
+            os._exit(0)
+    else:
+        logger.info(
+            "GPU 驱动检测通过: %s",
+            [(d.vendor.value, d.name, d.driver_version) for d in _gpu_check_result.devices_with_driver_ok()],
+        )
 
     # 确保不会同时运行多个 OrcaLab 实例
     ensure_single_instance_by_file_lock(config_service)
@@ -310,6 +334,7 @@ def main():
 
     # 处理pak包
     logger.info("正在准备资产包...")
+    _pak_start = time.monotonic()
     if config_service.init_paks():
         paks = config_service.paks()
         if paks:
@@ -323,9 +348,12 @@ def main():
     if pak_urls:
         logger.info("正在同步pak_urls列表...")
         sync_pak_urls(pak_urls, pak_urls_sha256)
+    logger.info("pak包处理完成, 耗时: %.2f 秒", time.monotonic() - _pak_start)
 
     # 同步订阅的资产包（带UI）
+    _sync_start = time.monotonic()
     run_asset_sync_ui(config_service)
+    logger.info("资产同步完成, 耗时: %.2f 秒", time.monotonic() - _sync_start)
 
     from orcalab.level_discovery import discover_levels_from_cache
 
@@ -346,6 +374,7 @@ def main():
         level_cli=level_cli,
         layout_cli=layout_cli,
     )
+    logger.info("场景选择完成, 总耗时: %.2f 秒", time.monotonic() - _main_start)
 
     event_loop = QEventLoop(q_app)
     asyncio.set_event_loop(event_loop)

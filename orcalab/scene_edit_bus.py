@@ -231,6 +231,8 @@ class SceneEditRequest:
     ) -> list:
         pass
 
+    async def set_flycamera_transform(self, transform: Transform) -> None:
+        pass
 
 SceneEditRequestBus = create_event_bus(SceneEditRequest)
 

@@ -755,21 +755,22 @@ class OrcaLabMCPServer:
         return json.dumps({"can_redo": result}, ensure_ascii=False)
 
     # ==================== 选择操作类 API ====================
-
-    async def set_selection(self, actor_paths: List[str]) -> str:
+    async def set_selection_and_active_actor(self, actor_paths: List[str], active_actor: str = "") -> str:
         '''
-        设置当前选中的Actor
+        设置当前选中的Actor列表以及激活Actor
         Args:
             actor_paths: Actor路径列表，如 ["/Actor1", "/Actor2"]。传入空列表可清空选择。
+            active_actor: 激活的Actor路径（在属性面板中显示的Actor），为空时自动取第一个选中Actor
         Returns:
-            设置选择的结果的json字符串格式
+            设置选择与激活Actor的结果的json字符串格式
         '''
         try:
             paths = [Path(p) for p in actor_paths]
-            await self.scene_edit_bus.set_selection(paths, undo=True, source="mcp")
+            active = Path(active_actor) if active_actor else (paths[0] if paths else None)
+            await self.scene_edit_bus.set_selection_and_active_actor(paths, active, undo=True, source="mcp")
             return json.dumps({"success": True, "message": f"成功设置选择，共选中 {len(paths)} 个Actor"}, ensure_ascii=False)
         except Exception as e:
-            return json.dumps({"success": False, "message": f"设置选择失败: {e}"}, ensure_ascii=False)
+            return json.dumps({"success": False, "message": f"设置选择与激活Actor失败: {e}"}, ensure_ascii=False)
 
     async def clear_selection(self) -> str:
         '''
@@ -780,11 +781,10 @@ class OrcaLabMCPServer:
             清空选择的结果的json字符串格式
         '''
         try:
-            await self.scene_edit_bus.set_selection([], undo=True, source="mcp")
+            await self.scene_edit_bus.set_selection_and_active_actor([],None, undo=True, source="mcp")
             return json.dumps({"success": True, "message": "成功清空选择"}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"success": False, "message": f"清空选择失败: {e}"}, ensure_ascii=False)
-
     # ==================== Actor 编辑类 API ====================
 
     async def rename_actor(self, actor_path: str, new_name: str) -> str:
@@ -1161,7 +1161,7 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.duplicate_actors)
         
         # 选择操作类
-        self.mcp.tool(self.set_selection)
+        self.mcp.tool(self.set_selection_and_active_actor)
         self.mcp.tool(self.clear_selection)
 
         # 撤销/重做类

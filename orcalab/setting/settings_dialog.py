@@ -23,13 +23,13 @@ _AUTO_FPS_LABEL = "自动"
 
 
 def _filtered_fps_options() -> list:
-    screen_fps = Viewport._detect_screen_refresh_rate()
+    max_screen_fps = Viewport._detect_max_screen_refresh_rate()
     result = [0]
     for fps in _FPS_OPTIONS:
-        if fps > 0 and fps <= screen_fps:
+        if fps > 0 and fps <= max_screen_fps:
             result.append(fps)
     if len(result) == 1:
-        result.append(screen_fps)
+        result.append(max_screen_fps)
     return result
 
 

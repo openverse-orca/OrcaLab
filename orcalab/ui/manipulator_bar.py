@@ -161,7 +161,8 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         connect(self.pivot_point_button.mouse_pressed, self.show_pivot_menu)
 
         self.runtime_grab_button = Button(icon=make_icon(":/icons/grab.png", icon_color))
-        self.runtime_grab_button.setToolTip("抓取(F3)")
+        self.runtime_grab_button.setEnabled(False)
+        self.runtime_grab_button.setToolTip("仿真时可用")
         self.runtime_grab_button.setFixedSize(button_size)
         self.runtime_grab_button.icon_size = icon_size
 
@@ -223,6 +224,8 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self.measure_distance_button.setToolTip("仿真时不可用")
         self.measure_angle_button.setEnabled(False)
         self.measure_angle_button.setToolTip("仿真时不可用")
+        self.runtime_grab_button.setEnabled(True)
+        self.runtime_grab_button.setToolTip("抓取(F3)")
 
     def end_sim(self):
         self.scale_button.setEnabled(True)
@@ -231,6 +234,8 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
         self.measure_distance_button.setToolTip("测距离")
         self.measure_angle_button.setEnabled(True)
         self.measure_angle_button.setToolTip("测角度")
+        self.runtime_grab_button.setEnabled(False)
+        self.runtime_grab_button.setToolTip("仿真时可用")
 
     async def set_translation(self):
         bus = StateSyncRequestBus()

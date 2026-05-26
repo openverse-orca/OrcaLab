@@ -356,6 +356,22 @@ message SetActiveCameraResponse {
     string error_message = 2;
 }
 
+message GetFlyCameraTransformRequest {
+}
+message GetFlyCameraTransformResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    Transform flycamera_transform = 3;
+}
+
+message SetFlyCameraTransformRequest {
+    Transform flycamera_transform = 1;
+}
+message SetFlyCameraTransformResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
 message GetViewportCameraTransformRequest {
 }
 message GetViewportCameraTransformResponse {
@@ -645,6 +661,8 @@ service GrpcService {
     rpc GetCameras(GetCamerasRequest) returns (GetCamerasResponse);
     rpc GetActiveCamera(GetActiveCameraRequest) returns (GetActiveCameraResponse);
     rpc SetActiveCamera(SetActiveCameraRequest) returns (SetActiveCameraResponse);
+    rpc GetFlyCameraTransform(GetFlyCameraTransformRequest) returns (GetFlyCameraTransformResponse);
+    rpc SetFlyCameraTransform(SetFlyCameraTransformRequest) returns (SetFlyCameraTransformResponse);
     rpc GetViewportCameraTransform(GetViewportCameraTransformRequest) returns (GetViewportCameraTransformResponse);
     rpc GetCameraDataPNG(GetCameraDataPNGRequest) returns (GetCameraDataPNGResponse);
 

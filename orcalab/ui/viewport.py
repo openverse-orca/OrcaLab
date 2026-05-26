@@ -149,7 +149,7 @@ class Viewport(QtWidgets.QWidget):
         try:
             screen = QtWidgets.QApplication.primaryScreen()
             if screen:
-                refresh_rate = int(screen.refreshRate())
+                refresh_rate = round(screen.refreshRate())
                 if refresh_rate <= 0:
                     refresh_rate = 60
         except Exception:
@@ -157,11 +157,34 @@ class Viewport(QtWidgets.QWidget):
         return refresh_rate
 
     @staticmethod
+    def _detect_max_screen_refresh_rate() -> int:
+        max_rate = 60
+        try:
+            screen = QtWidgets.QApplication.primaryScreen()
+            if screen:
+                best = 0.0
+                try:
+                    for mode in screen.modes():
+                        rate = mode.refreshRate()
+                        if rate > best:
+                            best = rate
+                except Exception:
+                    pass
+                if best > 0:
+                    max_rate = round(best)
+                else:
+                    max_rate = round(screen.refreshRate())
+                if max_rate <= 0:
+                    max_rate = 60
+        except Exception:
+            pass
+        return max_rate
+
+    @staticmethod
     def _effective_fps(config_fps: int) -> int:
-        screen_fps = Viewport._detect_screen_refresh_rate()
         if config_fps <= 0:
-            return screen_fps
-        return min(config_fps, screen_fps)
+            return Viewport._detect_screen_refresh_rate()
+        return min(config_fps, Viewport._detect_max_screen_refresh_rate())
 
     @staticmethod
     def _calc_target_frame_time() -> float:

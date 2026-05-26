@@ -442,6 +442,20 @@ class EditServiceWrapper:
         response = await self.stub.SetActiveCamera(request)
         self._check_response(response)
 
+    async def get_flycamera_transform(self) -> Transform:
+        request = edit_service_pb2.GetFlyCameraTransformRequest()
+        response = await self.stub.GetFlyCameraTransform(request)
+        self._check_response(response)
+        transform = response.flycamera_transform
+        return self._get_transform_from_message(transform)
+
+    async def set_flycamera_transform(self, flycamera_transform: Transform) -> None:
+        request = edit_service_pb2.SetFlyCameraTransformRequest(
+            flycamera_transform=self._create_transform_message(flycamera_transform)
+        )
+        response = await self.stub.SetFlyCameraTransform(request)
+        self._check_response(response)
+
     async def get_viewport_camera_transform(self) -> Transform:
         request = edit_service_pb2.GetViewportCameraTransformRequest()
         response = await self.stub.GetViewportCameraTransform(request)

@@ -13,7 +13,7 @@ from orcalab.path import Path
 from orcalab.scene_edit_bus import SceneEditRequestBus
 
 from PySide6 import QtCore, QtWidgets, QtGui
-
+from orcalab.application_util import get_remote_scene
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,8 @@ class _ActorData:
 class SceneLayoutHelper:
     def __init__(self, local_scene: LocalScene) -> None:
         self.local_scene = local_scene
-        self.version = "2.0"
+        self.version = "1.0"
+        self.flycamera_transform = Transform()
 
     @staticmethod
     def _node_stable_key(node) -> str:
@@ -226,6 +227,17 @@ class SceneLayoutHelper:
         
         if name == "root":
             actor = self.local_scene.root_actor
+            flycamera_transform_data = actor_data.get("flycamera_transform", {})
+            if flycamera_transform_data:
+                flycamera_position = np.array(
+                    ast.literal_eval(flycamera_transform_data["position"]), dtype=float
+                ).reshape(3)
+                flycamera_rotation = np.array(ast.literal_eval(flycamera_transform_data["rotation"]), dtype=float)
+                flycamera_scale = flycamera_transform_data.get("scale", 1.0)
+                self.flycamera_transform = Transform(flycamera_position, flycamera_rotation, flycamera_scale)
+                await SceneEditRequestBus().set_flycamera_transform(self.flycamera_transform)
+            else:
+                await self.get_flycamera_transform()
         else:
 
             if actor_type == "AssetActor":
@@ -317,158 +329,15 @@ class SceneLayoutHelper:
                 except Exception:
                     pass
 
-                key = ActorPropertyKey(
-                    actor_path, matched_group_prefix,
-                    matched_key_prop_name,
-                    prop_type,
-                    entity_id=matched_group.entity_id if matched_group else 0,
-                    component_type=matched_group.component_type_id if matched_group else "",
-                )
-                try:
-                    await SceneEditRequestBus().set_property(key, value, undo=False, source="layout")
-                except Exception as e:
-                    logger.warning("应用属性失败 %s.%s: %s", matched_group_prefix, property_name or prop_name, e)
-
-    @staticmethod
-    def _find_prop_v2(
-        actor: AssetActor,
-        entity_path: str,
-        component_type: str | None,
-        property_name: str,
-    ) -> tuple | tuple[None, str, str, None]:
-        """v2.0 格式：使用 entity_path + component_type + property_name 三元组寻址。
-        group.hint 存储 entity_path，group.name 存储 component_type。
-        对于普通属性：group.hint == entity_path 直接匹配。
-        对于树形属性：entity_path 可能是子实体路径，需在 group 的 tree_data 中搜索。
-        返回 (prop, group_prefix, key_property_name, group)"""
-        for group in actor.property_groups:
-            if group.hint != entity_path:
-                continue
-            if component_type is not None and group.name != component_type:
-                continue
-
-            for prop in group.properties:
-                if prop.name() == property_name:
-                    return prop, group.prefix, property_name, group
-
-            matched_prop, key_prop_name = SceneLayoutHelper._find_prop_in_tree_by_entity_id_for_path(
-                actor, group.tree_data, entity_path, property_name
-            )
-            if matched_prop is not None:
-                return matched_prop, group.prefix, key_prop_name, group
-
-        for group in actor.property_groups:
-            if component_type is not None and group.name != component_type:
-                continue
-
-            matched_prop, key_prop_name = SceneLayoutHelper._find_prop_in_tree_by_entity_id_for_path(
-                actor, group.tree_data, entity_path, property_name
-            )
-            if matched_prop is not None:
-                return matched_prop, group.prefix, key_prop_name, group
-
-        return None, "", "", None
-
-    @staticmethod
-    def _find_prop_in_tree_by_entity_id_for_path(
-        actor: AssetActor,
-        nodes,
-        entity_path: str,
-        property_name: str,
-    ) -> tuple | tuple[None, str]:
-        """在树形属性节点中，根据 entity_path 转换为 entity_id 后查找属性。"""
-        entity_root = actor.entity_root
-        if entity_root is None:
-            return None, ""
-
-        entity_info = entity_root.find_by_entity_path(entity_path)
-        if entity_info is None:
-            return None, ""
-
-        return SceneLayoutHelper._find_prop_in_tree_by_entity_id(
-            nodes, entity_info.entity_id, property_name
-        )
-
-    @staticmethod
-    def _find_prop_by_entity_path(
-        actor: AssetActor,
-        group_prefix: str,
-        entity_path: str,
-        component_type: str | None,
-        property_name: str,
-    ) -> tuple | tuple[None, str]:
-        """v2.0 格式：使用 entity_path 在 EntityInfo 层级中定位 Entity，
-        获取运行时 entity_id，再在 TreePropertyNode 中找到对应属性。"""
-        entity_root = actor.entity_root
-        if entity_root is None:
-            return None, ""
-
-        entity_info = entity_root.find_by_entity_path(entity_path)
-        if entity_info is None:
-            return None, ""
-
-        runtime_entity_id = entity_info.entity_id
-
-        for group in actor.property_groups:
-            if group.prefix != group_prefix:
-                continue
-            if component_type is not None and group.name != component_type:
-                continue
-            matched_prop, engine_key_name = SceneLayoutHelper._find_prop_in_tree_by_entity_id(
-                group.tree_data, runtime_entity_id, property_name
-            )
-            if matched_prop is not None:
-                return matched_prop, engine_key_name
-
-        return None, ""
-
-    @staticmethod
-    def _find_prop_in_tree_by_entity_id(
-        nodes, entity_id: int, property_name: str
-    ) -> tuple | tuple[None, str]:
-        """在树形属性节点中根据 entity_id 和 property_name 查找属性。"""
-        for node in nodes:
+            key = ActorPropertyKey(actor_path, group_prefix, engine_key_name, prop_type)
             try:
-                node_entity_id = int(node.name.split(":")[0])
-            except (ValueError, TypeError, AttributeError):
-                node_entity_id = None
+                await SceneEditRequestBus().set_property(key, value, undo=False, source="layout")
+            except Exception as e:
+                logger.warning("应用属性失败 %s.%s: %s", group_prefix, prop_name, e)
 
-            if node_entity_id == entity_id:
-                for prop in node.properties:
-                    if prop.name() == property_name:
-                        return prop, f"{node.name}.{prop.name()}"
+    async def set_flycamera_transform(self):
+        await SceneEditRequestBus().set_flycamera_transform(self.flycamera_transform)
 
-            found_prop, found_key = SceneLayoutHelper._find_prop_in_tree_by_entity_id(
-                node.children, entity_id, property_name
-            )
-            if found_prop is not None:
-                return found_prop, found_key
-
-        return None, ""
-
-    @staticmethod
-    def _find_prop_by_legacy_name(
-        actor: AssetActor,
-        group_prefix: str,
-        prop_name: str,
-    ) -> tuple | tuple[None, str]:
-        """v1.0 兼容格式：使用 display_name.PropName 在树形属性中查找。"""
-        for group in actor.property_groups:
-            if group.prefix != group_prefix:
-                continue
-            if "." in prop_name:
-                dot = prop_name.index(".")
-                node_display_name = prop_name[:dot]
-                leaf_name = prop_name[dot + 1:]
-                node = SceneLayoutHelper._find_tree_node_by_display_name(group.tree_data, node_display_name)
-                if node is not None:
-                    matched_prop = next(
-                        (p for p in node.properties if p.name() == leaf_name), None
-                    )
-                    if matched_prop is not None:
-                        return matched_prop, f"{node.name}.{leaf_name}"
-            else:
-                for prop in group.properties:
-                    if prop.name() == prop_name:
-                        return prop, prop_name
-        return None, ""
+    async def get_flycamera_transform(self):
+        remote_scene = get_remote_scene()
+        self.flycamera_transform = await remote_scene.get_flycamera_transform()
