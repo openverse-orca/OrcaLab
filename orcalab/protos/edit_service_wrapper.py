@@ -101,7 +101,7 @@ class EditServiceWrapper:
 
     def _check_response(self, response):
         if response.status_code != Success:
-            print(f"[Error] {response.error_message}")
+            logger.error(f"[_check_response] gRPC error: {response.error_message}")
             raise Exception(f"Request failed. {response.error_message}")
 
     def _check_response_no_exception(self, response) -> str:

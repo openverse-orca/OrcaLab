@@ -814,9 +814,6 @@ class SceneEditService(SceneEditRequest):
         undo: bool = True,
         source: str = "",
     ):
-        # Note: Property is already modified by ui before calling this method.
-        # Currently, property will not sync from remote to python.
-
         if property_key.property_name.endswith(".Name") and isinstance(value, str):
             actor, group, prop = self.local_scene.parse_property_key(property_key)
             node_key = property_key.property_name.rsplit(".", 1)[0]

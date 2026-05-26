@@ -231,6 +231,7 @@ class FlatPropertyItem:
     value: Any
     is_readonly: bool
     group_prefix: str
+    component_type_id: str = ""
     sub_name: str = ""
     parent_struct_name: str = ""
     struct_display_name: str = ""

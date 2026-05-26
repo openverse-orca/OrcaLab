@@ -55,6 +55,7 @@ class PropertyDataStore:
                             value=prop.value(),
                             is_readonly=prop.is_read_only(),
                             group_prefix=entry.property_group.prefix,
+                            component_type_id=entry.property_group.component_type_id,
                             group_id=entry_idx,
                         )
                     )
@@ -114,6 +115,7 @@ class PropertyDataStore:
                         value=prop.value(),
                         is_readonly=prop.is_read_only(),
                         group_prefix=group.prefix,
+                        component_type_id=group.component_type_id,
                         group_id=group_idx,
                     )
                 )
@@ -191,6 +193,8 @@ class PropertyDataStore:
                     hint=item.entity_path,
                 )
                 group.display_name = item.component_display_name
+                group.entity_id = item.entity_id
+                group.component_type_id = item.component_type_id
                 group_map[key] = group
                 group_order.append(key)
 
