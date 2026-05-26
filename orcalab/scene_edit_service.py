@@ -1069,3 +1069,124 @@ class SceneEditService(SceneEditRequest):
     @override
     async def set_flycamera_transform(self, transform: Transform) -> None:
         await self.remote_scene.set_flycamera_transform(transform)
+
+    @override
+    async def set_active_entity(
+        self,
+        actor_path: Path | None,
+        entity_id: int | None,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+        if self._edit_lock.locked() and source == "remote_scene":
+            return
+
+        async with self._edit_lock:
+            await self._set_active_entity(actor_path, entity_id, undo, source)
+
+    async def _set_active_entity(
+        self,
+        actor_path: Path | None,
+        entity_id: int | None,
+        undo: bool = True,
+        source: str = "",
+    ) -> None:
+        with perf_timer("service._set_active_entity", feature="SERVICE"):
+            old_active_entity = self.local_scene.active_entity
+
+            new_active_entity = None
+            if actor_path is not None and entity_id is not None:
+                new_active_entity = (actor_path, entity_id)
+
+            if new_active_entity == old_active_entity:
+                perf_log(f"service._set_active_entity: skipped (same entity)", feature="SERVICE")
+                return
+
+            if old_active_entity is not None:
+                old_actor_path, old_entity_id = old_active_entity
+                with perf_timer("service._set_active_entity.unhighlight_old", feature="SERVICE"):
+                    try:
+                        await self.remote_scene.set_highlight_entity_tree(
+                            old_actor_path, old_entity_id, False
+                        )
+                    except Exception:
+                        perf_log(f"service._set_active_entity: failed to unhighlight {old_actor_path}", feature="SERVICE")
+
+            self.local_scene.active_entity = new_active_entity
+
+            if new_active_entity is not None:
+                new_actor_path, new_entity_id = new_active_entity
+                with perf_timer("service._set_active_entity.select+highlight_new", feature="SERVICE"):
+                    try:
+                        await self.remote_scene.set_selection([])
+                    except Exception:
+                        perf_log(f"service._set_active_entity: failed to clear selection", feature="SERVICE")
+                    try:
+                        await self.remote_scene.set_selected_entity(new_actor_path, new_entity_id)
+                    except Exception:
+                        perf_log(f"service._set_active_entity: failed to select entity", feature="SERVICE")
+                    if self._recursive:
+                        try:
+                            await self.remote_scene.set_highlight_entity_tree(
+                                new_actor_path, new_entity_id, True
+                            )
+                        except Exception:
+                            perf_log(f"service._set_active_entity: failed to highlight entity tree", feature="SERVICE")
+                    else:
+                        try:
+                            await self.remote_scene.set_highlight_entity(new_entity_id, True)
+                        except Exception:
+                            perf_log(f"service._set_active_entity: failed to highlight entity", feature="SERVICE")
+            else:
+                if old_active_entity is not None:
+                    old_actor_path, _ = old_active_entity
+                    try:
+                        await self.remote_scene.set_selected_entity(old_actor_path, 0)
+                    except Exception:
+                        perf_log(f"service._set_active_entity: failed to deselect on remote", feature="SERVICE")
+
+            with perf_timer("service._set_active_entity.notify", feature="SERVICE"):
+                bus = SceneEditNotificationBus()
+                await bus.on_active_entity_changed(old_active_entity, new_active_entity, source)
+
+    @override
+    async def fetch_entity_hierarchy(
+        self,
+        actor_path: Path,
+        source: str = "",
+    ) -> EntityInfo | None:
+        with perf_timer("service.fetch_entity_hierarchy", feature="SERVICE"):
+            existing = self.local_scene.get_entity_root(actor_path)
+            if existing is not None:
+                perf_log("service.fetch_entity_hierarchy: cache hit", feature="SERVICE")
+                return existing
+
+            with perf_timer("service.fetch_entity_hierarchy.grpc", feature="SERVICE"):
+                entity_root = await self.remote_scene.get_entity_hierarchy(actor_path)
+            if entity_root is None:
+                return None
+
+            try:
+                self.local_scene.set_entity_root(actor_path, entity_root)
+
+                with perf_timer("service.fetch_entity_hierarchy.notify", feature="SERVICE"):
+                    bus = SceneEditNotificationBus()
+                    await bus.on_entity_hierarchy_loaded(actor_path, entity_root, source)
+            except asyncio.CancelledError:
+                raise
+
+            return entity_root
+
+    @override
+    async def get_entity_property_groups(
+        self,
+        actor_path: Path,
+        entity_id: int,
+    ) -> list:
+        return await self.remote_scene.get_entity_property_groups(
+            actor_path, entity_id
+        )
+
+    @override
+    async def set_highlight_entity(self, entity_id: int, highlight: bool) -> None:
+        await self.remote_scene.set_highlight_entity(entity_id, highlight)
