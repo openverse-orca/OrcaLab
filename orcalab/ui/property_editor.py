@@ -248,18 +248,19 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._active_cache_key = cache_key
 
         if cache_key is not None and cache_key in self._section_cache:
-            # perf_log(f"property_editor._load_properties: cache hit for {cache_key}", feature="PROPERTY")
+            perf_log(f"property_editor._load_properties: cache hit for {cache_key}", feature="PROPERTY")
             self._show_cached_sections(cache_key)
             return
 
         self._clear_property_layout()
 
-        # logger.info(
-        #     f"[PropertyEditor] _load_properties: actor={self._actor.name}, "
-        #     f"entity={self._entity.name if self._entity else None}, "
-        #     f"cache_key={cache_key}, "
-        #     f"cache_hit={cache_key in self._section_cache if cache_key else False}"
-        # )
+        perf_log(
+            f"property_editor._load_properties: actor={self._actor.name}, "
+            f"entity={self._entity.name if self._entity else None}, "
+            f"entity_id={self._entity.entity_id if self._entity else None}, "
+            f"cache_key={cache_key}",
+            feature="PROPERTY"
+        )
 
         if self._entity is not None:
             self._load_entity_properties()
@@ -375,12 +376,15 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
                     entity_ids = entity_info.collect_entity_ids() if (entity_info and self._recursive) else [entity_id]
 
-                    # logger.info(
-                    #     f"[PropertyEditor] _fetch_and_render_entity: actor_path={actor_path}, "
-                    #     f"requested_entity_id={entity_id}, "
-                    #     f"_recursive={self._recursive}, "
-                    #     f"resolved_entity_ids={entity_ids}"
-                    # )
+                    perf_log(
+                        f"property_editor._fetch_and_render_entity: actor_path={actor_path}, "
+                        f"requested_entity_id={entity_id}, "
+                        f"_recursive={self._recursive}, "
+                        f"resolved_entity_ids={entity_ids}, "
+                        f"entity_root={'yes' if entity_root else 'None'}, "
+                        f"entity_info={'yes' if entity_info else 'None'}",
+                        feature="PROPERTY"
+                    )
 
                     if len(entity_ids) == 1:
                         with perf_timer("property_editor._fetch_and_render_entity.grpc_single", feature="PROPERTY"):
@@ -388,13 +392,21 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                                 actor_path, entity_id
                             )
                         if not groups:
-                            logger.info(
-                                f"[Entity] no groups for entity_id={entity_id}, "
-                                f"skipping property display"
+                            perf_log(
+                                f"property_editor._fetch_and_render_entity: NO groups for entity_id={entity_id}",
+                                feature="PROPERTY"
                             )
                             return
 
-                        # perf_log(f"property_editor._fetch_and_render_entity: got {len(groups)} groups for single entity", feature="PROPERTY")
+                        group_details = "; ".join(
+                            f"{g.name}(props={len(g.properties)}, eid={g.entity_id})"
+                            for g in groups
+                        )
+                        perf_log(
+                            f"property_editor._fetch_and_render_entity: entity_id={entity_id}, "
+                            f"groups={len(groups)}, details=[{group_details}]",
+                            feature="PROPERTY"
+                        )
 
                         keys: list[ActorPropertyKey] = []
                         props: list[ActorProperty] = []
@@ -444,11 +456,21 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                                 all_groups.extend(sorted_groups)
 
                         if not all_groups:
-                            logger.info(
-                                f"[Entity] no groups for entity_id={entity_id} and children, "
-                                f"skipping property display"
+                            perf_log(
+                                f"property_editor._fetch_and_render_entity(batch): NO groups for entity_id={entity_id}",
+                                feature="PROPERTY"
                             )
                             return
+
+                        group_details = "; ".join(
+                            f"{g.name}(props={len(g.properties)})"
+                            for g in all_groups
+                        )
+                        perf_log(
+                            f"property_editor._fetch_and_render_entity(batch): entity_id={entity_id}, "
+                            f"entity_ids={entity_ids}, all_groups={len(all_groups)}, details=[{group_details}]",
+                            feature="PROPERTY"
+                        )
 
                         keys: list[ActorPropertyKey] = []
                         props: list[ActorProperty] = []
@@ -505,10 +527,11 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
         if self._entity is None:
             self._add_transform_edit()
-            # logger.info(
-            #     f"[PropertyEditor] actor selected (entity=None), "
-            #     f"skipping entity component groups, data_store has {len(self._data_store.items)} items"
-            # )
+            perf_log(
+                f"property_editor._render_from_data_store: entity=None (actor selected), "
+                f"data_store has {len(self._data_store.items)} items, skipping component groups",
+                feature="PROPERTY"
+            )
             return
 
         search_text = self._filter_bar.get_search_text()
@@ -528,26 +551,29 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         # Log data store contents before filtering
         all_ids = set(item.entity_id for item in self._data_store.items)
         all_paths = set(item.entity_path for item in self._data_store.items)
-        # logger.info(
-        #     f"[PropertyEditor] _render_from_data_store: "
-        #     f"current_entity_id={self._entity.entity_id}, "
-        #     f"data_store_items={len(self._data_store.items)}, "
-        #     f"unique_entity_ids={all_ids}, "
-        #     f"unique_entity_paths={all_paths}, "
-        #     f"selected_types={selected_types}"
-        # )
+        all_component_types = set(item.component_type for item in self._data_store.items)
+        perf_log(
+            f"property_editor._render_from_data_store: "
+            f"entity={self._entity.entity_id if self._entity else 'None'}, "
+            f"data_store_items={len(self._data_store.items)}, "
+            f"unique_entity_ids={all_ids}, "
+            f"unique_entity_paths={all_paths}, "
+            f"component_types={all_component_types}, "
+            f"selected_types={selected_types}",
+            feature="PROPERTY"
+        )
 
         groups = self._data_store.get_property_groups_for_display(
             component_types=selected_types,
             search_text=search_text,
         )
 
-        # logger.info(
-        #     f"[PropertyEditor] _render_from_data_store: entity_id={self._entity.entity_id}, "
-        #     f"data_store items={len(self._data_store.items)}, "
-        #     f"groups={len(groups)}, "
-        #     f"selected_types={selected_types}"
-        # )
+        perf_log(
+            f"property_editor._render_from_data_store: after filter, "
+            f"groups={len(groups)}, "
+            f"group_names=[{', '.join(g.name for g in groups)}]",
+            feature="PROPERTY"
+        )
 
         if not groups:
             return

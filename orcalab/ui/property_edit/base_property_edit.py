@@ -117,7 +117,8 @@ class BasePropertyEdit[T](StyledWidget):
         if not display_name:
             display_name = self.context.prop.name()
         label = QtWidgets.QLabel(display_name)
-        label.setFixedWidth(label_width)
+        label.setMinimumWidth(label_width)
+        label.setMaximumWidth(label_width * 2)
         label.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )

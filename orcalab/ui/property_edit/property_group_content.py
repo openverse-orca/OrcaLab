@@ -11,6 +11,7 @@ from orcalab.actor_property import (
     TreePropertyNode,
 )
 from orcalab.path import Path
+from orcalab.perf_log import perf_log
 from orcalab.ui.collapsible.collapsible_section import CollapsibleSection
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.icon_util import make_color_svg
@@ -147,6 +148,13 @@ def _build_struct_tree(
     if not struct_groups:
         return [], standalone_props
 
+    perf_log(
+        f"_build_struct_tree: group={group.name}, total_props={len(group.properties)}, "
+        f"prop_names={[p.name() for p in group.properties[:10]]}, "
+        f"struct_group_keys={list(struct_groups.keys())}, standalone_props={len(standalone_props)}",
+        feature="PROPERTY"
+    )
+
     def _is_tuple_group(g: StructPropertyGroup) -> bool:
         if g.children:
             return False
@@ -162,25 +170,71 @@ def _build_struct_tree(
                 return False
         return True
 
-    def _build(name: str, props: List[ActorProperty], display_override: str | None = None) -> StructPropertyGroup:
+    def _split_at_depth(name: str, depth: int) -> tuple[str, str] | None:
+        """Split a dotted name at the given depth (0-based).
+
+        Returns (prefix_up_to_depth, remaining_after_depth) or None if
+        the name doesn't have enough segments.
+
+        E.g. _split_at_depth("Configs.0.type", 1) -> ("Configs.0", "type")
+             _split_at_depth("Configs.0.actuatorMap.joint", 1) -> ("Configs.0", "actuatorMap.joint")
+             _split_at_depth("Configs.0.type", 2) -> None (only 3 segments, depth=2 requires 3+ segments)
+        """
+        pos = -1
+        for _ in range(depth + 1):
+            pos = name.find(".", pos + 1)
+            if pos == -1:
+                return None
+        return (name[:pos], name[pos + 1:])
+
+    def _last_segment(name: str) -> str:
+        pos = name.rfind(".")
+        return name[pos + 1:] if pos != -1 else name
+
+    def _build(
+        name: str,
+        props: List[ActorProperty],
+        display_override: str | None = None,
+        prefix_depth: int = 0,
+    ) -> StructPropertyGroup:
         display = display_override or name.capitalize()
         direct_props: List[ActorProperty] = []
         child_groups: dict[str, List[ActorProperty]] = {}
 
         for p in props:
-            dot_pos = p.name().find(".")
-            if dot_pos != -1:
-                remaining = p.name()[dot_pos + 1:]
+            result = _split_at_depth(p.name(), prefix_depth)
+            if result is None:
+                alias = p.create_alias(p.name())
+                alias._display_name = _last_segment(p.name())
+                direct_props.append(alias)
+            else:
+                _, remaining = result
                 next_dot = remaining.find(".")
                 if next_dot != -1:
                     child_name = remaining[:next_dot]
                     child_groups.setdefault(child_name, []).append(p)
                 else:
-                    direct_props.append(p)
-            else:
-                direct_props.append(p)
+                    alias = p.create_alias(p.name())
+                    alias._display_name = remaining
+                    direct_props.append(alias)
 
-        children = [_build(cn, cp, cn.capitalize()) for cn, cp in child_groups.items()]
+        perf_log(
+            f"_build_struct_tree._build: name={name}, prefix_depth={prefix_depth}, "
+            f"direct_props={len(direct_props)}, "
+            f"child_groups={list(child_groups.keys())[:10]}{'...' if len(child_groups) > 10 else ''}, "
+            f"child_counts={{k: len(v) for k, v in list(child_groups.items())[:5]}}",
+            feature="PROPERTY"
+        )
+
+        if prefix_depth > 10:
+            perf_log(
+                f"_build_struct_tree._build: DEPTH EXCEEDED! name={name}, prefix_depth={prefix_depth}, "
+                f"prop_names={[p.name() for p in props[:3]]}",
+                feature="PROPERTY"
+            )
+            return StructPropertyGroup(name, display, direct_props, [])
+
+        children = [_build(cn, cp, cn.capitalize(), prefix_depth + 1) for cn, cp in child_groups.items()]
         sg = StructPropertyGroup(name, display, direct_props, children)
         if _is_tuple_group(sg):
             sg.layout = "horizontal"
@@ -315,6 +369,13 @@ def create_property_group_content(
     property_edits: List[BasePropertyEdit],
     collapsed: bool = True,
 ) -> QtWidgets.QWidget:
+    perf_log(
+        f"create_property_group_content: group={group.name}, "
+        f"props={len(group.properties)}, "
+        f"prop_names=[{', '.join(p.name() for p in group.properties[:5])}{'...' if len(group.properties) > 5 else ''}]",
+        feature="PROPERTY"
+    )
+
     content = StyledWidget()
     content_layout = QtWidgets.QVBoxLayout(content)
     content_layout.setContentsMargins(0, 0, 0, 0)

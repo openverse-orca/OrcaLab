@@ -122,12 +122,15 @@ class PropertyDataStore:
 
         stored_ids = set(item.entity_id for item in self._items)
         stored_paths = set(item.entity_path for item in self._items)
-        # logger.info(
-        #     f"[PropertyDataStore] set_data_from_groups: {len(groups)} groups, "
-        #     f"{len(self._items)} items, "
-        #     f"unique_entity_ids={stored_ids}, "
-        #     f"unique_entity_paths={stored_paths}"
-        # )
+        stored_types = set(item.component_type for item in self._items)
+        perf_log(
+            f"data_store.set_data_from_groups: {len(groups)} groups, "
+            f"{len(self._items)} items, "
+            f"unique_entity_ids={stored_ids}, "
+            f"unique_entity_paths={stored_paths}, "
+            f"component_types={stored_types}",
+            feature="PROPERTY"
+        )
 
     def filter_items(
         self,
@@ -149,12 +152,23 @@ class PropertyDataStore:
             ]
 
         if entity_paths is not None:
-            logger.info(
-                f"[PropertyDataStore] filter_items: total={len(self._items)}, "
+            perf_log(
+                f"data_store.filter_items: total={len(self._items)}, "
                 f"filtered={len(result)}, "
                 f"entity_paths={entity_paths}, "
                 f"component_types={component_types}, "
-                f"search_text='{search_text}'"
+                f"search_text='{search_text}'",
+                feature="PROPERTY"
+            )
+
+        if component_types is not None:
+            result_types = set(i.component_type for i in result)
+            perf_log(
+                f"data_store.filter_items: component_types filter active, "
+                f"requested={component_types}, "
+                f"matched_types={result_types}, "
+                f"total={len(self._items)}, filtered={len(result)}",
+                feature="PROPERTY"
             )
 
         return result

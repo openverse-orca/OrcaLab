@@ -559,6 +559,14 @@ class EditServiceWrapper:
             tree_node = self._parse_tree_node_msg(tree_node_msg)
             pg.tree_data.append(tree_node)
 
+        perf_log(
+            f"grpc_wrapper._parse_property_group_msg: name={name}, "
+            f"entity_id={pg.entity_id}, prefix={pg_msg.prefix}, "
+            f"hint={pg_msg.hint}, props={len(pg.properties)}, "
+            f"prop_names=[{', '.join(p.name() for p in pg.properties[:5])}{'...' if len(pg.properties) > 5 else ''}]",
+            feature="PROPERTY"
+        )
+
         return pg
 
     def _create_property_key_message(self, key: ActorPropertyKey):
@@ -735,12 +743,13 @@ class EditServiceWrapper:
                 response = await self.stub.GetEntityPropertyGroups(request)
             self._check_response(response)
 
-            # logger.info(
-            #     f"[gRPC wrapper] get_entity_property_groups: "
-            #     f"actor_path={actor_path}, entity_id={entity_id}, "
-            #     f"status={response.status_code}, "
-            #     f"property_groups_count={len(response.property_groups)}"
-            # )
+            perf_log(
+                f"grpc_wrapper.get_entity_property_groups: "
+                f"actor_path={actor_path}, entity_id={entity_id}, "
+                f"status={response.status_code}, "
+                f"property_groups_count={len(response.property_groups)}",
+                feature="PROPERTY"
+            )
 
             perf_log(f"grpc_wrapper.get_entity_property_groups: parsing {len(response.property_groups)} groups", feature="PARSE")
 
