@@ -891,7 +891,7 @@ class MainWindow(
         if not filename.lower().endswith(".json"):
             filename += ".json"
 
-        if not await asyncWrap(self._confirm_discard_changes):
+        if not await asyncWrap(lambda: self._confirm_discard_changes(close_after_save=False)):
             return
 
         self.scene_layout_helper.create_empty_layout(filename)
@@ -916,7 +916,7 @@ class MainWindow(
         )
         if not filename:
             return
-        if not self._confirm_discard_changes():
+        if not self._confirm_discard_changes(close_after_save=False):
             return
         self.load_scene_layout_sig.emit(filename)
         self.cwd = os.path.dirname(filename)
@@ -1454,7 +1454,7 @@ class MainWindow(
         mode_label = "RunTime" if self._is_runtime_mode else "Editor"
         self.setWindowTitle(f"{self._base_title}    [{scene_part}]    {layout_label}    [{mode_label}]")
 
-    def _confirm_discard_changes(self) -> bool:
+    def _confirm_discard_changes(self, close_after_save: bool = True) -> bool:
         if not self._layout_modified:
             return True
         logger.debug("_confirm_discard_changes: 布局已修改，弹窗确认")
@@ -1474,11 +1474,18 @@ class MainWindow(
         if clicked == cancel_button:
             return False
         if clicked == save_button:
-            async def save_and_close():
-                await self.save_scene_layout()
-                self.close()
-            asyncio.create_task(save_and_close())
-            return False
+            if close_after_save:
+                async def save_and_close():
+                    await self.save_scene_layout()
+                    self.close()
+                asyncio.create_task(save_and_close())
+                return False
+            else:
+                async def save_and_continue():
+                    await self.save_scene_layout()
+                    self._mark_layout_clean()
+                asyncio.create_task(save_and_continue())
+                return True
         # 放弃修改
         logger.debug("_confirm_discard_changes: 用户选择放弃修改，重置状态")
         self._mark_layout_clean()
