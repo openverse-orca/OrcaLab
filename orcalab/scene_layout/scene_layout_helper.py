@@ -11,6 +11,7 @@ import pathlib
 from orcalab.math import Transform
 from orcalab.path import Path
 from orcalab.scene_edit_bus import SceneEditRequestBus
+from orcalab.scene_edit_types import AddActorRequest
 
 from PySide6 import QtCore, QtWidgets, QtGui
 from orcalab.application_util import get_remote_scene
@@ -111,8 +112,9 @@ class SceneLayoutHelper:
                         break
 
     async def clear_layout(self):
-        for actor in self.local_scene.root_actor.children:
-            await SceneEditRequestBus().delete_actor(actor, undo=False)
+        children = list(self.local_scene.root_actor.children)
+        if children:
+            await SceneEditRequestBus().delete_actors(children, undo=False)
 
     def create_empty_layout(self, file_path: str):
         layout_dict = {
@@ -139,9 +141,9 @@ class SceneLayoutHelper:
             logger.exception("读取场景布局文件失败: %s", e)
             return False
 
-        await self._clear_scene_layout(self.local_scene.root_actor)
+        await self.clear_layout()
         errors: List[str] = []
-        await self._create_actor_from_scene_layout(data, None, errors=errors)
+        await self._create_actor_from_scene_layout(data, errors=errors)
 
         if errors:
             error_detail = "\n".join(errors)
@@ -158,22 +160,64 @@ class SceneLayoutHelper:
 
         return True
 
-    async def _clear_scene_layout(self, actor):
-        if isinstance(actor, GroupActor):
-            for child_actor in actor.children:
-                await self._clear_scene_layout(child_actor)
-        if actor != self.local_scene.root_actor:
-            await SceneEditRequestBus().delete_actor(actor)
-
-        await SceneEditRequestBus().set_selection([], undo=False)
-
     async def _create_actor_from_scene_layout(
         self,
         actor_data,
-        parent: GroupActor | None,
         errors: List[str],
     ):
+        requests: List[AddActorRequest] = []
+        post_add_items: list = []
 
+        self._collect_layout_requests(actor_data, None, requests, post_add_items)
+
+        if actor_data.get("name") == "root":
+            flycamera_transform_data = actor_data.get("flycamera_transform", {})
+            if flycamera_transform_data:
+                await SceneEditRequestBus().set_flycamera_transform(self.flycamera_transform)
+            else:
+                await self.get_flycamera_transform()
+
+        if requests:
+            try:
+                await SceneEditRequestBus().add_actors(requests, undo=False, source="layout")
+            except Exception as e:
+                logger.warning("Batch add actors failed: %s", e)
+                for actor, _ in post_add_items:
+                    if isinstance(actor, AssetActor):
+                        errors.append(
+                            f"创建 Actor {actor.name} 失败: {e}, asset_path: {actor.asset_path}"
+                        )
+                return
+
+        for actor, actor_data_item in post_add_items:
+            actor_path = self.local_scene.get_actor_path(actor)
+            if actor_path is None:
+                continue
+            try:
+                if not actor.is_visible or not actor.is_parent_visible:
+                    await SceneEditRequestBus().set_actor_visible(actor_path, False, undo=False, source="layout")
+                if actor.is_locked or actor.is_parent_locked:
+                    await SceneEditRequestBus().set_actor_locked(actor_path, True, undo=False, source="layout")
+
+                if isinstance(actor, AssetActor):
+                    await self._apply_modified_properties(actor, actor_data_item)
+                    for group in actor.property_groups:
+                        SceneLayoutHelper._sync_tree_display_names(group.tree_data)
+            except Exception as e:
+                if isinstance(actor, AssetActor):
+                    error_msg = (
+                        f"创建 Actor {actor.name} 后处理失败: {e}, asset_path: {actor.asset_path}"
+                    )
+                    logger.warning(error_msg)
+                    errors.append(error_msg)
+
+    def _collect_layout_requests(
+        self,
+        actor_data,
+        parent_path: Path | None,
+        requests: List[AddActorRequest],
+        post_add_items: list,
+    ):
         name = actor_data["name"]
         actor_type = actor_data.get("type", "BaseActor")
 
@@ -189,22 +233,21 @@ class SceneLayoutHelper:
         is_parent_visible = actor_data.get("is_parent_visible", True)
         is_locked = actor_data.get("is_locked", False)
         is_parent_locked = actor_data.get("is_parent_locked", False)
-        
+
         if name == "root":
             actor = self.local_scene.root_actor
+            current_path = Path("/")
             flycamera_transform_data = actor_data.get("flycamera_transform", {})
             if flycamera_transform_data:
                 flycamera_position = np.array(
                     ast.literal_eval(flycamera_transform_data["position"]), dtype=float
                 ).reshape(3)
-                flycamera_rotation = np.array(ast.literal_eval(flycamera_transform_data["rotation"]), dtype=float)
+                flycamera_rotation = np.array(
+                    ast.literal_eval(flycamera_transform_data["rotation"]), dtype=float
+                )
                 flycamera_scale = flycamera_transform_data.get("scale", 1.0)
                 self.flycamera_transform = Transform(flycamera_position, flycamera_rotation, flycamera_scale)
-                await SceneEditRequestBus().set_flycamera_transform(self.flycamera_transform)
-            else:
-                await self.get_flycamera_transform()
         else:
-
             if actor_type == "AssetActor":
                 asset_path = actor_data.get("asset_path", "")
                 actor = AssetActor(name=name, asset_path=asset_path)
@@ -218,32 +261,14 @@ class SceneLayoutHelper:
             actor.is_locked = is_locked
             actor.is_parent_locked = is_parent_locked
 
-            try:
-                assert parent is not None
-                await SceneEditRequestBus().add_actor(actor=actor, parent_actor=parent)
-
-                actor_path = self.local_scene.get_actor_path(actor)
-                if actor.is_visible == False or actor.is_parent_visible == False:
-                    await SceneEditRequestBus().set_actor_visible(actor_path, False, undo=False, source="layout")
-                if actor.is_locked or actor.is_parent_locked:
-                    await SceneEditRequestBus().set_actor_locked(actor_path, True, undo=False, source="layout")
-
-                if isinstance(actor, AssetActor):
-                    await self._apply_modified_properties(actor, actor_data)
-                    # 属性应用完毕后同步关节显示名，确保 UI 按钮文字正确
-                    for group in actor.property_groups:
-                        SceneLayoutHelper._sync_tree_display_names(group.tree_data)
-            except Exception as e:
-                if isinstance(actor, AssetActor):
-                    error_msg = (
-                        f"创建 Actor {name} 失败: {e}, asset_path: {actor.asset_path}"
-                    )
-                    logger.warning(error_msg)
-                    errors.append(error_msg)
+            assert parent_path is not None
+            requests.append(AddActorRequest(actor, parent_path))
+            current_path = parent_path / name
+            post_add_items.append((actor, actor_data))
 
         if isinstance(actor, GroupActor):
             for child_data in actor_data.get("children", []):
-                await self._create_actor_from_scene_layout(child_data, actor, errors)
+                self._collect_layout_requests(child_data, current_path, requests, post_add_items)
 
     async def _apply_modified_properties(self, actor: AssetActor, actor_data: dict):
         saved = actor_data.get("modified_properties", [])
