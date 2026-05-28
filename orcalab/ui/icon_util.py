@@ -15,11 +15,11 @@ def schedule_windows_taskbar_icon_refresh(window: QtWidgets.QWidget) -> None:
         return
 
     def _reapply() -> None:
-        icon = window.windowIcon()
+        icon = app_window_icon()
         window.setWindowIcon(QtGui.QIcon())
         window.setWindowIcon(icon)
 
-    QtCore.QTimer.singleShot(0, _reapply)
+    QtCore.QTimer.singleShot(10, _reapply)
 
 
 def set_windows_app_user_model_id() -> None:
