@@ -225,7 +225,6 @@ def ensure_single_instance_by_file_lock(config_service: ConfigService):
         _global_file_lock = FileLock(lock_path, timeout=0)
         _global_file_lock.acquire()
     except Timeout:
-        print("已有实例在运行")
         try:
             with open(info_path, "r") as f:
                 data = json.load(f)
@@ -263,6 +262,3 @@ def ensure_single_instance_by_file_lock(config_service: ConfigService):
 
     with open(info_path, "w") as f:
         json.dump(info, f)
-
-    print("启动成功，PID =", os.getpid())
-

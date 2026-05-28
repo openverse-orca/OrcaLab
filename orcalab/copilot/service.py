@@ -10,9 +10,12 @@ import json
 import requests
 import tempfile
 import os
+import time
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 from orcalab.token_storage import TokenStorage
+import logging
+logger = logging.getLogger(__name__)
 
 
 class CopilotService:
@@ -104,6 +107,7 @@ class CopilotService:
                     pass
             
             if response.status_code != 200:
+                logger.debug(f"Server error: {response.status_code} - {response.text}")
                 raise Exception(f"Server error: {response.status_code} - {response.text}")
             
             generation_data = response.json()
@@ -139,12 +143,16 @@ class CopilotService:
         Returns:
             The HTTP response
         """
-        return requests.post(
+        _start = time.monotonic()
+        response = requests.post(
             f"{self.server_url}/api/generate",
             json={"query": prompt},
             headers=self._get_headers(),
             timeout=self.timeout
         )
+        elapsed = time.monotonic() - _start
+        logger.debug("HTTP POST %s/api/generate 耗时: %.3f 秒 (状态码: %s)", self.server_url, elapsed, response.status_code)
+        return response
     
     async def _parse_scene(self) -> Dict[str, Any]:
         """
@@ -165,13 +173,16 @@ class CopilotService:
             )
             
             if response.status_code != 200:
+                logger.debug(f"Parse error: {response.status_code} - {response.text}")
                 raise Exception(f"Parse error: {response.status_code} - {response.text}")
             
             return response.json()
             
         except requests.exceptions.RequestException as e:
+            logger.debug(f"Parse request error: {str(e)}")
             raise Exception(f"Parse request error: {str(e)}")
         except Exception as e:
+            logger.debug(f"Parse error: {str(e)}")
             raise Exception(f"Parse error: {str(e)}")
     
     def _make_parse_request(self) -> requests.Response:
@@ -181,11 +192,15 @@ class CopilotService:
         Returns:
             The HTTP response
         """
-        return requests.post(
+        _start = time.monotonic()
+        response = requests.post(
             f"{self.server_url}/api/parse",
             json={},
             timeout=30
         )
+        elapsed = time.monotonic() - _start
+        logger.debug("HTTP POST %s/api/parse 耗时: %.3f 秒 (状态码: %s)", self.server_url, elapsed, response.status_code)
+        return response
     
     async def test_connection(self) -> bool:
         """
@@ -211,11 +226,15 @@ class CopilotService:
         Returns:
             The HTTP response
         """
-        return requests.get(
+        _start = time.monotonic()
+        response = requests.get(
             f"{self.server_url}/api/health",
             headers=self._get_headers(),
             timeout=5
         )
+        elapsed = time.monotonic() - _start
+        logger.debug("HTTP GET %s/api/health 耗时: %.3f 秒 (状态码: %s)", self.server_url, elapsed, response.status_code)
+        return response
     
     async def _show_progress_dots(self, progress_callback):
         """

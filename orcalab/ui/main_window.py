@@ -1,5 +1,6 @@
 import asyncio
 import math
+import time
 import webbrowser
 
 from typing import Any, Dict, List, Tuple, override
@@ -88,7 +89,7 @@ class MainWindow(
     add_item_by_drag = QtCore.Signal(str, Transform)
     load_scene_layout_sig = QtCore.Signal(str)
 
-    def __init__(self):
+    def __init__(self, url_service_port: int = 50651):
         super().__init__()
         self.cwd = os.getcwd()
         self.config_service = ConfigService()
@@ -98,6 +99,7 @@ class MainWindow(
         self._cleanup_in_progress = False
         self._cleanup_completed = False
         self._is_runtime_mode = False
+        self._url_service_port = url_service_port
 
         # 状态指示器（顶部蓝色条）
         self._status_indicator = None
@@ -136,11 +138,13 @@ class MainWindow(
     #     self._viewport_widget.start_viewport_main_loop()
 
     async def init(self):
+        _init_start = time.monotonic()
+
         self.local_scene = LocalScene()
         self.remote_scene = RemoteScene(self.config_service)
 
         self.asset_service = AssetService()
-        self.url_server = UrlServiceServer()
+        self.url_server = UrlServiceServer(port=self._url_service_port)
         self.simulation_service = SimulationService()
         self.undo_service = UndoService()
 
@@ -158,13 +162,15 @@ class MainWindow(
 
         self._viewport_widget = Viewport()
 
+        self.scene_layout_helper = SceneLayoutHelper(self.local_scene)
+
         self._current_scene_name: str | None = None
         self._current_layout_name: str | None = None
         self._layout_modified: bool = False
 
         logger.info("开始初始化 UI…")
         await self._init_ui()
-        logger.info("UI 初始化完成")
+        logger.info("UI 初始化完成, 耗时: %.2f 秒", time.monotonic() - _init_start)
 
         rect = self.screen().availableGeometry()
         self.resize(rect.width(), rect.height())
@@ -176,24 +182,39 @@ class MainWindow(
 
         if await ask_user_consent():
             logger.info("用户允许发送统计数据")
-            await send_report_directly()
+            asyncio.create_task(send_report_directly())
         else:
             logger.info("用户拒绝发送统计数据")
+        logger.info("ask_user_consent 完成, 耗时: %.2f 秒", time.monotonic() - _init_start)
 
         # 若上次异常退出，上传上次运行的 log 文件
         if take_pending_abnormal_exit_report():
-            try:
-                await send_abnormal_exit_report()
-            except Exception:
-                logger.exception("crash_reports 上传失败")
+            asyncio.create_task(self._send_abnormal_exit_report_async())
 
         await asyncio.sleep(0.5)
 
         logger.info("初始化引擎...")
+        _engine_start = time.monotonic()
+        start_time = time.monotonic()
+
+        message_box = QtWidgets.QMessageBox(self)
+        message_box.setWindowTitle("请稍候")
+        message_box.setModal(True)
+        message_box.setText("正在初始化引擎，请稍候...   ")
+        message_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.NoButton)
+        message_box.show()
+        
+        await asyncio.sleep(0.2) 
         self._viewport_widget.init_viewport()
+        logger.info("init_viewport 完成, 耗时: %.2f 秒", time.monotonic() - _engine_start)
+
+        _vp_loop_start = time.monotonic()
         self._viewport_widget.start_viewport_main_loop()
         await asyncio.sleep(0.5)
-        logger.info("引擎初始化完成")
+        logger.info("start_viewport_main_loop + sleep(0.5) 完成, 耗时: %.2f 秒", time.monotonic() - _vp_loop_start)
+        
+        message_box.accept()
+        logger.info("引擎初始化完成, 耗时: %.2f 秒", time.monotonic() - start_time)
 
         connect(self.actor_outline_model.add_item, self.add_item_to_scene)
 
@@ -227,15 +248,22 @@ class MainWindow(
 
         self.connect_buses()
 
+        _grpc_start = time.monotonic()
         await self.remote_scene.init_grpc()
+        logger.info("init_grpc 完成, 耗时: %.2f 秒", time.monotonic() - _grpc_start)
+
+        _post_grpc_start = time.monotonic()
         await self.remote_scene.set_sync_from_mujoco_to_scene(False)
         await self.remote_scene.set_selection([])
         await self.remote_scene.clear_scene()
+        logger.info("set_sync + set_selection + clear_scene 完成, 耗时: %.2f 秒", time.monotonic() - _post_grpc_start)
 
         self.default_layout_path = self._resolve_path(self.config_service.default_layout_file())
         if self.default_layout_path and SystemPath(self.default_layout_path).exists():
+            _layout_start = time.monotonic()
             try:
                 await self.load_scene_layout(self.default_layout_path)
+                logger.info("load_scene_layout 完成, 耗时: %.2f 秒", time.monotonic() - _layout_start)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("加载默认布局失败: %s", exc)
                 import traceback
@@ -254,35 +282,58 @@ class MainWindow(
             else:
                 self._mark_layout_clean()
 
+        _cache_start = time.monotonic()
         self.cache_folder = await self.remote_scene.get_cache_folder()
+        logger.info("get_cache_folder 完成, 耗时: %.2f 秒", time.monotonic() - _cache_start)
+
+        _url_start = time.monotonic()
         await self.url_server.start()
+        logger.info("url_server.start 完成, 耗时: %.2f 秒", time.monotonic() - _url_start)
 
         logger.info("启动异步资产加载…")
         asyncio.create_task(self._load_assets_async())
 
+        await self.scene_layout_helper.get_flycamera_transform()
+
         # Load cameras from remote scene.
+        _cam_start = time.monotonic()
         cameras = await self.remote_scene. get_cameras()
         viewport_camera_index = await self.remote_scene.get_active_camera()
         self.on_cameras_changed(cameras, viewport_camera_index)
+        logger.info("get_cameras 完成, 耗时: %.2f 秒", time.monotonic() - _cam_start)
 
+        _mcp_start = time.monotonic()
         self.mcp_service = OrcaLabMCPServer(port=self.config_service.mcp_port())
         self.mcp_service.add_tools()
         self.mcp_service._task = asyncio.create_task(self.mcp_service.run())
+        logger.info("MCP 服务启动完成, 耗时: %.2f 秒", time.monotonic() - _mcp_start)
 
         # Reset camera's move & rotate sensitivity
+        _sens_start = time.monotonic()
         await self.remote_scene.set_move_rotate_sensitivity(
             move_sensitivity=self.config_service.camera_move_sensitivity(),
             rotate_sensitivity=self.config_service.camera_rotation_sensitivity()
         )
+        logger.info("set_move_rotate_sensitivity 完成, 耗时: %.2f 秒", time.monotonic() - _sens_start)
 
         # 发送匿名统计数据
-        await self.send_statistics()
+        _stats_start = time.monotonic()
+        asyncio.create_task(self.send_statistics())
+        logger.info("send_statistics 已提交异步任务, 耗时: %.2f 秒", time.monotonic() - _stats_start)
 
         # 在Viewport之前拦截事件。
         # Note: filters invoked in reverse order of installation, so we install it last.
         qapp = QtCore.QCoreApplication.instance()
         assert qapp is not None
         qapp.installEventFilter(self)
+
+        logger.info("MainWindow.init 全部完成, 总耗时: %.2f 秒", time.monotonic() - _init_start)
+
+    async def _send_abnormal_exit_report_async(self):
+        try:
+            await send_abnormal_exit_report()
+        except Exception:
+            logger.exception("crash_reports 上传失败")
 
     def stop_viewport_main_loop(self):
         """停止viewport主循环"""
@@ -638,9 +689,13 @@ class MainWindow(
 
     async def start_sim(self):
         await SimulationRequestBus().start_simulation()
+        await self.manipulator_bar.set_translation()
+        await self.scene_edit_service.set_selection_and_active_actor([], None, True)
 
     async def stop_sim(self):
         await SimulationRequestBus().stop_simulation()
+        if self.manipulator_bar._grab == True:
+            await self.manipulator_bar.set_runtime_grab()
 
     def _set_window_border_style(self, is_runtime: bool):
         """设置运行时状态指示：运行时显示蓝色指示器，编辑模式隐藏"""
@@ -665,6 +720,7 @@ class MainWindow(
             self.copilot_widget.setEnabled(False)
             self.copilot_widget.setAttribute(t, True)
         self.menu_edit.setEnabled(False)
+        self.manipulator_bar.start_sim()
 
     def _enable_edit(self):
         t = QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents
@@ -678,6 +734,7 @@ class MainWindow(
             self.copilot_widget.setEnabled(True)
             self.copilot_widget.setAttribute(t, False)
         self.menu_edit.setEnabled(True)
+        self.manipulator_bar.end_sim()
 
     @override
     async def on_simulation_state_changed(self, old_state: SimulationState, new_state: SimulationState) -> None:
@@ -745,25 +802,31 @@ class MainWindow(
             logger.debug("_write_scene_layout_file: 保存完成 path=%s", self.current_layout_path)
             self._update_title()
 
-    def save_scene_layout(self):
+    async def save_scene_layout(self):       
         if not self.current_layout_path or self._is_default_layout(self.current_layout_path):
-            self.save_scene_layout_as()
+            await self.save_scene_layout_as()
             return
+        self.scene_layout_helper.flycamera_transform = await self.remote_scene.get_flycamera_transform()
         self._write_scene_layout_file(self.current_layout_path)
 
-    def save_scene_layout_as(self):
-        filename, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self,
-            "保存场景布局",
-            self.cwd,
-            "布局文件 (*.json);;所有文件 (*)"
-        )
+    async def save_scene_layout_as(self):
+        def select_file():
+            filename, _ = QtWidgets.QFileDialog.getSaveFileName(
+                self,
+                "保存场景布局",
+                self.cwd,
+                "布局文件 (*.json);;所有文件 (*)"
+            )
+            return filename
+
+        filename = await asyncWrap(select_file)
 
         if not filename:
             return
         if not filename.lower().endswith(".json"):
             filename += ".json"
 
+        self.scene_layout_helper.flycamera_transform = await self.remote_scene.get_flycamera_transform()
         self._write_scene_layout_file(filename)
         self.cwd = os.path.dirname(filename)
 
@@ -789,7 +852,15 @@ class MainWindow(
         }
 
         if actor.name == "root":
-            new_fields = {"version": "1.0"}
+            flycamera_transform = self.scene_layout_helper.flycamera_transform
+            new_fields = {
+                "version": "1.0",
+                "flycamera_transform": {
+                    "position": compact_array(to_list(flycamera_transform.position)),
+                    "rotation": compact_array(to_list(flycamera_transform.rotation)),
+                    "scale": flycamera_transform.scale,
+                }
+            }
             data = {**new_fields, **data}
 
         if isinstance(actor, AssetActor):
@@ -820,13 +891,12 @@ class MainWindow(
         if not filename.lower().endswith(".json"):
             filename += ".json"
 
-        if not await asyncWrap(self._confirm_discard_changes):
+        if not await asyncWrap(lambda: self._confirm_discard_changes(close_after_save=False)):
             return
 
-        helper = SceneLayoutHelper(self.local_scene)
-        helper.create_empty_layout(filename)
+        self.scene_layout_helper.create_empty_layout(filename)
 
-        await helper.clear_layout()
+        await self.scene_layout_helper.clear_layout()
 
         self.cwd = os.path.dirname(filename)
         self.current_layout_path = filename
@@ -846,7 +916,7 @@ class MainWindow(
         )
         if not filename:
             return
-        if not self._confirm_discard_changes():
+        if not self._confirm_discard_changes(close_after_save=False):
             return
         self.load_scene_layout_sig.emit(filename)
         self.cwd = os.path.dirname(filename)
@@ -913,8 +983,7 @@ class MainWindow(
         if show_loading:
             self._show_scene_loading_dialog()
         try:
-            helper = SceneLayoutHelper(self.local_scene)
-            if not await helper.load_scene_layout(self, filename):
+            if not await self.scene_layout_helper.load_scene_layout(self, filename):
                 return
 
             self.current_layout_path = resolved
@@ -957,7 +1026,6 @@ class MainWindow(
             await self.duplicate_selection("menu")
         connect(action_duplicate.triggered, duplicate_wrapper)
 
-
         action_delete = self.menu_edit.addAction("删除")
         action_delete.setEnabled(self.can_delete_selection())
         action_delete.setShortcut(QtGui.QKeySequence("Delete"))
@@ -968,8 +1036,18 @@ class MainWindow(
 
         self.menu_edit.addSeparator()
 
+        action_set_flycamera_transform = self.menu_edit.addAction("恢复视角")
+        action_set_flycamera_transform.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
+        async def set_flycamera_transform_wrapper():
+            await self.scene_layout_helper.set_flycamera_transform()
+            logger.info("恢复视角")
+        connect(action_set_flycamera_transform.triggered, set_flycamera_transform_wrapper)
+
+        self.menu_edit.addSeparator()
+
         action_settings = self.menu_edit.addAction("配置")
         connect(action_settings.triggered, self.open_settings)
+
 
     def prepare_run_menu(self):
         self.menu_run.clear()
@@ -1196,6 +1274,7 @@ class MainWindow(
             # 6. 停止MCP服务
             if hasattr(self, 'mcp_service'):
                 self.mcp_service.stop()
+                self.config_service.clear_mcp_status()
                 logger.info("cleanup: MCP服务已停止")
 
             # 7. 强制垃圾回收
@@ -1307,7 +1386,7 @@ class MainWindow(
         if output is not None:
             output.append(transform)
         return transform
-        
+
     #
     # CameraNotificationBus overrides
     #
@@ -1329,6 +1408,10 @@ class MainWindow(
     @override
     async def set_measure_type(self, type: MeasureType) -> None:
         await self.remote_scene.change_measure_type(type)
+
+    @override
+    async def set_pivot_point_type(self, type: MeasureType) -> None:
+        await self.remote_scene.change_pivot_point_type(type)
 
     @override
     async def set_debug_draw(self, enabled: bool):
@@ -1371,7 +1454,7 @@ class MainWindow(
         mode_label = "RunTime" if self._is_runtime_mode else "Editor"
         self.setWindowTitle(f"{self._base_title}    [{scene_part}]    {layout_label}    [{mode_label}]")
 
-    def _confirm_discard_changes(self) -> bool:
+    def _confirm_discard_changes(self, close_after_save: bool = True) -> bool:
         if not self._layout_modified:
             return True
         logger.debug("_confirm_discard_changes: 布局已修改，弹窗确认")
@@ -1391,8 +1474,18 @@ class MainWindow(
         if clicked == cancel_button:
             return False
         if clicked == save_button:
-            self.save_scene_layout()
-            return not self._layout_modified
+            if close_after_save:
+                async def save_and_close():
+                    await self.save_scene_layout()
+                    self.close()
+                asyncio.create_task(save_and_close())
+                return False
+            else:
+                async def save_and_continue():
+                    await self.save_scene_layout()
+                    self._mark_layout_clean()
+                asyncio.create_task(save_and_continue())
+                return True
         # 放弃修改
         logger.debug("_confirm_discard_changes: 用户选择放弃修改，重置状态")
         self._mark_layout_clean()
@@ -1407,7 +1500,7 @@ class MainWindow(
 
     def open_settings(self):
         SettingsDialog(self, remote_scene=self.remote_scene).exec()
-    
+
     def can_duplicate_selection(self) -> bool:
         if not self.local_scene.selection:
             return False
@@ -1448,7 +1541,7 @@ class MainWindow(
             assert isinstance(event, QtGui.QKeyEvent)
             ctrl = event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier
             shift = event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
-            
+
             if event.key() == QtCore.Qt.Key.Key_Z:
                 if ctrl and not event.isAutoRepeat():
                     if shift and not event.isAutoRepeat():
@@ -1461,7 +1554,7 @@ class MainWindow(
                 if ctrl and not event.isAutoRepeat():
                     asyncio.create_task(self.duplicate_selection("main window"))
                     return True
-                
+
             if event.key() == QtCore.Qt.Key.Key_Delete and not event.isAutoRepeat():
                 asyncio.create_task(self.delete_selection("main window"))
                 return True

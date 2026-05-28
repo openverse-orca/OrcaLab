@@ -34,10 +34,15 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
     
     def on_asset_status(self, asset_id: str, asset_name: str, file_name: str, size: int, status: str):
         self.window.add_asset(asset_id, asset_name, file_name, size, status)
+
+    def on_set_status(self, asset_id: str, status: str):
+        self.window.set_asset_status(asset_id, status)
+
+    def on_set_name_size(self, asset_id: str, name: str, size: int):
+        self.window.set_asset_name_size(asset_id, name, size)
     
-    def on_download_start(self, asset_id: str, asset_name: str):
+    def on_download_start(self, asset_id: str):
         self.window.set_asset_status(asset_id, 'downloading')
-        self.window.set_status(f"正在下载: {asset_name}")
     
     def on_download_progress(self, asset_id: str, progress: int64, speed: float):
         self.window.set_asset_progress(asset_id, progress, speed)

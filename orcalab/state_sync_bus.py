@@ -6,6 +6,7 @@ class ManipulatorType(Enum):
     Translate = 0
     Rotate = 1
     Scale = 2
+    ManipulatorNone = 3
 
 class CameraMovementType(Enum):
     CameraTranslate = 0
@@ -18,6 +19,14 @@ class MeasureType(Enum):
     Angle = 1
     MeasureNone = 2
 
+
+class PivotPointType(Enum):
+    Default = 0
+    IndividualCenter = 1
+    BoundingBoxCenter = 2
+    MedianPoint = 3
+    ActiveActor = 4
+
 class StateSyncRequest:
     async def set_manipulator_type(self, type: ManipulatorType):
         pass
@@ -26,6 +35,9 @@ class StateSyncRequest:
         pass
 
     async def set_measure_type(self, type: MeasureType):
+        pass
+
+    async def set_pivot_point_type(self, type: PivotPointType):
         pass
 
     async def set_debug_draw(self, enabled: bool):
@@ -47,6 +59,9 @@ class StateSyncNotification:
         pass
 
     def on_measure_type_changed(self, type: MeasureType):
+        pass
+
+    def on_pivot_point_type_changed(self, type: PivotPointType):
         pass
 
     def on_debug_draw_changed(self, enabled: bool):

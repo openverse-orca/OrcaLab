@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 from orcalab.http_service.http_bus import HttpServiceRequest, HttpServiceRequestBus
 from typing import List, Dict, Optional, Callable, Any, override
 from orcalab.token_storage import TokenStorage
@@ -15,6 +16,12 @@ import sys
 
 
 logger = logging.getLogger(__name__)
+
+
+def _log_request_time(method: str, url: str, start: float, status: int = None):
+    elapsed = time.monotonic() - start
+    status_str = f" (状态码: {status})" if status else ""
+    logger.debug("HTTP %s %s 耗时: %.3f 秒%s", method, url, elapsed, status_str)
 
 def require_online(func: Callable) -> Callable:
     """装饰器：检查在线状态，离线时跳过请求"""
@@ -52,12 +59,18 @@ class HttpService(HttpServiceRequest):
         metadata_url = f"{self.base_url}/meta/?isPublished=true"
         metadata_url_unpublished = f"{self.base_url}/meta/?isPublished=false"
         async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
             async with session.get(metadata_url, headers=self._get_headers()) as response:
+                _log_request_time("GET", metadata_url, _start, response.status)
                 if response.status != 200:
+                    logger.debug(f"get all metadata failed. Status: {response.status}. MetadataUrl: {metadata_url}")
                     return None
                 metadata_published = await response.json()
+                _start = time.monotonic()
                 async with session.get(metadata_url_unpublished, headers=self._get_headers()) as response:
+                    _log_request_time("GET", metadata_url_unpublished, _start, response.status)
                     if response.status != 200:
+                        logger.debug(f"get all metadata failed. Status: {response.status} MetadataUrl: {metadata_url_unpublished}")
                         return None
                     metadata_unpublished = await response.json()
                 metadata = metadata_published + metadata_unpublished
@@ -120,8 +133,11 @@ class HttpService(HttpServiceRequest):
     async def get_subscriptions(self, output: List[str] = None) -> str:
         subscriptions_url = f"{self.base_url}/subscriptions/?version={self.version}&platform={self.platform}"
         async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
             async with session.get(subscriptions_url, headers=self._get_headers()) as response:
+                _log_request_time("GET", subscriptions_url, _start, response.status)
                 if response.status != 200:
+                    logger.debug(f"get subscriptions failed. Status: {response.status}")
                     return None
                 subscriptions = await response.json()
                 subscriptions = json.dumps(subscriptions, ensure_ascii=False, indent=2)
@@ -163,7 +179,9 @@ class HttpService(HttpServiceRequest):
         
         try:
             headers = self._get_headers(include_content_type=False)
+            _start = time.monotonic()
             response = requests.post(post_asset_thumbnail_url, files=files, headers=headers)
+            _log_request_time("POST", post_asset_thumbnail_url, _start, response.status_code)
             if response.status_code in [200, 201, 204]:
                 logger.info("Upload thumbnail success: %s, files: %s", response.status_code, thumbnail_path)
             else:
@@ -175,8 +193,11 @@ class HttpService(HttpServiceRequest):
     @override
     async def get_asset_thumbnail2cache(self, asset_url: str, asset_save_path: str) -> None:
         async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
             async with session.get(asset_url) as response:
+                _log_request_time("GET", asset_url, _start, response.status)
                 if response.status != 200:
+                    logger.debug(f"get asset thumbnail to cache failed. Status: {response.status}")
                     return None
                 data = await response.read()
                 if not os.path.exists(os.path.dirname(asset_save_path)):
@@ -189,8 +210,11 @@ class HttpService(HttpServiceRequest):
     async def get_image_url(self, asset_id: str) -> str:
         get_asset_metadata_url = f"{self.base_url}/asset/{asset_id}/"
         async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
             async with session.get(get_asset_metadata_url, headers=self._get_headers()) as response:
+                _log_request_time("GET", get_asset_metadata_url, _start, response.status)
                 if response.status != 200:
+                    logger.debug(f"get image url failed. Status: {response.status}")
                     return None
                 asset_metadata = await response.json()
                 return json.dumps(asset_metadata, ensure_ascii=False, indent=2)
@@ -207,11 +231,14 @@ class HttpService(HttpServiceRequest):
 
         url = f"{self.base_url}/asset/{asset_package_id}/subscribe/"
         async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
             async with session.post(url, headers=self._get_headers(), json={}) as response:
+                _log_request_time("POST", url, _start, response.status)
                 body = await response.text()
                 try:
                     body_json = json.loads(body) if body.strip() else {}
                 except json.JSONDecodeError:
+                    logger.exception("post_asset_subscribe: 请求异常")
                     body_json = {"raw": body}
                 ok = response.status in (200, 201, 204)
                 msg = json.dumps(
@@ -236,7 +263,9 @@ class HttpService(HttpServiceRequest):
         is_admin_url = f"{self.base_url}/is_admin/"
         try:
             with requests.Session() as session:
+                _start = time.monotonic()
                 response = session.get(is_admin_url, headers=self._get_headers())
+                _log_request_time("GET", is_admin_url, _start, response.status_code)
                 if response.status_code != 200:
                     logger.warning("is_admin: 请求失败，状态码: %s", response.status_code)
                     return False

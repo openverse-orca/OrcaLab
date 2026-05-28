@@ -5,6 +5,7 @@ from PySide6 import QtCore, QtWidgets, QtGui, QtSvg
 import orcalab.assets.rc_assets
 
 APP_WINDOW_ICON_QRC = ":/icons/orcalab_logo.png"
+ORCALAB_APP_USER_MODEL_ID = "OrcaLab.Songying.OrcaLab"
 
 def app_window_icon() -> QtGui.QIcon:
     return QtGui.QIcon(APP_WINDOW_ICON_QRC)
@@ -14,11 +15,21 @@ def schedule_windows_taskbar_icon_refresh(window: QtWidgets.QWidget) -> None:
         return
 
     def _reapply() -> None:
-        icon = window.windowIcon()
+        icon = app_window_icon()
         window.setWindowIcon(QtGui.QIcon())
         window.setWindowIcon(icon)
 
-    QtCore.QTimer.singleShot(0, _reapply)
+    QtCore.QTimer.singleShot(10, _reapply)
+
+
+def set_windows_app_user_model_id() -> None:
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(ORCALAB_APP_USER_MODEL_ID)
+    except Exception:
+        pass
 
 def make_color_svg(svg_file: str, color: QtGui.QColor) -> QtGui.QPixmap:
     # Load the SVG file

@@ -388,6 +388,11 @@ class ThumbnailView(QtWidgets.QWidget):
     def _on_item_updated(self, index: int):
         for item in self.visible_items:
             if item.index == index:
+                if index not in self._movies and self._model:
+                    player = self._model.movie_at(index)
+                    if player:
+                        self._load_movie(index, player)
+                        self._update_playing_state()
                 self.update(item.cell_rect)
                 break
     

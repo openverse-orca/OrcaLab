@@ -9,6 +9,7 @@ import asyncio
 import sys
 import signal
 import logging
+import time
 
 from orcalab.cli_options import create_argparser, resolve_and_validate_workspace
 from orcalab.config_service import ConfigService
@@ -28,7 +29,8 @@ import orcalab.assets.rc_assets
 
 from qasync import QEventLoop
 from orcalab.python_project_installer import ensure_python_project_installed
-from orcalab.ui.icon_util import app_window_icon
+from orcalab.ui.icon_util import app_window_icon, set_windows_app_user_model_id
+from orcalab.url_service.url_service import find_free_port, DEFAULT_PORT as URL_SERVICE_DEFAULT_PORT
 
 # This is needed to display the app icon on the taskbar on Windows
 if os.name == 'nt':
@@ -63,6 +65,10 @@ def _start_force_exit_watchdog(timeout: int = 10) -> None:
 def signal_handler(signum, frame):
     """Handle system signals to ensure cleanup"""
     logger.info("Received signal %s, exiting...", signum)
+    try:
+        ConfigService().clear_mcp_status()
+    except Exception:
+        pass
     os._exit(0)
 
 
@@ -74,7 +80,7 @@ def register_signal_handlers():
         signal.signal(signal.SIGHUP, signal_handler)  # Hangup signal
 
 
-async def main_async(q_app, fullscreen: bool):
+async def main_async(q_app, fullscreen: bool, url_service_port: int):
     global _main_window
 
     app_close_event = asyncio.Event()
@@ -82,7 +88,7 @@ async def main_async(q_app, fullscreen: bool):
     if fullscreen:
         main_window = MainWindowFullScreen()
     else:
-        main_window = MainWindow()
+        main_window = MainWindow(url_service_port=url_service_port)
     _main_window = main_window  # Store reference for signal handlers
     await main_window.init()
     await app_close_event.wait()
@@ -120,7 +126,10 @@ def select_scene_and_layout(
             "Content-Type": "application/json",
         }
         try:
+            _start = time.monotonic()
             resp = _requests.get(f"{base_url}/is_admin/", headers=headers, timeout=10)
+            elapsed = time.monotonic() - _start
+            logger.debug("HTTP GET %s/is_admin/ 耗时: %.3f 秒 (状态码: %s)", base_url, elapsed, resp.status_code)
             if resp.status_code != 200:
                 return False
             return resp.json().get("isAdmin", False)
@@ -225,6 +234,7 @@ def select_scene_and_layout(
 
 def main():
     """Main entry point for the orcalab application"""
+    _main_start = time.monotonic()
     parser = create_argparser()
     args, unknown = parser.parse_known_args()
 
@@ -236,7 +246,7 @@ def main():
             print(exc, file=sys.stderr)
             sys.exit(2)
 
-    logger = setup_logging(console_level=console_level)
+    logger = setup_logging(file_level=logging.DEBUG, console_level=console_level)
 
     logger.info("进程 PID: %d", os.getpid())
 
@@ -257,6 +267,12 @@ def main():
     project_root = current_dir.parent  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root, workspace)
 
+    # 命令行参数覆盖配置文件中的 GPU 适配器设置
+    if getattr(args, "force_adapter", None):
+        config_service.config.setdefault("orcalab", {})["force_adapter"] = args.force_adapter
+    if getattr(args, "adapter_index", None) is not None:
+        config_service.config.setdefault("orcalab", {})["adapter_index"] = args.adapter_index
+
     if config_service.had_previous_abnormal_exit():
         logger.warning("检测到上次 OrcaLab 未正常退出")
         schedule_abnormal_exit_report()
@@ -269,8 +285,31 @@ def main():
     # Register signal handlers for graceful shutdown
     register_signal_handlers()
 
+    set_windows_app_user_model_id()
+
     q_app = QtWidgets.QApplication(sys.argv)
     q_app.setWindowIcon(app_window_icon())
+
+    # 检测 GPU 驱动状态，驱动缺失或异常时弹窗提示用户
+    from orcalab.gpu_driver_check import check_gpu_drivers, show_gpu_driver_warning
+
+    _gpu_check_result = check_gpu_drivers()
+    if not _gpu_check_result.has_working_driver:
+        logger.warning(
+            "GPU 驱动异常: has_gpu=%s, has_driver=%s, devices=%s",
+            _gpu_check_result.has_gpu_hardware,
+            _gpu_check_result.has_working_driver,
+            [(d.vendor.value, d.name, d.driver_status.value) for d in _gpu_check_result.devices],
+        )
+        _should_continue = show_gpu_driver_warning(_gpu_check_result)
+        if not _should_continue:
+            logger.info("用户因 GPU 驱动问题选择退出")
+            os._exit(0)
+    else:
+        logger.info(
+            "GPU 驱动检测通过: %s",
+            [(d.vendor.value, d.name, d.driver_version) for d in _gpu_check_result.devices_with_driver_ok()],
+        )
 
     # 确保不会同时运行多个 OrcaLab 实例
     ensure_single_instance_by_file_lock(config_service)
@@ -284,6 +323,7 @@ def main():
 
     # 处理pak包
     logger.info("正在准备资产包...")
+    _pak_start = time.monotonic()
     if config_service.init_paks():
         paks = config_service.paks()
         if paks:
@@ -297,9 +337,12 @@ def main():
     if pak_urls:
         logger.info("正在同步pak_urls列表...")
         sync_pak_urls(pak_urls, pak_urls_sha256)
+    logger.info("pak包处理完成, 耗时: %.2f 秒", time.monotonic() - _pak_start)
 
     # 同步订阅的资产包（带UI）
+    _sync_start = time.monotonic()
     run_asset_sync_ui(config_service)
+    logger.info("资产同步完成, 耗时: %.2f 秒", time.monotonic() - _sync_start)
 
     from orcalab.level_discovery import discover_levels_from_cache
 
@@ -320,19 +363,47 @@ def main():
         level_cli=level_cli,
         layout_cli=layout_cli,
     )
+    logger.info("场景选择完成, 总耗时: %.2f 秒", time.monotonic() - _main_start)
 
     event_loop = QEventLoop(q_app)
     asyncio.set_event_loop(event_loop)
 
+    cli_port = getattr(args, "port", None)
+    if cli_port is not None:
+        url_service_port = find_free_port(start_port=cli_port)
+        logger.info("使用命令行指定的URL服务端口: %s", url_service_port)
+    else:
+        config_port = config_service.url_service_port()
+        url_service_port = find_free_port(start_port=config_port)
+        if url_service_port != config_port:
+            logger.warning("默认端口 %s 不可用，已自动切换到端口 %s", config_port, url_service_port)
+        else:
+            logger.info("使用默认URL服务端口: %s", url_service_port)
+
+    config_service.write_url_service_port(url_service_port)
+
     try:
         fullscreen = args.full_screen
-        event_loop.run_until_complete(main_async(q_app, fullscreen))
+        
+        event_loop.run_until_complete(main_async(q_app, fullscreen, url_service_port))
     except KeyboardInterrupt:
         logger.info("Received KeyboardInterrupt, cleaning up...")
     except Exception as e:
         logger.exception("Application error: %s", e)
     finally:
         event_loop.close()
+
+    # 确保MCP状态文件被清理
+    try:
+        ConfigService().clear_mcp_status()
+    except Exception:
+        pass
+
+    # 确保URL服务状态文件被清理
+    try:
+        ConfigService().clear_url_service_status()
+    except Exception:
+        pass
 
     # 直接终止进程，跳过 Python atexit 和 C++ 静态析构。
     # 引擎资源已在 main_async → cleanup 中清理完毕，

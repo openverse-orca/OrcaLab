@@ -118,13 +118,13 @@ class OrcaLabMCPServer:
 
         return data
 
-    def get_asset_map(self) -> str:
+    def get_asset_map(self, project_name: str=None, category: str=None) -> str:
         '''
         获取所有已订阅资产的元数据信息
         Args:
-            无需传递参数
+            可选择传入project_name[资产所在项目名称]和category[资产分类]参数，用于筛选资产。
         Returns:
-            所有已订阅资产的元数据信息的json字符串格式
+            筛选后的所有已订阅资产的元数据信息的json字符串格式
         '''
         output = []
         self.metadata_service_bus.get_asset_map(output)
@@ -142,6 +142,17 @@ class OrcaLabMCPServer:
             cat = _category_str(info.get("category"))
             if "scene" in cat.lower():
                 continue
+            
+            if project_name is not None:
+                asset_path = info.get("assetPath") or ""
+                if project_name.lower() not in asset_path.lower():
+                    continue
+
+            if category is not None:
+                category_path = info.get("categoryPath") or ""
+                if category.lower() not in category_path.lower():
+                    continue
+
             result[path] = {
                 "name": info.get("name", ""),
                 "category": cat,
@@ -744,21 +755,22 @@ class OrcaLabMCPServer:
         return json.dumps({"can_redo": result}, ensure_ascii=False)
 
     # ==================== 选择操作类 API ====================
-
-    async def set_selection(self, actor_paths: List[str]) -> str:
+    async def set_selection_and_active_actor(self, actor_paths: List[str], active_actor: str = "") -> str:
         '''
-        设置当前选中的Actor
+        设置当前选中的Actor列表以及激活Actor
         Args:
             actor_paths: Actor路径列表，如 ["/Actor1", "/Actor2"]。传入空列表可清空选择。
+            active_actor: 激活的Actor路径（在属性面板中显示的Actor），为空时自动取第一个选中Actor
         Returns:
-            设置选择的结果的json字符串格式
+            设置选择与激活Actor的结果的json字符串格式
         '''
         try:
             paths = [Path(p) for p in actor_paths]
-            await self.scene_edit_bus.set_selection(paths, undo=True, source="mcp")
+            active = Path(active_actor) if active_actor else (paths[0] if paths else None)
+            await self.scene_edit_bus.set_selection_and_active_actor(paths, active, undo=True, source="mcp")
             return json.dumps({"success": True, "message": f"成功设置选择，共选中 {len(paths)} 个Actor"}, ensure_ascii=False)
         except Exception as e:
-            return json.dumps({"success": False, "message": f"设置选择失败: {e}"}, ensure_ascii=False)
+            return json.dumps({"success": False, "message": f"设置选择与激活Actor失败: {e}"}, ensure_ascii=False)
 
     async def clear_selection(self) -> str:
         '''
@@ -769,11 +781,10 @@ class OrcaLabMCPServer:
             清空选择的结果的json字符串格式
         '''
         try:
-            await self.scene_edit_bus.set_selection([], undo=True, source="mcp")
+            await self.scene_edit_bus.set_selection_and_active_actor([],None, undo=True, source="mcp")
             return json.dumps({"success": True, "message": "成功清空选择"}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"success": False, "message": f"清空选择失败: {e}"}, ensure_ascii=False)
-
     # ==================== Actor 编辑类 API ====================
 
     async def rename_actor(self, actor_path: str, new_name: str) -> str:
@@ -838,7 +849,20 @@ class OrcaLabMCPServer:
         except Exception as e:
             return json.dumps({"success": False, "message": f"改变Actor父级失败: {e}"}, ensure_ascii=False)
 
-
+    async def duplicate_actors(self, actor_paths: List[str]) -> str:
+        '''
+        复制Actor
+        Args:
+            actor_paths: 要复制的Actor路径列表
+        Returns:
+            复制操作的结果的json字符串格式
+        '''
+        try:
+            paths = [Path(p) for p in actor_paths]
+            await self.scene_edit_bus.duplicate_actors(paths, undo=True, source="mcp")
+            return json.dumps({"success": True, "message": f"成功复制 {len(paths)} 个Actor"}, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"success": False, "message": f"复制Actor失败: {e}"}, ensure_ascii=False)
     # ==================== 仿真状态类 API ====================
 
     def get_simulation_state(self) -> str:
@@ -980,6 +1004,7 @@ class OrcaLabMCPServer:
                 {"action": "另存为", "shortcut": "Ctrl+Shift+S", "scope": "全局"},
                 {"action": "撤销", "shortcut": "Ctrl+Z", "scope": "全局"},
                 {"action": "重做", "shortcut": "Ctrl+Shift+Z", "scope": "全局"},
+                {"action": "复制", "shortcut": "Ctrl+D", "scope": "全局"},
                 {"action": "平移操纵器", "shortcut": "1", "scope": "全局"},
                 {"action": "旋转操纵器", "shortcut": "2", "scope": "全局"},
                 {"action": "缩放操纵器", "shortcut": "3", "scope": "全局"},
@@ -1133,9 +1158,10 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.delete_actor)
         self.mcp.tool(self.rename_actor)
         self.mcp.tool(self.reparent_actor)
+        self.mcp.tool(self.duplicate_actors)
         
         # 选择操作类
-        self.mcp.tool(self.set_selection)
+        self.mcp.tool(self.set_selection_and_active_actor)
         self.mcp.tool(self.clear_selection)
 
         # 撤销/重做类
@@ -1171,6 +1197,7 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.load_layout)
 
     async def run(self):
+        self.config_service.mark_mcp_ready()
         await self.mcp.run_async(transport="http", port=self.port)
 
     def stop(self):

@@ -4,6 +4,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
 from typing import Dict, List, Optional
 import json
 import importlib.metadata as importlib_metadata
@@ -116,38 +117,22 @@ def _run_cmd(cmd: List[str], timeout: float = 5.0) -> Optional[str]:
 
 
 def _get_gpu_info() -> List[Dict[str, Optional[object]]]:
+    from orcalab.gpu_driver_check import check_gpu_drivers, DriverStatus
+
+    result = check_gpu_drivers()
     gpus: List[Dict[str, Optional[object]]] = []
-
-    # 1) nvidia-smi parsing
-    if shutil.which("nvidia-smi"):
-        out = _run_cmd(
-            [
-                "nvidia-smi",
-                "--query-gpu=index,name,driver_version,memory.total",
-                "--format=csv,noheader,nounits",
-            ]
+    for device in result.devices:
+        gpus.append(
+            {
+                "vendor": device.vendor.value,
+                "name": device.name,
+                "pci_address": device.pci_address or None,
+                "driver_status": device.driver_status.value,
+                "driver_version": device.driver_version or None,
+                "driver_cli_tool": device.driver_cli_tool or None,
+                "memory_total_mb": device.memory_total_mb or None,
+            }
         )
-        if out:
-            for line in out.splitlines():
-                parts = [p.strip() for p in line.split(",")]
-                if len(parts) >= 4:
-                    gpus.append(
-                        {
-                            "index": parts[0],
-                            "name": parts[1],
-                            "driver_version": parts[2],
-                            "memory_total_mb": parts[3],
-                        }
-                    )
-            if gpus:
-                return gpus
-
-    if shutil.which("amd-smi"):
-        out = _run_cmd(["amd-smi", "static", "--asic", "--vram", "--json"])
-        if out:
-            json_data = json.loads(out)
-            return json_data
-
     return gpus
 
 
@@ -212,7 +197,15 @@ def _get_python_packages() -> Dict[str, str]:
     packages: Dict[str, str] = {}
     distributions = list(importlib_metadata.distributions())
     for dist in distributions:
-        packages[dist.metadata["Name"]] = dist.version
+        if dist.metadata is None:
+            continue
+        name = dist.metadata.get("Name")
+        if not name:
+            continue
+        try:
+            packages[name] = dist.version
+        except TypeError:
+            continue
     return packages
 
 
@@ -251,10 +244,15 @@ def _get_ip_info():
     import requests
 
     try:
+        _start = time.monotonic()
         response = requests.get("http://ip-api.com/json", timeout=5)
+        elapsed = time.monotonic() - _start
+        logger.debug("HTTP GET http://ip-api.com/json 耗时: %.3f 秒 (状态码: %s)", elapsed, response.status_code)
         if response.status_code == 200:
             data = response.json()
             return data
+        else:
+            logger.warning(f"get ip info failed. Status: {response.status_code}")
 
     except Exception:
         return {}
@@ -333,9 +331,12 @@ async def send_report_directly():
 
     try:
         async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
             async with session.post(
                 url, json=data, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
             ) as response:
+                elapsed = time.monotonic() - _start
+                logger.debug("HTTP POST %s 耗时: %.3f 秒 (状态码: %s)", url, elapsed, response.status)
                 logger.info(
                     "Statistics report sent, status=%s", response.status
                 )

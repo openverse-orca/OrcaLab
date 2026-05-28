@@ -1,9 +1,12 @@
 from typing import List, override
 from PySide6 import QtCore, QtWidgets, QtGui
+import logging
 
 from orcalab.ui.asset_browser.asset_info import AssetInfo
 from orcalab.ui.asset_browser.thumbnail_model import ThumbnailModel
 from orcalab.ui.asset_browser.apng_player import ApngPlayer
+
+logger = logging.getLogger(__name__)
 
 
 class AssetModel(ThumbnailModel):
@@ -47,7 +50,9 @@ class AssetModel(ThumbnailModel):
     @override
     def text_at(self, index: int) -> str:
         if self._filtered_assets[index].metadata is not None:
-            return self._filtered_assets[index].metadata['name']
+            name = self._filtered_assets[index].metadata.get('name', '')
+            if isinstance(name, str) and name:
+                return name
         return self._filtered_assets[index].name
 
     def info_at(self, index: int) -> AssetInfo:
@@ -58,17 +63,22 @@ class AssetModel(ThumbnailModel):
         self.apply_filters()
 
     def apply_filters(self):
-        list1 = self._apply_category_filter(self._all_assets)
-        list2 = self._apply_include_filter(list1)
-        list3 = self._apply_exclude_filter(list2)
-        self._filtered_assets = list3
-        self.data_updated.emit()
+        try:
+            list1 = self._apply_category_filter(self._all_assets)
+            list2 = self._apply_include_filter(list1)
+            list3 = self._apply_exclude_filter(list2)
+            self._filtered_assets = list3
+            self.data_updated.emit()
+        except Exception as e:
+            logger.error("[搜索诊断] apply_filters 异常: %s, include=%r, exclude=%r, category=%r",
+                         e, self.include_filter, self.exclude_filter, self.category_filter, exc_info=True)
+            self._filtered_assets = self._all_assets
+            self.data_updated.emit()
 
     def get_all_assets(self) -> List[AssetInfo]:
         return self._all_assets
     
     def notify_item_updated(self, index: int) -> None:
-        """通知指定索引的项已更新"""
         self.item_updated.emit(index)
     
     def _apply_category_filter(self, input: List[AssetInfo]):
@@ -78,7 +88,8 @@ class AssetModel(ThumbnailModel):
         result: List[AssetInfo] = []
         for asset in input:
             if asset.metadata is not None:
-                if asset.metadata['categoryPath'].startswith(self.category_filter):
+                category_path = asset.metadata.get('categoryPath', '')
+                if isinstance(category_path, str) and category_path.startswith(self.category_filter):
                     result.append(asset)
             else:
                 if self.category_filter == "/other":
@@ -88,9 +99,15 @@ class AssetModel(ThumbnailModel):
     def _matches_filter(self, asset: AssetInfo, keyword: str) -> bool:
         if keyword in asset.name.lower():
             return True
-        return (asset.metadata is not None
-                and (keyword in asset.metadata['englishName'].lower()
-                     or keyword in asset.metadata['name']))
+        if asset.metadata is None:
+            return False
+        english_name = asset.metadata.get('englishName', '')
+        name = asset.metadata.get('name', '')
+        if isinstance(english_name, str) and keyword in english_name.lower():
+            return True
+        if isinstance(name, str) and keyword in name:
+            return True
+        return False
 
     def _apply_include_filter(self, input: List[AssetInfo]):
         if not self.include_filter:

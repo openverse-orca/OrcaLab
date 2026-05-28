@@ -6,6 +6,7 @@ import sys
 import shutil
 import hashlib
 import pickle
+import time
 import aiohttp
 import aiofiles
 import asyncio
@@ -304,7 +305,10 @@ async def download_pak_from_url(url: str, target_path: pathlib.Path, cloud_file_
     """
     try:
         async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
             async with session.get(url) as response:
+                elapsed = time.monotonic() - _start
+                logger.debug("HTTP GET %s 耗时: %.3f 秒 (状态码: %s)", url, elapsed, response.status)
                 if response.status != 200:
                     logger.error("Failed to download %s. Status code: %s", url, response.status)
                     return False
@@ -324,6 +328,7 @@ async def download_pak_from_url(url: str, target_path: pathlib.Path, cloud_file_
                     logger.error("文件下载不完整，源文件sha256: %s, 下载文件sha256: %s", cloud_file_sha256, local_file_sha256)
                     msg = f"源文件sha256: {cloud_file_sha256}\n下载文件sha256: {local_file_sha256}"
                     QtWidgets.QMessageBox.information(None, "pak 下载不完整, 请重新启动 orcalab", msg)
+                    sys.exit(1)
                     return False
 
                 # 重命名

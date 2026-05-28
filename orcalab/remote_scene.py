@@ -2,6 +2,7 @@ import asyncio
 from typing import Any, List, Tuple, override
 
 import logging
+import time
 
 
 from orcalab.actor_property import (
@@ -29,6 +30,7 @@ from orcalab.state_sync_bus import (
     ManipulatorType,
     CameraMovementType,
     MeasureType,
+    PivotPointType,
     StateSyncNotificationBus,
 )
 from orcalab.ui.camera.camera_brief import CameraBrief
@@ -122,13 +124,19 @@ class RemoteScene(SceneEditNotification):
         SceneEditNotificationBus.disconnect(self)
 
     async def init_grpc(self):
+        _t0 = time.monotonic()
         self._service.init_grpc(self.edit_grpc_addr)
+        logger.info("init_grpc channel 创建完成, 耗时: %.2f 秒", time.monotonic() - _t0)
 
+        _t1 = time.monotonic()
         await self.change_sim_state(False)
+        logger.info("change_sim_state(False) 完成, 耗时: %.2f 秒", time.monotonic() - _t1)
         logger.info("已连接到服务器")
 
         # Start the pending operation loop.
+        _t2 = time.monotonic()
         await self._query_pending_operation_loop()
+        logger.info("_query_pending_operation_loop 首次完成, 耗时: %.2f 秒", time.monotonic() - _t2)
 
     async def destroy_grpc(self):
         self.shutdown = True
@@ -264,8 +272,7 @@ class RemoteScene(SceneEditNotification):
             elif value == "scale":
                 manipulator_type = ManipulatorType.Scale
             else:
-                print(f"Unknown manipulator type: {value}")
-                return
+                manipulator_type = ManipulatorType.ManipulatorNone
 
             bus = StateSyncNotificationBus()
             bus.on_manipulator_type_changed(manipulator_type)
@@ -300,6 +307,24 @@ class RemoteScene(SceneEditNotification):
             bus = StateSyncNotificationBus()
             bus.on_measure_type_changed(measure_type)
             return
+        
+        prefix = "pivot_point_type:"
+        if op.startswith(prefix):
+            value = op[len(prefix) :]
+            if value == "individualcenter":
+                pivot_point_type = PivotPointType.IndividualCenter
+            elif value == "boundingboxcenter":
+                pivot_point_type = PivotPointType.BoundingBoxCenter
+            elif value == "medianpoint":
+                pivot_point_type = PivotPointType.MedianPoint
+            elif value == "activeactor":
+                pivot_point_type = PivotPointType.ActiveActor
+            else:
+                pivot_point_type = PivotPointType.Default
+
+            bus = StateSyncNotificationBus()
+            bus.on_pivot_point_type_changed(pivot_point_type)
+            return
 
         prefix = "debug_draw:"
         if op.startswith(prefix):
@@ -317,7 +342,7 @@ class RemoteScene(SceneEditNotification):
             bus.on_runtime_grab_changed(enabled)
             return
 
-        print(f"Unknown pending operation: {op}")
+        logger.debug(f"Unknown pending operation: {op}")
 
     def _is_transform_change(self, op: str) -> bool:
         return op.startswith("transform_change:")
@@ -747,6 +772,13 @@ class RemoteScene(SceneEditNotification):
         cmd = f"change_measure_type:{measure_type.name.lower()}"
         async with self._grpc_lock:
             return await self._service.custom_command(cmd)
+        
+    async def change_pivot_point_type(
+        self, pivot_point_type: PivotPointType
+    ) -> bool:
+        cmd = f"change_pivot_point_type:{pivot_point_type.name.lower()}"
+        async with self._grpc_lock:
+            return await self._service.custom_command(cmd)
 
     async def get_camera_png(self, camera_name: str, png_path: str, png_name: str):
         async with self._grpc_lock:
@@ -803,6 +835,14 @@ class RemoteScene(SceneEditNotification):
     async def set_active_camera(self, camera_index: int) -> None:
         async with self._grpc_lock:
             await self._service.set_active_camera(camera_index)
+
+    async def get_flycamera_transform(self) -> Transform:
+        async with self._grpc_lock:
+            return await self._service.get_flycamera_transform()
+
+    async def set_flycamera_transform(self, flycamera_transform: Transform) -> None:
+        async with self._grpc_lock:
+            await self._service.set_flycamera_transform(flycamera_transform)
 
     async def get_viewport_camera_transform(self) -> Transform:
         async with self._grpc_lock:

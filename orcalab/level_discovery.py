@@ -22,6 +22,8 @@ def _read_scene_layouts(pak_path: Path) -> List[Dict[str, str]]:
             with pak.open("scene_layouts.json") as file:
                 text_file = TextIOWrapper(file, encoding="utf-8")
                 data = json.load(text_file)
+
+            pak_file_set = {n.lower() for n in pak.namelist()}
     except zipfile.BadZipFile:
         logger.warning("无效的pak文件: %s", pak_path)
         return []
@@ -56,6 +58,13 @@ def _read_scene_layouts(pak_path: Path) -> List[Dict[str, str]]:
         name = scene.get("name")
         path = _to_spawnable_path(scene.get("path"))
         if not path:
+            continue
+        if path.lower() not in pak_file_set:
+            logger.warning(
+                "场景 '%s' 的 spawnable 文件不存在于 pak 中，已跳过: %s",
+                name or path,
+                path,
+            )
             continue
         item = {
             "name": name or path,

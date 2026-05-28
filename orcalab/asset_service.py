@@ -4,9 +4,12 @@ from orcalab.application_bus import ApplicationRequestBus
 
 import aiohttp
 import aiofiles
+import time
 
 from typing import override
 
+import logging
+logger = logging.getLogger(__name__)
 
 class AssetService(AssetServiceRequest):
 
@@ -21,8 +24,12 @@ class AssetService(AssetServiceRequest):
     async def download_asset_to_file(self, url: str, file: str) -> None:
         async with aiofiles.open(file, "wb") as f:
             async with aiohttp.ClientSession() as session:
+                _start = time.monotonic()
                 async with session.get(url) as response:
+                    elapsed = time.monotonic() - _start
+                    logger.debug("HTTP GET %s 耗时: %.3f 秒 (状态码: %s)", url, elapsed, response.status)
                     if response.status != 200:
+                        logger.debug("Failed to download asset. Status code: %d , Response Text: %s...", response.status, response.text[:200])
                         raise Exception(
                             f"Failed to download asset. Status code: {response.status}"
                         )

@@ -57,7 +57,10 @@ class AuthService:
             try:
                 url = f"{self.auth_url}/nonce/"
                 logger.info("尝试获取 nonce (第 %s 次): %s", attempt + 1, url)
+                _start = time.monotonic()
                 response = requests.get(url, timeout=self.timeout)
+                elapsed = time.monotonic() - _start
+                logger.debug("HTTP GET %s/nonce/ 耗时: %.3f 秒 (状态码: %s)", self.auth_url, elapsed, response.status_code)
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -114,11 +117,14 @@ class AuthService:
             start_time = time.monotonic()
             for i in range(max_retries):
                 try:
+                    _start = time.monotonic()
                     response = requests.post(
                         url,
                         json={'nonce': nonce},
                         timeout=self.timeout
                     )
+                    elapsed = time.monotonic() - _start
+                    logger.debug("HTTP POST %s/nonce/verify/ 耗时: %.3f 秒 (状态码: %s)", self.auth_url, elapsed, response.status_code)
                     
                     if response.status_code == 200:
                         data = response.json()
@@ -291,7 +297,7 @@ class AuthService:
                     'username': username,
                     'access_token': access_token
                 },
-                timeout=self.timeout
+                timeout=10
             )
             
             return response.status_code == 200
