@@ -1,6 +1,6 @@
 from enum import Enum
-from dataclasses import dataclass
-from typing import List, Any
+from dataclasses import dataclass, field
+from typing import Any, List
 
 from orcalab.path import Path
 
@@ -12,6 +12,7 @@ class ActorPropertyType(Enum):
     FLOAT = 3
     STRING = 4
     TREE = 5
+    ENUM = 6
 
 
 class ValueWrapper:
@@ -85,8 +86,11 @@ class ActorProperty:
                 if not isinstance(value, str):
                     raise ValueError("Value must be a string")
                 target.value = value
+            case ActorPropertyType.ENUM:
+                if not isinstance(value, str):
+                    raise ValueError("Value must be a string for enum")
+                target.value = value
             case ActorPropertyType.TREE:
-                # TREE 类型没有直接值，数据在 group.tree_data 中
                 pass
             case _:
                 raise NotImplementedError("Unsupported property type")
@@ -236,3 +240,4 @@ class FlatPropertyItem:
     parent_struct_name: str = ""
     struct_display_name: str = ""
     group_id: int = 0
+    enum_values: List[str] = field(default_factory=list)

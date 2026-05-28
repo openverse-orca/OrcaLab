@@ -404,6 +404,7 @@ enum PropertyType {
     Float = 3;
     String = 4;
     Tree = 5;
+    ENUM = 6;
 }
 
 message PropertyValue {

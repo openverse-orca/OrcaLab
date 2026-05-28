@@ -58,6 +58,8 @@ def _create_property_edit(
             return FloatPropertyEdit(parent, context, label_width)
         case ActorPropertyType.STRING:
             return StringPropertyEdit(parent, context, label_width)
+        case ActorPropertyType.ENUM:
+            return ComboBoxPropertyEdit(parent, context, label_width)
         case _:
             raise NotImplementedError("Unsupported property type")
 

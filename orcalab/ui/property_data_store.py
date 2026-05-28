@@ -57,6 +57,7 @@ class PropertyDataStore:
                             group_prefix=entry.property_group.prefix,
                             component_type_id=entry.property_group.component_type_id,
                             group_id=entry_idx,
+                            enum_values=prop.enum_values(),
                         )
                     )
 
@@ -117,6 +118,7 @@ class PropertyDataStore:
                         group_prefix=group.prefix,
                         component_type_id=group.component_type_id,
                         group_id=group_idx,
+                        enum_values=prop.enum_values(),
                     )
                 )
 
@@ -219,6 +221,8 @@ class PropertyDataStore:
                 value=item.value,
             )
             prop.set_read_only(item.is_readonly)
+            if item.enum_values:
+                prop.set_enum_values(item.enum_values)
             group_map[key].properties.append(prop)
 
         perf_log(

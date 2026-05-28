@@ -506,6 +506,13 @@ class EditServiceWrapper:
                     type=ActorPropertyType.TREE,
                     value=None,
                 )
+            case edit_service_pb2.PropertyType.ENUM:
+                prop = ActorProperty(
+                    name=prop_msg.name,
+                    display_name=prop_msg.display_name,
+                    type=ActorPropertyType.ENUM,
+                    value="",
+                )
         if prop:
             prop.set_read_only(prop_msg.read_only)
             prop.set_editor_hint(prop_msg.editor_hint)
@@ -597,6 +604,10 @@ class EditServiceWrapper:
             case ActorPropertyType.STRING:
                 if not isinstance(value, str):
                     raise ValueError("Value must be a string.")
+                value_msg.value_string = value
+            case ActorPropertyType.ENUM:
+                if not isinstance(value, str):
+                    raise ValueError("Value must be a string for enum.")
                 value_msg.value_string = value
             case _:
                 raise ValueError("Unsupported property type.")

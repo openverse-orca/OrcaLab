@@ -67,6 +67,8 @@ def create_property_edit(
             return IntegerPropertyEdit(parent, context, label_width)
         case ActorPropertyType.FLOAT:
             return FloatPropertyEdit(parent, context, label_width)
+        case ActorPropertyType.ENUM:
+            return ComboBoxPropertyEdit(parent, context, label_width)
         case _:
             return StringPropertyEdit(parent, context, label_width)
 
