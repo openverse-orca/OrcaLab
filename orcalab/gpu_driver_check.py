@@ -478,7 +478,7 @@ def _detect_gpu_hardware_windows() -> List[GpuDeviceInfo]:
     devices: List[GpuDeviceInfo] = []
 
     out = _run_cmd([
-        "powershell", "-Command",
+        "powershell", "-NoProfile", "-Command",
         "Get-WmiObject Win32_VideoController | "
         "Select-Object Name, AdapterCompatibility, DriverVersion, AdapterRAM | "
         "ConvertTo-Json"

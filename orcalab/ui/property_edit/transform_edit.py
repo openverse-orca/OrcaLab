@@ -14,13 +14,17 @@ from orcalab.ui.styled_widget import StyledWidget
 
 from orcalab.math import Transform
 
+from orcalab.perf_log import perf_log
+
 
 class TransformEdit(StyledWidget, SceneEditNotification):
 
     def connect_buses(self):
+        perf_log(f"TransformEdit.connect_buses: actor={self._actor_path}, id={id(self)}", feature="TRACE_LIFECYCLE")
         SceneEditNotificationBus.connect(self)
 
     def disconnect_buses(self):
+        perf_log(f"TransformEdit.disconnect_buses: actor={self._actor_path}, id={id(self)}", feature="TRACE_LIFECYCLE")
         SceneEditNotificationBus.disconnect(self)
 
     def __init__(
@@ -74,6 +78,8 @@ class TransformEdit(StyledWidget, SceneEditNotification):
         new_transforms: List[Transform],
         source: str,
     ) -> None:
+        perf_log(f"TransformEdit.on_transforms_changed: actor={self._actor_path}, id={id(self)}, source={source}, content={self._transform_content is not None}", feature="TRACE_LIFECYCLE")
+
         if self._actor is None:
             return
 
@@ -82,5 +88,6 @@ class TransformEdit(StyledWidget, SceneEditNotification):
 
         for path, new_transform in zip(actor_paths, new_transforms):
             if self._actor_path == path:
+                perf_log(f"TransformEdit.on_transforms_changed: calling set_transform for actor={self._actor_path}, content_alive={self._transform_content is not None}", feature="TRACE_LIFECYCLE")
                 self.set_transform(new_transform)
                 break
