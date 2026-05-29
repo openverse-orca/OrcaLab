@@ -58,6 +58,8 @@ class SceneEditService(SceneEditRequest):
         # 防止多个编辑操作中的异步操作交叉导致状态混乱。
         self._edit_lock = asyncio.Lock()
 
+        self._is_duplicating = False
+
     def connect_bus(self):
         SceneEditRequestBus.connect(self)
 
@@ -677,8 +679,15 @@ class SceneEditService(SceneEditRequest):
     async def duplicate_actors(
         self, actors: Sequence[BaseActor | Path], undo: bool = True, source: str = ""
     ):
+        if self._is_duplicating:
+            logger.debug("Already duplicating actors, skip duplicate_actors call.")
+            return
+        self._is_duplicating = True
+
         async with self._edit_lock:
             await self._duplicate_actors(actors, undo, source)
+        
+        self._is_duplicating = False
 
     async def _duplicate_actors(
         self, actors: Sequence[BaseActor | Path], undo: bool = True, source: str = ""
