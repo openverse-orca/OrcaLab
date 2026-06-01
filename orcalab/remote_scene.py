@@ -710,6 +710,12 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             return await self._service.get_actor_assets()
 
+    async def get_assets_by_type_page(self, asset_type_uuid: str, page_index: int, page_size: int):
+        async with self._grpc_lock:
+            return await self._service.get_assets_by_type_page(
+                asset_type_uuid, page_index, page_size
+            )
+
     async def save_state(self):
         print("Saving state...")
         async with self._grpc_lock:

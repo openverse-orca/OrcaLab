@@ -13,6 +13,7 @@ class ActorPropertyType(Enum):
     STRING = 4
     TREE = 5
     ENUM = 6
+    ASSET = 7
 
 
 class ValueWrapper:
@@ -89,6 +90,10 @@ class ActorProperty:
             case ActorPropertyType.ENUM:
                 if not isinstance(value, str):
                     raise ValueError("Value must be a string for enum")
+                target.value = value
+            case ActorPropertyType.ASSET:
+                if not isinstance(value, str):
+                    raise ValueError("Value must be a string for asset")
                 target.value = value
             case ActorPropertyType.TREE:
                 pass

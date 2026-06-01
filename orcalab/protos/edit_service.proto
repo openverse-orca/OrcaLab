@@ -427,14 +427,19 @@ message AssetInfo {
     string relative_path = 2;
 }
 
-message GetAssetsByTypeRequest {
+message GetAssetsByTypePageRequest {
     string asset_type_uuid = 1;
+    int32 page_index = 2;
+    int32 page_size = 3;
 }
 
-message GetAssetsByTypeResponse {
+message GetAssetsByTypePageResponse {
     StatusCode status_code = 1;
     string error_message = 2;
-    repeated AssetInfo assets = 3;
+    int32 page_index = 3;
+    int32 total_pages = 4;
+    int32 total_count = 5;
+    repeated AssetInfo assets = 6;
 }
 
 message Property {
@@ -767,5 +772,5 @@ service GrpcService {
     rpc GetEntityAllFieldValues(GetEntityAllFieldValuesRequest) returns (GetEntityAllFieldValuesResponse);
     rpc SetEntityFieldValues(SetEntityFieldValuesRequest) returns (SetEntityFieldValuesResponse);
     rpc GetEntityAllFieldValuesBatch(GetEntityAllFieldValuesBatchRequest) returns (GetEntityAllFieldValuesBatchResponse);
-    rpc GetAssetsByType(GetAssetsByTypeRequest) returns (GetAssetsByTypeResponse);
+    rpc GetAssetsByTypePage(GetAssetsByTypePageRequest) returns (GetAssetsByTypePageResponse);
 }

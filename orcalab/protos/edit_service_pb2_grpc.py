@@ -304,10 +304,10 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.GetEntityAllFieldValuesBatchRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetEntityAllFieldValuesBatchResponse.FromString,
                 _registered_method=True)
-        self.GetAssetsByType = channel.unary_unary(
-                '/SceneEdit.GrpcService/GetAssetsByType',
-                request_serializer=edit__service__pb2.GetAssetsByTypeRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.GetAssetsByTypeResponse.FromString,
+        self.GetAssetsByTypePage = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetAssetsByTypePage',
+                request_serializer=edit__service__pb2.GetAssetsByTypePageRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetAssetsByTypePageResponse.FromString,
                 _registered_method=True)
 
 
@@ -640,7 +640,7 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetAssetsByType(self, request, context):
+    def GetAssetsByTypePage(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -919,10 +919,10 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     request_deserializer=edit__service__pb2.GetEntityAllFieldValuesBatchRequest.FromString,
                     response_serializer=edit__service__pb2.GetEntityAllFieldValuesBatchResponse.SerializeToString,
             ),
-            'GetAssetsByType': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetAssetsByType,
-                    request_deserializer=edit__service__pb2.GetAssetsByTypeRequest.FromString,
-                    response_serializer=edit__service__pb2.GetAssetsByTypeResponse.SerializeToString,
+            'GetAssetsByTypePage': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAssetsByTypePage,
+                    request_deserializer=edit__service__pb2.GetAssetsByTypePageRequest.FromString,
+                    response_serializer=edit__service__pb2.GetAssetsByTypePageResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -2394,7 +2394,7 @@ class GrpcService(object):
             _registered_method=True)
 
     @staticmethod
-    def GetAssetsByType(request,
+    def GetAssetsByTypePage(request,
             target,
             options=(),
             channel_credentials=None,
@@ -2407,9 +2407,9 @@ class GrpcService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/SceneEdit.GrpcService/GetAssetsByType',
-            edit__service__pb2.GetAssetsByTypeRequest.SerializeToString,
-            edit__service__pb2.GetAssetsByTypeResponse.FromString,
+            '/SceneEdit.GrpcService/GetAssetsByTypePage',
+            edit__service__pb2.GetAssetsByTypePageRequest.SerializeToString,
+            edit__service__pb2.GetAssetsByTypePageResponse.FromString,
             options,
             channel_credentials,
             insecure,

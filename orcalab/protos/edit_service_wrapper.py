@@ -513,6 +513,13 @@ class EditServiceWrapper:
                     type=ActorPropertyType.ENUM,
                     value="",
                 )
+            case edit_service_pb2.PropertyType.ASSET:
+                prop = ActorProperty(
+                    name=prop_msg.name,
+                    display_name=prop_msg.display_name,
+                    type=ActorPropertyType.ASSET,
+                    value="",
+                )
         if prop:
             prop.set_read_only(prop_msg.read_only)
             prop.set_editor_hint(prop_msg.editor_hint)
@@ -609,6 +616,10 @@ class EditServiceWrapper:
                 if not isinstance(value, str):
                     raise ValueError("Value must be a string for enum.")
                 value_msg.value_string = value
+            case ActorPropertyType.ASSET:
+                if not isinstance(value, str):
+                    raise ValueError("Value must be a string for asset.")
+                value_msg.value_asset = value
             case _:
                 raise ValueError("Unsupported property type.")
 
@@ -792,6 +803,18 @@ class EditServiceWrapper:
                         groups.append(pg)
                     result.append(groups)
             return result
+
+    async def get_assets_by_type_page(
+        self, asset_type_uuid: str, page_index: int, page_size: int
+    ):
+        request = edit_service_pb2.GetAssetsByTypePageRequest(
+            asset_type_uuid=asset_type_uuid,
+            page_index=page_index,
+            page_size=page_size,
+        )
+        response = await self.stub.GetAssetsByTypePage(request)
+        self._check_response(response)
+        return response
 
     async def get_all_entity_property_groups(
         self, actor_path: Path

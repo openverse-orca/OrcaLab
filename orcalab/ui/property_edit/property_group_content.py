@@ -25,7 +25,9 @@ from orcalab.ui.property_edit.float_property_edit import FloatPropertyEdit
 from orcalab.ui.property_edit.int_property_edit import IntegerPropertyEdit
 from orcalab.ui.property_edit.color_property_edit import ColorPropertyEdit
 from orcalab.ui.property_edit.string_property_edit import StringPropertyEdit
+from orcalab.ui.property_edit.texture_picker_property_edit import TexturePickerPropertyEdit
 from orcalab.ui.styled_widget import StyledWidget
+from orcalab.texture_asset_cache import get_texture_asset_cache
 
 
 _COLOR_CHANNEL_NAMES = {"r", "g", "b", "a"}
