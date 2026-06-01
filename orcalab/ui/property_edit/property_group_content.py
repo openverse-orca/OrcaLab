@@ -23,8 +23,29 @@ from orcalab.ui.property_edit.bool_property_edit import BooleanPropertyEdit
 from orcalab.ui.property_edit.combo_property_edit import ComboBoxPropertyEdit
 from orcalab.ui.property_edit.float_property_edit import FloatPropertyEdit
 from orcalab.ui.property_edit.int_property_edit import IntegerPropertyEdit
+from orcalab.ui.property_edit.color_property_edit import ColorPropertyEdit
 from orcalab.ui.property_edit.string_property_edit import StringPropertyEdit
 from orcalab.ui.styled_widget import StyledWidget
+
+
+_COLOR_CHANNEL_NAMES = {"r", "g", "b", "a"}
+
+
+def _is_color_struct(sg: StructPropertyGroup) -> bool:
+    if sg.children:
+        return False
+    if not sg.properties:
+        return False
+    has_r = False
+    for p in sg.properties:
+        if p.value_type() != ActorPropertyType.FLOAT:
+            return False
+        last_seg = p.name().rsplit(".", 1)[-1] if "." in p.name() else p.name()
+        if last_seg not in _COLOR_CHANNEL_NAMES:
+            return False
+        if last_seg == "r":
+            has_r = True
+    return has_r
 
 
 def _indent_unit() -> int:
@@ -261,7 +282,13 @@ def _render_struct_group(
     indent_level: int = 0,
     collapsed: bool = True,
 ):
-    """递归渲染结构体组为 CollapsibleSection"""
+    if _is_color_struct(struct_group):
+        color_edit = ColorPropertyEdit(
+            parent, struct_group, actor, actor_path, group, label_width
+        )
+        layout.addWidget(color_edit)
+        return
+
     section = CollapsibleSection(
         parent=parent,
         title=struct_group.display_name,
