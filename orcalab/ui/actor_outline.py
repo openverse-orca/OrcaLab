@@ -196,6 +196,33 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         self.set_actor_selection(actors)
 
     @override
+    async def on_actor_locked_changed(
+        self, actor_path: Path, paths_to_update: list, locked: bool, source: str = ""
+    ):
+        if not locked:
+            return
+
+        local_scene = self.actor_model().local_scene
+        selection = local_scene.selection
+        if selection == []:
+            return
+        locked_set = set(paths_to_update)
+        new_selection = [p for p in selection if p not in locked_set]
+        if len(new_selection) != len(selection):
+            actors = []
+            for p in new_selection:
+                actor = local_scene.find_actor_by_path(p)
+                if actor is not None:
+                    actors.append(actor)
+            self.set_actor_selection(actors)
+            active = local_scene.active_actor
+            if active in locked_set:
+                active = None
+            await SceneEditRequestBus().set_selection_and_active_actor(
+                new_selection, active, source="actor_outline"
+            )
+
+    @override
     async def on_active_entity_changed(
         self,
         old_active_entity: tuple | None,
@@ -497,6 +524,10 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                 if not actor_path:
                     return
 
+                actor = self.actor_model().local_scene.find_actor_by_path(actor_path)
+                if actor is not None and (actor.is_locked or actor.is_parent_locked):
+                    return
+
                 branch_area = self._brach_areas.get(index)
                 if branch_area and branch_area.contains(pos):
                     self.setExpanded(index, not self.isExpanded(index))
@@ -513,6 +544,9 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                 return
 
             if node is None or actor_path is None:
+                return
+
+            if isinstance(node, BaseActor) and (node.is_locked or node.is_parent_locked):
                 return
 
             if not actor_path.is_root():
