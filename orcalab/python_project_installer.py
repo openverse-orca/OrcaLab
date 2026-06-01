@@ -28,7 +28,7 @@ class InstallProgressDialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("OrcaLab 安装进度")
-        self.setMinimumSize(500, 300)
+        self.setFixedSize(500, 300)
         self.setModal(True)
         
         layout = QtWidgets.QVBoxLayout(self)
