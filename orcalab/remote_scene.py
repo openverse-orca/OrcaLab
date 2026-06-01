@@ -878,6 +878,10 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             await self._service.get_actor_asset_aabb(actor_path, output)
 
+    async def find_non_overlapping_position(self, actor_path: Path, output: List[float]):
+        async with self._grpc_lock:
+            await self._service.find_non_overlapping_position(actor_path, output)
+
     async def queue_mouse_event(self, x: float, y: float, button: int, action: int):
         await self._service.queue_mouse_event(x, y, button, action)
 

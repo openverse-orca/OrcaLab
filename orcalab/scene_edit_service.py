@@ -769,26 +769,6 @@ class SceneEditService(SceneEditRequest):
                 new_actor_paths.append(new_actor_path)
                 exsiting_names.append(new_actor_path.name())
 
-        for request in requests:
-            if isinstance(request.actor, AssetActor):
-                aabb = []
-                _, actor_template_path = self.local_scene.normalize_actor(request.actor_template)
-                await self.remote_scene.get_actor_asset_aabb(actor_template_path, aabb)
-                bias_x = aabb[3] - aabb[0]
-                bias_y = aabb[4] - aabb[1]
-
-                if abs(bias_x) > 100000.0:
-                    bias_x = 0.0
-                if abs(bias_y) > 100000.0:
-                    bias_y = 0.0
-
-                transform_bias = Transform(
-                    position=np.array([bias_x, bias_y, 0.0]),
-                    rotation=np.array([1.0, 0.0, 0.0, 0.0]),
-                    scale=1.0
-                )
-                request.actor._transform = transform_bias * request.actor._transform
-
         bus = SceneEditNotificationBus()
 
         command_group = CommandGroup()
@@ -806,6 +786,27 @@ class SceneEditService(SceneEditRequest):
                 self.local_scene.normalize_actor(p)[0] for p in new_actor_paths
             ]
             await self._sync_subtrees_visibility_lock_remote(new_roots)
+
+            transform_paths = []
+            transform_values = []
+            for new_actor_path in new_actor_paths:
+                new_actor = self.local_scene.find_actor_by_path(new_actor_path)
+                if isinstance(new_actor, AssetActor):
+                    pos = []
+                    await self.remote_scene.find_non_overlapping_position(new_actor_path, pos)
+                    transform_paths.append(new_actor_path)
+                    transform_values.append(Transform(
+                        position=np.array([pos[0], pos[1], pos[2]]),
+                        rotation=np.array([1.0, 0.0, 0.0, 0.0]),
+                        scale=1.0,
+                    ))
+            if transform_paths:
+                await self.remote_scene.set_actor_transform_batch(transform_paths, transform_values)
+                for actor_path, transform in zip(transform_paths, transform_values):
+                    actor = self.local_scene.find_actor_by_path(actor_path)
+                    if actor is not None:
+                        actor._transform = transform
+
         await bus.on_actor_added_batch("")
 
         await self._set_selection(new_selection, undo=False, source=source)

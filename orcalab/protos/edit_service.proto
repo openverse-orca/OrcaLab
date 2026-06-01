@@ -297,6 +297,16 @@ message GetActorAssetAabbResponse {
     repeated float max = 4;
 }
 
+message FindNonOverlappingPositionRequest {
+    string actor_path = 1;
+}
+
+message FindNonOverlappingPositionResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    repeated float position = 3;
+}
+
 message QueueMouseEventRequest {
     uint32 button = 1;
     uint32 action = 2;
@@ -654,6 +664,7 @@ service GrpcService {
 
     rpc GetCameraPNG(GetCameraPNGRequest) returns (GetCameraPNGResponse);
     rpc GetActorAssetAabb(GetActorAssetAabbRequest) returns (GetActorAssetAabbResponse);
+    rpc FindNonOverlappingPosition(FindNonOverlappingPositionRequest) returns (FindNonOverlappingPositionResponse);
 
     rpc QueueMouseEvent(QueueMouseEventRequest) returns (QueueMouseEventResponse);
     rpc QueueMouseWheelEvent(QueueMouseWheelEventRequest) returns (QueueMouseWheelEventResponse);
