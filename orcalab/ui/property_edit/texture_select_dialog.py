@@ -7,6 +7,17 @@ from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.theme_service import ThemeService
 
 
+def _extract_texture_display_name(path: str) -> str:
+    filename = path.replace("\\", "/").split("/")[-1]
+    if filename.endswith(".streamingimage"):
+        filename = filename[:-len(".streamingimage")]
+    for ext in (".png", ".jpg", ".jpeg", ".tga", ".dds", ".bmp", ".tif", ".tiff", ".exr", ".hdr"):
+        if filename.lower().endswith(ext):
+            filename = filename[:-len(ext)]
+            break
+    return filename
+
+
 class TextureSelectDialog(QtWidgets.QDialog):
     texture_selected = QtCore.Signal(str)
 
@@ -128,8 +139,10 @@ class TextureSelectDialog(QtWidgets.QDialog):
     def _populate_list(self, items: List[Tuple[str, str]]):
         self._list_widget.clear()
         for uuid_str, path in items:
-            item = QtWidgets.QListWidgetItem(path)
+            display = _extract_texture_display_name(path)
+            item = QtWidgets.QListWidgetItem(display)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, uuid_str)
+            item.setToolTip(path)
             self._list_widget.addItem(item)
 
         self._update_status(len(items))

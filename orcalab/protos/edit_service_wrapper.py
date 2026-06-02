@@ -636,6 +636,8 @@ class EditServiceWrapper:
                 return value_msg.value_float
             case "value_string":
                 return value_msg.value_string
+            case "value_asset":
+                return value_msg.value_asset
             case _:
                 return None
 

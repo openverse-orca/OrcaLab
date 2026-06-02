@@ -31,6 +31,7 @@ class ColorPropertyEdit(StyledWidget):
         self._actor = actor
         self._actor_path = actor_path
         self._group = group
+        self._struct_group = struct_group
 
         self._channels: dict[str, ActorProperty] = {}
         for prop in struct_group.properties:
@@ -71,7 +72,7 @@ class ColorPropertyEdit(StyledWidget):
         root_layout.addStretch()
 
     def _create_label(self, label_width: int) -> QtWidgets.QLabel:
-        display_name = self._group.display_name
+        display_name = self._struct_group.display_name
         label = QtWidgets.QLabel(display_name)
         label.setMinimumWidth(label_width)
         label.setMaximumWidth(label_width * 2)

@@ -10,6 +10,17 @@ from orcalab.ui.theme_service import ThemeService
 from orcalab.texture_asset_cache import TextureAssetCache
 
 
+def _extract_texture_display_name(path: str) -> str:
+    filename = path.replace("\\", "/").split("/")[-1]
+    if filename.endswith(".streamingimage"):
+        filename = filename[:-len(".streamingimage")]
+    for ext in (".png", ".jpg", ".jpeg", ".tga", ".dds", ".bmp", ".tif", ".tiff", ".exr", ".hdr"):
+        if filename.lower().endswith(ext):
+            filename = filename[:-len(ext)]
+            break
+    return filename
+
+
 class TexturePickerPropertyEdit(BasePropertyEdit[str]):
 
     def __init__(
@@ -55,7 +66,7 @@ class TexturePickerPropertyEdit(BasePropertyEdit[str]):
 
         path = self._cache.get_path(uuid_str)
         if path:
-            self._path_edit.setText(path)
+            self._path_edit.setText(_extract_texture_display_name(path))
             self._path_edit.setStyleSheet("")
         else:
             self._path_edit.setText(uuid_str)

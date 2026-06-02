@@ -83,6 +83,10 @@ def _create_property_edit(
             return StringPropertyEdit(parent, context, label_width)
         case ActorPropertyType.ENUM:
             return ComboBoxPropertyEdit(parent, context, label_width)
+        case ActorPropertyType.ASSET:
+            return TexturePickerPropertyEdit(
+                parent, context, label_width, get_texture_asset_cache()
+            )
         case _:
             raise NotImplementedError("Unsupported property type")
 
@@ -288,7 +292,12 @@ def _render_struct_group(
         color_edit = ColorPropertyEdit(
             parent, struct_group, actor, actor_path, group, label_width
         )
-        layout.addWidget(color_edit)
+        row = QtWidgets.QWidget()
+        row_layout = QtWidgets.QHBoxLayout(row)
+        row_layout.setContentsMargins((indent_level + 1) * _indent_unit(), 0, 0, 0)
+        row_layout.setSpacing(0)
+        row_layout.addWidget(color_edit)
+        layout.addWidget(row)
         return
 
     section = CollapsibleSection(
