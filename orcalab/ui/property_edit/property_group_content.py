@@ -27,6 +27,10 @@ from orcalab.ui.property_edit.int_property_edit import IntegerPropertyEdit
 from orcalab.ui.property_edit.color_property_edit import ColorPropertyEdit
 from orcalab.ui.property_edit.string_property_edit import StringPropertyEdit
 from orcalab.ui.property_edit.texture_picker_property_edit import TexturePickerPropertyEdit
+from orcalab.ui.property_edit.physical_material_edit import (
+    PhysicalMaterialEdit,
+    _is_geom_component,
+)
 from orcalab.ui.styled_widget import StyledWidget
 from orcalab.texture_asset_cache import get_texture_asset_cache
 
@@ -430,6 +434,13 @@ def create_property_group_content(
     content_layout = QtWidgets.QVBoxLayout(content)
     content_layout.setContentsMargins(0, 0, 0, 0)
     content_layout.setSpacing(2)
+
+    if _is_geom_component(group):
+        material_edit = PhysicalMaterialEdit(
+            parent, actor, actor_path, group, label_width,
+        )
+        content_layout.addWidget(material_edit)
+        content._physical_material_edit = material_edit
 
     # 第一步：重建结构体树
     struct_roots, standalone_props = _build_struct_tree(group)

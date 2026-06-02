@@ -437,6 +437,14 @@ class RemoteScene(SceneEditNotification):
         await self.set_properties([property_key], [value])
         await self._sync_property_read_only_state(property_key)
 
+    @override
+    async def on_properties_changed(
+        self, property_keys: list, values: list, source: str
+    ):
+        await self.set_properties(property_keys, values)
+        for key in property_keys:
+            await self._sync_property_read_only_state(key)
+
     async def _sync_property_read_only_state(self, property_key: ActorPropertyKey):
         local_scene = get_local_scene()
         actor = local_scene.find_actor_by_path(property_key.actor_path)

@@ -133,6 +133,15 @@ class SceneEditRequest:
     ):
         pass
 
+    async def set_properties(
+        self,
+        property_keys: List[ActorPropertyKey],
+        values: List[Any],
+        undo: bool = True,
+        source: str = "",
+    ):
+        pass
+
     def start_change_property(self, property_key: ActorPropertyKey):
         pass
 
@@ -326,6 +335,14 @@ class SceneEditNotification:
         self,
         property_key: ActorPropertyKey,
         value: Any,
+        source: str,
+    ):
+        pass
+
+    async def on_properties_changed(
+        self,
+        property_keys: List[ActorPropertyKey],
+        values: List[Any],
         source: str,
     ):
         pass

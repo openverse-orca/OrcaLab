@@ -291,6 +291,9 @@ def main():
 
     check_project_folder()
 
+    from orcalab.physical_material import PhysicalMaterialManager
+    PhysicalMaterialManager.instance().load_from_file()
+
     # register_protocol()
 
     # Register signal handlers for graceful shutdown

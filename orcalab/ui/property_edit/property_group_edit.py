@@ -15,6 +15,7 @@ from orcalab.scene_edit_bus import (
 )
 from orcalab.ui.collapsible.collapsible_section import CollapsibleSection
 from orcalab.ui.property_edit.base_property_edit import BasePropertyEdit
+from orcalab.ui.property_edit.physical_material_edit import PhysicalMaterialEdit
 from orcalab.ui.property_edit.property_group_content import create_property_group_content
 from orcalab.ui.styled_widget import StyledWidget
 
@@ -41,6 +42,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         self._actor_path = actor_path
 
         self._property_edits: List[BasePropertyEdit] = []
+        self._physical_material_edit: PhysicalMaterialEdit | None = None
 
         with perf_timer(f"property_group_edit.init({group.name})", feature="PROPERTY"):
             self._section = CollapsibleSection(
@@ -67,6 +69,9 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
                 property_edits=self._property_edits,
                 collapsed=False,
             )
+            self._physical_material_edit = getattr(content, "_physical_material_edit", None)
+            if self._physical_material_edit is not None:
+                self._physical_material_edit.set_property_edits(self._property_edits)
             return content
 
     def connect_buses(self):
@@ -121,7 +126,37 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         for edit in self._property_edits:
             if edit.context.prop.name() == property_key.property_name:
                 edit.set_value(value)
-                return
+
+        if self._physical_material_edit is not None:
+            self._physical_material_edit.on_controlled_property_changed(
+                property_key.property_name, value
+            )
+
+    @override
+    async def on_properties_changed(
+        self,
+        property_keys: list,
+        values: list,
+        source: str,
+    ):
+        if source == "ui":
+            return
+
+        for key, value in zip(property_keys, values):
+            if key.actor_path != self._actor_path:
+                continue
+            if key.group_prefix != self._group.prefix:
+                continue
+
+            for edit in self._property_edits:
+                if edit.context.prop.name() == key.property_name:
+                    edit.set_value(value)
+
+        if self._physical_material_edit is not None:
+            for key, value in zip(property_keys, values):
+                self._physical_material_edit.on_controlled_property_changed(
+                    key.property_name, value
+                )
 
     @override
     async def on_property_read_only_changed(
