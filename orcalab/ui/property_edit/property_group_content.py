@@ -1,4 +1,5 @@
 from typing import List, Tuple
+import logging
 
 from PySide6 import QtWidgets
 
@@ -288,31 +289,40 @@ def _render_struct_group(
     indent_level: int = 0,
     collapsed: bool = True,
 ):
-    if _is_color_struct(struct_group):
-        color_edit = ColorPropertyEdit(
-            parent, struct_group, actor, actor_path, group, label_width
-        )
-        row = QtWidgets.QWidget()
-        row_layout = QtWidgets.QHBoxLayout(row)
-        row_layout.setContentsMargins((indent_level + 1) * _indent_unit(), 0, 0, 0)
-        row_layout.setSpacing(0)
-        row_layout.addWidget(color_edit)
-        layout.addWidget(row)
-        return
+    try:
+        if _is_color_struct(struct_group):
+            color_edit = ColorPropertyEdit(
+                parent, struct_group, actor, actor_path, group, label_width
+            )
+            row = QtWidgets.QWidget()
+            row_layout = QtWidgets.QHBoxLayout(row)
+            row_layout.setContentsMargins((indent_level + 1) * _indent_unit(), 0, 0, 0)
+            row_layout.setSpacing(0)
+            row_layout.addWidget(color_edit)
+            layout.addWidget(row)
+            return
 
-    section = CollapsibleSection(
-        parent=parent,
-        title=struct_group.display_name,
-        collapsed=collapsed,
-        indent_level=indent_level,
-        content_factory=lambda sg=struct_group: _create_struct_content(
-            parent, actor, actor_path, group,
-            sg, label_width, property_edits,
-            indent_level=indent_level,
+        section = CollapsibleSection(
+            parent=parent,
+            title=struct_group.display_name,
             collapsed=collapsed,
-        ),
-    )
-    layout.addWidget(section)
+            indent_level=indent_level,
+            content_factory=lambda sg=struct_group: _create_struct_content(
+                parent, actor, actor_path, group,
+                sg, label_width, property_edits,
+                indent_level=indent_level,
+                collapsed=collapsed,
+            ),
+        )
+        layout.addWidget(section)
+
+    except Exception as e:
+        logging.getLogger(__name__).error(
+            f"_render_struct_group failed: name={struct_group.display_name} "
+            f"type={type(e).__name__} msg={e}", exc_info=True
+        )
+        err_label = QtWidgets.QLabel(f"⚠ {struct_group.display_name}: {e}")
+        layout.addWidget(err_label)
 
 
 def _create_horizontal_tuple_content(
@@ -426,31 +436,47 @@ def create_property_group_content(
 
     # 第二步：渲染非结构体属性
     for prop in standalone_props:
-        if prop.value_type() == ActorPropertyType.TREE:
-            _render_tree_data_flat(
-                parent, actor, actor_path, group,
-                group.tree_data, content_layout, label_width,
-                property_edits,
-            )
-        elif prop.editor_hint() in ("container", "struct"):
-            editor = _create_property_edit(parent, actor, actor_path, group, prop, label_width)
-            editor.set_read_only(True)
-            property_edits.append(editor)
-            content_layout.addWidget(editor)
-        else:
-            editor = _create_property_edit(parent, actor, actor_path, group, prop, label_width)
-            if prop.is_read_only():
+        try:
+            if prop.value_type() == ActorPropertyType.TREE:
+                _render_tree_data_flat(
+                    parent, actor, actor_path, group,
+                    group.tree_data, content_layout, label_width,
+                    property_edits,
+                )
+            elif prop.editor_hint() in ("container", "struct"):
+                editor = _create_property_edit(parent, actor, actor_path, group, prop, label_width)
                 editor.set_read_only(True)
-            property_edits.append(editor)
-            content_layout.addWidget(editor)
+                property_edits.append(editor)
+                content_layout.addWidget(editor)
+            else:
+                editor = _create_property_edit(parent, actor, actor_path, group, prop, label_width)
+                if prop.is_read_only():
+                    editor.set_read_only(True)
+                property_edits.append(editor)
+                content_layout.addWidget(editor)
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                f"render prop name={prop.name()} failed: "
+                f"type={type(e).__name__} msg={e}", exc_info=True
+            )
+            err_label = QtWidgets.QLabel(f"⚠ {prop.name()}: {e}")
+            content_layout.addWidget(err_label)
 
     # 第三步：递归渲染结构体树
-    for struct_root in struct_roots:
-        _render_struct_group(
-            parent, actor, actor_path, group,
-            struct_root, label_width, property_edits,
-            content_layout,
-            collapsed=collapsed,
-        )
+    for idx, struct_root in enumerate(struct_roots):
+        try:
+            _render_struct_group(
+                parent, actor, actor_path, group,
+                struct_root, label_width, property_edits,
+                content_layout,
+                collapsed=collapsed,
+            )
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                f"render struct[{idx}] name={struct_root.name} failed: "
+                f"type={type(e).__name__} msg={e}", exc_info=True
+            )
+            err_label = QtWidgets.QLabel(f"⚠ {struct_root.display_name}: {e}")
+            content_layout.addWidget(err_label)
 
     return content

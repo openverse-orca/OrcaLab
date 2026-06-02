@@ -71,7 +71,7 @@ class TexturePickerPropertyEdit(BasePropertyEdit[str]):
         else:
             self._path_edit.setText(uuid_str)
             theme = ThemeService()
-            gray_color = theme.get_color_hex("text_disabled")
+            gray_color = theme.get_color_hex("text_disable")
             self._path_edit.setStyleSheet(f"color: {gray_color};")
 
     def _on_pick_clicked(self):
