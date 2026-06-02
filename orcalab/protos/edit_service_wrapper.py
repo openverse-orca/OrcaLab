@@ -396,6 +396,16 @@ class EditServiceWrapper:
             output.extend(response.min)
             output.extend(response.max)
         return response
+    
+    async def find_non_overlapping_position(self, actor_path: Path, output: List[float]):
+        request = edit_service_pb2.FindNonOverlappingPositionRequest(
+            actor_path=actor_path.string()
+        )
+        response = await self.stub.FindNonOverlappingPosition(request)
+        self._check_response(response)
+        if output is not None:
+            output.extend(response.position)
+        return response
 
     async def queue_mouse_event(self, x: float, y: float, button: int, action: int):
         request = edit_service_pb2.QueueMouseEventRequest(

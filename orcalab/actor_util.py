@@ -228,6 +228,8 @@ def collect_properties_duplicate_data(
         for prop in src_group.properties:
             if prop.value_type() == ActorPropertyType.TREE:
                 continue
+            if prop.is_read_only():
+                continue
             key = ActorPropertyKey(
                 dst_actor_path, src_group.prefix, prop.name(), prop.value_type(),
                 entity_id=dst_group.entity_id, component_type=dst_group.component_type_id,
@@ -240,6 +242,8 @@ def collect_properties_duplicate_data(
             src_group.tree_data, dst_group.tree_data
         ):
             for src_prop, dst_prop in zip(src_node.properties, dst_node.properties):
+                if src_prop.is_read_only():
+                    continue
                 full_name = f"{dst_node.name}.{dst_prop.name()}"
                 key = ActorPropertyKey(
                     dst_actor_path,

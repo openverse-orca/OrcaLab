@@ -53,6 +53,7 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
         actor = actor_out[0]
 
         aabb = []
+        await asyncio.sleep(0.1)
         await SceneEditNotificationBus().get_actor_asset_aabb(Path(f"/{actor.name}"), output=aabb)
         if not aabb:
             logger.error(f"failed to get {asset_path} aabb")

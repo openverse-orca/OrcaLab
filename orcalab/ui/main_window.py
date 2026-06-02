@@ -876,7 +876,7 @@ class MainWindow(
         if actor.name == "root":
             flycamera_transform = self.scene_layout_helper.flycamera_transform
             new_fields = {
-                "version": "1.0",
+                "version": "2.0",
                 "flycamera_transform": {
                     "position": compact_array(to_list(flycamera_transform.position)),
                     "rotation": compact_array(to_list(flycamera_transform.rotation)),

@@ -43,6 +43,33 @@ VIAddVersionKey "FileVersion" "${PRODUCT_VERSION}"
 
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
+; ── Detect existing installation ─────────────────────────
+Function .onInit
+    ReadRegStr $0 HKCU "${PRODUCT_UNINST_KEY}" "DisplayVersion"
+    IfErrors no_previous_version
+
+    MessageBox MB_YESNO|MB_ICONQUESTION \
+        "检测到已安装 OrcaLab $0。$\n$\n是否覆盖安装为新版本 ${PRODUCT_VERSION}？$\n$\n注意：覆盖安装将保留您的配置数据。" \
+        IDYES upgrade_confirm
+    Quit
+
+upgrade_confirm:
+    ReadRegStr $1 HKCU "${PRODUCT_UNINST_KEY}" "UninstallString"
+    IfErrors skip_old_shortcut_cleanup
+
+    ReadRegStr $2 HKCU "${PRODUCT_DIR_REGKEY}" ""
+    IfErrors skip_old_shortcut_cleanup
+
+    Delete "$DESKTOP\OrcaLab.lnk"
+    RMDir /r "$SMPROGRAMS\OrcaLab"
+
+skip_old_shortcut_cleanup:
+    DeleteRegKey HKCU "${PRODUCT_UNINST_KEY}"
+    DeleteRegKey HKCU "${PRODUCT_DIR_REGKEY}"
+
+no_previous_version:
+FunctionEnd
+
 ; ── Helper: set AppUserModelID on .lnk shortcut ───────────
 Function SetShortcutAppId
     ; Stack: shortcut_path
@@ -72,12 +99,12 @@ Section "Install"
     File "..\..\orcalab\assets\icons\orcalab_logo.ico"
 
     ; Run conda environment setup during installation
-    DetailPrint "Setting up OrcaLab environment (this may take several minutes)..."
+    DetailPrint "正在设置 OrcaLab 运行环境（可能需要几分钟）..."
     FileOpen $0 "$TEMP\orcalab_setup_only" w
     FileClose $0
     ExecWait '"$INSTDIR\orcalab.bat"' $1
     ${If} $1 != 0
-        DetailPrint "Warning: Environment setup exited with code $1. Setup will retry on first launch."
+        DetailPrint "警告: 环境设置返回代码 $1。首次启动时将自动重试。"
     ${EndIf}
 
     ; Desktop shortcut (point to .vbs for invisible launch)

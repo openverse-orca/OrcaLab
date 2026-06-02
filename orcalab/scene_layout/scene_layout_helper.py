@@ -38,7 +38,7 @@ class _ActorData:
 class SceneLayoutHelper:
     def __init__(self, local_scene: LocalScene) -> None:
         self.local_scene = local_scene
-        self.version = "1.0"
+        self.version = "2.0"
         self.flycamera_transform = Transform()
 
     @staticmethod
@@ -137,6 +137,52 @@ class SceneLayoutHelper:
                         if isinstance(val, str) and val:
                             node.display_name = val
                         break
+
+    @staticmethod
+    def _find_prop_v2(actor: AssetActor, entity_path: str, component_type: str | None, property_name: str):
+        for group in actor.property_groups:
+            if group.hint != entity_path:
+                continue
+            if component_type is not None and group.name != component_type:
+                continue
+
+            dot_pos = property_name.rfind(".")
+            if dot_pos != -1:
+                node_display_name = property_name[:dot_pos]
+                prop_name = property_name[dot_pos + 1:]
+                node = SceneLayoutHelper._find_tree_node_by_display_name(group.tree_data, node_display_name)
+                if node is not None:
+                    for prop in node.properties:
+                        if prop.name() == prop_name:
+                            return prop, group.prefix, property_name, group
+            else:
+                for prop in group.properties:
+                    if prop.name() == property_name:
+                        return prop, group.prefix, property_name, group
+
+        return None, "", "", None
+
+    @staticmethod
+    def _find_prop_by_legacy_name(actor: AssetActor, group_prefix: str, prop_name: str):
+        for group in actor.property_groups:
+            if group.prefix != group_prefix:
+                continue
+
+            dot_pos = prop_name.rfind(".")
+            if dot_pos != -1:
+                node_display_name = prop_name[:dot_pos]
+                engine_prop_name = prop_name[dot_pos + 1:]
+                node = SceneLayoutHelper._find_tree_node_by_display_name(group.tree_data, node_display_name)
+                if node is not None:
+                    for prop in node.properties:
+                        if prop.name() == engine_prop_name:
+                            return prop, prop_name
+            else:
+                for prop in group.properties:
+                    if prop.name() == prop_name:
+                        return prop, prop_name
+
+        return None, ""
 
     async def clear_layout(self):
         children = list(self.local_scene.root_actor.children)
@@ -354,7 +400,7 @@ class SceneLayoutHelper:
                 except Exception:
                     pass
 
-            key = ActorPropertyKey(actor_path, group_prefix, engine_key_name, prop_type)
+            key = ActorPropertyKey(actor_path, matched_group_prefix, matched_key_prop_name, prop_type)
             try:
                 await SceneEditRequestBus().set_property(key, value, undo=False, source="layout")
             except Exception as e:

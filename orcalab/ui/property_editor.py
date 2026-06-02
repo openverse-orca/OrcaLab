@@ -180,7 +180,8 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._property_edits.clear()
 
         if self._transform_edit is not None:
-            perf_log(f"_hide_active_sections: setting _transform_edit=None, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}, disconnect_buses NOT called", feature="TRACE_LIFECYCLE")
+            perf_log(f"_hide_active_sections: disconnect_buses and setting _transform_edit=None, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}", feature="TRACE_LIFECYCLE")
+            self._transform_edit.disconnect_buses()
         self._transform_edit = None
 
         cached_ids = self._cached_widget_ids()
@@ -201,7 +202,8 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._property_edits.clear()
 
         if self._transform_edit is not None:
-            perf_log(f"_clear_property_layout: setting _transform_edit=None, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}, disconnect_buses NOT called", feature="TRACE_LIFECYCLE")
+            perf_log(f"_clear_property_layout: disconnect_buses and setting _transform_edit=None, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}", feature="TRACE_LIFECYCLE")
+            self._transform_edit.disconnect_buses()
         self._transform_edit = None
 
         cached_ids = self._cached_widget_ids()
@@ -229,6 +231,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
     def _add_transform_edit(self):
         if self._transform_edit is not None:
             perf_log(f"_add_transform_edit: replacing existing _transform_edit, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}", feature="TRACE_LIFECYCLE")
+            self._transform_edit.disconnect_buses()
             self._transform_edit.deleteLater()
             self._transform_edit = None
 

@@ -164,6 +164,11 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.GetActorAssetAabbRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetActorAssetAabbResponse.FromString,
                 _registered_method=True)
+        self.FindNonOverlappingPosition = channel.unary_unary(
+                '/SceneEdit.GrpcService/FindNonOverlappingPosition',
+                request_serializer=edit__service__pb2.FindNonOverlappingPositionRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.FindNonOverlappingPositionResponse.FromString,
+                _registered_method=True)
         self.QueueMouseEvent = channel.unary_unary(
                 '/SceneEdit.GrpcService/QueueMouseEvent',
                 request_serializer=edit__service__pb2.QueueMouseEventRequest.SerializeToString,
@@ -465,6 +470,12 @@ class GrpcServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetActorAssetAabb(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def FindNonOverlappingPosition(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -778,6 +789,11 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.GetActorAssetAabb,
                     request_deserializer=edit__service__pb2.GetActorAssetAabbRequest.FromString,
                     response_serializer=edit__service__pb2.GetActorAssetAabbResponse.SerializeToString,
+            ),
+            'FindNonOverlappingPosition': grpc.unary_unary_rpc_method_handler(
+                    servicer.FindNonOverlappingPosition,
+                    request_deserializer=edit__service__pb2.FindNonOverlappingPositionRequest.FromString,
+                    response_serializer=edit__service__pb2.FindNonOverlappingPositionResponse.SerializeToString,
             ),
             'QueueMouseEvent': grpc.unary_unary_rpc_method_handler(
                     servicer.QueueMouseEvent,
@@ -1627,6 +1643,33 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/GetActorAssetAabb',
             edit__service__pb2.GetActorAssetAabbRequest.SerializeToString,
             edit__service__pb2.GetActorAssetAabbResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def FindNonOverlappingPosition(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/FindNonOverlappingPosition',
+            edit__service__pb2.FindNonOverlappingPositionRequest.SerializeToString,
+            edit__service__pb2.FindNonOverlappingPositionResponse.FromString,
             options,
             channel_credentials,
             insecure,
