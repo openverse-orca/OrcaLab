@@ -5,7 +5,7 @@ from typing import Generator
 
 _perf_logger = logging.getLogger("orcalab.perf")
 
-PERF_MASTER_ON = True
+PERF_MASTER_ON = False
 PERF_MASTER_OFF = False
 
 PERF_OUTLINE = False

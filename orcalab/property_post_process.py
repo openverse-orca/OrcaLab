@@ -118,17 +118,25 @@ class PostProcessDispatcher:
 
         def _collect_from_properties(prop_list):
             for prop in prop_list:
-                if prop.name() in read_properties and prop.name() not in [k.property_name for k in keys]:
-                    key = ActorPropertyKey(
-                        trigger_key.actor_path,
-                        trigger_key.group_prefix,
-                        prop.name(),
-                        prop.value_type(),
-                        entity_id=trigger_key.entity_id,
-                        component_type=trigger_key.component_type,
-                    )
-                    keys.append(key)
-                    props.append(prop)
+                matched_read_name = None
+                for read_name in read_properties:
+                    if prop.name() == read_name or prop.name().startswith(read_name + "."):
+                        matched_read_name = read_name
+                        break
+                if matched_read_name is None:
+                    continue
+                if prop.name() in [k.property_name for k in keys]:
+                    continue
+                key = ActorPropertyKey(
+                    trigger_key.actor_path,
+                    trigger_key.group_prefix,
+                    prop.name(),
+                    prop.value_type(),
+                    entity_id=trigger_key.entity_id,
+                    component_type=trigger_key.component_type,
+                )
+                keys.append(key)
+                props.append(prop)
 
         def _collect_from_tree(nodes):
             for node in nodes:
