@@ -913,7 +913,7 @@ class MainWindow(
         if not filename.lower().endswith(".json"):
             filename += ".json"
 
-        if not await asyncWrap(lambda: self._confirm_discard_changes(close_after_save=False)):
+        if not await self._confirm_discard_changes(close_after_save=False):
             return
 
         self.scene_layout_helper.create_empty_layout(filename)
@@ -929,16 +929,19 @@ class MainWindow(
         self.undo_service.command_history = []
         self.undo_service.command_history_index = -1
 
-    def open_scene_layout(self):
-        filename, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self,
-            "打开场景布局",
-            self.cwd,
-            "布局文件 (*.json);;所有文件 (*)"
-        )
+    async def open_scene_layout(self):
+        def select_file():
+            return QtWidgets.QFileDialog.getOpenFileName(
+                self,
+                "打开场景布局",
+                self.cwd,
+                "布局文件 (*.json);;所有文件 (*)"
+            )
+
+        filename, _ = await asyncWrap(select_file)
         if not filename:
             return
-        if not self._confirm_discard_changes(close_after_save=False):
+        if not await self._confirm_discard_changes(close_after_save=False):
             return
         self.load_scene_layout_sig.emit(filename)
         self.cwd = os.path.dirname(filename)
@@ -1320,9 +1323,28 @@ class MainWindow(
             event.accept()
             return
 
-        if not self._confirm_discard_changes():
-            logger.debug("closeEvent: 用户取消关闭")
+        if self._layout_modified:
             event.ignore()
+
+            async def confirm_and_close():
+                if not await self._confirm_discard_changes(close_after_save=True):
+                    logger.debug("closeEvent: 用户取消关闭")
+                    return
+                if hasattr(self, '_cleanup_in_progress') and self._cleanup_in_progress:
+                    logger.info("清理进行中，接受关闭事件")
+                    QtWidgets.QApplication.quit()
+                    return
+                self._cleanup_in_progress = True
+                try:
+                    logger.debug("cleanup_and_close: 开始执行 cleanup")
+                    await self.cleanup()
+                    logger.info("cleanup_and_close: 清理完成，调用 QApplication.quit()")
+                    QtWidgets.QApplication.quit()
+                except Exception as e:
+                    logger.exception("清理过程中出现错误: %s", e)
+                    QtWidgets.QApplication.quit()
+
+            asyncio.create_task(confirm_and_close())
             return
 
         # Check if we're already in cleanup process to avoid infinite loop
@@ -1476,7 +1498,7 @@ class MainWindow(
         mode_label = "RunTime" if self._is_runtime_mode else "Editor"
         self.setWindowTitle(f"{self._base_title}    [{scene_part}]    {layout_label}    [{mode_label}]")
 
-    def _confirm_discard_changes(self, close_after_save: bool = True) -> bool:
+    async def _confirm_discard_changes(self, close_after_save: bool = True) -> bool:
         if not self._layout_modified:
             return True
         logger.debug("_confirm_discard_changes: 布局已修改，弹窗确认")
@@ -1490,24 +1512,18 @@ class MainWindow(
         save_button = message_box.addButton("保存修改", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
         message_box.setDefaultButton(save_button)
 
-        message_box.exec()
+        await asyncWrap(message_box.exec)
         clicked = message_box.clickedButton()
 
         if clicked == cancel_button:
             return False
         if clicked == save_button:
+            await self.save_scene_layout()
+            self._mark_layout_clean()
             if close_after_save:
-                async def save_and_close():
-                    await self.save_scene_layout()
-                    self.close()
-                asyncio.create_task(save_and_close())
+                self.close()
                 return False
-            else:
-                async def save_and_continue():
-                    await self.save_scene_layout()
-                    self._mark_layout_clean()
-                asyncio.create_task(save_and_continue())
-                return True
+            return True
         # 放弃修改
         logger.debug("_confirm_discard_changes: 用户选择放弃修改，重置状态")
         self._mark_layout_clean()
