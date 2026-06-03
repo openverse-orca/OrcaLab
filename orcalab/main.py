@@ -338,24 +338,30 @@ def main():
     # 处理pak包
     logger.info("正在准备资产包...")
     _pak_start = time.monotonic()
-    if config_service.init_paks():
-        paks = config_service.paks()
-        if paks:
-            # 如果paks有内容，则复制本地文件
-            logger.info("使用本地pak文件...")
-            copy_packages(paks)
+    if config_service.connect_builder_hub():
+        logger.info("Builder 模式，跳过 pak 包处理")
+    else:
+        if config_service.init_paks():
+            paks = config_service.paks()
+            if paks:
+                # 如果paks有内容，则复制本地文件
+                logger.info("使用本地pak文件...")
+                copy_packages(paks)
 
-    # 处理pak_urls（独立于paks和订阅列表，下载到orcalab子目录）
-    pak_urls = config_service.pak_urls()
-    pak_urls_sha256 = config_service.pak_urls_sha256()
-    if pak_urls:
-        logger.info("正在同步pak_urls列表...")
-        sync_pak_urls(pak_urls, pak_urls_sha256)
+        # 处理pak_urls（独立于paks和订阅列表，下载到orcalab子目录）
+        pak_urls = config_service.pak_urls()
+        pak_urls_sha256 = config_service.pak_urls_sha256()
+        if pak_urls:
+            logger.info("正在同步pak_urls列表...")
+            sync_pak_urls(pak_urls, pak_urls_sha256)
     logger.info("pak包处理完成, 耗时: %.2f 秒", time.monotonic() - _pak_start)
 
     # 同步订阅的资产包（带UI）
     _sync_start = time.monotonic()
-    run_asset_sync_ui(config_service)
+    if config_service.connect_builder_hub():
+        logger.info("Builder 模式，跳过资产同步")
+    else:
+        run_asset_sync_ui(config_service)
     logger.info("资产同步完成, 耗时: %.2f 秒", time.monotonic() - _sync_start)
 
     from orcalab.level_discovery import discover_levels_from_cache
