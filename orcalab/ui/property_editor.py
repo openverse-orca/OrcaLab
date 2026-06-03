@@ -294,6 +294,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
         self._section_cache.move_to_end(cache_key)
 
+        if isinstance(self._actor, AssetActor) and cached:
+            cached_groups = [edit._group for edit in cached]
+            self._actor.property_groups = cached_groups
+
     def _load_actor_properties(self):
         assert self._actor is not None
 

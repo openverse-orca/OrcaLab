@@ -5,6 +5,9 @@ from typing import Generator
 
 _perf_logger = logging.getLogger("orcalab.perf")
 
+PERF_MASTER_ON = True
+PERF_MASTER_OFF = False
+
 PERF_OUTLINE = False
 PERF_SERVICE = False
 PERF_GRPC = False
@@ -25,6 +28,10 @@ _FEATURE_SWITCHES = {
 
 
 def _is_enabled(feature: str) -> bool:
+    if PERF_MASTER_ON:
+        return True
+    if PERF_MASTER_OFF:
+        return False
     getter = _FEATURE_SWITCHES.get(feature)
     if getter is None:
         return True
