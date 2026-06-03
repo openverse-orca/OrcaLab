@@ -63,6 +63,7 @@ from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.undo_service.undo_service_bus import can_redo, can_undo
 from orcalab.url_service.url_service import UrlServiceServer
 from orcalab.asset_service import AssetService
+from orcalab.texture_asset_cache import get_texture_asset_cache
 from orcalab.asset_service_bus import (
     AssetServiceNotification,
     AssetServiceNotificationBus,
@@ -258,6 +259,10 @@ class MainWindow(
         await self.remote_scene.set_selection([])
         await self.remote_scene.clear_scene()
         logger.info("set_sync + set_selection + clear_scene 完成, 耗时: %.2f 秒", time.monotonic() - _post_grpc_start)
+
+        _texture_cache_start = time.monotonic()
+        await get_texture_asset_cache().initialize(self.remote_scene)
+        logger.info("纹理资产缓存初始化完成, 耗时: %.2f 秒", time.monotonic() - _texture_cache_start)
 
         self.default_layout_path = self._resolve_path(self.config_service.default_layout_file())
         if self.default_layout_path and SystemPath(self.default_layout_path).exists():

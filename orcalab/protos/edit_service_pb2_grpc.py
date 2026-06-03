@@ -294,6 +294,26 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.GetAllEntityPropertyGroupsRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetAllEntityPropertyGroupsResponse.FromString,
                 _registered_method=True)
+        self.GetEntityAllFieldValues = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetEntityAllFieldValues',
+                request_serializer=edit__service__pb2.GetEntityAllFieldValuesRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetEntityAllFieldValuesResponse.FromString,
+                _registered_method=True)
+        self.SetEntityFieldValues = channel.unary_unary(
+                '/SceneEdit.GrpcService/SetEntityFieldValues',
+                request_serializer=edit__service__pb2.SetEntityFieldValuesRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.SetEntityFieldValuesResponse.FromString,
+                _registered_method=True)
+        self.GetEntityAllFieldValuesBatch = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetEntityAllFieldValuesBatch',
+                request_serializer=edit__service__pb2.GetEntityAllFieldValuesBatchRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetEntityAllFieldValuesBatchResponse.FromString,
+                _registered_method=True)
+        self.GetAssetsByTypePage = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetAssetsByTypePage',
+                request_serializer=edit__service__pb2.GetAssetsByTypePageRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetAssetsByTypePageResponse.FromString,
+                _registered_method=True)
 
 
 class GrpcServiceServicer(object):
@@ -612,6 +632,31 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetEntityAllFieldValues(self, request, context):
+        """Property Registry RPCs
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetEntityFieldValues(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetEntityAllFieldValuesBatch(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetAssetsByTypePage(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GrpcServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -874,6 +919,26 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.GetAllEntityPropertyGroups,
                     request_deserializer=edit__service__pb2.GetAllEntityPropertyGroupsRequest.FromString,
                     response_serializer=edit__service__pb2.GetAllEntityPropertyGroupsResponse.SerializeToString,
+            ),
+            'GetEntityAllFieldValues': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetEntityAllFieldValues,
+                    request_deserializer=edit__service__pb2.GetEntityAllFieldValuesRequest.FromString,
+                    response_serializer=edit__service__pb2.GetEntityAllFieldValuesResponse.SerializeToString,
+            ),
+            'SetEntityFieldValues': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetEntityFieldValues,
+                    request_deserializer=edit__service__pb2.SetEntityFieldValuesRequest.FromString,
+                    response_serializer=edit__service__pb2.SetEntityFieldValuesResponse.SerializeToString,
+            ),
+            'GetEntityAllFieldValuesBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetEntityAllFieldValuesBatch,
+                    request_deserializer=edit__service__pb2.GetEntityAllFieldValuesBatchRequest.FromString,
+                    response_serializer=edit__service__pb2.GetEntityAllFieldValuesBatchResponse.SerializeToString,
+            ),
+            'GetAssetsByTypePage': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAssetsByTypePage,
+                    request_deserializer=edit__service__pb2.GetAssetsByTypePageRequest.FromString,
+                    response_serializer=edit__service__pb2.GetAssetsByTypePageResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -2280,6 +2345,114 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/GetAllEntityPropertyGroups',
             edit__service__pb2.GetAllEntityPropertyGroupsRequest.SerializeToString,
             edit__service__pb2.GetAllEntityPropertyGroupsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetEntityAllFieldValues(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetEntityAllFieldValues',
+            edit__service__pb2.GetEntityAllFieldValuesRequest.SerializeToString,
+            edit__service__pb2.GetEntityAllFieldValuesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetEntityFieldValues(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/SetEntityFieldValues',
+            edit__service__pb2.SetEntityFieldValuesRequest.SerializeToString,
+            edit__service__pb2.SetEntityFieldValuesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetEntityAllFieldValuesBatch(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetEntityAllFieldValuesBatch',
+            edit__service__pb2.GetEntityAllFieldValuesBatchRequest.SerializeToString,
+            edit__service__pb2.GetEntityAllFieldValuesBatchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAssetsByTypePage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/SceneEdit.GrpcService/GetAssetsByTypePage',
+            edit__service__pb2.GetAssetsByTypePageRequest.SerializeToString,
+            edit__service__pb2.GetAssetsByTypePageResponse.FromString,
             options,
             channel_credentials,
             insecure,
