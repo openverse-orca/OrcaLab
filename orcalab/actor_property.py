@@ -35,6 +35,8 @@ class ActorProperty:
         self._read_only = False
         self._editor_hint = ""
         self._enum_values: List[str] = []
+        self._post_read_fields: List[str] = []
+        self._post_read_delay_ms: int = 0
         self._sub_name: str = ""
         self._parent_struct_name: str = ""
         self._struct_display_name: str = ""
@@ -118,6 +120,18 @@ class ActorProperty:
     def set_enum_values(self, values: List[str]):
         self._enum_values = values
 
+    def post_read_fields(self) -> List[str]:
+        return self._post_read_fields
+
+    def set_post_read_fields(self, fields: List[str]):
+        self._post_read_fields = fields
+
+    def post_read_delay_ms(self) -> int:
+        return self._post_read_delay_ms
+
+    def set_post_read_delay_ms(self, delay_ms: int):
+        self._post_read_delay_ms = delay_ms
+
     def sub_name(self) -> str:
         return self._sub_name
 
@@ -147,6 +161,8 @@ class ActorProperty:
         alias._read_only = self._read_only
         alias._editor_hint = self._editor_hint
         alias._enum_values = self._enum_values
+        alias._post_read_fields = self._post_read_fields
+        alias._post_read_delay_ms = self._post_read_delay_ms
         alias._sub_name = self._sub_name
         alias._parent_struct_name = self._parent_struct_name
         alias._struct_display_name = self._struct_display_name

@@ -535,7 +535,22 @@ class EditServiceWrapper:
             prop.set_editor_hint(prop_msg.editor_hint)
             if prop_msg.enum_values:
                 prop.set_enum_values(list(prop_msg.enum_values))
+            if prop_msg.post_read_fields:
+                prop.set_post_read_fields(list(prop_msg.post_read_fields))
+                if prop_msg.post_read_delay_ms:
+                    prop.set_post_read_delay_ms(prop_msg.post_read_delay_ms)
         return prop
+
+    def _register_post_process_rule(self, prop, component_type_id: str):
+        from orcalab.property_post_process import PostProcessRegistry, PostProcessRule, ReadPropertiesAction
+
+        registry = PostProcessRegistry.instance()
+        registry.register(PostProcessRule(
+            trigger_property=prop.name(),
+            component_type=component_type_id,
+            action=ReadPropertiesAction(prop.post_read_fields()),
+            delay_ms=prop.post_read_delay_ms() or 100,
+        ))
 
     def _parse_tree_node_msg(self, node_msg) -> TreePropertyNode:
         """递归解析树节点消息"""
@@ -577,6 +592,8 @@ class EditServiceWrapper:
             prop = self._parse_property_msg(prop_msg)
             if prop:
                 pg.properties.append(prop)
+                if prop.post_read_fields() and pg_msg.component_type_id:
+                    self._register_post_process_rule(prop, pg_msg.component_type_id)
 
         # 解析树形数据
         for tree_node_msg in pg_msg.tree_data:
