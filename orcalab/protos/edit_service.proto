@@ -459,6 +459,8 @@ message Property {
     bool read_only = 4;
     string editor_hint = 5;
     repeated string enum_values = 6;
+    repeated string post_read_fields = 7;
+    int32 post_read_delay_ms = 8;
 }
 
 message TreePropertyNode {

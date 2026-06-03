@@ -16,6 +16,7 @@ from orcalab.actor_util import (
 )
 from orcalab.entity_info import EntityInfo
 from orcalab.local_scene import LocalScene
+from orcalab.property_post_process import PostProcessDispatcher
 from orcalab.remote_scene import RemoteScene
 from orcalab.math import Transform
 from orcalab.path import Path
@@ -52,6 +53,8 @@ class SceneEditService(SceneEditRequest):
         self.remote_scene = remote_scene
 
         self.old_transforms: Dict[Path, Transform] = {}
+
+        self._post_process_dispatcher = PostProcessDispatcher(local_scene, remote_scene)
 
         # For property change tracking
         self.property_key: ActorPropertyKey | None = None
@@ -846,6 +849,8 @@ class SceneEditService(SceneEditRequest):
 
             command = PropertyChangeCommand(property_key, old_value, value)
             UndoRequestBus().add_command(command)
+
+        self._post_process_dispatcher.on_property_set(property_key)
 
     @staticmethod
     def _collect_joint_names(tree_nodes: list, exclude_node_key: str = "") -> set:
