@@ -1,8 +1,6 @@
-import asyncio
 import grpc
 import logging
 import numpy as np
-import time
 from dataclasses import dataclass, field
 from typing import Any, List, Tuple
 
@@ -30,24 +28,6 @@ from orcalab.ui.camera.camera_brief import CameraBrief
 
 logger = logging.getLogger(__name__)
 
-
-class _TimedStub:
-    def __init__(self, stub):
-        self._stub = stub
-
-    def __getattr__(self, name):
-        attr = getattr(self._stub, name)
-        if asyncio.iscoroutinefunction(attr):
-            async def wrapper(*args, **kwargs):
-                start = time.monotonic()
-                try:
-                    return await attr(*args, **kwargs)
-                finally:
-                    elapsed = time.monotonic() - start
-                    logger.debug("gRPC %s 耗时: %.3f 秒", name, elapsed)
-            return wrapper
-        return attr
-
 Success = edit_service_pb2.StatusCode.Success
 Error = edit_service_pb2.StatusCode.Error
 
@@ -74,7 +54,7 @@ class EditServiceWrapper:
             addreass,
             options=options,
         )
-        self.stub = _TimedStub(edit_service_pb2_grpc.GrpcServiceStub(self.channel))
+        self.stub = edit_service_pb2_grpc.GrpcServiceStub(self.channel)
 
     async def destroy_grpc(self):
         if self.channel:
