@@ -237,8 +237,24 @@ def select_scene_and_layout(
         prepare_layout()
 
 
+def _ensure_xcb_platform() -> None:
+    if sys.platform != "linux":
+        return
+    if os.environ.get("QT_QPA_PLATFORM"):
+        return
+    session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+    if session_type == "wayland":
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
+        print(
+            "[OrcaLab] 检测到 Wayland 会话，引擎 Vulkan RHI 仅支持 XCB Surface，"
+            "已自动设置 QT_QPA_PLATFORM=xcb"
+        )
+
+
 def main():
     """Main entry point for the orcalab application"""
+    _ensure_xcb_platform()
+
     _main_start = time.monotonic()
     parser = create_argparser()
     args, unknown = parser.parse_known_args()
