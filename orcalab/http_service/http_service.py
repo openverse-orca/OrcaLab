@@ -221,6 +221,49 @@ class HttpService(HttpServiceRequest):
 
     @require_online
     @override
+    async def get_my_metadata(self, output: List[str] = None) -> str:
+        mymeta_url = f"{self.base_url}/mymeta/"
+        async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
+            async with session.get(mymeta_url, headers=self._get_headers()) as response:
+                _log_request_time("GET", mymeta_url, _start, response.status)
+                if response.status != 200:
+                    logger.debug(f"get my metadata failed. Status: {response.status}")
+                    return None
+                my_metadata = await response.json()
+                my_metadata = json.dumps(my_metadata, ensure_ascii=False, indent=2)
+                if output is not None:
+                    output.append(my_metadata)
+                return my_metadata
+
+    @require_online
+    @override
+    async def get_asset_detail(self, asset_id: str, output: List[str] = None) -> str:
+        asset_id = (asset_id or "").strip()
+        if not asset_id:
+            msg = json.dumps({"code": 400, "message": "asset_id 为空"}, ensure_ascii=False)
+            if output is not None:
+                output.append(msg)
+            return msg
+
+        asset_url = f"{self.base_url}/asset/{asset_id}/"
+        async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
+            async with session.get(asset_url, headers=self._get_headers()) as response:
+                _log_request_time("GET", asset_url, _start, response.status)
+                if response.status != 200:
+                    msg = json.dumps({"code": response.status, "message": f"获取资产详情失败"}, ensure_ascii=False)
+                    if output is not None:
+                        output.append(msg)
+                    return msg
+                asset_detail = await response.json()
+                asset_detail = json.dumps(asset_detail, ensure_ascii=False, indent=2)
+                if output is not None:
+                    output.append(asset_detail)
+                return asset_detail
+
+    @require_online
+    @override
     async def post_asset_subscribe(self, asset_package_id: str, output: List[str] = None) -> str:
         asset_package_id = (asset_package_id or "").strip()
         if not asset_package_id:
@@ -254,6 +297,397 @@ class HttpService(HttpServiceRequest):
                     output.append(msg)
                 return msg
 
+    @require_online
+    @override
+    async def post_asset_unsubscribe(self, asset_package_id: str, output: List[str] = None) -> str:
+        asset_package_id = (asset_package_id or "").strip()
+        if not asset_package_id:
+            msg = json.dumps({"success": False, "message": "asset_package_id 为空"}, ensure_ascii=False)
+            if output is not None:
+                output.append(msg)
+            return msg
+
+        url = f"{self.base_url}/asset/{asset_package_id}/unsubscribe/"
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=self._get_headers(), json={}) as response:
+                body = await response.text()
+                try:
+                    body_json = json.loads(body) if body.strip() else {}
+                except json.JSONDecodeError:
+                    body_json = {"raw": body}
+                ok = response.status in (200, 201, 204)
+                msg = json.dumps(
+                    {
+                        "success": ok,
+                        "http_status": response.status,
+                        "package_id": asset_package_id,
+                        "body": body_json,
+                    },
+                    ensure_ascii=False,
+                )
+                if output is not None:
+                    output.append(msg)
+                return msg
+
+    @require_online
+    @override
+    async def get_asset_subscription_status(self, asset_package_id: str, output: List[str] = None) -> str:
+        asset_package_id = (asset_package_id or "").strip()
+        if not asset_package_id:
+            msg = json.dumps({"success": False, "message": "asset_package_id 为空"}, ensure_ascii=False)
+            if output is not None:
+                output.append(msg)
+            return msg
+
+        url = f"{self.base_url}/asset/{asset_package_id}/subscription_status/"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=self._get_headers()) as response:
+                body = await response.text()
+                try:
+                    body_json = json.loads(body) if body.strip() else {}
+                except json.JSONDecodeError:
+                    body_json = {"raw": body}
+                ok = response.status == 200
+                msg = json.dumps(
+                    {
+                        "success": ok,
+                        "http_status": response.status,
+                        "package_id": asset_package_id,
+                        "body": body_json,
+                    },
+                    ensure_ascii=False,
+                )
+                if output is not None:
+                    output.append(msg)
+                return msg
+
+    @require_online
+    @override
+    async def post_generate_task(self, task_data: dict, output: List[str] = None) -> str:
+        if not task_data:
+            msg = json.dumps({"code": 400, "message": "task_data 为空"}, ensure_ascii=False)
+            if output is not None:
+                output.append(msg)
+            return msg
+
+        url = f"{self.base_url}/generate/"
+        async with aiohttp.ClientSession() as session:
+            image_path = task_data.pop("image_path", None)
+            data = aiohttp.FormData()
+            for key, value in task_data.items():
+                if value is not None:
+                    data.add_field(key, str(value))
+            if image_path:
+                import os
+                if not os.path.isfile(image_path):
+                    msg = json.dumps({"code": 400, "message": f"图片文件不存在: {image_path}"}, ensure_ascii=False)
+                    if output is not None:
+                        output.append(msg)
+                    return msg
+                data.add_field("image", open(image_path, "rb"), filename=os.path.basename(image_path), content_type="image/png")
+            headers = self._get_headers(include_content_type=False)
+            _start = time.monotonic()
+            async with session.post(url, headers=headers, data=data) as response:
+                _log_request_time("POST", url, _start, response.status)
+                body = await response.text()
+                try:
+                    body_json = json.loads(body) if body.strip() else {}
+                except json.JSONDecodeError:
+                    logger.exception("post_generate_task: 请求异常")
+                    body_json = {"raw": body}
+                ok = response.status in (200, 201, 202)
+                msg = json.dumps(
+                    {
+                        "success": ok,
+                        "http_status": response.status,
+                        "body": body_json,
+                    },
+                    ensure_ascii=False,
+                )
+                if output is not None:
+                    output.append(msg)
+                return msg
+
+    @require_online
+    @override
+    async def get_generate_task_status(self, task_id: str, output: List[str] = None) -> str:
+        task_id = (task_id or "").strip()
+        if not task_id:
+            msg = json.dumps({"code": 400, "message": "task_id 为空"}, ensure_ascii=False)
+            if output is not None:
+                output.append(msg)
+            return msg
+
+        url = f"{self.base_url}/generate/status/{task_id}/"
+        async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
+            async with session.get(url, headers=self._get_headers()) as response:
+                _log_request_time("GET", url, _start, response.status)
+                body = await response.text()
+                try:
+                    body_json = json.loads(body) if body.strip() else {}
+                except json.JSONDecodeError:
+                    logger.exception("get_generate_task_status: 请求异常")
+                    body_json = {"raw": body}
+                ok = response.status == 200
+                msg = json.dumps(
+                    {
+                        "success": ok,
+                        "http_status": response.status,
+                        "body": body_json,
+                    },
+                    ensure_ascii=False,
+                )
+                if output is not None:
+                    output.append(msg)
+                return msg
+
+    @require_online
+    @override
+    async def get_user_generate_tasks(self, output: List[str] = None) -> str:
+        url = f"{self.base_url}/generate/user_tasks/"
+        async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
+            async with session.get(url, headers=self._get_headers()) as response:
+                _log_request_time("GET", url, _start, response.status)
+                body = await response.text()
+                try:
+                    body_json = json.loads(body) if body.strip() else {}
+                except json.JSONDecodeError:
+                    logger.exception("get_user_generate_tasks: 请求异常")
+                    body_json = {"raw": body}
+                ok = response.status == 200
+                msg = json.dumps(
+                    {
+                        "success": ok,
+                        "http_status": response.status,
+                        "body": body_json,
+                    },
+                    ensure_ascii=False,
+                )
+                if output is not None:
+                    output.append(msg)
+                return msg
+
+    @require_online
+    @override
+    async def post_upload_generate_usdz(self, task_data: dict, output: List[str] = None) -> str:
+        if not task_data:
+            msg = json.dumps({"code": 400, "message": "task_data 为空"}, ensure_ascii=False)
+            if output is not None:
+                output.append(msg)
+            return msg
+
+        url = f"{self.base_url}/upload/generate_usdz/"
+        async with aiohttp.ClientSession() as session:
+            data = aiohttp.FormData()
+            for key, value in task_data.items():
+                if value is not None:
+                    data.add_field(key, str(value))
+            headers = self._get_headers(include_content_type=False)
+            _start = time.monotonic()
+            async with session.post(url, headers=headers, data=data) as response:
+                _log_request_time("POST", url, _start, response.status)
+                body = await response.text()
+                try:
+                    body_json = json.loads(body) if body.strip() else {}
+                except json.JSONDecodeError:
+                    logger.exception("post_upload_generate_usdz: 请求异常")
+                    body_json = {"raw": body}
+                ok = response.status in (200, 201, 202)
+                msg = json.dumps(
+                    {
+                        "success": ok,
+                        "http_status": response.status,
+                        "body": body_json,
+                    },
+                    ensure_ascii=False,
+                )
+                if output is not None:
+                    output.append(msg)
+                return msg
+
+    @require_online
+    @override
+    async def post_cancel_asset_zip(self, task_id: str, output: List[str] = None) -> str:
+        task_id = (task_id or "").strip()
+        if not task_id:
+            msg = json.dumps({"code": 400, "message": "task_id 为空"}, ensure_ascii=False)
+            if output is not None:
+                output.append(msg)
+            return msg
+
+        url = f"{self.base_url}/cancel_asset_zip/{task_id}/"
+        async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
+            async with session.post(url, headers=self._get_headers(), json={}) as response:
+                _log_request_time("POST", url, _start, response.status)
+                body = await response.text()
+                try:
+                    body_json = json.loads(body) if body.strip() else {}
+                except json.JSONDecodeError:
+                    logger.exception("post_cancel_asset_zip: 请求异常")
+                    body_json = {"raw": body}
+                ok = response.status == 200
+                msg = json.dumps(
+                    {
+                        "success": ok,
+                        "http_status": response.status,
+                        "body": body_json,
+                    },
+                    ensure_ascii=False,
+                )
+                if output is not None:
+                    output.append(msg)
+                return msg
+
+    @require_online
+    @override
+    async def get_task_chain_progress(self, task_chain_id: str, output: List[str] = None) -> str:
+        task_chain_id = (task_chain_id or "").strip()
+        if not task_chain_id:
+            msg = json.dumps({"code": 400, "message": "task_chain_id 为空"}, ensure_ascii=False)
+            if output is not None:
+                output.append(msg)
+            return msg
+
+        url = f"{self.base_url}/task_chain_progress/{task_chain_id}/"
+        async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
+            async with session.get(url, headers=self._get_headers()) as response:
+                _log_request_time("GET", url, _start, response.status)
+                body = await response.text()
+                try:
+                    body_json = json.loads(body) if body.strip() else {}
+                except json.JSONDecodeError:
+                    logger.exception("get_task_chain_progress: 请求异常")
+                    body_json = {"raw": body}
+                ok = response.status == 200
+                msg = json.dumps(
+                    {
+                        "success": ok,
+                        "http_status": response.status,
+                        "body": body_json,
+                    },
+                    ensure_ascii=False,
+                )
+                if output is not None:
+                    output.append(msg)
+                return msg
+
+    @require_online
+    @override
+    async def post_save_asset_draft(self, task_id: str, draft_data: dict, output: List[str] = None) -> str:
+        task_id = (task_id or "").strip()
+        if not task_id:
+            msg = json.dumps({"code": 400, "message": "task_id 为空"}, ensure_ascii=False)
+            if output is not None:
+                output.append(msg)
+            return msg
+
+        url = f"{self.base_url}/save_asset_draft/{task_id}/"
+        async with aiohttp.ClientSession() as session:
+            data = aiohttp.FormData()
+            for key, value in draft_data.items():
+                if value is not None:
+                    data.add_field(key, str(value))
+            headers = self._get_headers(include_content_type=False)
+            _start = time.monotonic()
+            async with session.post(url, headers=headers, data=data) as response:
+                _log_request_time("POST", url, _start, response.status)
+                body = await response.text()
+                try:
+                    body_json = json.loads(body) if body.strip() else {}
+                except json.JSONDecodeError:
+                    logger.exception("post_save_asset_draft: 请求异常")
+                    body_json = {"raw": body}
+                ok = response.status == 200
+                msg = json.dumps(
+                    {
+                        "success": ok,
+                        "http_status": response.status,
+                        "body": body_json,
+                    },
+                    ensure_ascii=False,
+                )
+                if output is not None:
+                    output.append(msg)
+                return msg
+
+    @require_online
+    @override
+    async def delete_asset(self, asset_id: str, output: List[str] = None) -> str:
+        asset_id = (asset_id or "").strip()
+        if not asset_id:
+            msg = json.dumps({"code": 400, "message": "asset_id 为空"}, ensure_ascii=False)
+            if output is not None:
+                output.append(msg)
+            return msg
+        
+        if not self.is_admin():
+            detail_out: list[str] = []
+            await self.get_asset_detail(asset_id, detail_out)
+            if detail_out:
+                try:
+                    detail = json.loads(detail_out[0])
+                    if isinstance(detail, dict) and "author" in detail:
+                        author = detail.get("author")
+                        if author and author != self.username:
+                            msg = json.dumps(
+                                {"success": False, "message": "无权限删除此资产，仅管理员可删除他人资产"},
+                                ensure_ascii=False,
+                            )
+                            if output is not None:
+                                output.append(msg)
+                            return msg
+                    else:
+                        msg = json.dumps(
+                            {"success": False, "message": "资产不存在"},
+                            ensure_ascii=False,
+                        )
+                        if output is not None:
+                            output.append(msg)
+                        return msg
+                except (json.JSONDecodeError, KeyError):
+                    pass
+            else:
+                msg = json.dumps(
+                    {"success": False, "message": "无法获取资产详情，请确认资产ID正确"},
+                    ensure_ascii=False,
+                )
+                if output is not None:
+                    output.append(msg)
+                return msg
+        msg = json.dumps(
+                    {"success": True, "message": "1111111111"},
+                    ensure_ascii=False,
+                )
+        output.append(msg)
+        return msg
+        # url = f"{self.base_url}/delete/{asset_id}/"
+        # async with aiohttp.ClientSession() as session:
+        #     _start = time.monotonic()
+        #     async with session.delete(url, headers=self._get_headers()) as response:
+        #         _log_request_time("DELETE", url, _start, response.status)
+        #         body = await response.text()
+        #         try:
+        #             body_json = json.loads(body) if body.strip() else {}
+        #         except json.JSONDecodeError:
+        #             logger.exception("delete_asset: 请求异常")
+        #             body_json = {"raw": body}
+        #         ok = response.status == 200
+        #         msg = json.dumps(
+        #             {
+        #                 "success": ok,
+        #                 "http_status": response.status,
+        #                 "body": body_json,
+        #             },
+        #             ensure_ascii=False,
+        #         )
+        #         if output is not None:
+        #             output.append(msg)
+        #         return msg
+
     @override
     def is_admin(self) -> bool:
         if not self.check_online():
@@ -274,6 +708,53 @@ class HttpService(HttpServiceRequest):
         except Exception as e:
             logger.exception("is_admin: 请求异常: %s", e)
             return False
+
+    @require_online
+    @override
+    async def search_assets(self, search_data: dict, output: List[str] = None) -> str:
+        if not search_data:
+            msg = json.dumps({"code": 400, "message": "search_data 为空"}, ensure_ascii=False)
+            if output is not None:
+                output.append(msg)
+            return msg
+
+        url = f"{self.base_url}/search/"
+        async with aiohttp.ClientSession() as session:
+            image_path = search_data.pop("image_path", None)
+            data = aiohttp.FormData()
+            for key, value in search_data.items():
+                if value is not None:
+                    data.add_field(key, str(value))
+            if image_path:
+                if not os.path.isfile(image_path):
+                    msg = json.dumps({"code": 400, "message": f"图片文件不存在: {image_path}"}, ensure_ascii=False)
+                    if output is not None:
+                        output.append(msg)
+                    return msg
+                with open(image_path, "rb") as f:
+                    data.add_field("image", f.read(), filename=os.path.basename(image_path), content_type="image/png")
+            headers = self._get_headers(include_content_type=False)
+            _start = time.monotonic()
+            async with session.post(url, headers=headers, data=data) as response:
+                _log_request_time("POST", url, _start, response.status)
+                body = await response.text()
+                try:
+                    body_json = json.loads(body) if body.strip() else {}
+                except json.JSONDecodeError:
+                    logger.exception("search_assets: 响应解析失败")
+                    body_json = {"raw": body}
+                ok = response.status in (200, 201, 202)
+                msg = json.dumps(
+                    {
+                        "success": ok,
+                        "http_status": response.status,
+                        "body": body_json,
+                    },
+                    ensure_ascii=False,
+                )
+                if output is not None:
+                    output.append(msg)
+                return msg
 
 
     def _get_headers(self, include_content_type: bool = True) -> Dict[str, str]:
