@@ -82,7 +82,7 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
             await SceneEditNotificationBus().get_camera_png("mujococamera256", dir_path, png_filename)
             png_files.append(os.path.join(dir_path, png_filename))
 
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0.02)
         apng_path = os.path.join(dir_path, f"{os.path.basename(tmp_path)}_panorama.apng")
 
 
@@ -93,7 +93,7 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
                 if ImageProcessor.add_text_to_image(png_512_file, aabb_text, position="bottom_right", font_size=10):
                     break
                 retry += 1
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.02)
 
         images = []
         for png_file in png_files:
@@ -106,9 +106,9 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
                         break
                     except Exception as e:
                         retry += 1
-                        await asyncio.sleep(0.01)
+                        await asyncio.sleep(0.02)
                 else:
-                    await asyncio.sleep(0.01)
+                    await asyncio.sleep(0.02)
                     retry += 1
 
         if images:
@@ -132,7 +132,10 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
                         os.remove(png_file)
                     except OSError as e:
                         continue
+        
+        await asyncio.sleep(0.02)
         await SceneEditRequestBus().delete_actor(actor, undo=False, source="create_panorama_apng")
+        await asyncio.sleep(0.02)
 
         logger.info(f"uploading {asset_path} thumbnail to server")
         asset_metadata = []

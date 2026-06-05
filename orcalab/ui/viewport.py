@@ -1,4 +1,6 @@
 import asyncio
+import time
+from typing import override
 from PySide6 import QtCore, QtWidgets, QtGui
 import pathlib
 import logging
@@ -18,6 +20,7 @@ class Viewport(QtWidgets.QWidget):
         super().__init__(parent)
 
         self.setAcceptDrops(True)
+        self._target_frame_time = self._calc_target_frame_time()
 
         # 延迟导入 orcalab_pyside，直到实际需要时
         try:
@@ -50,13 +53,31 @@ class Viewport(QtWidgets.QWidget):
             "pseudo.exe",
             "--LoadLevel",
             config_service.level(),
-            config_service.lock_fps(),
             "-datalink-scheme-host-port",
             f"{base_url}"
         ]
 
+        # 引擎性能优化参数（通过命令行设置引擎CVAR）
+        # VSync：默认开启（vsync_interval=1），使用 MAILBOX 模式避免 FIFO 阻塞
+        # 关闭 VSync（vsync_interval=0）使用 IMMEDIATE 模式可提高帧率，
+        # 但可能在某些机型（混合GPU笔记本）上导致卡死，需重启生效
+        if not config_service.vsync_enabled():
+            self.command_line.append("--vsync_interval=0")
+
+        # 引擎端帧率限制：与 Python 端 _target_frame_time 保持一致，
+        # 防止引擎内部以更高帧率渲染浪费 GPU 资源
+        engine_fps = int(round(1.0 / self._target_frame_time))
+        self.command_line.append(f"--sys_MaxFPS={engine_fps}")
+
         if config_service.enable_debug_tool():
             self.command_line.append("--debug-tool")
+
+        force_adapter = config_service.force_adapter()
+        adapter_index = config_service.adapter_index()
+        if force_adapter:
+            self.command_line.extend(["--forceAdapter", force_adapter])
+            if adapter_index > 0:
+                self.command_line.extend(["--adapterIndex", str(adapter_index)])
 
         project_path = config_service.orca_project_folder()
         connect_builder_hub = False
@@ -78,6 +99,25 @@ class Viewport(QtWidgets.QWidget):
         ):
             raise RuntimeError("Failed to initialize viewport")
 
+    def warmup(self):
+        if self._viewport is None:
+            return
+        
+        config_service = ConfigService()
+        project_path = config_service.orca_project_folder()
+
+        if config_service.is_development():
+            project_path = config_service.dev_project_path()
+
+        if not self._validate_project_path(project_path):
+            raise RuntimeError(f"Invalid project path: {project_path}")
+
+        command_line = ["pseudo.exe"]
+        command_line.append(f"--project-path={project_path}")
+        self._viewport.init_viewport(command_line, False)
+
+        # self._viewport.destroy_viewport()
+
     def _validate_project_path(self, path: str) -> bool:
         project_dir = pathlib.Path(path)
         if not project_dir.exists() or not project_dir.is_dir():
@@ -97,6 +137,57 @@ class Viewport(QtWidgets.QWidget):
         """安全停止viewport主循环"""
         self._viewport_running = False
 
+    @staticmethod
+    def _detect_screen_refresh_rate() -> int:
+        refresh_rate = 60
+        try:
+            screen = QtWidgets.QApplication.primaryScreen()
+            if screen:
+                refresh_rate = round(screen.refreshRate())
+                if refresh_rate <= 0:
+                    refresh_rate = 60
+        except Exception:
+            pass
+        return refresh_rate
+
+    @staticmethod
+    def _detect_max_screen_refresh_rate() -> int:
+        max_rate = 60
+        try:
+            screen = QtWidgets.QApplication.primaryScreen()
+            if screen:
+                best = 0.0
+                try:
+                    for mode in screen.modes():
+                        rate = mode.refreshRate()
+                        if rate > best:
+                            best = rate
+                except Exception:
+                    pass
+                if best > 0:
+                    max_rate = round(best)
+                else:
+                    max_rate = round(screen.refreshRate())
+                if max_rate <= 0:
+                    max_rate = 60
+        except Exception:
+            pass
+        return max_rate
+
+    @staticmethod
+    def _effective_fps(config_fps: int) -> int:
+        if config_fps <= 0:
+            return Viewport._detect_screen_refresh_rate()
+        return min(config_fps, Viewport._detect_max_screen_refresh_rate())
+
+    @staticmethod
+    def _calc_target_frame_time() -> float:
+        config_fps = ConfigService().lock_fps_value()
+        return 1.0 / Viewport._effective_fps(config_fps)
+
+    def set_target_fps(self, fps: int) -> None:
+        self._target_frame_time = 1.0 / self._effective_fps(fps)
+
     async def _viewport_main_loop(self):
         try:
             # 检查事件循环是否还在运行
@@ -110,13 +201,19 @@ class Viewport(QtWidgets.QWidget):
             if not self._viewport_running:
                 return
 
+            tick_start = time.monotonic()
+
             if self._viewport:
                 self._viewport.main_loop_tick()
 
             # 如果还在运行，继续下一帧
             if self._viewport_running:
-                # 使用asyncio.sleep而不是立即创建新任务，避免递归过深
-                await asyncio.sleep(0.016)  # ~60 FPS
+                # 计算本帧已用时间，只sleep剩余的帧时间
+                # 这样既保证60FPS帧率，又给Qt事件循环足够的处理时间
+                # 当达不到目标帧率时，至少 sleep 3毫秒，给Qt事件循环一些处理时间，避免编辑场景时出现明显卡顿
+                elapsed = time.monotonic() - tick_start
+                sleep_time = max(0.003, self._target_frame_time - elapsed)
+                await asyncio.sleep(sleep_time)
                 asyncio.create_task(self._viewport_main_loop())
         except Exception as e:
             logger.exception("Viewport 主循环错误: %s", e)
@@ -197,3 +294,9 @@ class Viewport(QtWidgets.QWidget):
                 UserEventRequestBus().queue_mouse_event(x, y, button, MouseAction.Move)
 
         return super().eventFilter(watched, event)
+
+    @override
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        painter = QtGui.QPainter(self)
+        painter.fillRect(self.rect(), QtGui.QColor(0, 0, 0))  # Clear with black background
+        return super().paintEvent(event)

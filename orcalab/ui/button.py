@@ -144,3 +144,6 @@ class Button(QtWidgets.QWidget):
 
     def minimumSizeHint(self):
         return self.sizeHint()
+    
+    def setIcon(self, icon: QtGui.QIcon | None = None,):
+        self._icon = icon

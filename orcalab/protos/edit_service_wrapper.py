@@ -1,5 +1,8 @@
+import asyncio
 import grpc
+import logging
 import numpy as np
+import time
 from dataclasses import dataclass, field
 from typing import Any, List, Tuple
 
@@ -18,6 +21,26 @@ from orcalab.actor_property import (
 )
 from orcalab.scene_edit_types import AddActorRequest
 from orcalab.ui.camera.camera_brief import CameraBrief
+
+logger = logging.getLogger(__name__)
+
+
+class _TimedStub:
+    def __init__(self, stub):
+        self._stub = stub
+
+    def __getattr__(self, name):
+        attr = getattr(self._stub, name)
+        if asyncio.iscoroutinefunction(attr):
+            async def wrapper(*args, **kwargs):
+                start = time.monotonic()
+                try:
+                    return await attr(*args, **kwargs)
+                finally:
+                    elapsed = time.monotonic() - start
+                    logger.debug("gRPC %s 耗时: %.3f 秒", name, elapsed)
+            return wrapper
+        return attr
 
 Success = edit_service_pb2.StatusCode.Success
 Error = edit_service_pb2.StatusCode.Error
@@ -45,7 +68,7 @@ class EditServiceWrapper:
             addreass,
             options=options,
         )
-        self.stub = edit_service_pb2_grpc.GrpcServiceStub(self.channel)
+        self.stub = _TimedStub(edit_service_pb2_grpc.GrpcServiceStub(self.channel))
 
     async def destroy_grpc(self):
         if self.channel:
@@ -411,6 +434,20 @@ class EditServiceWrapper:
     async def set_active_camera(self, camera_index: int) -> None:
         request = edit_service_pb2.SetActiveCameraRequest(index=camera_index)
         response = await self.stub.SetActiveCamera(request)
+        self._check_response(response)
+
+    async def get_flycamera_transform(self) -> Transform:
+        request = edit_service_pb2.GetFlyCameraTransformRequest()
+        response = await self.stub.GetFlyCameraTransform(request)
+        self._check_response(response)
+        transform = response.flycamera_transform
+        return self._get_transform_from_message(transform)
+
+    async def set_flycamera_transform(self, flycamera_transform: Transform) -> None:
+        request = edit_service_pb2.SetFlyCameraTransformRequest(
+            flycamera_transform=self._create_transform_message(flycamera_transform)
+        )
+        response = await self.stub.SetFlyCameraTransform(request)
         self._check_response(response)
 
     async def get_viewport_camera_transform(self) -> Transform:

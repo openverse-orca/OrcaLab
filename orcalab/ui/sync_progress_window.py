@@ -18,7 +18,7 @@ from numpy import int64
 class AssetItemWidget(QtWidgets.QWidget):
     """资产包条目组件"""
     
-    def __init__(self, asset_name: str, file_name: str, size: int, status: str, parent=None):
+    def __init__(self, asset_name: str, file_name: str, size: float, status: str, parent=None):
         super().__init__(parent)
         self.asset_name = asset_name
         self.file_name = file_name
@@ -137,6 +137,12 @@ class AssetItemWidget(QtWidgets.QWidget):
         self.update_status_text()
         self.progress_bar.setVisible(status in ['download', 'downloading'])
 
+    def set_name_size(self, name: str, size: float):
+        """更新资产包名字"""
+        # self.file_label.setText(name)
+        self._size += size
+        size_mb = size / (1024 * 1024)
+        self.size_label.setText(f"{size_mb:.2f} MB")
 
 class SyncProgressWindow(QtWidgets.QDialog):
     """资产同步进度窗口"""
@@ -148,6 +154,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
     # 内部信号（线程安全）
     _add_asset_signal = QtCore.Signal(str, str, str, int64, str)  # id, name, file, size, status
     _set_status_signal = QtCore.Signal(str, str)  # asset_id, status
+    _set_name_size_signal = QtCore.Signal(str, str, float)  # asset_id, name, size
     _set_progress_signal = QtCore.Signal(str, int64, float)  # asset_id, progress, speed
     _set_message_signal = QtCore.Signal(str)  # message
     _set_metadata_progress_signal = QtCore.Signal(str, int, int)  # status, count, total
@@ -173,6 +180,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
         # 连接内部信号（线程安全）
         self._add_asset_signal.connect(self._add_asset_impl)
         self._set_status_signal.connect(self._set_status_impl)
+        self._set_name_size_signal.connect(self._set_name_size_impl)
         self._set_progress_signal.connect(self._set_progress_impl)
         self._set_message_signal.connect(self._set_message_impl)
         self._set_metadata_progress_signal.connect(self._set_metadata_progress_impl)
@@ -278,7 +286,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
     
     def _add_asset_impl(self, asset_id: str, asset_name: str, file_name: str, size: int64, status: str):
         """内部实现：添加资产包"""
-        widget = AssetItemWidget(asset_name, file_name, size, status)
+        widget = AssetItemWidget(asset_name, file_name, float(size), status)
         self.asset_widgets[asset_id] = widget
         
         # 插入到 stretch 之前
@@ -314,7 +322,16 @@ class SyncProgressWindow(QtWidgets.QDialog):
         if asset_id in self.asset_widgets:
             self.asset_widgets[asset_id].set_status(status)
             self.update_stats()
+            
+    def set_asset_name_size(self, asset_id: str, name: str, size: float):
+        """线程安全：设置资产包状态"""
+        self._set_name_size_signal.emit(asset_id, name, size)
     
+    def _set_name_size_impl(self, asset_id: str, name: str, size: float):
+        """内部实现：设置资产包状态"""
+        if asset_id in self.asset_widgets:
+            self.asset_widgets[asset_id].set_name_size(name, size)
+
     def set_asset_progress(self, asset_id: str, progress: int64, speed: float = 0):
         """线程安全：设置资产包下载进度"""
         self._set_progress_signal.emit(asset_id, progress, speed)

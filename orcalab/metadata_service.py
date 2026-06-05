@@ -53,8 +53,14 @@ class MetadataService(MetadataServiceRequest):
 
     def _build_asset_map(self) -> AssetMap:
         for pak_metadata in self._metadata.values():
-            for asset_metadata in pak_metadata['children']:
-                asset_path = asset_metadata['assetPath'].removesuffix('.spawnable').lower()
+            children = pak_metadata.get('children') if isinstance(pak_metadata, dict) else None
+            if not children:
+                continue
+            for asset_metadata in children:
+                asset_path = asset_metadata.get('assetPath', '')
+                if not asset_path:
+                    continue
+                asset_path = asset_path.removesuffix('.spawnable').lower()
                 self._asset_map[asset_path] = asset_metadata
 
     def _save_metadata(self) -> None:
@@ -65,7 +71,7 @@ class MetadataService(MetadataServiceRequest):
             new_metadata[pak_id]['children'] = []
 
         for asset_path, asset_info in self._asset_map.items():
-            pkg_id = asset_info['parentPackageId']
+            pkg_id = asset_info.get('parentPackageId', '') if isinstance(asset_info, dict) else ''
             if pkg_id in new_metadata.keys():
                 new_metadata[pkg_id]['children'].append(asset_info)
             else:
