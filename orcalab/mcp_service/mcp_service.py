@@ -857,6 +857,281 @@ class OrcaLabMCPServer:
                 ensure_ascii=False,
             )
 
+    async def post_check_asset_version(self, time_period: str, project_name: str, name: str, author: str = "") -> str:
+        '''
+        检测资产版本并返回下一个版本号
+        对应后端接口 POST /api/check-asset-version/
+        Args:
+            time_period: 时间段开始日期（格式：YYYY-MM-DD）
+            project_name: 项目名
+            name: 资产名，即 zip 压缩包的名字（如 remy.zip 则 name=remy）
+            author: 作者（可选，默认使用当前用户）
+        Returns:
+            检测结果的json字符串格式
+            {
+                "isDuplicate": false,
+                "version": "2026.01.20",
+                "message": "未检测到全量资产包，使用初始版本号（全量发布）",
+                "revisionKind": "full",
+                "baseVersionId": null
+            }
+            版本号规则：
+            - 如果没有重复：使用时间段对应的初始版本号（如 2025.09.01）
+            - 如果检测到重复：自动递增小版本号（如 2025.09.02, 2025.09.03...）
+        '''
+        try:
+            version_data = {
+                "timePeriod": time_period,
+                "project_name": project_name,
+                "name": name,
+            }
+            if author:
+                version_data["author"] = author
+
+            output: list[str] = []
+            await self.http_service_bus.post_check_asset_version(version_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法检测资产版本（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"检测资产版本失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def post_upload_asset_zip(
+        self,
+        local_path: str,
+        name: str,
+        version: str,
+        project_name: str,
+        time_period: str,
+        upload_type: str = "private",
+        revision_kind: str = "full",
+    ) -> str:
+        '''
+        上传资产压缩包并转换为PAK文件
+        对应后端接口 POST /api/upload/asset_zip/
+        Args:
+            local_path: 资产压缩包路径（如 smb://192.168.110.53/share/RemyLevel_ysb.zip）
+            name: 资产名，即 zip 压缩包的名字（如 RemyLevel_ysb.zip 则 name=RemyLevel_ysb）
+            version: 版本号（如 2026.04.01）
+            project_name: 项目名
+            time_period: 时间段开始日期（格式：YYYY-MM-DD）
+            upload_type: 上传类型，默认 "private"
+            revision_kind: 发布类型，默认 "full"
+        Returns:
+            上传结果的json字符串格式
+            {
+                "code": 200,
+                "data": {
+                    "status": "success",
+                    "taskId": "...",
+                    "uniqueId": "...",
+                    "message": "任务已提交，Worker正在处理"
+                }
+            }
+        '''
+        try:
+            upload_data = {
+                "local_path": local_path,
+                "name": name,
+                "version": version,
+                "project_name": project_name,
+                "upload_type": upload_type,
+                "timePeriod": time_period,
+                "revision_kind": revision_kind,
+            }
+            output: list[str] = []
+            await self.http_service_bus.post_upload_asset_zip(upload_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法上传资产压缩包（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"上传资产压缩包失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def post_upload_usdz(
+        self,
+        local_path: str,
+        name: str,
+        version: str,
+        project_name: str,
+        time_period: str,
+        upload_type: str = "private",
+        revision_kind: str = "full",
+        roles: str = '["admin"]',
+        size: str = "1",
+        usdz_split_mesh: str = "false",
+        merge_threshold: str = "0.01",
+        merge_iterations: str = "1",
+        max_split_mesh_number: str = "100",
+        separate_mesh: str = "false",
+        generate_lod: str = "false",
+        smooth_mesh: str = "false",
+        smooth_ratio: str = "2",
+        generate_global_config: str = "false",
+        use_hub_cli: str = "true",
+    ) -> str:
+        '''
+        上传 USDZ（仅管理员；公网 usdz_file 或私网 local_path 指向 .zip），异步处理 usdz_to_xml_zip → xml_zip_to_asset_zip → asset_zip_to_pak
+        对应后端接口 POST /api/upload/usdz/
+        Args:
+            local_path: 资产压缩包路径（如 smb://192.168.110.53/share/bar_stool_usdz.zip）
+            name: 资产名
+            version: 版本号（如 2026.04.01）
+            project_name: 项目名
+            time_period: 时间段开始日期（格式：YYYY-MM-DD）
+            upload_type: 上传类型，默认 "private"
+            revision_kind: 发布类型，默认 "full"
+            roles: 可见角色列表，默认 '["admin"]'
+            size: 大小，默认 "1"
+            usdz_split_mesh: 是否拆分USDZ网格，默认 "false"
+            merge_threshold: 合并阈值，默认 "0.01"
+            merge_iterations: 合并迭代次数，默认 "1"
+            max_split_mesh_number: 最大拆分网格数，默认 "100"
+            separate_mesh: 是否分离网格，默认 "false"
+            generate_lod: 是否生成LOD，默认 "false"
+            smooth_mesh: 是否平滑网格，默认 "false"
+            smooth_ratio: 平滑比率，默认 "2"
+            generate_global_config: 是否生成全局配置，默认 "false"
+            use_hub_cli: 是否使用 hub cli，默认 "true"
+        Returns:
+            上传结果的json字符串格式
+            {
+                "code": 200,
+                "data": {
+                    "status": "success",
+                    "taskChainId": "...",
+                    "fileType": "usdz",
+                    ...
+                }
+            }
+        '''
+        try:
+            upload_data = {
+                "local_path": local_path,
+                "name": name,
+                "version": version,
+                "project_name": project_name,
+                "upload_type": upload_type,
+                "timePeriod": time_period,
+                "revision_kind": revision_kind,
+                "roles": roles,
+                "size": size,
+                "usdz_split_mesh": usdz_split_mesh,
+                "merge_threshold": merge_threshold,
+                "merge_iterations": merge_iterations,
+                "max_split_mesh_number": max_split_mesh_number,
+                "separate_mesh": separate_mesh,
+                "generate_lod": generate_lod,
+                "smooth_mesh": smooth_mesh,
+                "smooth_ratio": smooth_ratio,
+                "generate_global_config": generate_global_config,
+                "use_hub_cli": use_hub_cli,
+                "file_type": "usdz",
+            }
+            output: list[str] = []
+            await self.http_service_bus.post_upload_usdz(upload_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法上传USDZ（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"上传USDZ失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def post_upload_xml(
+        self,
+        local_path: str,
+        name: str,
+        version: str,
+        project_name: str,
+        time_period: str,
+        upload_type: str = "private",
+        revision_kind: str = "full",
+        roles: str = '["admin"]',
+        separate_mesh: str = "false",
+        generate_lod: str = "false",
+        smooth_mesh: str = "false",
+        smooth_ratio: str = "2",
+        generate_global_config: str = "false",
+        use_hub_cli: str = "true",
+    ) -> str:
+        '''
+        上传 XML（仅管理员；公网 xml_file 或私网 local_path 指向 .zip），异步处理 xml_zip_to_asset_zip → asset_zip_to_pak
+        对应后端接口 POST /api/upload/xml/
+        Args:
+            local_path: 资产压缩包路径（如 smb://192.168.110.53/share/realman_xml.zip）
+            name: 资产名
+            version: 版本号（如 2026.01.20）
+            project_name: 项目名
+            time_period: 时间段开始日期（格式：YYYY-MM-DD）
+            upload_type: 上传类型，默认 "private"
+            revision_kind: 发布类型，默认 "full"
+            roles: 可见角色列表，默认 '["admin"]'
+            separate_mesh: 是否分离网格，默认 "false"
+            generate_lod: 是否生成LOD，默认 "false"
+            smooth_mesh: 是否平滑网格，默认 "false"
+            smooth_ratio: 平滑比率，默认 "2"
+            generate_global_config: 是否生成全局配置，默认 "false"
+            use_hub_cli: 是否使用 hub cli，默认 "true"
+        Returns:
+            上传结果的json字符串格式
+            {
+                "code": 200,
+                "data": {
+                    "status": "success",
+                    "taskChainId": "...",
+                    "fileType": "xml",
+                    ...
+                }
+            }
+        '''
+        try:
+            upload_data = {
+                "local_path": local_path,
+                "name": name,
+                "version": version,
+                "project_name": project_name,
+                "upload_type": upload_type,
+                "timePeriod": time_period,
+                "revision_kind": revision_kind,
+                "roles": roles,
+                "separate_mesh": separate_mesh,
+                "generate_lod": generate_lod,
+                "smooth_mesh": smooth_mesh,
+                "smooth_ratio": smooth_ratio,
+                "generate_global_config": generate_global_config,
+                "use_hub_cli": use_hub_cli,
+                "file_type": "xml",
+            }
+            output: list[str] = []
+            await self.http_service_bus.post_upload_xml(upload_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法上传XML（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"上传XML失败: {e}"},
+                ensure_ascii=False,
+            )
+
     async def get_task_chain_progress(self, task_chain_id: str) -> str:
         '''
         查询任务链整体进度
@@ -934,7 +1209,7 @@ class OrcaLabMCPServer:
     async def delete_asset(self, asset_id: str) -> str:
         '''
         删除指定资产（支持级联删除）
-        权限说明：管理员可删除任意资产，非管理员只能删除自己的资产（author 为当前用户）
+        权限说明：只能删除自己的资产（author 为当前用户）
         对应后端接口 DELETE /api/delete/<id>/
         Args:
             asset_id: 资产ID
@@ -1839,6 +2114,10 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.get_user_generate_tasks)
         self.mcp.tool(self.post_upload_generate_usdz)
         self.mcp.tool(self.post_cancel_asset_zip)
+        self.mcp.tool(self.post_check_asset_version)
+        self.mcp.tool(self.post_upload_asset_zip)
+        self.mcp.tool(self.post_upload_usdz)
+        self.mcp.tool(self.post_upload_xml)
         self.mcp.tool(self.get_task_chain_progress)
         self.mcp.tool(self.post_save_asset_draft)
         self.mcp.tool(self.delete_asset)

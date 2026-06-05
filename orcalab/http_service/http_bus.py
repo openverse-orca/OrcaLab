@@ -50,6 +50,18 @@ class HttpServiceRequest:
     async def post_cancel_asset_zip(self, task_id: str, output: List[str] = None) -> str:
         pass
     
+    async def post_check_asset_version(self, version_data: dict, output: List[str] = None) -> str:
+        pass
+    
+    async def post_upload_asset_zip(self, upload_data: dict, output: List[str] = None) -> str:
+        pass
+    
+    async def post_upload_usdz(self, upload_data: dict, output: List[str] = None) -> str:
+        pass
+    
+    async def post_upload_xml(self, upload_data: dict, output: List[str] = None) -> str:
+        pass
+    
     async def get_task_chain_progress(self, task_chain_id: str, output: List[str] = None) -> str:
         pass
     
