@@ -166,23 +166,23 @@ class PanelManager(QtWidgets.QWidget, PanelRequest):
         raise ValueError(f"No panel area '{panel_area_name}' found.")
 
     @override
-    def open_panel(self, panel_name: str):
+    def open_panel(self, name: str):
         for panel, panel_area in self.iterate_panels():
-            if panel.panel_name == panel_name:
+            if panel.panel_name == name:
                 self.open_panel_area(panel_area.name)
-                panel_area.open_panel(panel_name)
+                panel_area.open_panel(name)
                 return
 
-        raise ValueError(f"No panel with the name '{panel_name}' found.")
+        raise ValueError(f"No panel with the name '{name}' found.")
 
     @override
-    def close_panel(self, panel_name: str):
+    def close_panel(self, name: str):
         for panel, panel_area in self.iterate_panels():
-            if panel.panel_name == panel_name:
-                panel_area.close_panel(panel_name)
+            if panel.panel_name == name:
+                panel_area.close_panel(name)
                 return
 
-        raise ValueError(f"No panel with the name '{panel_name}' found.")
+        raise ValueError(f"No panel with the name '{name}' found.")
 
     @override
     def open_panel_area(self, name):

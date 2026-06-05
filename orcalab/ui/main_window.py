@@ -31,7 +31,7 @@ from orcalab.simulation.simulation_bus import (
     SimulationState,
 )
 from orcalab.simulation.simulation_service import SimulationService
-from orcalab.state_sync_bus import ManipulatorType,CameraMovementType, MeasureType, StateSyncRequest, StateSyncRequestBus
+from orcalab.state_sync_bus import ManipulatorType,CameraMovementType, MeasureType, PivotPointType, StateSyncRequest, StateSyncRequestBus
 from orcalab.ui.property_editor import PropertyEditor
 from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.actor_outline_model import ActorOutlineModel
@@ -1454,7 +1454,7 @@ class MainWindow(
         await self.remote_scene.change_measure_type(type)
 
     @override
-    async def set_pivot_point_type(self, type: MeasureType) -> None:
+    async def set_pivot_point_type(self, type: PivotPointType) -> None:
         await self.remote_scene.change_pivot_point_type(type)
 
     @override

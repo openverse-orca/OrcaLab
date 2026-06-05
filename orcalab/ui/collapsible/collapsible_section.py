@@ -54,28 +54,30 @@ class SectionHeader(QtWidgets.QWidget):
         self.setFixedHeight(self._row_height)
 
     def _draw_branch_indicator(self, painter: QtGui.QPainter, x: int, rect: QtCore.QRect):
-        indicator_size = self._CHEVRON_SIZE
-        indicator_rect = QtCore.QRect(x, (rect.height() - indicator_size) // 2, indicator_size, indicator_size)
+        size = self._CHEVRON_SIZE
+        cy = rect.height() / 2
+        half = 3
+        margin = (size - half * 2) / 2
+        left = x + margin
+        right = x + size - margin
 
-        option = QtWidgets.QStyleOptionViewItem()
-        option.rect = indicator_rect  # type: ignore[assignment]
-        option.state = QtWidgets.QStyle.StateFlag.State_Children  # type: ignore[assignment]
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setBrush(QtGui.QBrush(QtGui.QColor(255, 255, 255)))
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
-        if not self._collapsed:
-            option.state |= QtWidgets.QStyle.StateFlag.State_Open  # type: ignore[assignment]
-
-        if self._hovered:
-            option.state |= QtWidgets.QStyle.StateFlag.State_MouseOver  # type: ignore[assignment]
-
-        if self._selected:
-            option.state |= QtWidgets.QStyle.StateFlag.State_Selected  # type: ignore[assignment]
-
-        self.style().drawPrimitive(
-            QtWidgets.QStyle.PrimitiveElement.PE_IndicatorBranch,
-            option,
-            painter,
-            self,
-        )
+        if self._collapsed:
+            tri = QtGui.QPolygonF([
+                QtCore.QPointF(left, cy - half),
+                QtCore.QPointF(right, cy),
+                QtCore.QPointF(left, cy + half),
+            ])
+        else:
+            tri = QtGui.QPolygonF([
+                QtCore.QPointF(left, cy - half),
+                QtCore.QPointF(right, cy - half),
+                QtCore.QPointF((left + right) / 2, cy + half),
+            ])
+        painter.drawPolygon(tri)
 
     def set_collapsed(self, collapsed: bool):
         self._collapsed = collapsed
@@ -226,24 +228,29 @@ class SectionHeader(QtWidgets.QWidget):
         icon_size = 16
 
         if has_children:
-            indicator_rect = QtCore.QRect(x, rect.y() + (rect.height() - chevron_size) // 2, chevron_size, chevron_size)
-            option = QtWidgets.QStyleOptionViewItem()
-            option.rect = indicator_rect  # type: ignore[assignment]
-            option.state = QtWidgets.QStyle.StateFlag.State_Children  # type: ignore[assignment]
-            if not collapsed:
-                option.state |= QtWidgets.QStyle.StateFlag.State_Open  # type: ignore[assignment]
-            if hovered:
-                option.state |= QtWidgets.QStyle.StateFlag.State_MouseOver  # type: ignore[assignment]
-            if selected:
-                option.state |= QtWidgets.QStyle.StateFlag.State_Selected  # type: ignore[assignment]
+            cy = rect.y() + rect.height() / 2
+            half = 3
+            margin = (chevron_size - half * 2) / 2
+            left = x + margin
+            right = x + chevron_size - margin
 
-            style = QtWidgets.QApplication.style() if widget is None else widget.style()
-            style.drawPrimitive(
-                QtWidgets.QStyle.PrimitiveElement.PE_IndicatorBranch,
-                option,
-                painter,
-                widget,
-            )
+            painter.setPen(QtCore.Qt.PenStyle.NoPen)
+            painter.setBrush(QtGui.QBrush(QtGui.QColor(255, 255, 255)))
+            painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+
+            if collapsed:
+                tri = QtGui.QPolygonF([
+                    QtCore.QPointF(left, cy - half),
+                    QtCore.QPointF(right, cy),
+                    QtCore.QPointF(left, cy + half),
+                ])
+            else:
+                tri = QtGui.QPolygonF([
+                    QtCore.QPointF(left, cy - half),
+                    QtCore.QPointF(right, cy - half),
+                    QtCore.QPointF((left + right) / 2, cy + half),
+                ])
+            painter.drawPolygon(tri)
             x += chevron_size + 4
 
         if icon is not None:

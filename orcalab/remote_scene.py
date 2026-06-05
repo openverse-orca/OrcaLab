@@ -772,28 +772,28 @@ class RemoteScene(SceneEditNotification):
         async with self._grpc_lock:
             return await self._service.change_sim_state(sim_process_running)
 
-    async def change_manipulator_type(self, manipulator_type: ManipulatorType) -> bool:
+    async def change_manipulator_type(self, manipulator_type: ManipulatorType) -> None:
         cmd = f"change_manipulator_type:{manipulator_type.name.lower()}"
         async with self._grpc_lock:
             return await self._service.custom_command(cmd)
 
     async def change_camera_movement_type(
         self, camera_movement_type: CameraMovementType
-    ) -> bool:
+    ) -> None:
         cmd = f"change_camera_movement_type:{camera_movement_type.name.lower()}"
         async with self._grpc_lock:
             return await self._service.custom_command(cmd)
         
     async def change_measure_type(
         self, measure_type: MeasureType
-    ) -> bool:
+    ) -> None:
         cmd = f"change_measure_type:{measure_type.name.lower()}"
         async with self._grpc_lock:
             return await self._service.custom_command(cmd)
         
     async def change_pivot_point_type(
         self, pivot_point_type: PivotPointType
-    ) -> bool:
+    ) -> None:
         cmd = f"change_pivot_point_type:{pivot_point_type.name.lower()}"
         async with self._grpc_lock:
             return await self._service.custom_command(cmd)
@@ -819,7 +819,7 @@ class RemoteScene(SceneEditNotification):
         camera_name: str,
         png_path: str,
         index: int,
-        output: list[CameraDataPNGResult] = None,
+        output: list[CameraDataPNGResult] = None, # type: ignore
     ) -> CameraDataPNGResult:
         async with self._grpc_lock:
             result = await self._service.get_camera_data_png(

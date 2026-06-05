@@ -15,6 +15,9 @@ class FloatEdit(BaseNumberEdit[float]):
         self.setValidator(QtGui.QDoubleValidator())
         self._value = 0.0
         self.setText("0.0")
+        self.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
         self._step = step
         self.max_float_before_precision_loss = 100000.0
 
@@ -28,7 +31,7 @@ class FloatEdit(BaseNumberEdit[float]):
 
     @override
     def _value_to_text(self, value: float) -> str:
-        return f"{value:.5f}"
+        return f"{value:.3f}"
 
     @override
     def value(self) -> float:
