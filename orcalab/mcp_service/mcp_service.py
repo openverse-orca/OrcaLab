@@ -170,10 +170,13 @@ class OrcaLabMCPServer:
         Returns:
             指定资产元数据信息
         '''
+        if not asset_path or not asset_path.strip():
+            return json.dumps({"code": 400, "message": "asset_path 不能为空"}, ensure_ascii=False)
         output = []
         self.metadata_service_bus.get_asset_info(asset_path, output)
-        asset_info = output[0]
-        return json.dumps(asset_info, ensure_ascii=False)
+        if not output or output[0] is None:
+            return json.dumps({"code": 404, "message": f"资产路径不存在: {asset_path}"}, ensure_ascii=False)
+        return json.dumps(output[0], ensure_ascii=False)
 
     @staticmethod
     def _find_first_package_match_by_asset_name(
@@ -281,6 +284,655 @@ class OrcaLabMCPServer:
         except Exception as e:
             return json.dumps(
                 {"success": False, "message": f"订阅资产包失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def unsubscribe_asset_package_by_asset_name(self, asset_name: str) -> str:
+        '''
+        根据资产名称在元数据中搜索，并取消订阅第一个匹配项所属的资产包。
+        Args:
+            asset_name: 资产显示名或路径片段（不区分大小写，匹配 name 或 assetPath 子串）。
+        Returns:
+            操作结果的 json 字符串，含 success、所选资产包 id、匹配条目及取消订阅接口返回。
+        '''
+        try:
+            name = asset_name.strip()
+            if not name:
+                return json.dumps(
+                    {"success": False, "message": "asset_name 不能为空"},
+                    ensure_ascii=False,
+                )
+
+            meta_out: list[str] = []
+            await self.http_service_bus.get_all_metadata(meta_out)
+            if not meta_out:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": "无法获取远程元数据（请确认已登录 DataLink 且网络正常）",
+                    },
+                    ensure_ascii=False,
+                )
+
+            metadata_list = json.loads(meta_out[0])
+            if not isinstance(metadata_list, list):
+                return json.dumps(
+                    {"success": False, "message": "元数据格式异常：非列表"},
+                    ensure_ascii=False,
+                )
+
+            matched, package_id = self._find_first_package_match_by_asset_name(metadata_list, name)
+            if not matched or not package_id:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": f"未找到名称或路径包含「{name}」的资产",
+                    },
+                    ensure_ascii=False,
+                )
+
+            unsub_out: list[str] = []
+            await self.http_service_bus.post_asset_unsubscribe(package_id, unsub_out)
+            if not unsub_out:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "package_id": package_id,
+                        "matched_asset": {
+                            "id": matched.get("id"),
+                            "name": matched.get("name"),
+                            "assetPath": matched.get("assetPath"),
+                            "parentPackageId": matched.get("parentPackageId"),
+                        },
+                        "message": "取消订阅请求未执行（请确认已登录 DataLink 且在线）",
+                    },
+                    ensure_ascii=False,
+                )
+            unsub_result = json.loads(unsub_out[0])
+
+            merged = {
+                "success": bool(unsub_result.get("success")),
+                "package_id": package_id,
+                "matched_asset": {
+                    "id": matched.get("id"),
+                    "name": matched.get("name"),
+                    "assetPath": matched.get("assetPath"),
+                    "parentPackageId": matched.get("parentPackageId"),
+                },
+                "unsubscribe": unsub_result,
+            }
+            if merged["success"]:
+                merged["message"] = f"已取消订阅资产包 {package_id}（匹配资产: {matched.get('name', '')}）"
+            else:
+                merged["message"] = unsub_result.get("body") or unsub_result.get("message") or "取消订阅请求失败"
+            return json.dumps(merged, ensure_ascii=False)
+        except json.JSONDecodeError as e:
+            return json.dumps(
+                {"success": False, "message": f"解析元数据或取消订阅结果失败: {e}"},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"取消订阅资产包失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def get_subscription_status_by_asset_name(self, asset_name: str) -> str:
+        '''
+        根据资产名称在元数据中搜索，并查询第一个匹配项所属资产包的订阅状态。
+        Args:
+            asset_name: 资产显示名或路径片段（不区分大小写，匹配 name 或 assetPath 子串）。
+        Returns:
+            操作结果的 json 字符串，含 success、所选资产包 id、匹配条目及订阅状态。
+        '''
+        try:
+            name = asset_name.strip()
+            if not name:
+                return json.dumps(
+                    {"success": False, "message": "asset_name 不能为空"},
+                    ensure_ascii=False,
+                )
+
+            meta_out: list[str] = []
+            await self.http_service_bus.get_all_metadata(meta_out)
+            if not meta_out:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": "无法获取远程元数据（请确认已登录 DataLink 且网络正常）",
+                    },
+                    ensure_ascii=False,
+                )
+
+            metadata_list = json.loads(meta_out[0])
+            if not isinstance(metadata_list, list):
+                return json.dumps(
+                    {"success": False, "message": "元数据格式异常：非列表"},
+                    ensure_ascii=False,
+                )
+
+            matched, package_id = self._find_first_package_match_by_asset_name(metadata_list, name)
+            if not matched or not package_id:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": f"未找到名称或路径包含「{name}」的资产",
+                    },
+                    ensure_ascii=False,
+                )
+
+            status_out: list[str] = []
+            await self.http_service_bus.get_asset_subscription_status(package_id, status_out)
+            if not status_out:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "package_id": package_id,
+                        "matched_asset": {
+                            "id": matched.get("id"),
+                            "name": matched.get("name"),
+                            "assetPath": matched.get("assetPath"),
+                            "parentPackageId": matched.get("parentPackageId"),
+                        },
+                        "message": "查询订阅状态请求未执行（请确认已登录 DataLink 且在线）",
+                    },
+                    ensure_ascii=False,
+                )
+            status_result = json.loads(status_out[0])
+
+            merged = {
+                "success": bool(status_result.get("success")),
+                "package_id": package_id,
+                "matched_asset": {
+                    "id": matched.get("id"),
+                    "name": matched.get("name"),
+                    "assetPath": matched.get("assetPath"),
+                    "parentPackageId": matched.get("parentPackageId"),
+                },
+                "subscription_status": status_result,
+            }
+            if merged["success"]:
+                merged["message"] = f"成功获取资产包订阅状态（匹配资产: {matched.get('name', '')}）"
+            else:
+                merged["message"] = status_result.get("body") or status_result.get("message") or "查询订阅状态失败"
+            return json.dumps(merged, ensure_ascii=False)
+        except json.JSONDecodeError as e:
+            return json.dumps(
+                {"success": False, "message": f"解析元数据或订阅状态结果失败: {e}"},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"查询资产包订阅状态失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def get_my_metadata(self) -> str:
+        '''
+        获取我的资产列表（包含自己上传的资产和订阅的资产包）
+        对应后端接口 GET /api/mymeta/
+        Returns:
+            资产列表的 json 字符串格式
+            {
+                "code": 200,
+                "data": [
+                    {
+                        "id": "4c5e6a29-8b3f-4d72-a0c5-9e1b8d7f2a34",
+                        "name": "Gryphon_Beast",
+                        "category": "scene",
+                        "type": "asset_package",
+                        "parentPackageId": null,
+                        "description": "",
+                        "categoryPath": "/scene",
+                        "size": 37082768,
+                        "imgUrl": "",
+                        "version": "2025.11.01",
+                        "status": "draft",
+                        "author": "linliwan",
+                        "assetPath": null,
+                        "projectName": "default_project",
+                        "isSubscribed": false,
+                        "isMyCreation": true
+                    }
+                ]
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.get_my_metadata(output)
+            if not output:
+                return json.dumps(
+                    {"code": 500, "message": "无法获取我的资产列表（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"code": 500, "message": f"获取我的资产列表失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def get_asset_detail(self, asset_id: str) -> str:
+        '''
+        根据资产ID获取单个资产详情（含预览图列表、元数据信息等）
+        对应后端接口 GET /api/asset/<id>/
+        Args:
+            asset_id: 资产的ID
+        Returns:
+            资产详情的json字符串格式
+            {
+                "code": 200,
+                "data": {
+                    "id": "...",
+                    "name": "...",
+                    "category": "...",
+                    "type": "asset",
+                    "parentPackageId": "...",
+                    "description": "...",
+                    "categoryPath": "...",
+                    "pictures": [...],
+                    "isCanEdit": true,
+                    ...
+                }
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.get_asset_detail(asset_id, output)
+            if not output:
+                return json.dumps(
+                    {"code": 500, "message": "无法获取资产详情（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"code": 500, "message": f"获取资产详情失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def search_assets(self, search_type: str, query: str = "", image_path: str = "") -> str:
+        '''
+        资产全文检索（支持文字和图片搜索）
+        对应后端接口 POST /api/search/
+        Args:
+            search_type: 搜索类型，"text" 表示文字搜索，"image" 表示图片搜索
+            query: 搜索关键词，如"桌子"（search_type 为 text 时必填）
+            image_path: 图片文件路径（search_type 为 image 时必填）
+        Returns:
+            搜索结果的json字符串格式
+            {
+                "code": 200,
+                "data": {
+                    "status": "success",
+                    "searchType": "text",
+                    "query": "kitchen",
+                    "totalResults": 10,
+                    "results": [...]
+                }
+            }
+        '''
+        try:
+            search_data = {
+                "search_type": search_type,
+            }
+            if search_type == "text":
+                if not query:
+                    return json.dumps(
+                        {"code": 400, "message": "文字搜索时需要提供 query"},
+                        ensure_ascii=False,
+                    )
+                search_data["query"] = query
+            elif search_type == "image":
+                if not image_path:
+                    return json.dumps(
+                        {"code": 400, "message": "图片搜索时需要提供 image_path"},
+                        ensure_ascii=False,
+                    )
+                search_data["image_path"] = image_path
+            else:
+                return json.dumps(
+                    {"code": 400, "message": f"不支持的搜索类型: {search_type}，仅支持 text 或 image"},
+                    ensure_ascii=False,
+                )
+            output: list[str] = []
+            await self.http_service_bus.search_assets(search_data, output)
+            if not output:
+                return json.dumps(
+                    {"code": 500, "message": "搜索失败（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"code": 500, "message": f"搜索失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def post_generate_task(self, type: str, text: str = "", time_period: str = "", image_path: str = "") -> str:
+        '''
+        创建生成资产任务（支持文本和图片）
+        对应后端接口 POST /api/generate/
+        Args:
+            type: 生成类型，"text" 表示文本生成，"image" 表示图片生成
+            text: 文本描述，如"键盘"（type 为 text 时必填）
+            time_period: 时间周期，如"2026-04-01"
+            image_path: 图片文件路径（type 为 image 时必填）
+        Returns:
+            生成任务的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "status": "queued",
+                    "taskId": "...",
+                    "queuePosition": 3,
+                    "message": "任务已加入队列，当前队列位置：3"
+                }
+            }
+        '''
+        try:
+            task_data = {
+                "type": type,
+                "timePeriod": time_period,
+            }
+            if type == "text":
+                task_data["text"] = text
+            elif type == "image":
+                if not image_path:
+                    return json.dumps(
+                        {"success": False, "message": "图片生成时需要提供 image_path"},
+                        ensure_ascii=False,
+                    )
+                task_data["image_path"] = image_path
+            output: list[str] = []
+            await self.http_service_bus.post_generate_task(task_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法创建生成任务（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"创建生成任务失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def get_generate_task_status(self, task_id: str) -> str:
+        '''
+        查询生成任务状态和队列位置
+        对应后端接口 GET /api/generate/status/<task_id>/
+        Args:
+            task_id: 任务ID
+        Returns:
+            任务状态的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "taskId": "...",
+                    "status": "pending",
+                    "queuePosition": 2,
+                    "result": null,
+                    "error": null
+                }
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.get_generate_task_status(task_id, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法查询生成任务状态（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"查询生成任务状态失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def get_user_generate_tasks(self) -> str:
+        '''
+        查询用户最近的生成任务（用于页面刷新后恢复）
+        对应后端接口 GET /api/generate/user_tasks/
+        Args:
+            无需传递参数
+        Returns:
+            用户最近生成任务的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "tasks": [
+                        {
+                            "taskId": "...",
+                            "status": "pending",
+                            "queuePosition": 2
+                        }
+                    ],
+                    "count": 1
+                }
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.get_user_generate_tasks(output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法查询用户生成任务（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"查询用户生成任务失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def post_upload_generate_usdz(
+        self,
+        file_url: str,
+        preview_url: str = "",
+        name: str = "",
+        project_name: str = "",
+        version: str = "",
+        time_period: str = "",
+        file_type: str = "generate_usdz",
+        upload_type: str = "private",
+        roles: str = '["admin"]',
+        separate_mesh: str = "false",
+        generate_lod: str = "false",
+        smooth_mesh: str = "false",
+        smooth_ratio: str = "2",
+        generate_global_config: str = "false",
+        use_hub_cli: str = "true",
+        size: str = "1",
+        usdz_split_mesh: str = "false",
+        merge_threshold: str = "0.01",
+        merge_iterations: str = "1",
+        max_split_mesh_number: str = "100",
+    ) -> str:
+        '''
+        根据 file_url 上传生成完成的 USDZ 资产，异步转为 AssetZip/PAK
+        对应后端接口 POST /api/upload/generate_usdz/
+        Args:
+            file_url: 生成任务完成后返回的文件URL（必填）
+            preview_url: 预览图URL
+            name: 资产名称
+            project_name: 项目名称
+            version: 版本号
+            time_period: 时间周期
+            file_type: 文件类型，默认 "generate_usdz"
+            upload_type: 上传类型，默认 "private"
+            roles: 可见角色列表，默认 '["admin"]'
+            separate_mesh: 是否分离网格，默认 "false"
+            generate_lod: 是否生成LOD，默认 "false"
+            smooth_mesh: 是否平滑网格，默认 "false"
+            smooth_ratio: 平滑比率，默认 "2"
+            generate_global_config: 是否生成全局配置，默认 "false"
+            use_hub_cli: 是否使用 hub cli，默认 "true"
+            size: 大小，默认 "1"
+            usdz_split_mesh: 是否拆分USDZ网格，默认 "false"
+            merge_threshold: 合并阈值，默认 "0.01"
+            merge_iterations: 合并迭代次数，默认 "1"
+            max_split_mesh_number: 最大拆分网格数，默认 "100"
+        Returns:
+            上传结果的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "status": "success",
+                    "message": "USDZ文件上传成功，开始处理流程",
+                    "taskChainId": "...",
+                    "fileType": "generate_usdz",
+                    ...
+                }
+            }
+        '''
+        try:
+            task_data = {
+                "file_url": file_url,
+                "file_type": file_type,
+                "upload_type": upload_type,
+                "roles": roles,
+                "project_name": project_name or None,
+                "name": name or None,
+                "version": version or None,
+                "timePeriod": time_period or None,
+                "preview_url": preview_url or None,
+                "separate_mesh": separate_mesh,
+                "generate_lod": generate_lod,
+                "smooth_mesh": smooth_mesh,
+                "smooth_ratio": smooth_ratio,
+                "generate_global_config": generate_global_config,
+                "use_hub_cli": use_hub_cli,
+                "size": size,
+                "usdz_split_mesh": usdz_split_mesh,
+                "merge_threshold": merge_threshold,
+                "merge_iterations": merge_iterations,
+                "max_split_mesh_number": max_split_mesh_number,
+            }
+            output: list[str] = []
+            await self.http_service_bus.post_upload_generate_usdz(task_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法上传生成资产（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"上传生成资产失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def get_task_chain_progress(self, task_chain_id: str) -> str:
+        '''
+        查询任务链整体进度
+        对应后端接口 GET /api/task_chain_progress/<task_chain_id>/
+        Args:
+            task_chain_id: 任务链ID
+        Returns:
+            任务链进度的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "progress": 50,
+                    "message": "...",
+                    "steps": [...],
+                    "currentStep": "...",
+                    ...
+                }
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.get_task_chain_progress(task_chain_id, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法查询任务链进度（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"查询任务链进度失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def post_save_asset_draft(self, task_id: str, name: str = "", description: str = "", category_path: str = "") -> str:
+        '''
+        保存资产草稿，用于后续编辑和发布
+        对应后端接口 POST /api/save_asset_draft/<task_id>/
+        Args:
+            task_id: 任务ID
+            name: 资产名称
+            description: 资产描述（可选）
+            category_path: 分类路径（可选）
+        Returns:
+            保存结果的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "status": "success",
+                    "message": "资产草稿已保存",
+                    "assetId": "..."
+                }
+            }
+        '''
+        try:
+            draft_data = {
+                "name": name or None,
+                "description": description or None,
+                "category_path": category_path or None,
+            }
+            output: list[str] = []
+            await self.http_service_bus.post_save_asset_draft(task_id, draft_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法保存资产草稿（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"保存资产草稿失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def delete_asset(self, asset_id: str) -> str:
+        '''
+        删除指定资产（支持级联删除）
+        权限说明：管理员可删除任意资产，非管理员只能删除自己的资产（author 为当前用户）
+        对应后端接口 DELETE /api/delete/<id>/
+        Args:
+            asset_id: 资产ID
+        Returns:
+            删除结果的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "status": "success",
+                    "message": "资产包 xxx（ID：...）及其下 N 个子资产已删除",
+                    "assetId": "...",
+                    "assetName": "...",
+                    "deletedCount": 12,
+                    "childAssetsCount": 11
+                }
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.delete_asset(asset_id, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法删除资产（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"删除资产失败: {e}"},
                 ensure_ascii=False,
             )
 
@@ -1146,6 +1798,18 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.get_asset_map)
         self.mcp.tool(self.get_asset_info)
         self.mcp.tool(self.subscribe_asset_package_by_asset_name)
+        self.mcp.tool(self.unsubscribe_asset_package_by_asset_name)
+        self.mcp.tool(self.get_subscription_status_by_asset_name)
+        self.mcp.tool(self.get_my_metadata)
+        self.mcp.tool(self.get_asset_detail)
+        self.mcp.tool(self.search_assets)
+        self.mcp.tool(self.post_generate_task)
+        self.mcp.tool(self.get_generate_task_status)
+        self.mcp.tool(self.get_user_generate_tasks)
+        self.mcp.tool(self.post_upload_generate_usdz)
+        self.mcp.tool(self.get_task_chain_progress)
+        self.mcp.tool(self.post_save_asset_draft)
+        self.mcp.tool(self.delete_asset)
 
         # Actor 查询类
         self.mcp.tool(self.get_all_actors)

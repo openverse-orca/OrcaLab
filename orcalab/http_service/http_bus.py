@@ -22,6 +22,42 @@ class HttpServiceRequest:
 
     async def post_asset_subscribe(self, asset_package_id: str, output: List[str] = None) -> str:
         pass
+
+    async def post_asset_unsubscribe(self, asset_package_id: str, output: List[str] = None) -> str:
+        pass
+
+    async def get_asset_subscription_status(self, asset_package_id: str, output: List[str] = None) -> str:
+        pass
+
+    async def get_my_metadata(self, output: List[str] = None) -> str:
+        pass
+    
+    async def get_asset_detail(self, asset_id: str, output: List[str] = None) -> str:
+        pass
+    
+    async def post_generate_task(self, task_data: dict, output: List[str] = None) -> str:
+        pass
+    
+    async def get_generate_task_status(self, task_id: str, output: List[str] = None) -> str:
+        pass
+    
+    async def get_user_generate_tasks(self, output: List[str] = None) -> str:
+        pass
+    
+    async def post_upload_generate_usdz(self, task_data: dict, output: List[str] = None) -> str:
+        pass
+    
+    async def get_task_chain_progress(self, task_chain_id: str, output: List[str] = None) -> str:
+        pass
+    
+    async def post_save_asset_draft(self, task_id: str, draft_data: dict, output: List[str] = None) -> str:
+        pass
+    
+    async def delete_asset(self, asset_id: str, output: List[str] = None) -> str:
+        pass
+    
+    async def search_assets(self, search_data: dict, output: List[str] = None) -> str:
+        pass
     
     def is_admin(self) -> bool:
         pass
