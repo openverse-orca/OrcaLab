@@ -8,6 +8,12 @@ from orcalab.ui.property_edit.base_property_edit import (
 )
 
 
+class _PropertyComboBox(QtWidgets.QComboBox):
+    def hidePopup(self):
+        super().hidePopup()
+        self.clearFocus()
+
+
 class ComboBoxPropertyEdit(BasePropertyEdit[str]):
     """枚举属性编辑器：使用标签文本进行交互，通过 enum_values 或 editor_hint "options:A,B,C" 解析选项。"""
 
@@ -31,7 +37,7 @@ class ComboBoxPropertyEdit(BasePropertyEdit[str]):
             hint = context.prop.editor_hint()
             options = hint[len("options:"):].split(",") if hint.startswith("options:") else []
 
-        editor = QtWidgets.QComboBox()
+        editor = _PropertyComboBox()
         editor.addItems(options)
         current = context.prop.value()
         if isinstance(current, str) and current in options:
