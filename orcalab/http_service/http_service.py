@@ -509,6 +509,40 @@ class HttpService(HttpServiceRequest):
 
     @require_online
     @override
+    async def post_cancel_asset_zip(self, task_id: str, output: List[str] = None) -> str:
+        task_id = (task_id or "").strip()
+        if not task_id:
+            msg = json.dumps({"code": 400, "message": "task_id 为空"}, ensure_ascii=False)
+            if output is not None:
+                output.append(msg)
+            return msg
+
+        url = f"{self.base_url}/cancel_asset_zip/{task_id}/"
+        async with aiohttp.ClientSession() as session:
+            _start = time.monotonic()
+            async with session.post(url, headers=self._get_headers(), json={}) as response:
+                _log_request_time("POST", url, _start, response.status)
+                body = await response.text()
+                try:
+                    body_json = json.loads(body) if body.strip() else {}
+                except json.JSONDecodeError:
+                    logger.exception("post_cancel_asset_zip: 请求异常")
+                    body_json = {"raw": body}
+                ok = response.status == 200
+                msg = json.dumps(
+                    {
+                        "success": ok,
+                        "http_status": response.status,
+                        "body": body_json,
+                    },
+                    ensure_ascii=False,
+                )
+                if output is not None:
+                    output.append(msg)
+                return msg
+
+    @require_online
+    @override
     async def get_task_chain_progress(self, task_chain_id: str, output: List[str] = None) -> str:
         task_chain_id = (task_chain_id or "").strip()
         if not task_chain_id:

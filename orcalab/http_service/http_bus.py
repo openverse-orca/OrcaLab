@@ -47,6 +47,9 @@ class HttpServiceRequest:
     async def post_upload_generate_usdz(self, task_data: dict, output: List[str] = None) -> str:
         pass
     
+    async def post_cancel_asset_zip(self, task_id: str, output: List[str] = None) -> str:
+        pass
+    
     async def get_task_chain_progress(self, task_chain_id: str, output: List[str] = None) -> str:
         pass
     

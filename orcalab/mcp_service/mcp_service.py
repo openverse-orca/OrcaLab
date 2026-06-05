@@ -826,6 +826,37 @@ class OrcaLabMCPServer:
                 ensure_ascii=False,
             )
 
+    async def post_cancel_asset_zip(self, task_id: str) -> str:
+        '''
+        取消资产压缩包上传（OSS删除）
+        对应后端接口 POST /api/cancel_asset_zip/<task_id>/
+        Args:
+            task_id: 任务ID
+        Returns:
+            取消结果的json字符串格式
+            {
+                "code": 200,
+                "data": {
+                    "status": "success",
+                    "message": "资产上传已取消，相关文件已删除"
+                }
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.post_cancel_asset_zip(task_id, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法取消资产上传（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"取消资产上传失败: {e}"},
+                ensure_ascii=False,
+            )
+
     async def get_task_chain_progress(self, task_chain_id: str) -> str:
         '''
         查询任务链整体进度
@@ -1807,6 +1838,7 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.get_generate_task_status)
         self.mcp.tool(self.get_user_generate_tasks)
         self.mcp.tool(self.post_upload_generate_usdz)
+        self.mcp.tool(self.post_cancel_asset_zip)
         self.mcp.tool(self.get_task_chain_progress)
         self.mcp.tool(self.post_save_asset_draft)
         self.mcp.tool(self.delete_asset)
