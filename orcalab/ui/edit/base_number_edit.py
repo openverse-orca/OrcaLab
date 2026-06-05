@@ -206,6 +206,11 @@ class BaseNumberEdit[T: (int, float)](QtWidgets.QLineEdit):
     def step(self) -> T:
         raise NotImplementedError()
 
+    def paintEvent(self, event):
+        if self._state != BaseNumberEditState.Typing:
+            self.setCursorPosition(0)
+        super().paintEvent(event)
+
     def setReadOnly(self, ro: bool):
         super().setReadOnly(ro)
         if ro:

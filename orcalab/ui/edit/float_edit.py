@@ -15,9 +15,6 @@ class FloatEdit(BaseNumberEdit[float]):
         self.setValidator(QtGui.QDoubleValidator())
         self._value = 0.0
         self.setText("0.0")
-        self.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
         self._step = step
         self.max_float_before_precision_loss = 100000.0
 

@@ -64,8 +64,8 @@ class PanelManager(QtWidgets.QWidget, PanelRequest):
 
         # Window central area.
 
-        splitter_v = QtWidgets.QSplitter(QtCore.Qt.Vertical)
-        splitter_h = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        splitter_v = QtWidgets.QSplitter(QtCore.Qt.Vertical) # type: ignore
+        splitter_h = QtWidgets.QSplitter(QtCore.Qt.Horizontal) # type: ignore
 
         left_panel_bar_width = 48
         right_panel_bar_width = 48
