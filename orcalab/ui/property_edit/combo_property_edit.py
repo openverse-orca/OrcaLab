@@ -1,5 +1,5 @@
 from typing import override
-from PySide6 import QtWidgets
+from PySide6 import QtWidgets, QtCore
 
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.property_edit.base_property_edit import (
@@ -9,10 +9,23 @@ from orcalab.ui.property_edit.base_property_edit import (
 
 
 class _PropertyComboBox(QtWidgets.QComboBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+
+    def showPopup(self):
+        self.setFocus()
+        super().showPopup()
+
     def hidePopup(self):
         super().hidePopup()
         self.clearFocus()
 
+    def wheelEvent(self, event):
+        if self.hasFocus():
+            super().wheelEvent(event)
+        else:
+            event.ignore()
 
 class ComboBoxPropertyEdit(BasePropertyEdit[str]):
     """枚举属性编辑器：使用标签文本进行交互，通过 enum_values 或 editor_hint "options:A,B,C" 解析选项。"""
