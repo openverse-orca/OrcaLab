@@ -5,7 +5,7 @@ from orcalab.actor_property import ActorPropertyKey
 from orcalab.math import Transform
 from orcalab.path import Path
 from orcalab.scene_edit_types import AddActorRequest
-
+from orcalab.selection_data import SelectionData
 
 # 不要存Actor对象，只存Path。
 # Actor可能被删除和创建，前后的Actor是不相等的。
@@ -27,21 +27,12 @@ class CommandGroup(BaseCommand):
 
 
 class SelectionCommand(BaseCommand):
-    def __init__(self, old_selection: list[Path], new_selection: list[Path]):
+    def __init__(self, old_selection: SelectionData, new_selection: SelectionData):
         self.old_selection = old_selection
         self.new_selection = new_selection
 
     def __repr__(self):
         return f"SelectionCommand(old_selection={self.old_selection}, new_selection={self.new_selection})"
-
-
-class ActiveActorCommand(BaseCommand):
-    def __init__(self, old_active_actor: Path | None, new_active_actor: Path | None):
-        self.old_active_actor = old_active_actor
-        self.new_active_actor = new_active_actor
-
-    def __repr__(self):
-        return f"ActiveActorCommand(old_active_actor={self.old_active_actor}, new_active_actor={self.new_active_actor})"
 
 
 class AddActorCommand(BaseCommand):
@@ -63,9 +54,9 @@ class DeleteActorCommand(BaseCommand):
 
 
 class RenameActorCommand(BaseCommand):
-    def __init__(self):
-        self.old_path: Path = Path()
-        self.new_path: Path = Path()
+    def __init__(self, old_path: Path, new_path: Path):
+        self.old_path: Path = old_path
+        self.new_path: Path = new_path
 
     def __repr__(self):
         return f"RenameActorCommand(old_path={self.old_path}, new_path={self.new_path})"

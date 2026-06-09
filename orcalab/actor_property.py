@@ -11,9 +11,9 @@ class ActorPropertyType(Enum):
     INTEGER = 2
     FLOAT = 3
     STRING = 4
-    TREE = 5
-    ENUM = 6
-    ASSET = 7
+    ENUM = 5
+    ASSET = 6
+
 
 
 class ValueWrapper:
@@ -97,8 +97,6 @@ class ActorProperty:
                 if not isinstance(value, str):
                     raise ValueError("Value must be a string for asset")
                 target.value = value
-            case ActorPropertyType.TREE:
-                pass
             case _:
                 raise NotImplementedError("Unsupported property type")
 
@@ -150,33 +148,7 @@ class ActorProperty:
     def set_struct_display_name(self, name: str):
         self._struct_display_name = name
 
-    def create_alias(self, new_name: str) -> "ActorProperty":
-        """创建共享值引用的别名属性，修改别名时原属性也会更新"""
-        alias = object.__new__(ActorProperty)
-        alias._name = new_name
-        alias._display_name = self._display_name
-        alias._type = self._type
-        alias._value = self._value  # 共享引用
-        alias._original_value = self._original_value  # 共享引用
-        alias._read_only = self._read_only
-        alias._editor_hint = self._editor_hint
-        alias._enum_values = self._enum_values
-        alias._post_read_fields = self._post_read_fields
-        alias._post_read_delay_ms = self._post_read_delay_ms
-        alias._sub_name = self._sub_name
-        alias._parent_struct_name = self._parent_struct_name
-        alias._struct_display_name = self._struct_display_name
-        return alias
 
-
-class TreePropertyNode:
-    """树形属性节点"""
-
-    def __init__(self, name: str, display_name: str | None = None):
-        self.name = name
-        self.display_name = display_name if display_name else name
-        self.properties: List[ActorProperty] = []
-        self.children: List["TreePropertyNode"] = []
 
 
 class ActorPropertyGroup:
@@ -186,7 +158,6 @@ class ActorPropertyGroup:
         self.display_name = name
         self.hint = hint
         self.properties: List[ActorProperty] = []
-        self.tree_data: List[TreePropertyNode] = []
         self.entity_id: int = 0
         self.component_type_id: str = ""
 
@@ -224,10 +195,14 @@ class ActorPropertyKey:
             (self.actor_path, self.group_prefix, self.property_name, self.property_type)
         )
 
+    def __repr__(self):
+        return f"ActorPropertyKey(actor_path={self.actor_path}, group_prefix='{self.group_prefix}', property_name='{self.property_name}', property_type={self.property_type})"
+
 
 @dataclass
 class StructPropertyGroup:
     """结构体属性组（树形结构）"""
+
     name: str
     display_name: str
     properties: List[ActorProperty]

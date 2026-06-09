@@ -53,54 +53,12 @@ class SceneLayoutHelper:
         return node.display_name
 
     @staticmethod
-    def _resolve_entity_path_for_node(actor: AssetActor, node) -> str | None:
-        """根据 TreePropertyNode.name 中的 entity_id 从 EntityInfo 层级中解析 entity_path。
-        node.name 格式为 'entityId:componentId' 或 'entityId'。
-        """
-        entity_root = actor.entity_root
-        if entity_root is None:
-            return None
-        try:
-            entity_id = int(node.name.split(":")[0])
-        except (ValueError, TypeError, AttributeError):
-            return None
-        entity_info = entity_root.find_by_entity_id(entity_id)
-        if entity_info is not None:
-            return entity_info.entity_path
-        return None
-
-    @staticmethod
-    def _collect_modified_tree_props(nodes, group_prefix: str, component_type: str, actor: AssetActor) -> list:
-        result = []
-        for node in nodes:
-            entity_path = SceneLayoutHelper._resolve_entity_path_for_node(actor, node)
-            for prop in node.properties:
-                if prop.is_modified():
-                    entry = {
-                        "group_prefix": group_prefix,
-                        "component_type": component_type,
-                        "property_name": prop.name(),
-                        "type": prop.value_type().name,
-                        "value": prop.value(),
-                    }
-                    if entity_path is not None:
-                        entry["entity_path"] = entity_path
-                    else:
-                        stable_key = SceneLayoutHelper._node_stable_key(node)
-                        entry["name"] = f"{stable_key}.{prop.name()}"
-                    result.append(entry)
-            result.extend(SceneLayoutHelper._collect_modified_tree_props(node.children, group_prefix, component_type, actor))
-        return result
-
-    @staticmethod
     def collect_modified_properties(actor: AssetActor) -> list:
         result = []
         for group in actor.property_groups:
             component_type = group.name
             entity_path = group.hint
             for prop in group.properties:
-                if prop.value_type() == ActorPropertyType.TREE:
-                    continue
                 if prop.is_modified():
                     entry = {
                         "entity_path": entity_path,
@@ -110,7 +68,6 @@ class SceneLayoutHelper:
                         "value": prop.value(),
                     }
                     result.append(entry)
-            result.extend(SceneLayoutHelper._collect_modified_tree_props(group.tree_data, group.prefix, component_type, actor))
         return result
 
     @staticmethod
@@ -368,8 +325,6 @@ class SceneLayoutHelper:
             value: Any = entry.get("value")
 
             prop_type = _type_map.get(type_str)
-            if prop_type is None or prop_type == ActorPropertyType.TREE:
-                continue
 
             entity_path: str | None = entry.get("entity_path", None)
             component_type: str | None = entry.get("component_type", None)

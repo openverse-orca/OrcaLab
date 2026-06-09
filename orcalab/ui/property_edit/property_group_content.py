@@ -9,13 +9,11 @@ from orcalab.actor_property import (
     ActorPropertyGroup,
     ActorPropertyType,
     StructPropertyGroup,
-    TreePropertyNode,
 )
 from orcalab.path import Path
 from orcalab.perf_log import perf_log
 from orcalab.ui.collapsible.collapsible_section import CollapsibleSection
 from orcalab.ui.fonts.font_service import FontService
-from orcalab.ui.icon_util import make_color_svg
 from orcalab.ui.property_edit.base_property_edit import (
     BasePropertyEdit,
     PropertyEditContext,
@@ -26,10 +24,11 @@ from orcalab.ui.property_edit.float_property_edit import FloatPropertyEdit
 from orcalab.ui.property_edit.int_property_edit import IntegerPropertyEdit
 from orcalab.ui.property_edit.color_property_edit import ColorPropertyEdit
 from orcalab.ui.property_edit.string_property_edit import StringPropertyEdit
-from orcalab.ui.property_edit.texture_picker_property_edit import TexturePickerPropertyEdit
+from orcalab.ui.property_edit.texture_picker_property_edit import (
+    TexturePickerPropertyEdit,
+)
 from orcalab.ui.styled_widget import StyledWidget
 from orcalab.texture_asset_cache import get_texture_asset_cache
-
 
 _COLOR_CHANNEL_NAMES = {"r", "g", "b", "a"}
 
@@ -62,13 +61,12 @@ def _create_property_edit(
     group: ActorPropertyGroup,
     prop: ActorProperty,
     label_width: int,
-    name_prefix: str = "",
 ) -> BasePropertyEdit:
     context = PropertyEditContext(
         actor=actor,
         actor_path=actor_path,
         group=group,
-        prop=prop.create_alias(f"{name_prefix}{prop.name()}") if name_prefix else prop,
+        prop=prop,
     )
 
     match prop.value_type():
@@ -90,66 +88,6 @@ def _create_property_edit(
             )
         case _:
             raise NotImplementedError("Unsupported property type")
-
-
-def _render_tree_data_flat(
-    parent: QtWidgets.QWidget,
-    actor: BaseActor,
-    actor_path: Path,
-    group: ActorPropertyGroup,
-    nodes: List[TreePropertyNode],
-    layout: QtWidgets.QVBoxLayout,
-    label_width: int,
-    property_edits: List[BasePropertyEdit],
-    indent: int = 0,
-    name_prefix: str = "",
-):
-    fs = FontService()
-    indent_px = indent * _indent_unit()
-
-    for node in nodes:
-        header_row = QtWidgets.QWidget()
-        header_layout = QtWidgets.QHBoxLayout(header_row)
-        header_layout.setContentsMargins(indent_px, 2, 4, 2)
-        header_layout.setSpacing(4)
-
-        if node.children:
-            indicator = QtWidgets.QLabel("▾")
-            fs.bind_widget_font(indicator, 'group_title')
-            header_layout.addWidget(indicator)
-
-        name_label = QtWidgets.QLabel(node.display_name)
-        fs.bind_widget_font(name_label, 'group_title')
-        header_layout.addWidget(name_label)
-        header_layout.addStretch()
-        layout.addWidget(header_row)
-
-        node_prefix = f"{name_prefix}{node.name}." if name_prefix else f"{node.name}."
-
-        for prop in node.properties:
-            editor = _create_property_edit(
-                parent, actor, actor_path, group, prop, label_width, name_prefix=node_prefix
-            )
-            if prop.is_read_only():
-                editor.set_read_only(True)
-
-            prop_row = QtWidgets.QWidget()
-            row_layout = QtWidgets.QHBoxLayout(prop_row)
-            row_layout.setContentsMargins((indent + 1) * _indent_unit(), 0, 0, 0)
-            row_layout.setSpacing(0)
-            row_layout.addWidget(editor)
-            row_layout.addStretch()
-
-            property_edits.append(editor)
-            layout.addWidget(prop_row)
-
-        if node.children:
-            _render_tree_data_flat(
-                parent, actor, actor_path, group,
-                node.children, layout, label_width,
-                property_edits,
-                indent=indent + 1, name_prefix=node_prefix,
-            )
 
 
 def _build_struct_tree(
@@ -182,7 +120,7 @@ def _build_struct_tree(
         f"_build_struct_tree: group={group.name}, total_props={len(group.properties)}, "
         f"prop_names={[p.name() for p in group.properties[:10]]}, "
         f"struct_group_keys={list(struct_groups.keys())}, standalone_props={len(standalone_props)}",
-        feature="PROPERTY"
+        feature="PROPERTY",
     )
 
     def _is_tuple_group(g: StructPropertyGroup) -> bool:
@@ -195,7 +133,7 @@ def _build_struct_tree(
                 return False
             name = p.name()
             dot_pos = name.rfind(".")
-            sub = name[dot_pos + 1:] if dot_pos != -1 else name
+            sub = name[dot_pos + 1 :] if dot_pos != -1 else name
             if len(sub) != 1:
                 return False
         return True
@@ -215,11 +153,7 @@ def _build_struct_tree(
             pos = name.find(".", pos + 1)
             if pos == -1:
                 return None
-        return (name[:pos], name[pos + 1:])
-
-    def _last_segment(name: str) -> str:
-        pos = name.rfind(".")
-        return name[pos + 1:] if pos != -1 else name
+        return (name[:pos], name[pos + 1 :])
 
     def _build(
         name: str,
@@ -234,9 +168,7 @@ def _build_struct_tree(
         for p in props:
             result = _split_at_depth(p.name(), prefix_depth)
             if result is None:
-                alias = p.create_alias(p.name())
-                alias._display_name = _last_segment(p.name())
-                direct_props.append(alias)
+                direct_props.append(p)
             else:
                 _, remaining = result
                 next_dot = remaining.find(".")
@@ -244,27 +176,28 @@ def _build_struct_tree(
                     child_name = remaining[:next_dot]
                     child_groups.setdefault(child_name, []).append(p)
                 else:
-                    alias = p.create_alias(p.name())
-                    alias._display_name = remaining
-                    direct_props.append(alias)
+                    direct_props.append(p)
 
         perf_log(
             f"_build_struct_tree._build: name={name}, prefix_depth={prefix_depth}, "
             f"direct_props={len(direct_props)}, "
             f"child_groups={list(child_groups.keys())[:10]}{'...' if len(child_groups) > 10 else ''}, "
             f"child_counts={{k: len(v) for k, v in list(child_groups.items())[:5]}}",
-            feature="PROPERTY"
+            feature="PROPERTY",
         )
 
         if prefix_depth > 10:
             perf_log(
                 f"_build_struct_tree._build: DEPTH EXCEEDED! name={name}, prefix_depth={prefix_depth}, "
                 f"prop_names={[p.name() for p in props[:3]]}",
-                feature="PROPERTY"
+                feature="PROPERTY",
             )
             return StructPropertyGroup(name, display, direct_props, [])
 
-        children = [_build(cn, cp, cn.capitalize(), prefix_depth + 1) for cn, cp in child_groups.items()]
+        children = [
+            _build(cn, cp, cn.capitalize(), prefix_depth + 1)
+            for cn, cp in child_groups.items()
+        ]
         sg = StructPropertyGroup(name, display, direct_props, children)
         if _is_tuple_group(sg):
             sg.layout = "horizontal"
@@ -308,8 +241,13 @@ def _render_struct_group(
             collapsed=collapsed,
             indent_level=indent_level,
             content_factory=lambda sg=struct_group: _create_struct_content(
-                parent, actor, actor_path, group,
-                sg, label_width, property_edits,
+                parent,
+                actor,
+                actor_path,
+                group,
+                sg,
+                label_width,
+                property_edits,
                 indent_level=indent_level,
                 collapsed=collapsed,
             ),
@@ -319,7 +257,8 @@ def _render_struct_group(
     except Exception as e:
         logging.getLogger(__name__).error(
             f"_render_struct_group failed: name={struct_group.display_name} "
-            f"type={type(e).__name__} msg={e}", exc_info=True
+            f"type={type(e).__name__} msg={e}",
+            exc_info=True,
         )
         err_label = QtWidgets.QLabel(f"⚠ {struct_group.display_name}: {e}")
         layout.addWidget(err_label)
@@ -345,10 +284,10 @@ def _create_horizontal_tuple_content(
 
     for prop in struct_group.properties:
         dot_pos = prop.name().rfind(".")
-        sub_name = prop.name()[dot_pos + 1:] if dot_pos != -1 else prop.name()
-        display_alias = prop.create_alias(prop.name())
-        display_alias._display_name = sub_name.upper()
-        editor = _create_property_edit(parent, actor, actor_path, group, display_alias, compact_label_width)
+        sub_name = prop.name()[dot_pos + 1 :] if dot_pos != -1 else prop.name()
+        editor = _create_property_edit(
+            parent, actor, actor_path, group, prop, compact_label_width
+        )
         if prop.is_read_only():
             editor.set_read_only(True)
         property_edits.append(editor)
@@ -378,14 +317,21 @@ def _create_struct_content(
     if struct_group.layout == "horizontal":
         prop_indent = (indent_level + 1) * _indent_unit()
         row = _create_horizontal_tuple_content(
-            parent, actor, actor_path, group,
-            struct_group, property_edits, prop_indent,
+            parent,
+            actor,
+            actor_path,
+            group,
+            struct_group,
+            property_edits,
+            prop_indent,
         )
         content_layout.addWidget(row)
     else:
         prop_indent = (indent_level + 1) * _indent_unit()
         for prop in struct_group.properties:
-            editor = _create_property_edit(parent, actor, actor_path, group, prop, label_width)
+            editor = _create_property_edit(
+                parent, actor, actor_path, group, prop, label_width
+            )
             if prop.is_read_only():
                 editor.set_read_only(True)
             property_edits.append(editor)
@@ -400,8 +346,13 @@ def _create_struct_content(
 
     for child in struct_group.children:
         _render_struct_group(
-            parent, actor, actor_path, group,
-            child, label_width, property_edits,
+            parent,
+            actor,
+            actor_path,
+            group,
+            child,
+            label_width,
+            property_edits,
             content_layout,
             indent_level=indent_level + 1,
             collapsed=collapsed,
@@ -423,7 +374,7 @@ def create_property_group_content(
         f"create_property_group_content: group={group.name}, "
         f"props={len(group.properties)}, "
         f"prop_names=[{', '.join(p.name() for p in group.properties[:5])}{'...' if len(group.properties) > 5 else ''}]",
-        feature="PROPERTY"
+        feature="PROPERTY",
     )
 
     content = StyledWidget()
@@ -437,19 +388,17 @@ def create_property_group_content(
     # 第二步：渲染非结构体属性
     for prop in standalone_props:
         try:
-            if prop.value_type() == ActorPropertyType.TREE:
-                _render_tree_data_flat(
-                    parent, actor, actor_path, group,
-                    group.tree_data, content_layout, label_width,
-                    property_edits,
+            if prop.editor_hint() in ("container", "struct"):
+                editor = _create_property_edit(
+                    parent, actor, actor_path, group, prop, label_width
                 )
-            elif prop.editor_hint() in ("container", "struct"):
-                editor = _create_property_edit(parent, actor, actor_path, group, prop, label_width)
                 editor.set_read_only(True)
                 property_edits.append(editor)
                 content_layout.addWidget(editor)
             else:
-                editor = _create_property_edit(parent, actor, actor_path, group, prop, label_width)
+                editor = _create_property_edit(
+                    parent, actor, actor_path, group, prop, label_width
+                )
                 if prop.is_read_only():
                     editor.set_read_only(True)
                 property_edits.append(editor)
@@ -457,7 +406,8 @@ def create_property_group_content(
         except Exception as e:
             logging.getLogger(__name__).error(
                 f"render prop name={prop.name()} failed: "
-                f"type={type(e).__name__} msg={e}", exc_info=True
+                f"type={type(e).__name__} msg={e}",
+                exc_info=True,
             )
             err_label = QtWidgets.QLabel(f"⚠ {prop.name()}: {e}")
             content_layout.addWidget(err_label)
@@ -466,15 +416,21 @@ def create_property_group_content(
     for idx, struct_root in enumerate(struct_roots):
         try:
             _render_struct_group(
-                parent, actor, actor_path, group,
-                struct_root, label_width, property_edits,
+                parent,
+                actor,
+                actor_path,
+                group,
+                struct_root,
+                label_width,
+                property_edits,
                 content_layout,
                 collapsed=collapsed,
             )
         except Exception as e:
             logging.getLogger(__name__).error(
                 f"render struct[{idx}] name={struct_root.name} failed: "
-                f"type={type(e).__name__} msg={e}", exc_info=True
+                f"type={type(e).__name__} msg={e}",
+                exc_info=True,
             )
             err_label = QtWidgets.QLabel(f"⚠ {struct_root.display_name}: {e}")
             content_layout.addWidget(err_label)

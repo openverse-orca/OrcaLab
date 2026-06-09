@@ -1,10 +1,18 @@
 import asyncio
 from typing import List, Tuple, override
 
-from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt, QMimeData, Signal
+from PySide6.QtCore import (
+    QAbstractItemModel,
+    QModelIndex,
+    QPersistentModelIndex,
+    Qt,
+    QMimeData,
+    Signal,
+)
 
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.entity_info import EntityInfo
+from orcalab.entity_path import EntityPath
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.perf_log import perf_timer, perf_log
@@ -43,8 +51,6 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         self.m_root_group: GroupActor | None = None
         self.reparent_mime = "application/x-orca-actor-reparent"
         self.local_scene = local_scene
-        self._entity_actor_path_cache: dict[int, Path] = {}
-        self._inserted_entity_actors: set[Path] = set()
 
     def connect_bus(self):
         SceneEditNotificationBus.connect(self)
@@ -60,7 +66,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
             return node
         return None
 
-    def get_actor(self, index: QModelIndex) -> BaseActor:
+    def get_actor(self, index: QModelIndex) -> BaseActor | None:
         if not index.isValid():
             return self.m_root_group
 
@@ -71,49 +77,12 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         if isinstance(node, BaseActor):
             return node
         if isinstance(node, EntityInfo):
-            actor_path = self._find_actor_path_for_entity_index(index)
-            if actor_path is not None:
-                actor = self.local_scene.find_actor_by_path(actor_path)
-                if actor is not None:
-                    return actor
+            actor = self.local_scene.find_actor_by_entity_id(node.entity_id)
+            if actor is not None:
+                return actor
             raise ValueError("Cannot resolve actor for EntityInfo node.")
 
         raise ValueError("Invalid node.")
-
-    def _find_actor_path_for_entity_index(self, index: QModelIndex) -> Path | None:
-        node = index.internalPointer()
-        if isinstance(node, AssetActor):
-            return self.local_scene.get_actor_path(node)
-        if isinstance(node, EntityInfo):
-            cached = self._entity_actor_path_cache.get(id(node))
-            if cached is not None:
-                return cached
-            for path, actor in self.local_scene._actors.items():
-                if isinstance(actor, AssetActor) and actor.entity_root is not None:
-                    if self._is_entity_in_tree(actor.entity_root, node):
-                        self._entity_actor_path_cache[id(node)] = path
-                        return path
-        return None
-
-    def _is_entity_in_tree(self, root: EntityInfo, target: EntityInfo) -> bool:
-        if root is target:
-            return True
-        for child in root.children:
-            if self._is_entity_in_tree(child, target):
-                return True
-        return False
-
-    def _register_entity_tree(self, actor_path: Path, entity: EntityInfo):
-        self._entity_actor_path_cache[id(entity)] = actor_path
-        for child in entity.children:
-            self._register_entity_tree(actor_path, child)
-
-    def _rebuild_entity_cache(self):
-        self._entity_actor_path_cache.clear()
-        self._inserted_entity_actors.clear()
-        for path, actor in self.local_scene._actors.items():
-            if isinstance(actor, AssetActor) and actor.entity_root is not None:
-                self._register_entity_tree(path, actor.entity_root)
 
     def get_index_from_actor(self, actor: BaseActor) -> QModelIndex:
         if not isinstance(actor, BaseActor):
@@ -127,9 +96,8 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
             raise Exception("Actor that is not pseudo root should always has a parent.")
 
         index = -1
-        children = parent_actor.children
-        for i, child in enumerate(children):
-            if child == actor:
+        for i, child in enumerate(parent_actor.children):
+            if child is actor:
                 index = i
                 break
 
@@ -138,45 +106,34 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
 
         return self.createIndex(index, 0, actor)
 
-    def get_index_from_entity_info(
-        self, actor_path: Path, entity_info: EntityInfo
+    def get_index_for_entity(
+        self, actor: AssetActor, entity_path: EntityPath
     ) -> QModelIndex:
-        entity_root = self.local_scene.get_entity_root(actor_path)
+        if not isinstance(actor, AssetActor):
+            logger.error(
+                "[Coding Error]: Trying to get index for entity from non-asset actor."
+            )
+            return QModelIndex()
+
+        entity_root = actor.entity_root
         if entity_root is None:
             return QModelIndex()
 
-        if entity_root is entity_info:
-            actor = self.local_scene.find_actor_by_path(actor_path)
-            if actor is None:
-                return QModelIndex()
-            self.get_index_from_actor(actor)
+        entity_info = entity_root.find_entity_info_by_path(entity_path)
+        if entity_info is None:
+            return QModelIndex()
+
+        parent_entity_info = entity_info.parent
+        if parent_entity_info is None:
             return self.createIndex(0, 0, entity_info)
 
-        parent_entity, row = self._find_parent_and_row(entity_root, entity_info)
-        if parent_entity is None:
-            return QModelIndex()
+        index = -1
+        for i, child in enumerate(parent_entity_info.children):
+            if child is entity_info:
+                index = i
+                break
 
-        if parent_entity is entity_root:
-            actor = self.local_scene.find_actor_by_path(actor_path)
-            if actor is None:
-                return QModelIndex()
-            return self.createIndex(row, 0, entity_info)
-
-        parent_index = self.get_index_from_entity_info(actor_path, parent_entity)
-        if not parent_index.isValid():
-            return QModelIndex()
-        return self.createIndex(row, 0, entity_info)
-
-    def _find_parent_and_row(
-        self, root: EntityInfo, target: EntityInfo
-    ) -> Tuple[EntityInfo | None, int]:
-        for i, child in enumerate(root.children):
-            if child is target:
-                return root, i
-            result_parent, result_row = self._find_parent_and_row(child, target)
-            if result_parent is not None:
-                return result_parent, result_row
-        return None, -1
+        return self.createIndex(index, 0, entity_info)
 
     @override
     def index(self, row, column, /, parent=...):
@@ -200,12 +157,10 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
                     return self.createIndex(row, column, child)
 
             elif isinstance(node, AssetActor):
-                entity_root = self.local_scene.get_entity_root(
-                    self.local_scene.get_actor_path(node)
-                )
+                entity_root = node.entity_root
                 if entity_root is not None:
                     if row == 0:
-                        return self.createIndex(0, column, entity_root)
+                        return self.createIndex(0, column, entity_root.root_entity_info)
 
             elif isinstance(node, EntityInfo):
                 if row < len(node.children):
@@ -215,7 +170,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         return QModelIndex()
 
     @override
-    def parent(self, child):
+    def parent(self, child: QModelIndex | QPersistentModelIndex) -> QModelIndex:  # type: ignore
         super().parent()
         if not child.isValid():
             return QModelIndex()
@@ -224,40 +179,35 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
 
         if isinstance(node, BaseActor):
             parent_actor = node.parent
+            assert parent_actor is not None
             if parent_actor == self.m_root_group:
                 return QModelIndex()
             return self.get_index_from_actor(parent_actor)
 
         elif isinstance(node, EntityInfo):
-            actor_path = self._find_actor_path_for_entity_index(child)
-            if actor_path is None:
+            parent_entity = node.parent
+            if parent_entity is not None:
+                index = -1
+                parent_of_parent = parent_entity.parent
+                siblings = (
+                    parent_of_parent.children
+                    if parent_of_parent is not None
+                    else [parent_entity]
+                )
+                for i, _child in enumerate(siblings):
+                    if _child is parent_entity:
+                        index = i
+                        break
+                return self.createIndex(index, 0, parent_entity)
+
+            # If parent_entity is None, the parent is the AssetActor
+
+            asset_actor = self.local_scene.find_actor_by_entity_id(node.entity_id)
+            if asset_actor is None:
+                logger.error(f"Cannot find actor for entity {node.entity_path}.")
                 return QModelIndex()
 
-            entity_root = self.local_scene.get_entity_root(actor_path)
-            if entity_root is None:
-                return QModelIndex()
-
-            if node is entity_root:
-                actor = self.local_scene.find_actor_by_path(actor_path)
-                if actor is None:
-                    return QModelIndex()
-                return self.get_index_from_actor(actor)
-
-            parent_entity, _ = self._find_parent_and_row(entity_root, node)
-            if parent_entity is None:
-                return QModelIndex()
-
-            if parent_entity is entity_root:
-                actor = self.local_scene.find_actor_by_path(actor_path)
-                if actor is None:
-                    return QModelIndex()
-                return self.createIndex(0, 0, entity_root)
-
-            _, parent_row = self._find_parent_and_row(entity_root, parent_entity)
-            if parent_row == -1:
-                return QModelIndex()
-
-            return self.createIndex(parent_row, 0, parent_entity)
+            return self.get_index_from_actor(asset_actor)
 
         return QModelIndex()
 
@@ -295,8 +245,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
                 return len(node.children)
 
             elif isinstance(node, AssetActor):
-                actor_path = self.local_scene.get_actor_path(node)
-                entity_root = self.local_scene.get_entity_root(actor_path)
+                entity_root = node.entity_root
                 return 1 if entity_root is not None else 0
 
             elif isinstance(node, EntityInfo):
@@ -355,11 +304,9 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         if not isinstance(group, GroupActor):
             raise TypeError("Root group must be an instance of GroupActor.")
 
-        self._entity_actor_path_cache.clear()
         self.beginResetModel()
         self.m_root_group = group
         self.endResetModel()
-        self._rebuild_entity_cache()
 
     def supportedDropActions(self):
         return Qt.DropAction.CopyAction | Qt.DropAction.MoveAction
@@ -385,7 +332,9 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
 
             self.request_reparent.emit("", reparent_data.parent_path, row)
 
-            new_parent_paths: List[Path] = [reparent_data.parent_path] * len(reparent_data.actor_paths)
+            new_parent_paths: List[Path] = [reparent_data.parent_path] * len(
+                reparent_data.actor_paths
+            )
             insert_positions: List[int] = [row] * len(reparent_data.actor_paths)
 
             async def _do_reparent():
@@ -405,17 +354,9 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
             return True
 
         if data.hasFormat("application/x-orca-asset"):
-            ba = data.data("application/x-orca-asset")
-            try:
-                asset_name = bytes(ba).decode("utf-8")
-            except Exception:
-                try:
-                    asset_name = ba.data().decode("utf-8")
-                except Exception:
-                    asset_name = str(ba)
-
+            binary_data = bytes(data.data("application/x-orca-asset").data())
+            asset_name = binary_data.decode("utf-8")
             parent_actor = self.get_actor(parent)
-
             self.add_item.emit(asset_name, parent_actor)
             return True
 
@@ -446,6 +387,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
             return QMimeData()
 
         actor = self.get_actor(indexes[0])
+        assert actor is not None
 
         actor_path = self.local_scene.get_actor_path(actor)
         if actor_path is None:
@@ -476,12 +418,14 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
             return False, None
 
         parent_actor = self.get_actor(parent)
+        if parent_actor is None:
+            return False, None
 
         parent_actor_path = self.local_scene.get_actor_path(parent_actor)
         if parent_actor_path is None:
             return False, None
 
-        data_str = mime_data.data(self.reparent_mime).data().decode("utf-8")
+        data_str = bytes(mime_data.data(self.reparent_mime).data()).decode("utf-8")
 
         path_strs = data_str.split(";")
         actors: List[BaseActor] = []
@@ -522,6 +466,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
     ):
         parent_actor, _ = self.local_scene.get_actor_and_path(parent_actor_path)
         parent_index = self.get_index_from_actor(parent_actor)
+        assert isinstance(parent_actor, GroupActor)
         child_count = len(parent_actor.children)
 
         self.beginInsertRows(parent_index, child_count, child_count)
@@ -543,7 +488,6 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         source: str,
     ):
         self.endResetModel()
-        self._rebuild_entity_cache()
 
     @override
     async def before_actors_deleted(self, actor_paths: List[Path], source: str):
@@ -552,7 +496,6 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
     @override
     async def on_actors_deleted(self, actor_paths: List[Path], source: str):
         self.endResetModel()
-        self._rebuild_entity_cache()
 
     @override
     async def before_actor_renamed(
@@ -570,7 +513,9 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         new_name: str,
         source: str,
     ):
-        new_path = actor_path.parent() / new_name
+        parent_path = actor_path.parent()
+        assert parent_path is not None
+        new_path = parent_path / new_name
         actor, _ = self.local_scene.get_actor_and_path(new_path)
         index = self.get_index_from_actor(actor)
         self.dataChanged.emit(index, index)
@@ -582,7 +527,6 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
     @override
     async def on_actor_reparented(self):
         self.endResetModel()
-        self._rebuild_entity_cache()
 
     @override
     async def on_actor_visible_changed(
@@ -607,7 +551,6 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
     @override
     async def on_actor_added_batch(self, error: str):
         self.endResetModel()
-        self._rebuild_entity_cache()
 
     @override
     async def on_entity_hierarchy_loaded(
@@ -617,114 +560,5 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         source: str = "",
     ) -> None:
         with perf_timer("outline_model.on_entity_hierarchy_loaded", feature="OUTLINE"):
-            if actor_path in self._inserted_entity_actors:
-                return
-
-            self._inserted_entity_actors.add(actor_path)
-            self._register_entity_tree(actor_path, entity_root)
-
-            actor = self.local_scene.find_actor_by_path(actor_path)
-            if actor is None:
-                return
-
-            actor_index = self.get_index_from_actor(actor)
-            if not actor_index.isValid():
-                return
-
-            self.beginInsertRows(actor_index, 0, 0)
-            self.endInsertRows()
-
-
-if __name__ == "__main__":
-    import unittest
-    from orcalab.actor import AssetActor
-    from PySide6.QtTest import QAbstractItemModelTester
-    from PySide6.QtCore import QModelIndex, Qt
-
-    class TestAddFunction(unittest.TestCase):
-        def test_empty_path_is_invalid(self):
-            local_scene = LocalScene()
-
-            local_scene.add_actor(GroupActor("g1"), Path("/"))
-            local_scene.add_actor(GroupActor("g2"), Path("/"))
-            local_scene.add_actor(GroupActor("g3"), Path("/"))
-            local_scene.add_actor(GroupActor("g4"), Path("/g2"))
-            local_scene.add_actor(AssetActor("a1", "spw_name"), Path("/g3"))
-
-            model = ActorOutlineModel(local_scene)
-            model.set_root_group(local_scene.root_actor)
-
-            self.assertEqual(model.rowCount(QModelIndex()), 3)
-            index1 = model.index(0, 0, QModelIndex())
-            self.assertEqual(index1.isValid(), True)
-            self.assertEqual(index1.data(Qt.DisplayRole), "g1")
-            self.assertEqual(
-                model.parent(model.index(0, 0, QModelIndex())).isValid(), False
-            )
-            self.assertEqual(
-                model.parent(model.index(1, 0, QModelIndex())).isValid(), False
-            )
-            self.assertEqual(
-                model.parent(model.index(2, 0, QModelIndex())).isValid(), False
-            )
-
-            mode = QAbstractItemModelTester.FailureReportingMode.Fatal
-            tester = QAbstractItemModelTester(model, mode)
-
-    class TestEntityHierarchyRaceCondition(unittest.TestCase):
-        def setUp(self):
-            self.local_scene = LocalScene()
-            self.local_scene.add_actor(GroupActor("g1"), Path("/"))
-            self.local_scene.add_actor(AssetActor("a1", "spw_name"), Path("/g1"))
-            self.model = ActorOutlineModel(self.local_scene)
-            self.model.set_root_group(self.local_scene.root_actor)
-            self.actor_path = Path("/g1/a1")
-
-        def _get_actor_index(self):
-            return self.model.index(0, 0, QModelIndex())
-
-        def _call_on_entity_hierarchy_loaded(self):
-            entity_root = EntityInfo(1, "root", "/")
-            asyncio.run(
-                self.model.on_entity_hierarchy_loaded(self.actor_path, entity_root)
-            )
-
-        def test_duplicate_insert_is_skipped(self):
-            self._call_on_entity_hierarchy_loaded()
-            self.assertEqual(self.model.rowCount(self._get_actor_index()), 1)
-
-            self._call_on_entity_hierarchy_loaded()
-            self.assertEqual(self.model.rowCount(self._get_actor_index()), 1)
-
-        def test_rebuild_cache_resets_guard(self):
-            self._call_on_entity_hierarchy_loaded()
-            self.assertEqual(self.model.rowCount(self._get_actor_index()), 1)
-
-            self.model.beginResetModel()
-            self.model.endResetModel()
-            self.model._rebuild_entity_cache()
-
-            self._call_on_entity_hierarchy_loaded()
-            self.assertEqual(self.model.rowCount(self._get_actor_index()), 1)
-
-        def test_different_actor_paths_not_affected(self):
-            self.local_scene.add_actor(AssetActor("a2", "spw_name"), Path("/g1"))
-            self.model.beginResetModel()
-            self.model.endResetModel()
-            self.model._rebuild_entity_cache()
-
-            entity_root_1 = EntityInfo(1, "root1", "/")
-            asyncio.run(
-                self.model.on_entity_hierarchy_loaded(Path("/g1/a1"), entity_root_1)
-            )
-
-            entity_root_2 = EntityInfo(2, "root2", "/")
-            asyncio.run(
-                self.model.on_entity_hierarchy_loaded(Path("/g1/a2"), entity_root_2)
-            )
-
-            self.assertEqual(self.model.rowCount(QModelIndex()), 1)
-            g1_index = self.model.index(0, 0, QModelIndex())
-            self.assertEqual(self.model.rowCount(g1_index), 2)
-
-    unittest.main()
+            self.beginResetModel()
+            self.endResetModel()

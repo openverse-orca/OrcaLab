@@ -17,6 +17,7 @@ from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.path import Path
 from typing import List, Dict
 
+from orcalab.selection_data import SelectionData
 from orcalab.simulation.simulation_bus import SimulationRequestBus, SimulationState
 from orcalab.ui.camera.camera_brief import CameraBrief
 from orcalab.ui.camera.camera_bus import CameraRequestBus
@@ -1725,7 +1726,7 @@ class OrcaLabMCPServer:
         try:
             paths = [Path(p) for p in actor_paths]
             active = Path(active_actor) if active_actor else (paths[0] if paths else None)
-            await self.scene_edit_bus.set_selection_and_active_actor(paths, active, undo=True, source="mcp")
+            await self.scene_edit_bus.set_selection(SelectionData(paths, active), undo=True, source="mcp")
             return json.dumps({"success": True, "message": f"成功设置选择，共选中 {len(paths)} 个Actor"}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"success": False, "message": f"设置选择与激活Actor失败: {e}"}, ensure_ascii=False)
@@ -1739,7 +1740,7 @@ class OrcaLabMCPServer:
             清空选择的结果的json字符串格式
         '''
         try:
-            await self.scene_edit_bus.set_selection_and_active_actor([],None, undo=True, source="mcp")
+            await self.scene_edit_bus.set_selection(SelectionData(), undo=True, source="mcp")
             return json.dumps({"success": True, "message": "成功清空选择"}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"success": False, "message": f"清空选择失败: {e}"}, ensure_ascii=False)

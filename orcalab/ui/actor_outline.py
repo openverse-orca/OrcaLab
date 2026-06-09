@@ -1,11 +1,14 @@
 import asyncio
-from typing import Dict, Tuple, override
+from platform import node
+from platform import node
+from typing import Any, Dict, List, Tuple, override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.actor import BaseActor, GroupActor, AssetActor
 from orcalab.actor_util import make_unique_name
 from orcalab.application_util import get_local_scene
 from orcalab.entity_info import EntityInfo
+from orcalab.entity_path import FullEntityPath
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.perf_log import perf_timer, perf_log
@@ -16,6 +19,8 @@ from orcalab.scene_edit_bus import (
     SceneEditNotificationBus,
 )
 
+from orcalab.selection_data import SelectionData
+from orcalab.ui import actor_outline_model
 from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.collapsible.collapsible_section import SectionHeader
 from orcalab.ui.fonts.font_service import FontService
@@ -38,7 +43,9 @@ def _visibility_lock_button_rects(
     r = row_rect.x() + row_rect.width()
 
     lock_rect = QtCore.QRect(r - 4 - tail_size, y, tail_size, tail_size)
-    eye_rect = QtCore.QRect(r - 4 - tail_size - gap - tail_size, y, tail_size, tail_size)
+    eye_rect = QtCore.QRect(
+        r - 4 - tail_size - gap - tail_size, y, tail_size, tail_size
+    )
 
     return eye_rect, lock_rect
 
@@ -63,7 +70,7 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
         self,
         painter: QtGui.QPainter,
         option: QtWidgets.QStyleOptionViewItem,
-        index: QtCore.QModelIndex,
+        index: QtCore.QModelIndex | QtCore.QPersistentModelIndex,
     ):
         if not index.isValid():
             super().paint(painter, option, index)
@@ -71,18 +78,31 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
 
         node = index.internalPointer()
 
-        hovered = bool(option.state & QtWidgets.QStyle.StateFlag.State_MouseOver)
-        selected = bool(option.state & QtWidgets.QStyle.StateFlag.State_Selected)
+        # PySide6's type hint for QStyleOptionViewItem is not great,
+        # so we need to use Any to access the state, font, rect, and palette attributes.
+        option_any: Any = option
+        state: QtWidgets.QStyle.StateFlag = option_any.state
+        font: QtGui.QFont = option_any.font
+        rect: QtCore.QRect = option_any.rect
+        palette: QtGui.QPalette = option_any.palette
+
+        hovered = bool(state & QtWidgets.QStyle.StateFlag.State_MouseOver)
+        selected = bool(state & QtWidgets.QStyle.StateFlag.State_Selected)
 
         tree_view = self.parent()
-        is_expanded = tree_view.isExpanded(index) if isinstance(tree_view, QtWidgets.QTreeView) else True
+        assert isinstance(tree_view, QtWidgets.QTreeView)
+        is_expanded = (
+            tree_view.isExpanded(index)
+            if isinstance(tree_view, QtWidgets.QTreeView)
+            else True
+        )
 
         if isinstance(node, EntityInfo):
-            font = FontService().apply_font_modifiers("entity_info", option.font)
+            font = FontService().apply_font_modifiers("entity_info", font)
             painter.setFont(font)
             SectionHeader.paint_at(
                 painter=painter,
-                rect=option.rect,
+                rect=rect,
                 title=node.name,
                 collapsed=not is_expanded,
                 has_children=False,
@@ -101,7 +121,7 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
         model = index.model()
         has_children = model.hasChildren(index) if model else False
 
-        color = option.palette.color(
+        color = palette.color(
             QtGui.QPalette.ColorGroup.Active,
             QtGui.QPalette.ColorRole.Text,
         )
@@ -114,7 +134,7 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
 
         SectionHeader.paint_at(
             painter=painter,
-            rect=option.rect,
+            rect=rect,
             title=actor.name,
             collapsed=not is_expanded,
             has_children=False,
@@ -157,7 +177,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
         self.reparent_mime = "application/x-orca-actor-reparent"
 
-        self._temp_expaned_actor_paths = []
+        self._temp_expaned_items: List[Path | FullEntityPath] = []
 
         self._entity_fetch_version: Dict[Path, int] = {}
         self._entity_fetch_tasks: Dict[Path, asyncio.Task] = {}
@@ -185,15 +205,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         if source == "actor_outline":
             return
 
-        actors = []
-
-        for actor_path in new_selection:
-            local_scene = get_local_scene()
-            actor = local_scene.find_actor_by_path(actor_path)
-            assert actor is not None
-            actors.append(actor)
-
-        self.set_actor_selection(actors)
+        self.set_selection(new_selection)
 
     @override
     async def on_actor_locked_changed(
@@ -203,97 +215,109 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             return
 
         local_scene = self.actor_model().local_scene
-        selection = local_scene.selection
-        if selection == []:
+        actors = local_scene.selected_actors
+        if not actors:
             return
+
         locked_set = set(paths_to_update)
-        new_selection = [p for p in selection if p not in locked_set]
-        if len(new_selection) != len(selection):
-            actors = []
-            for p in new_selection:
-                actor = local_scene.find_actor_by_path(p)
-                if actor is not None:
-                    actors.append(actor)
-            self.set_actor_selection(actors)
-            active = local_scene.active_actor
-            if active in locked_set:
-                active = None
-            await SceneEditRequestBus().set_selection_and_active_actor(
-                new_selection, active, source="actor_outline"
-            )
+        new_actors = []
+        for p in actors:
+            if p not in locked_set:
+                new_actors.append(p)
 
-    @override
-    async def on_active_entity_changed(
-        self,
-        old_active_entity: tuple | None,
-        new_active_entity: tuple | None,
-        source: str = "",
-    ) -> None:
-        if source == "actor_outline":
+        def need_update():
+            if len(new_actors) != len(actors):
+                return True
+            if local_scene.active_actor in locked_set:
+                return True
+            return False
+
+        if not need_update():
             return
 
-        if new_active_entity is None:
-            selection_model = self.selectionModel()
-            node = None
-            current = selection_model.currentIndex()
-            if current.isValid():
-                node = current.internalPointer()
-            if isinstance(node, EntityInfo):
-                selection_model.clearSelection()
-            return
+        active_actor = local_scene.active_actor
+        if active_actor in locked_set:
+            active_actor = None
 
-        actor_path, entity_id = new_active_entity
+        new_selection = SelectionData(
+            selected_actors=new_actors, active_actor=active_actor
+        )
+        self.set_selection(new_selection)
+        await SceneEditRequestBus().set_selection(new_selection, source="actor_outline")
+
+    def _select_active_entity(self, selection: SelectionData) -> bool:
+        if selection.active_actor is None:
+            if not selection.active_entity.empty():
+                logger.error("Active entity is set but active actor is None.")
+            return False
+
         model = self.actor_model()
         local_scene = model.local_scene
 
-        actor = local_scene.find_actor_by_path(actor_path)
-        if actor is None:
-            return
+        actor = local_scene.find_actor_by_path(selection.active_actor)
+        if not isinstance(actor, AssetActor):
+            if not selection.active_entity.empty():
+                logger.error(
+                    "Active entity is set but active actor is not an AssetActor."
+                )
+            return False
 
-        entity_info = local_scene.find_entity_info_by_id(actor_path, entity_id)
-        if entity_info is None:
-            return
+        if selection.active_entity.empty():
+            return False
 
-        entity_index = model.get_index_from_entity_info(actor_path, entity_info)
-        if not entity_index.isValid():
-            return
-
-        self._select_entity_index(entity_index)
-
-    def _select_entity_index(self, entity_index: QtCore.QModelIndex):
-        parent_index = entity_index.parent()
-        while parent_index.isValid():
-            if not self.isExpanded(parent_index):
-                self.expand(parent_index)
-            parent_index = parent_index.parent()
-
-        self.scrollTo(entity_index)
+        index = model.get_index_for_entity(actor, selection.active_entity)
+        if not index.isValid():
+            logger.error("Invalid index for active entity.")
+            return False
 
         selection_model = self.selectionModel()
         selection_model.clearSelection()
+        SelectionFlag = QtCore.QItemSelectionModel.SelectionFlag
+        flags = SelectionFlag.Select | SelectionFlag.Rows
+        selection_model.select(index, flags)
 
-        flags = (
-            QtCore.QItemSelectionModel.SelectionFlag.Select
-            | QtCore.QItemSelectionModel.SelectionFlag.Rows
-        )
-        selection_model.select(entity_index, flags)
+        self.scrollTo(index)
+        return True
 
-    def set_actor_selection(self, actors: list[BaseActor]):
+    def _select_actors(self, selection: SelectionData):
         selection_model = self.selectionModel()
         selection_model.clearSelection()
 
         model = self.actor_model()
-        for actor in actors:
+        local_scene = model.local_scene
+
+        actor_indices = []
+        for actor_path in selection.selected_actors:
+            actor = local_scene.find_actor_by_path(actor_path)
+            if actor is None:
+                logger.warning(f"Actor not found for path: {actor_path}")
+                continue
+
             index = model.get_index_from_actor(actor)
             if not index.isValid():
-                raise Exception("Invalid actor.")
+                logger.warning(f"Invalid index for actor: {actor_path}")
 
-            flags = (
-                QtCore.QItemSelectionModel.SelectionFlag.Select
-                | QtCore.QItemSelectionModel.SelectionFlag.Rows
-            )
+            SelectionFlag = QtCore.QItemSelectionModel.SelectionFlag
+            flags = SelectionFlag.Select | SelectionFlag.Rows
             selection_model.select(index, flags)
-            self.scrollTo(index)
+            actor_indices.append(index)
+
+        if len(actor_indices) == 1:
+            self.scrollTo(actor_indices[0])
+
+    def set_selection(self, selection: SelectionData):
+        """
+        只考虑UI层的选中逻辑，不涉及数据层的选中状态管理。
+        - Actor支持多选
+        - Entity只支持单选
+        - Actor和Entity不能同时选中
+        - Entity优先于Actor
+        """
+
+        if self._select_active_entity(selection):
+            return
+
+        self._select_actors(selection)
 
     def _on_node_expanded(self, index: QtCore.QModelIndex):
         if not index.isValid():
@@ -380,11 +404,15 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
         if is_entity_node:
             action_expand = QtGui.QAction("递归展开")
-            connect(action_expand.triggered, lambda: self._recursive_expand_action(True))
+            connect(
+                action_expand.triggered, lambda: self._recursive_expand_action(True)
+            )
             menu.addAction(action_expand)
 
             action_collapse = QtGui.QAction("递归折叠")
-            connect(action_collapse.triggered, lambda: self._recursive_expand_action(False))
+            connect(
+                action_collapse.triggered, lambda: self._recursive_expand_action(False)
+            )
             menu.addAction(action_collapse)
         else:
             action_add_group = QtGui.QAction("Add Group")
@@ -407,11 +435,15 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             menu.addSeparator()
 
             action_expand = QtGui.QAction("递归展开")
-            connect(action_expand.triggered, lambda: self._recursive_expand_action(True))
+            connect(
+                action_expand.triggered, lambda: self._recursive_expand_action(True)
+            )
             menu.addAction(action_expand)
 
             action_collapse = QtGui.QAction("递归折叠")
-            connect(action_collapse.triggered, lambda: self._recursive_expand_action(False))
+            connect(
+                action_collapse.triggered, lambda: self._recursive_expand_action(False)
+            )
             menu.addAction(action_collapse)
 
         menu.exec(self.mapToGlobal(position))
@@ -471,29 +503,20 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                 )
             )
 
-    def _get_node_at_pos(self, pos: QtCore.QPoint):
-        index = self.indexAt(pos)
-        if not index.isValid():
-            return None, None, None
-        node = index.internalPointer()
-        if isinstance(node, BaseActor):
-            actor_outline_model = self.actor_model()
-            actor, actor_path = actor_outline_model.local_scene.get_actor_and_path(node)
-            return node, actor_path, False
-        elif isinstance(node, EntityInfo):
-            actor_outline_model = self.actor_model()
-            actor_path = actor_outline_model._find_actor_path_for_entity_index(index)
-            return node, actor_path, True
-        return None, None, None
-
     def mousePressEvent(self, event: QtGui.QMouseEvent):
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
             self._left_mouse_pressed = True
             self._left_mouse_pressed_position = event.position()
-            node, actor_path, is_entity = self._get_node_at_pos(event.position().toPoint())
-            if isinstance(node, BaseActor):
-                self._current_actor = node
-                self._current_actor_path = actor_path
+
+            index = self.indexAt(event.position().toPoint())
+
+            if index.isValid():
+                ptr = index.internalPointer()
+                if isinstance(ptr, BaseActor):
+                    local_scene = self.actor_model().local_scene
+                    actor, actor_path = local_scene.get_actor_and_path(ptr)
+                    self._current_actor = actor
+                    self._current_actor_path = actor_path
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent):
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
@@ -505,85 +528,22 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             pos = event.position().toPoint()
             index = self.indexAt(pos)
 
-            if index.isValid():
-                node = index.internalPointer()
-
-                if isinstance(node, BaseActor):
-                    row_rect = self.visualRect(index)
-                    eye_rect, lock_rect = _visibility_lock_button_rects(row_rect)
-                    if eye_rect.contains(pos):
-                        self._toggle_actor_visibile(index)
-                        return
-                    if lock_rect.contains(pos):
-                        self._toggle_actor_locked(index)
-                        return
-
-            node, actor_path, is_entity = self._get_node_at_pos(pos)
-
-            if is_entity and isinstance(node, EntityInfo):
-                if not actor_path:
-                    return
-
-                actor = self.actor_model().local_scene.find_actor_by_path(actor_path)
-                if actor is not None and (actor.is_locked or actor.is_parent_locked):
-                    return
-
-                branch_area = self._brach_areas.get(index)
-                if branch_area and branch_area.contains(pos):
-                    self.setExpanded(index, not self.isExpanded(index))
-                    return
-
-                async def _do_select_entity():
-                    with perf_timer("outline.set_active_entity", feature="OUTLINE"):
-                        await SceneEditRequestBus().set_active_entity(
-                            actor_path, node.entity_id, source="actor_outline"
-                        )
-
-                self._select_entity_index(index)
-                asyncio.create_task(_do_select_entity())
+            branch_area = self._brach_areas.get(index)
+            if branch_area is not None and branch_area.contains(pos):
+                self.setExpanded(index, not self.isExpanded(index))
                 return
 
-            if node is None or actor_path is None:
+            if self._toggle_actor_state(pos, index):
                 return
 
-            if isinstance(node, BaseActor) and (node.is_locked or node.is_parent_locked):
-                return
-
-            if not actor_path.is_root():
-                branch_area = self._brach_areas.get(index)
-                if branch_area and branch_area.contains(pos):
-                    self.setExpanded(index, not self.isExpanded(index))
-                    return
-
-            async def _do_set_selection(
-                actor_paths: list[Path], active_path: Path | None
-            ):
-                _actors, _ = get_local_scene().normalize_actors(actor_paths)
-                self.set_actor_selection(_actors)
-
-                bus = SceneEditRequestBus()
-                await bus.set_selection_and_active_actor(actor_paths, active_path, source="actor_outline")
-
-            def do_set_selection(actor_paths: list[Path], active_path: Path | None):
-                asyncio.create_task(_do_set_selection(actor_paths, active_path))
-
-            shift = event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
-            if shift:
-                if actor_path == Path.root_path():
-                    pass
-                else:
-                    actor_paths = self._selected_actor_paths()
-                    if actor_path in actor_paths:
-                        if actor_path == self.actor_model().local_scene.active_actor:
-                            actor_paths.remove(actor_path)
-                    else:
-                        actor_paths.append(actor_path)
-                    do_set_selection(actor_paths, actor_path)
-            else:
-                if actor_path == Path.root_path():
-                    do_set_selection([], None)
-                else:
-                    do_set_selection([actor_path], actor_path)
+            selection = SelectionData()
+            shift = QtCore.Qt.KeyboardModifier.ShiftModifier in event.modifiers()
+            if self._update_selection_data(selection, index, shift):
+                asyncio.create_task(
+                    SceneEditRequestBus().set_selection(
+                        selection, source="actor_outline"
+                    )
+                )
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent):
         if not self._left_mouse_pressed or self._left_mouse_pressed_position is None:
@@ -662,6 +622,109 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         )
         self.viewport().update(self.visualRect(index))
 
+    def _toggle_actor_state(
+        self, pos: QtCore.QPoint, index: QtCore.QModelIndex
+    ) -> bool:
+        if not index.isValid():
+            return False
+
+        ptr = index.internalPointer()
+        if isinstance(ptr, BaseActor):
+            row_rect = self.visualRect(index)
+            eye_rect, lock_rect = _visibility_lock_button_rects(row_rect)
+            if eye_rect.contains(pos):
+                self._toggle_actor_visibile(index)
+                return True
+            if lock_rect.contains(pos):
+                self._toggle_actor_locked(index)
+                return True
+
+        return False
+
+    def _update_selection_data(
+        self,
+        selection: SelectionData,
+        index: QtCore.QModelIndex,
+        shift: bool,
+    ) -> bool:
+        if not index.isValid():
+            if shift:
+                # 按住shift点击空白区域没有任何效果
+                return False
+
+            # 点击空白区域，清空选中
+            return True
+
+        local_scene = self.actor_model().local_scene
+        ptr = index.internalPointer()
+
+        if isinstance(ptr, BaseActor):
+            actor_path = local_scene.get_actor_path(ptr)
+            if actor_path is None:
+                logger.error("Actor path not found for actor: {}".format(ptr))
+                return False
+
+            if ptr.is_locked or ptr.is_parent_locked:
+                # 点击锁定的actor没有任何效果
+                return False
+
+            selected = actor_path in selection.selected_actors
+            active = local_scene.active_actor == actor_path
+
+            if shift:
+                # 按住shift点击一个actor
+                selection.selected_actors = local_scene.selected_actors
+                selection.active_actor = local_scene.active_actor
+
+                if selected:
+                    if active:
+                        # 如果是active actor，取消选中，保持active actor不变
+                        selection.selected_actors.remove(actor_path)
+                    else:
+                        # 如果不是active actor，设为active，保持选择不变
+                        selection.active_actor = actor_path
+                else:
+                    # 如果未选中，则添加到选中列表中，但不修改active actor
+                    selection.selected_actors.append(actor_path)
+
+                return True
+            else:
+                # 点击一个未选中的actor，选中并且设为active actor
+                if not selected:
+                    selection.selected_actors = [actor_path]
+                    selection.active_actor = actor_path
+                    return True
+
+        elif isinstance(ptr, EntityInfo):
+            if shift:
+                # 按住shift点击Entity没有任何效果
+                return False
+
+            asset_actor = local_scene.find_actor_by_entity_id(ptr.entity_id)
+            if asset_actor is None:
+                logger.error(
+                    "Asset actor not found for entity: {}".format(ptr.entity_path)
+                )
+                return False
+
+            if asset_actor.is_locked or asset_actor.is_parent_locked:
+                # 点击锁定的actor下的entity没有任何效果
+                return False
+
+            actor_path = local_scene.get_actor_path(asset_actor)
+            if actor_path is None:
+                logger.error(
+                    "Actor path not found for actor: {}".format(asset_actor.name)
+                )
+                return False
+
+            selection.selected_actors = [actor_path]
+            selection.active_actor = actor_path
+            selection.active_entity = ptr.entity_path
+            return True
+
+        return False
+
     def _selected_actor_paths(self) -> list[Path]:
         indexes = self.selectedIndexes()
         if not indexes:
@@ -691,8 +754,81 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
         return super().drawBranches(painter, rect, index)
 
+    def _save_expaneded_items(
+        self, parent: QtCore.QModelIndex, parent_actor_path: Path | None
+    ):
+        model = self.actor_model()
+        local_scene = model.local_scene
+
+        for i in range(model.rowCount(parent)):
+            child = model.index(i, 0, parent)
+            if not self.isExpanded(child):
+                continue
+
+            ptr = child.internalPointer()
+            if isinstance(ptr, BaseActor):
+                actor_path = local_scene.get_actor_path(ptr)
+                if actor_path is not None:
+                    self._temp_expaned_items.append(actor_path)
+                    self._save_expaneded_items(child, actor_path)
+            elif isinstance(ptr, EntityInfo):
+                entity_path = ptr.entity_path
+                assert parent_actor_path is not None
+                full_entity_path = FullEntityPath(parent_actor_path, entity_path)
+                self._temp_expaned_items.append(full_entity_path)
+                self._save_expaneded_items(child, parent_actor_path)
+
+    def _expand_actor(self, actor_path: Path):
+        model = self.actor_model()
+        local_scene = model.local_scene
+
+        actor = local_scene.find_actor_by_path(actor_path)
+        if actor is None:
+            return
+
+        index = model.get_index_from_actor(actor)
+        if not index.isValid():
+            return
+
+        def do_expand():
+            self.setExpanded(index, True)
+
+        QtCore.QTimer.singleShot(10, do_expand)
+
+    def _expand_entity(self, full_entity_path: FullEntityPath):
+        model = self.actor_model()
+        local_scene = model.local_scene
+
+        actor = local_scene.find_actor_by_path(full_entity_path.actor_path)
+        if not isinstance(actor, AssetActor):
+            return
+
+        entity_root = actor.entity_root
+        if entity_root is None:
+            return
+
+        entity_info = entity_root.find_entity_info_by_path(full_entity_path.entity_path)
+        if entity_info is None:
+            return
+
+        index = model.get_index_for_entity(actor, entity_info.entity_path)
+        if not index.isValid():
+            return
+
+        def do_expand():
+            self.setExpanded(index, True)
+
+        QtCore.QTimer.singleShot(10, do_expand)
+
+    def _restore_expanded_items(self):
+        for item in self._temp_expaned_items:
+            if isinstance(item, Path):
+                self._expand_actor(item)
+            elif isinstance(item, FullEntityPath):
+                self._expand_entity(item)
+
     def _before_reset_model(self):
-        self._temp_expaned_actor_paths.clear()
+        self._temp_expaned_items.clear()
         self._entity_fetch_version.clear()
 
         for task in self._entity_fetch_tasks.values():
@@ -700,69 +836,13 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                 task.cancel()
         self._entity_fetch_tasks.clear()
 
-        model = self.actor_model()
-        local_scene = model.local_scene
-
-        def collect_expaneded_actors(parent: QtCore.QModelIndex):
-            for i in range(model.rowCount(parent)):
-                child = model.index(i, 0, parent)
-                if self.isExpanded(child):
-                    node = child.internalPointer()
-                    if isinstance(node, BaseActor):
-                        actor_path = local_scene.get_actor_path(node)
-                        if actor_path is not None:
-                            self._temp_expaned_actor_paths.append(actor_path)
-                    collect_expaneded_actors(child)
-
-        collect_expaneded_actors(QtCore.QModelIndex())
+        self._save_expaneded_items(QtCore.QModelIndex(), None)
 
     def _after_reset_model(self):
-
         model = self.actor_model()
         local_scene = model.local_scene
 
-        actors, actor_paths = local_scene.normalize_actors(local_scene.selection)
-        self.set_actor_selection(actors)
+        self.set_selection(local_scene.selection())
 
-        for actor_path in self._temp_expaned_actor_paths:
-            actor = local_scene.find_actor_by_path(actor_path)
-            if actor is not None:
-                index = model.get_index_from_actor(actor)
-                if index.isValid():
-                    QtCore.QTimer.singleShot(
-                        10, lambda index=index: self.setExpanded(index, True)
-                    )
-
-        self._temp_expaned_actor_paths.clear()
-
-
-if __name__ == "__main__":
-    import sys
-    from actor_outline_model import ActorOutlineModel
-    from orcalab.actor import GroupActor, AssetActor
-
-    app = QtWidgets.QApplication(sys.argv)
-
-    local_scene = LocalScene()
-    local_scene.add_actor(GroupActor("g1"), Path("/"))
-    local_scene.add_actor(GroupActor("g2"), Path("/"))
-    local_scene.add_actor(GroupActor("g3"), Path("/"))
-    local_scene.add_actor(GroupActor("g4"), Path("/g2"))
-    local_scene.add_actor(AssetActor("a1", "spw_name"), Path("/g3"))
-
-    model = ActorOutlineModel(local_scene)
-    model.set_root_group(local_scene.root_actor)
-
-    def on_request_reparent(actor_path: Path, new_parent_path: Path, row: int):
-        if row < 0:
-            logger.debug(f"reparent {actor_path} to end of {new_parent_path}")
-        else:
-            logger.debug(f"reparent {actor_path} to row {row} of {new_parent_path}")
-
-    model.request_reparent.connect(on_request_reparent)
-
-    actor_outline = ActorOutline()
-    actor_outline.set_actor_model(model)
-    actor_outline.show()
-
-    app.exec()
+        self._restore_expanded_items()
+        self._temp_expaned_items.clear()

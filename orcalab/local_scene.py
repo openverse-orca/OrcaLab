@@ -6,12 +6,12 @@ from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
     ActorPropertyKey,
-    ActorPropertyType,
-    TreePropertyNode,
 )
-from orcalab.entity_info import EntityInfo
+from orcalab.entity_info import EntityInfo, EntityRoot
+from orcalab.entity_path import EntityPath
 from orcalab.path import Path
 from orcalab.scene_edit_types import AddActorRequest
+from orcalab.selection_data import SelectionData
 
 
 class LocalScene:
@@ -20,9 +20,10 @@ class LocalScene:
         self.root_actor = GroupActor(name="root", parent=None)
         self._actors: Dict[Path, BaseActor] = {}
         self._actors[Path.root_path()] = self.root_actor
-        self._selection: List[Path] = []
-        self._active_actor: Path | None = None
-        self._active_entity: Tuple[Path, int] | None = None
+
+        self._selection: SelectionData = SelectionData()
+
+        self._entity_lookup_table: Dict[int, AssetActor] = {}
 
     def __contains__(self, path: Path) -> bool:
         return path in self._actors
@@ -41,12 +42,12 @@ class LocalScene:
         return self._actors.copy()
 
     @property
-    def selection(self) -> List[Path]:
+    def selected_actors(self) -> List[Path]:
         """返回当前选中Actor的路径列表，路径列表是有序的，按照路径字符串的字典序排序"""
-        return self._selection.copy()
+        return self._selection.selected_actors.copy()
 
-    @selection.setter
-    def selection(self, actors: List[Path]):
+    @selected_actors.setter
+    def selected_actors(self, actors: List[Path]):
         paths = []
         for actor in actors:
             actor, path = self.get_actor_and_path(actor)
@@ -54,60 +55,76 @@ class LocalScene:
 
         # 确保路径列表是有序的，按照路径字符串的字典序排序
         sorted_paths = sorted(paths)
-        self._selection = sorted_paths
+        self._selection.selected_actors = sorted_paths
 
     @property
     def active_actor(self) -> Path | None:
-        """返回当前激活Actor的路径，如果没有激活Actor则返回None"""
-        return self._active_actor
-
-    @active_actor.setter
-    def active_actor(self, actor_path: Path | None):
-        self._active_actor = actor_path
+        return self._selection.active_actor
 
     @property
-    def active_entity(self) -> Tuple[Path, int] | None:
-        return self._active_entity
+    def active_entity(self) -> int:
+        return self._selection.active_entity
 
-    @active_entity.setter
-    def active_entity(self, value: Tuple[Path, int] | None):
-        self._active_entity = value
+    def selection(self) -> SelectionData:
+        """只读接口，返回当前的SelectionData的拷贝"""
+        return self._selection.clone()
+
+    def set_selection(self, selection: SelectionData):
+        self._selection = selection.clone()
 
     def find_actor_by_path(self, path: Path) -> BaseActor | None:
         if path in self._actors:
             return self._actors[path]
         return None
 
-    def get_entity_root(self, actor_path: Path) -> EntityInfo | None:
+    def get_entity_root(self, actor_path: Path) -> EntityRoot | None:
         actor = self.find_actor_by_path(actor_path)
         if isinstance(actor, AssetActor):
             return actor.entity_root
         return None
 
-    def set_entity_root(self, actor_path: Path, entity_root: EntityInfo | None):
+    def set_entity_root(self, actor_path: Path, entity_root_info: EntityInfo | None):
         actor = self.find_actor_by_path(actor_path)
         if isinstance(actor, AssetActor):
-            actor.entity_root = entity_root
+            if entity_root_info is None:
+                actor.entity_root = None
+            else:
+                entity_root = EntityRoot(entity_root_info)
+                entity_root.build_lookup_table()
+                actor.entity_root = entity_root
 
-    def find_entity_info_by_id(
-        self, actor_path: Path, entity_id: int
-    ) -> EntityInfo | None:
-        entity_root = self.get_entity_root(actor_path)
+                for entity_id in entity_root.entity_ids():
+                    self._entity_lookup_table[entity_id] = actor
+
+    def find_actor_by_entity_id(self, entity_id: int) -> AssetActor | None:
+        return self._entity_lookup_table.get(entity_id, None)
+
+    def find_entity_path_by_id(self, entity_id: int) -> EntityPath | None:
+        actor = self.find_actor_by_entity_id(entity_id)
+        if actor is None:
+            return None
+
+        entity_root = actor.entity_root
         if entity_root is None:
             return None
-        return entity_root.find_by_entity_id(entity_id)
 
-    def find_entity_info_by_path(
-        self, actor_path: Path, entity_path: str
-    ) -> EntityInfo | None:
-        entity_root = self.get_entity_root(actor_path)
-        if entity_root is None:
+        entity_info = entity_root.find_entity_info(entity_id)
+        if entity_info is None:
             return None
-        return entity_root.find_by_entity_path(entity_path)
 
-    def get_actor_path(self, actor) -> Path | None:
+        return entity_info.entity_path
+
+    # def find_entity_info_by_id(
+    #     self, actor_path: Path, entity_id: int
+    # ) -> EntityInfo | None:
+    #     entity_root = self.get_entity_root(actor_path)
+    #     if entity_root is None:
+    #         return None
+    #     return entity_root.find_entity_info(entity_id)
+
+    def get_actor_path(self, actor: BaseActor) -> Path | None:
         for path, a in self._actors.items():
-            if a == actor:
+            if a is actor:
                 return path
         return None
 
@@ -403,24 +420,6 @@ class LocalScene:
             if isinstance(node, GroupActor):
                 q.extend(node.children)
 
-    def _find_property_in_tree(
-        self,
-        node: TreePropertyNode,
-        full_prop_name: str,
-        prop_type: ActorPropertyType,
-    ) -> ActorProperty | None:
-        """在树节点中递归查找属性，使用完整属性名匹配"""
-        for prop in node.properties:
-            # 树形属性的完整名称格式: NodeName.PropertyName
-            expected_name = f"{node.name}.{prop.name()}"
-            if expected_name == full_prop_name and prop.value_type() == prop_type:
-                return prop
-        for child in node.children:
-            result = self._find_property_in_tree(child, full_prop_name, prop_type)
-            if result:
-                return result
-        return None
-
     def parse_property_key(
         self, property_key: ActorPropertyKey
     ) -> Tuple[BaseActor, ActorPropertyGroup, ActorProperty]:
@@ -433,22 +432,11 @@ class LocalScene:
 
         for group in actor.property_groups:
             if group.prefix == property_key.group_prefix:
-                # 先在 properties 中查找
                 for prop in group.properties:
                     if (
                         prop.name() == property_key.property_name
                         and prop.value_type() == property_key.property_type
                     ):
-                        return actor, group, prop
-
-                # 再在 tree_data 中查找（遍历所有节点匹配完整属性名）
-                for tree_node in group.tree_data:
-                    prop = self._find_property_in_tree(
-                        tree_node,
-                        property_key.property_name,
-                        property_key.property_type,
-                    )
-                    if prop:
                         return actor, group, prop
 
         raise Exception("Property not found.")

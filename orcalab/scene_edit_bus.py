@@ -2,27 +2,20 @@ from typing import Any, Dict, List, Sequence
 
 from orcalab.actor import BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyKey
+from orcalab.camera_data_png_result import CameraDataPNGResult
 from orcalab.entity_info import EntityInfo
 from orcalab.math import Transform
 from orcalab.event_bus import create_event_bus
 from orcalab.path import Path
-from orcalab.protos.edit_service_wrapper import CameraDataPNGResult
 from orcalab.scene_edit_types import AddActorRequest
+from orcalab.selection_data import SelectionData
 
 
 class SceneEditRequest:
 
     async def set_selection(
         self,
-        selection: List[Path],
-        undo: bool = True,
-        source: str = "",
-    ) -> None:
-        pass
-
-    async def set_active_actor(
-        self,
-        actor: BaseActor | Path | None,
+        selection: SelectionData,
         undo: bool = True,
         source: str = "",
     ) -> None:
@@ -108,22 +101,6 @@ class SceneEditRequest:
     ):
         pass
 
-    # Property Editing
-    #
-    # --- Non-Drag Pattern:
-    #
-    # set_property(undo=True)
-    #
-    # --- Drag Pattern:
-    #
-    # start_change_property()
-    # set_property(undo=False)
-    # ...
-    # set_property(undo=False)
-    # set_property(undo=True)
-    # end_change_property()
-    #
-
     async def set_property(
         self,
         property_key: ActorPropertyKey,
@@ -200,32 +177,6 @@ class SceneEditRequest:
     ):
         pass
 
-    async def set_selection_and_active_actor(
-        self,
-        selection: List[Path],
-        actor: BaseActor | Path | None,
-        undo: bool = True,
-        source: str = "",
-    ) -> None:
-        pass
-
-    async def set_highlight_entity(self, entity_id: int, highlight: bool) -> None:
-        """Highlight or unhighlight a single entity (joint/geom/site) in the viewport.
-        Args:
-            entity_id (int): The EntityId of the target entity (from TreePropertyNode.name).
-            highlight (bool): True to highlight, False to clear.
-        """
-        pass
-
-    async def set_active_entity(
-        self,
-        actor_path: Path | None,
-        entity_id: int | None,
-        undo: bool = True,
-        source: str = "",
-    ) -> None:
-        pass
-
     async def fetch_entity_hierarchy(
         self,
         actor_path: Path,
@@ -238,10 +189,11 @@ class SceneEditRequest:
         actor_path: Path,
         entity_id: int,
     ) -> list:
-        pass
+        return []
 
     async def set_flycamera_transform(self, transform: Transform) -> None:
         pass
+
 
 SceneEditRequestBus = create_event_bus(SceneEditRequest)
 
@@ -250,8 +202,8 @@ class SceneEditNotification:
 
     async def on_selection_changed(
         self,
-        old_selection: List[Path],
-        new_selection: List[Path],
+        old_selection: SelectionData,
+        new_selection: SelectionData,
         source: str = "",
     ) -> None:
         pass
@@ -364,9 +316,9 @@ class SceneEditNotification:
         camera_name: str,
         png_path: str,
         index: int,
-        output: list[CameraDataPNGResult] = None,
+        output: list[CameraDataPNGResult],
     ) -> CameraDataPNGResult:
-        pass
+        return CameraDataPNGResult()
 
     async def get_actor_asset_aabb(self, actor_path: Path, output: List[float]):
         pass
@@ -379,14 +331,6 @@ class SceneEditNotification:
     async def on_actor_locked_changed(
         self, actor_path: Path, paths_to_update: List[Path], locked: bool, source: str
     ):
-        pass
-
-    async def on_active_entity_changed(
-        self,
-        old_active_entity: tuple | None,
-        new_active_entity: tuple | None,
-        source: str = "",
-    ) -> None:
         pass
 
     async def on_entity_hierarchy_loaded(

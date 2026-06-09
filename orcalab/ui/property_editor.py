@@ -12,6 +12,7 @@ from orcalab.application_util import get_local_scene, get_remote_scene
 from orcalab.entity_info import EntityInfo
 from orcalab.path import Path
 from orcalab.perf_log import perf_timer, perf_log
+from orcalab.selection_data import SelectionData
 from orcalab.ui.filter_bar import FilterBar
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.property_data_store import PropertyDataStore
@@ -385,7 +386,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             try:
                 with perf_timer("property_editor._fetch_and_render_entity.total", feature="PROPERTY"):
                     entity_root = get_local_scene().get_entity_root(actor_path)
-                    entity_info = entity_root.find_by_entity_id(entity_id) if entity_root else None
+                    entity_info = entity_root.find_entity_info(entity_id) if entity_root else None
 
                     entity_ids = entity_info.collect_entity_ids() if (entity_info and self._recursive) else [entity_id]
 
@@ -691,25 +692,26 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                 self.set_actor(actor)
 
     @override
-    async def on_active_entity_changed(
+    async def on_selection_changed(
         self,
-        old_active_entity: tuple | None,
-        new_active_entity: tuple | None,
+        old_selection: SelectionData,
+        new_selection: SelectionData,
         source: str = "",
     ) -> None:
-        with perf_timer("property_editor.on_active_entity_changed", feature="PROPERTY"):
-            if new_active_entity is None:
+        with perf_timer("property_editor.on_selection_changed", feature="PROPERTY"):
+            if new_selection.active_actor is None:
                 if self._entity is not None:
                     if self._actor is not None:
                         self.set_actor(self._actor)
                     else:
                         self.clear_selection()
             else:
-                actor_path, entity_id = new_active_entity
+                actor_path = new_selection.active_actor
+                entity_path = new_selection.active_entity
                 local_scene = get_local_scene()
                 actor = local_scene.find_actor_by_path(actor_path)
                 if actor is not None:
                     entity_root = local_scene.get_entity_root(actor_path)
-                    entity_info = entity_root.find_by_entity_id(entity_id) if entity_root else None
+                    entity_info = entity_root.find_entity_info_by_path(entity_path) if entity_root else None
                     if entity_info is not None:
                         self.set_entity(actor, entity_info, actor_path)

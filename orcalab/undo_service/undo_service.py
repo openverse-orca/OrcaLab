@@ -9,7 +9,6 @@ from orcalab.path import Path
 
 from orcalab.scene_edit_types import AddActorRequest
 from orcalab.undo_service.command import (
-    ActiveActorCommand,
     BaseCommand,
     CommandGroup,
     AddActorCommand,
@@ -112,10 +111,6 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().set_selection(
                     command.old_selection, undo=False
                 )
-            case ActiveActorCommand():
-                await SceneEditRequestBus().set_active_actor(
-                    command.old_active_actor, undo=False
-                )
             case AddActorCommand():
                 paths: List[Path] = []
                 for request in command.requests:
@@ -168,10 +163,6 @@ class UndoService(UndoRequest):
             case SelectionCommand():
                 await SceneEditRequestBus().set_selection(
                     command.new_selection, undo=False
-                )
-            case ActiveActorCommand():
-                await SceneEditRequestBus().set_active_actor(
-                    command.new_active_actor, undo=False
                 )
             case AddActorCommand():
                 await SceneEditRequestBus().add_actors(command.requests, undo=False)

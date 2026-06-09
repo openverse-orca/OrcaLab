@@ -239,11 +239,6 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.SetPropertiesRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetPropertiesResponse.FromString,
                 _registered_method=True)
-        self.SetHighlightJoint = channel.unary_unary(
-                '/SceneEdit.GrpcService/SetHighlightJoint',
-                request_serializer=edit__service__pb2.SetHighlightJointRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.SetHighlightJointResponse.FromString,
-                _registered_method=True)
         self.CustomCommand = channel.unary_unary(
                 '/SceneEdit.GrpcService/CustomCommand',
                 request_serializer=edit__service__pb2.CustomCommandRequest.SerializeToString,
@@ -268,16 +263,6 @@ class GrpcServiceStub(object):
                 '/SceneEdit.GrpcService/GetEntityHierarchy',
                 request_serializer=edit__service__pb2.GetEntityHierarchyRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetEntityHierarchyResponse.FromString,
-                _registered_method=True)
-        self.SetSelectedEntity = channel.unary_unary(
-                '/SceneEdit.GrpcService/SetSelectedEntity',
-                request_serializer=edit__service__pb2.SetSelectedEntityRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.SetSelectedEntityResponse.FromString,
-                _registered_method=True)
-        self.SetHighlightEntityTree = channel.unary_unary(
-                '/SceneEdit.GrpcService/SetHighlightEntityTree',
-                request_serializer=edit__service__pb2.SetHighlightEntityTreeRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.SetHighlightEntityTreeResponse.FromString,
                 _registered_method=True)
         self.GetEntityPropertyGroups = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetEntityPropertyGroups',
@@ -565,12 +550,6 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def SetHighlightJoint(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def CustomCommand(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -598,18 +577,6 @@ class GrpcServiceServicer(object):
     def GetEntityHierarchy(self, request, context):
         """Entity hierarchy related RPCs
         """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SetSelectedEntity(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SetHighlightEntityTree(self, request, context):
-        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -865,11 +832,6 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     request_deserializer=edit__service__pb2.SetPropertiesRequest.FromString,
                     response_serializer=edit__service__pb2.SetPropertiesResponse.SerializeToString,
             ),
-            'SetHighlightJoint': grpc.unary_unary_rpc_method_handler(
-                    servicer.SetHighlightJoint,
-                    request_deserializer=edit__service__pb2.SetHighlightJointRequest.FromString,
-                    response_serializer=edit__service__pb2.SetHighlightJointResponse.SerializeToString,
-            ),
             'CustomCommand': grpc.unary_unary_rpc_method_handler(
                     servicer.CustomCommand,
                     request_deserializer=edit__service__pb2.CustomCommandRequest.FromString,
@@ -894,16 +856,6 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     servicer.GetEntityHierarchy,
                     request_deserializer=edit__service__pb2.GetEntityHierarchyRequest.FromString,
                     response_serializer=edit__service__pb2.GetEntityHierarchyResponse.SerializeToString,
-            ),
-            'SetSelectedEntity': grpc.unary_unary_rpc_method_handler(
-                    servicer.SetSelectedEntity,
-                    request_deserializer=edit__service__pb2.SetSelectedEntityRequest.FromString,
-                    response_serializer=edit__service__pb2.SetSelectedEntityResponse.SerializeToString,
-            ),
-            'SetHighlightEntityTree': grpc.unary_unary_rpc_method_handler(
-                    servicer.SetHighlightEntityTree,
-                    request_deserializer=edit__service__pb2.SetHighlightEntityTreeRequest.FromString,
-                    response_serializer=edit__service__pb2.SetHighlightEntityTreeResponse.SerializeToString,
             ),
             'GetEntityPropertyGroups': grpc.unary_unary_rpc_method_handler(
                     servicer.GetEntityPropertyGroups,
@@ -2059,33 +2011,6 @@ class GrpcService(object):
             _registered_method=True)
 
     @staticmethod
-    def SetHighlightJoint(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/SceneEdit.GrpcService/SetHighlightJoint',
-            edit__service__pb2.SetHighlightJointRequest.SerializeToString,
-            edit__service__pb2.SetHighlightJointResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
     def CustomCommand(request,
             target,
             options=(),
@@ -2210,60 +2135,6 @@ class GrpcService(object):
             '/SceneEdit.GrpcService/GetEntityHierarchy',
             edit__service__pb2.GetEntityHierarchyRequest.SerializeToString,
             edit__service__pb2.GetEntityHierarchyResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def SetSelectedEntity(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/SceneEdit.GrpcService/SetSelectedEntity',
-            edit__service__pb2.SetSelectedEntityRequest.SerializeToString,
-            edit__service__pb2.SetSelectedEntityResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def SetHighlightEntityTree(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/SceneEdit.GrpcService/SetHighlightEntityTree',
-            edit__service__pb2.SetHighlightEntityTreeRequest.SerializeToString,
-            edit__service__pb2.SetHighlightEntityTreeResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 from orcalab.actor_property import ActorPropertyKey, ActorProperty, ActorPropertyType, ActorPropertyGroup
 from orcalab.path import Path
+from orcalab.post_process_dispatcher import PostProcessDispatcher
 from orcalab.property_post_process import (
     PostProcessRegistry,
     PostProcessRule,
-    PostProcessDispatcher,
     ReadPropertiesAction,
 )
 
@@ -241,7 +241,6 @@ class TestPostProcessDispatcherExecute(unittest.TestCase):
             group = MagicMock(spec=ActorPropertyGroup)
             group.prefix = "group"
             group.properties = [prop_density, prop_friction]
-            group.tree_data = []
 
             local_scene.parse_property_key.return_value = (MagicMock(), group, MagicMock())
 
@@ -291,7 +290,6 @@ class TestPostProcessDispatcherExecute(unittest.TestCase):
             group = MagicMock(spec=ActorPropertyGroup)
             group.prefix = "group"
             group.properties = [prop_density]
-            group.tree_data = []
 
             local_scene.parse_property_key.return_value = (MagicMock(), group, MagicMock())
 
@@ -336,7 +334,6 @@ class TestPostProcessDispatcherExecute(unittest.TestCase):
             group = MagicMock(spec=ActorPropertyGroup)
             group.prefix = "group"
             group.properties = [prop_density]
-            group.tree_data = []
 
             local_scene.parse_property_key.return_value = (MagicMock(), group, MagicMock())
 
@@ -382,7 +379,6 @@ class TestPostProcessDispatcherExecute(unittest.TestCase):
             group = MagicMock(spec=ActorPropertyGroup)
             group.prefix = "group"
             group.properties = [prop_density, prop_friction]
-            group.tree_data = []
 
             local_scene.parse_property_key.return_value = (MagicMock(), group, MagicMock())
             remote_scene.get_properties = AsyncMock(return_value=[1000.0, [0.5, 0.1, 0.1]])
@@ -453,15 +449,6 @@ class TestActorPropertyPostReadFields(unittest.TestCase):
         prop.set_post_read_delay_ms(150)
         self.assertEqual(prop.post_read_fields(), ["density", "friction"])
         self.assertEqual(prop.post_read_delay_ms(), 150)
-
-    def test_alias_copies_post_read_fields(self):
-        prop = ActorProperty(name="test", display_name="Test", type=ActorPropertyType.FLOAT, value=0.0)
-        prop.set_post_read_fields(["density", "friction"])
-        prop.set_post_read_delay_ms(100)
-        alias = prop.create_alias("alias")
-        self.assertEqual(alias.post_read_fields(), ["density", "friction"])
-        self.assertEqual(alias.post_read_delay_ms(), 100)
-
 
 class TestAutoRegisterFromPropertyGroup(unittest.TestCase):
     def test_auto_register_from_property_group(self):

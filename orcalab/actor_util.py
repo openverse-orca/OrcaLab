@@ -8,7 +8,6 @@ from orcalab.actor_property import (
     ActorPropertyGroup,
     ActorPropertyKey,
     ActorPropertyType,
-    TreePropertyNode,
 )
 from orcalab.application_util import get_local_scene
 from orcalab.local_scene import LocalScene
@@ -133,33 +132,6 @@ class ActorIterator:
         return current
 
 
-def collect_tree_propertys(
-    keys: List[ActorPropertyKey],
-    props: List[ActorProperty],
-    actor_path: Path,
-    group_prefix: str,
-    node: TreePropertyNode,
-    entity_id: int = 0,
-    component_type: str = "",
-):
-    """递归收集树形属性的子属性"""
-    for prop in node.properties:
-        full_name = f"{node.name}.{prop.name()}"
-        key = ActorPropertyKey(
-            actor_path,
-            group_prefix,
-            full_name,
-            prop.value_type(),
-            entity_id=entity_id,
-            component_type=component_type,
-        )
-        keys.append(key)
-        props.append(prop)
-
-    for child in node.children:
-        collect_tree_propertys(keys, props, actor_path, group_prefix, child, entity_id=entity_id, component_type=component_type)
-
-
 def collect_properties(
     keys: List[ActorPropertyKey],
     props: List[ActorProperty],
@@ -168,52 +140,16 @@ def collect_properties(
 ):
     for group in properties:
         for prop in group.properties:
-            if prop.value_type() == ActorPropertyType.TREE:
-                continue
             key = ActorPropertyKey(
-                actor_path, group.prefix, prop.name(), prop.value_type(),
-                entity_id=group.entity_id, component_type=group.component_type_id,
+                actor_path,
+                group.prefix,
+                prop.name(),
+                prop.value_type(),
+                entity_id=group.entity_id,
+                component_type=group.component_type_id,
             )
             props.append(prop)
             keys.append(key)
-
-        for tree_node in group.tree_data:
-            collect_tree_propertys(keys, props, actor_path, group.prefix, tree_node, entity_id=group.entity_id, component_type=group.component_type_id)
-
-
-class TreePropertyNode_PairIterator:
-    """同时遍历两个 ActorPropertyGroup 的树形属性节点，返回节点对 (node1, node2)，如果两个树并不匹配，抛出异常"""
-
-    def __init__(
-        self, tree_data1: List[TreePropertyNode], tree_data2: List[TreePropertyNode]
-    ):
-        self.stack1: List[TreePropertyNode] = []
-        self.stack2: List[TreePropertyNode] = []
-        self.stack1.extend(reversed(tree_data1))
-        self.stack2.extend(reversed(tree_data2))
-
-    def __iter__(self):
-        return self
-
-    def __next__(self) -> Tuple[TreePropertyNode, TreePropertyNode]:
-        if len(self.stack1) != len(self.stack2):
-            raise Exception(f"Tree mismatch")
-
-        if not self.stack1 and not self.stack2:
-            raise StopIteration
-
-        node1 = self.stack1.pop()
-        node2 = self.stack2.pop()
-
-        if len(node1.children) != len(node2.children):
-            raise Exception(f"Tree mismatch")
-
-        for child in reversed(node1.children):
-            self.stack1.append(child)
-        for child in reversed(node2.children):
-            self.stack2.append(child)
-
-        return node1, node2
 
 
 def collect_properties_duplicate_data(
@@ -226,36 +162,19 @@ def collect_properties_duplicate_data(
 ):
     for src_group, dst_group in zip(src_properties, dst_properties):
         for prop in src_group.properties:
-            if prop.value_type() == ActorPropertyType.TREE:
-                continue
             if prop.is_read_only():
                 continue
             key = ActorPropertyKey(
-                dst_actor_path, src_group.prefix, prop.name(), prop.value_type(),
-                entity_id=dst_group.entity_id, component_type=dst_group.component_type_id,
+                dst_actor_path,
+                src_group.prefix,
+                prop.name(),
+                prop.value_type(),
+                entity_id=dst_group.entity_id,
+                component_type=dst_group.component_type_id,
             )
             keys.append(key)
             props.append(prop)
             values.append(prop.value())
-
-        for src_node, dst_node in TreePropertyNode_PairIterator(
-            src_group.tree_data, dst_group.tree_data
-        ):
-            for src_prop, dst_prop in zip(src_node.properties, dst_node.properties):
-                if src_prop.is_read_only():
-                    continue
-                full_name = f"{dst_node.name}.{dst_prop.name()}"
-                key = ActorPropertyKey(
-                    dst_actor_path,
-                    dst_group.prefix,
-                    full_name,
-                    dst_prop.value_type(),
-                    entity_id=dst_group.entity_id,
-                    component_type=dst_group.component_type_id,
-                )
-                keys.append(key)
-                props.append(dst_prop)
-                values.append(src_prop.value())
 
 
 def sort_actors_with_data[T](

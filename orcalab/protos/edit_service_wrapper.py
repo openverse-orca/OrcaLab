@@ -1,8 +1,16 @@
 import grpc
 import logging
 import numpy as np
-from dataclasses import dataclass, field
 from typing import Any, List, Tuple
+
+from orcalab.camera_data_png_result import CameraDataPNGResult
+from orcalab.entity_path import EntityPath, NameWithIndex
+from orcalab.selection_data import BackendSelectionData, SelectionData
+from orcalab.property_post_process import (
+    PostProcessRegistry,
+    PostProcessRule,
+    ReadPropertiesAction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +27,6 @@ from orcalab.actor_property import (
     ActorPropertyGroup,
     ActorPropertyKey,
     ActorPropertyType,
-    TreePropertyNode,
     EntityPropertyGroupEntry,
 )
 from orcalab.perf_log import perf_timer, perf_log
@@ -30,15 +37,6 @@ logger = logging.getLogger(__name__)
 
 Success = edit_service_pb2.StatusCode.Success
 Error = edit_service_pb2.StatusCode.Error
-
-
-@dataclass
-class CameraDataPNGResult:
-    transform: Transform = field(default_factory=Transform)
-    has_color: bool = False
-    has_depth: bool = False
-    has_normal: bool = False
-    has_object_color: bool = False
 
 
 class EditServiceWrapper:
@@ -59,8 +57,6 @@ class EditServiceWrapper:
     async def destroy_grpc(self):
         if self.channel:
             await self.channel.close()
-        self.stub = None
-        self.channel = None
 
     def _create_transform_message(self, transform: Transform):
         msg = edit_service_pb2.Transform(
@@ -133,7 +129,9 @@ class EditServiceWrapper:
                 raise ValueError("Unsupported actor type.")
             requests.append(request_union)
 
-        batch_request = edit_service_pb2.AddActorBatchRequest(requests=requests, stop_on_error=stop_on_error)
+        batch_request = edit_service_pb2.AddActorBatchRequest(
+            requests=requests, stop_on_error=stop_on_error
+        )
         response = await self.stub.AddActorBatch(batch_request)
         if response.status_code != Success:
             print(f"Errors occur during add_actor_batch()")
@@ -170,16 +168,6 @@ class EditServiceWrapper:
         response = await self.stub.GetPendingOperations(request)
         self._check_response(response)
         return response.operations
-
-    async def get_pending_actor_transform(self, path: Path, local: bool) -> Transform:
-        space = edit_service_pb2.Space.Local if local else edit_service_pb2.Space.World
-        request = edit_service_pb2.GetPendingActorTransformRequest(
-            actor_path=path.string(),
-            space=space,
-        )
-        response = await self.stub.GetPendingActorTransform(request)
-        self._check_response(response)
-        return self._get_transform_from_message(response.transform)
 
     async def get_pending_actor_transform_batch(
         self, paths: List[Path]
@@ -233,12 +221,6 @@ class EditServiceWrapper:
         response = await self.stub.ClearScene(request)
         self._check_response(response)
 
-    async def get_pending_selection_change(self) -> List[str]:
-        request = edit_service_pb2.GetPendingSelectionChangeRequest()
-        response = await self.stub.GetPendingSelectionChange(request)
-        self._check_response(response)
-        return response.actor_paths
-
     async def get_pending_add_item(self) -> Tuple[Transform, str]:
         request = edit_service_pb2.GetPendingAddItemRequest()
         response = await self.stub.GetPendingAddItem(request)
@@ -246,14 +228,49 @@ class EditServiceWrapper:
         transform = self._get_transform_from_message(response.transform)
         return (transform, response.actor_name)
 
-    async def set_selection(self, actor_paths: List[Path]):
+    def _to_grpc_selection_data(
+        self, selection: BackendSelectionData
+    ) -> edit_service_pb2.SelectionData:
         paths = []
-        for p in actor_paths:
+        for p in selection.selected_actors:
             if not isinstance(p, Path):
                 raise Exception(f"Invalid path: {p}")
             paths.append(p.string())
 
-        request = edit_service_pb2.SetSelectionRequest(actor_paths=paths)
+        if selection.active_actor:
+            active_actor_path = selection.active_actor.string()
+        else:
+            active_actor_path = ""
+
+        return edit_service_pb2.SelectionData(
+            selected_actor_paths=paths,
+            active_actor_path=active_actor_path,
+            active_entity_id=selection.active_entity,
+        )
+
+    def _from_grpc_selection_data(
+        self, selection_data: edit_service_pb2.SelectionData
+    ) -> BackendSelectionData:
+        paths = [Path(p) for p in selection_data.selected_actor_paths]
+        if selection_data.active_actor_path:
+            active_actor = Path(selection_data.active_actor_path)
+        else:
+            active_actor = None
+        return BackendSelectionData(
+            selected_actors=paths,
+            active_actor=active_actor,
+            active_entity=selection_data.active_entity_id,
+        )
+
+    async def get_pending_selection_change(self) -> BackendSelectionData:
+        request = edit_service_pb2.GetPendingSelectionChangeRequest()
+        response = await self.stub.GetPendingSelectionChange(request)
+        self._check_response(response)
+        return self._from_grpc_selection_data(response.selection)
+
+    async def set_selection(self, selection: BackendSelectionData):
+        selection_data = self._to_grpc_selection_data(selection)
+        request = edit_service_pb2.SetSelectionRequest(selection=selection_data)
         response = await self.stub.SetSelection(request)
         self._check_response(response)
 
@@ -318,7 +335,7 @@ class EditServiceWrapper:
         response = await self.stub.LoadPackage(request)
         self._check_response(response)
 
-    async def change_sim_state(self, sim_process_running: bool) -> bool:
+    async def change_sim_state(self, sim_process_running: bool):
         request = edit_service_pb2.ChangeSimStateRequest(
             sim_process_running=sim_process_running
         )
@@ -326,7 +343,7 @@ class EditServiceWrapper:
         self._check_response(response)
         return response
 
-    async def change_manipulator_type(self, manipulator_type: int) -> bool:
+    async def change_manipulator_type(self, manipulator_type: int):
         request = edit_service_pb2.ChangeManipulatorTypeRequest(
             manipulator_type=manipulator_type
         )
@@ -376,8 +393,10 @@ class EditServiceWrapper:
             output.extend(response.min)
             output.extend(response.max)
         return response
-    
-    async def find_non_overlapping_position(self, actor_path: Path, output: List[float]):
+
+    async def find_non_overlapping_position(
+        self, actor_path: Path, output: List[float]
+    ):
         request = edit_service_pb2.FindNonOverlappingPositionRequest(
             actor_path=actor_path.string()
         )
@@ -452,7 +471,9 @@ class EditServiceWrapper:
         self._check_response(response)
         return self._get_transform_from_message(response.transform)
 
-    def _parse_property_msg(self, prop_msg) -> ActorProperty | None:
+    def _parse_property_msg(
+        self, prop_msg: edit_service_pb2.Property
+    ) -> ActorProperty | None:
         """解析属性消息"""
         prop: ActorProperty | None = None
         match prop_msg.type:
@@ -489,13 +510,6 @@ class EditServiceWrapper:
                     type=ActorPropertyType.STRING,
                     value=value,
                 )
-            case edit_service_pb2.PropertyType.Tree:
-                prop = ActorProperty(
-                    name=prop_msg.name,
-                    display_name=prop_msg.display_name,
-                    type=ActorPropertyType.TREE,
-                    value=None,
-                )
             case edit_service_pb2.PropertyType.ENUM:
                 prop = ActorProperty(
                     name=prop_msg.name,
@@ -522,43 +536,28 @@ class EditServiceWrapper:
         return prop
 
     def _register_post_process_rule(self, prop, component_type_id: str):
-        from orcalab.property_post_process import PostProcessRegistry, PostProcessRule, ReadPropertiesAction
-
         registry = PostProcessRegistry.instance()
-        registry.register(PostProcessRule(
-            trigger_property=prop.name(),
-            component_type=component_type_id,
-            action=ReadPropertiesAction(prop.post_read_fields()),
-            delay_ms=prop.post_read_delay_ms() or 100,
-        ))
-
-    def _parse_tree_node_msg(self, node_msg) -> TreePropertyNode:
-        """递归解析树节点消息"""
-        node = TreePropertyNode(
-            name=node_msg.name,
-            display_name=node_msg.display_name,
+        registry.register(
+            PostProcessRule(
+                trigger_property=prop.name(),
+                component_type=component_type_id,
+                action=ReadPropertiesAction(prop.post_read_fields()),
+                delay_ms=prop.post_read_delay_ms() or 100,
+            )
         )
-        for prop_msg in node_msg.properties:
-            prop = self._parse_property_msg(prop_msg)
-            if prop:
-                node.properties.append(prop)
-        for child_msg in node_msg.children:
-            child_node = self._parse_tree_node_msg(child_msg)
-            node.children.append(child_node)
-        return node
 
     @staticmethod
     def _strip_component_suffix(name: str) -> str:
         suffix = "Component"
         if len(name) > len(suffix) and name.endswith(suffix):
-            return name[:-len(suffix)]
+            return name[: -len(suffix)]
         return name
 
-    def _parse_property_group_msg(self, pg_msg) -> ActorPropertyGroup:
+    def _parse_property_group_msg(
+        self, pg_msg: edit_service_pb2.PropertyGroup
+    ) -> ActorPropertyGroup:
         name = self._strip_component_suffix(pg_msg.name)
-        pg = ActorPropertyGroup(
-            prefix=pg_msg.prefix, name=name, hint=pg_msg.hint
-        )
+        pg = ActorPropertyGroup(prefix=pg_msg.prefix, name=name, hint=pg_msg.hint)
 
         if pg_msg.entity_id:
             pg.entity_id = pg_msg.entity_id
@@ -575,17 +574,12 @@ class EditServiceWrapper:
                 if prop.post_read_fields() and pg_msg.component_type_id:
                     self._register_post_process_rule(prop, pg_msg.component_type_id)
 
-        # 解析树形数据
-        for tree_node_msg in pg_msg.tree_data:
-            tree_node = self._parse_tree_node_msg(tree_node_msg)
-            pg.tree_data.append(tree_node)
-
         perf_log(
             f"grpc_wrapper._parse_property_group_msg: name={name}, "
             f"entity_id={pg.entity_id}, prefix={pg_msg.prefix}, "
             f"hint={pg_msg.hint}, props={len(pg.properties)}, "
             f"prop_names=[{', '.join(p.name() for p in pg.properties[:5])}{'...' if len(pg.properties) > 5 else ''}]",
-            feature="PROPERTY"
+            feature="PROPERTY",
         )
 
         return pg
@@ -596,7 +590,23 @@ class EditServiceWrapper:
         key_msg.entity_id = key.entity_id
         key_msg.component_type = key.component_type
         key_msg.field_path = key.property_name
-        key_msg.property_type = key.property_type.value
+
+        match key.property_type:
+            case ActorPropertyType.BOOL:
+                key_msg.property_type = edit_service_pb2.PropertyType.Bool
+            case ActorPropertyType.INTEGER:
+                key_msg.property_type = edit_service_pb2.PropertyType.Int
+            case ActorPropertyType.FLOAT:
+                key_msg.property_type = edit_service_pb2.PropertyType.Float
+            case ActorPropertyType.STRING:
+                key_msg.property_type = edit_service_pb2.PropertyType.String
+            case ActorPropertyType.ENUM:
+                key_msg.property_type = edit_service_pb2.PropertyType.ENUM
+            case ActorPropertyType.ASSET:
+                key_msg.property_type = edit_service_pb2.PropertyType.ASSET
+            case _:
+                raise ValueError("Unsupported property type.")
+
         return key_msg
 
     def _create_property_value_message(self, key: ActorPropertyKey, value: Any):
@@ -677,14 +687,6 @@ class EditServiceWrapper:
         response = await self.stub.SetProperties(request)
         self._check_response(response)
 
-    async def set_highlight_joint(self, entity_id: int, highlight: bool):
-        request = edit_service_pb2.SetHighlightJointRequest(
-            entity_id=entity_id,
-            highlight=highlight,
-        )
-        response = await self.stub.SetHighlightJoint(request)
-        self._check_response(response)
-
     async def custom_command(self, command: str):
         request = edit_service_pb2.CustomCommandRequest(command=command)
         response = await self.stub.CustomCommand(request)
@@ -723,6 +725,31 @@ class EditServiceWrapper:
         response = await self.stub.SetMoveRotateSensitivity(request)
         self._check_response(response)
 
+    def parse_entity_info(
+        self,
+        msg: edit_service_pb2.EntityInfoMessage,
+        parent: EntityInfo | None,
+        segments: List[NameWithIndex],
+        position: int,
+    ) -> EntityInfo:
+
+        entity_info = EntityInfo(entity_id=msg.entity_id, name=msg.name, parent=parent)
+
+        segment = NameWithIndex(name=msg.name, index=position)
+        segments.append(segment)
+
+        children = []
+        for i, child in enumerate(msg.children):
+            result = self.parse_entity_info(child, entity_info, segments, i)
+            children.append(result)
+
+        entity_info.children = children
+        entity_info.entity_path = EntityPath(segments.copy())
+
+        segments.pop()
+
+        return entity_info
+
     async def get_entity_hierarchy(self, actor_path: Path) -> EntityInfo | None:
         request = edit_service_pb2.GetEntityHierarchyRequest(
             actor_path=actor_path.string()
@@ -730,47 +757,23 @@ class EditServiceWrapper:
         response = await self.stub.GetEntityHierarchy(request)
         self._check_response(response)
 
-        def parse_entity_info(msg) -> EntityInfo:
-            children = [parse_entity_info(child) for child in msg.children]
-            return EntityInfo(
-                entity_id=msg.entity_id,
-                name=msg.name,
-                entity_path=msg.entity_path,
-                children=children,
-            )
-
         if response.HasField("root_entity"):
-            return parse_entity_info(response.root_entity)
+            return self.parse_entity_info(response.root_entity, None, [], 0)
         return None
-
-    async def set_selected_entity(self, actor_path: Path, entity_id: int):
-        request = edit_service_pb2.SetSelectedEntityRequest(
-            actor_path=actor_path.string(),
-            entity_id=entity_id,
-        )
-        response = await self.stub.SetSelectedEntity(request)
-        self._check_response(response)
-
-    async def set_highlight_entity_tree(
-        self, actor_path: Path, entity_id: int, highlight: bool
-    ):
-        request = edit_service_pb2.SetHighlightEntityTreeRequest(
-            actor_path=actor_path.string(),
-            entity_id=entity_id,
-            highlight=highlight,
-        )
-        response = await self.stub.SetHighlightEntityTree(request)
-        self._check_response(response)
 
     async def get_entity_property_groups(
         self, actor_path: Path, entity_id: int
     ) -> List[ActorPropertyGroup]:
-        with perf_timer("grpc_wrapper.get_entity_property_groups.total", feature="PARSE"):
+        with perf_timer(
+            "grpc_wrapper.get_entity_property_groups.total", feature="PARSE"
+        ):
             request = edit_service_pb2.GetEntityPropertyGroupsRequest(
                 actor_path=actor_path.string(),
                 entity_id=entity_id,
             )
-            with perf_timer("grpc_wrapper.get_entity_property_groups.network", feature="PARSE"):
+            with perf_timer(
+                "grpc_wrapper.get_entity_property_groups.network", feature="PARSE"
+            ):
                 response = await self.stub.GetEntityPropertyGroups(request)
             self._check_response(response)
 
@@ -779,12 +782,17 @@ class EditServiceWrapper:
                 f"actor_path={actor_path}, entity_id={entity_id}, "
                 f"status={response.status_code}, "
                 f"property_groups_count={len(response.property_groups)}",
-                feature="PROPERTY"
+                feature="PROPERTY",
             )
 
-            perf_log(f"grpc_wrapper.get_entity_property_groups: parsing {len(response.property_groups)} groups", feature="PARSE")
+            perf_log(
+                f"grpc_wrapper.get_entity_property_groups: parsing {len(response.property_groups)} groups",
+                feature="PARSE",
+            )
 
-            with perf_timer("grpc_wrapper.get_entity_property_groups.parse", feature="PARSE"):
+            with perf_timer(
+                "grpc_wrapper.get_entity_property_groups.parse", feature="PARSE"
+            ):
                 property_groups: List[ActorPropertyGroup] = []
                 for pg_msg in response.property_groups:
                     pg = self._parse_property_group_msg(pg_msg)
@@ -794,16 +802,22 @@ class EditServiceWrapper:
     async def get_entity_property_groups_batch(
         self, actor_path: Path, entity_ids: List[int]
     ) -> List[List[ActorPropertyGroup]]:
-        with perf_timer("grpc_wrapper.get_entity_property_groups_batch.total", feature="PARSE"):
+        with perf_timer(
+            "grpc_wrapper.get_entity_property_groups_batch.total", feature="PARSE"
+        ):
             request = edit_service_pb2.GetEntityPropertyGroupsBatchRequest(
                 actor_path=actor_path.string(),
                 entity_ids=entity_ids,
             )
-            with perf_timer("grpc_wrapper.get_entity_property_groups_batch.network", feature="PARSE"):
+            with perf_timer(
+                "grpc_wrapper.get_entity_property_groups_batch.network", feature="PARSE"
+            ):
                 response = await self.stub.GetEntityPropertyGroupsBatch(request)
             self._check_response(response)
 
-            with perf_timer("grpc_wrapper.get_entity_property_groups_batch.parse", feature="PARSE"):
+            with perf_timer(
+                "grpc_wrapper.get_entity_property_groups_batch.parse", feature="PARSE"
+            ):
                 result: List[List[ActorPropertyGroup]] = []
                 for pg_list_msg in response.property_group_lists:
                     groups: List[ActorPropertyGroup] = []
@@ -828,17 +842,26 @@ class EditServiceWrapper:
     async def get_all_entity_property_groups(
         self, actor_path: Path
     ) -> List[EntityPropertyGroupEntry]:
-        with perf_timer("grpc_wrapper.get_all_entity_property_groups.total", feature="PARSE"):
+        with perf_timer(
+            "grpc_wrapper.get_all_entity_property_groups.total", feature="PARSE"
+        ):
             request = edit_service_pb2.GetAllEntityPropertyGroupsRequest(
                 actor_path=actor_path.string(),
             )
-            with perf_timer("grpc_wrapper.get_all_entity_property_groups.network", feature="PARSE"):
+            with perf_timer(
+                "grpc_wrapper.get_all_entity_property_groups.network", feature="PARSE"
+            ):
                 response = await self.stub.GetAllEntityPropertyGroups(request)
             self._check_response(response)
 
-            perf_log(f"grpc_wrapper.get_all_entity_property_groups: parsing {len(response.entries)} entries", feature="PARSE")
+            perf_log(
+                f"grpc_wrapper.get_all_entity_property_groups: parsing {len(response.entries)} entries",
+                feature="PARSE",
+            )
 
-            with perf_timer("grpc_wrapper.get_all_entity_property_groups.parse", feature="PARSE"):
+            with perf_timer(
+                "grpc_wrapper.get_all_entity_property_groups.parse", feature="PARSE"
+            ):
                 entries: List[EntityPropertyGroupEntry] = []
                 for entry_msg in response.entries:
                     pg = self._parse_property_group_msg(entry_msg.property_group)

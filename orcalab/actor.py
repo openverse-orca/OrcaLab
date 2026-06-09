@@ -1,7 +1,7 @@
-from typing import List, override
+from typing import Dict, List, override
 
 from orcalab.actor_property import ActorPropertyGroup
-from orcalab.entity_info import EntityInfo
+from orcalab.entity_info import EntityInfo, EntityRoot
 from orcalab.path import Path
 from orcalab.math import Transform
 
@@ -196,7 +196,7 @@ class AssetActor(BaseActor):
         super().__init__(name, parent)
         self._asset_path = asset_path
         self.property_groups: List[ActorPropertyGroup] = []
-        self._entity_root: EntityInfo | None = None
+        self._entity_root: EntityRoot | None = None
 
     def __repr__(self):
         return f"AssetActor(name={self.name})"
@@ -212,9 +212,9 @@ class AssetActor(BaseActor):
         self._asset_path = value
 
     @property
-    def entity_root(self) -> EntityInfo | None:
+    def entity_root(self) -> EntityRoot | None:
         return self._entity_root
 
     @entity_root.setter
-    def entity_root(self, value: EntityInfo | None):
+    def entity_root(self, value: EntityRoot | None):
         self._entity_root = value

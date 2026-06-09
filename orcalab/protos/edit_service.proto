@@ -132,14 +132,6 @@ message GetActorAssetsResponse {
     repeated string actor_asset_names = 3;
 }
 
-message GetPendingSelectionChangeRequest {
-}
-message GetPendingSelectionChangeResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-    repeated string actor_paths = 3;
-}
-
 message GetPendingAddItemRequest {
 }
 message GetPendingAddItemResponse {
@@ -149,13 +141,30 @@ message GetPendingAddItemResponse {
     string actor_name = 4;
 }
 
+
+
+message SelectionData {
+    repeated string selected_actor_paths = 1;
+    string active_actor_path = 2;
+    uint64 active_entity_id = 3;
+}
+
+message GetPendingSelectionChangeRequest {
+}
+message GetPendingSelectionChangeResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    SelectionData selection = 3;
+}
+
 message SetSelectionRequest {
-    repeated string actor_paths = 1;
+    SelectionData selection = 1;
 }
 message SetSelectionResponse {
     StatusCode status_code = 1;
     string error_message = 2;
 }
+
 
 
 message SaveStateRequest {
@@ -413,9 +422,8 @@ enum PropertyType {
     Int = 2;
     Float = 3;
     String = 4;
-    Tree = 5;
-    ENUM = 6;
-    ASSET = 7;
+    ENUM = 5;
+    ASSET = 6;
 }
 
 message PropertyValue {
@@ -463,12 +471,7 @@ message Property {
     int32 post_read_delay_ms = 8;
 }
 
-message TreePropertyNode {
-    string name = 1;
-    string display_name = 2;
-    repeated Property properties = 3;
-    repeated TreePropertyNode children = 4;
-}
+
 
 message PropertyGroup {
     string prefix = 1;
@@ -476,9 +479,8 @@ message PropertyGroup {
     string display_name = 3;
     string hint = 4;
     repeated Property properties = 5;
-    repeated TreePropertyNode tree_data = 6;
-    uint64 entity_id = 7;
-    string component_type_id = 8;
+    uint64 entity_id = 6;
+    string component_type_id = 7;
 }
 
 message PropertyKey {
@@ -551,25 +553,6 @@ message GetEntityHierarchyResponse {
     EntityInfoMessage root_entity = 3;
 }
 
-message SetSelectedEntityRequest {
-    string actor_path = 1;
-    uint64 entity_id = 2;
-}
-message SetSelectedEntityResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-}
-
-message SetHighlightEntityTreeRequest {
-    string actor_path = 1;
-    uint64 entity_id = 2;
-    bool highlight = 3;
-}
-message SetHighlightEntityTreeResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-}
-
 message GetEntityPropertyGroupsRequest {
     string actor_path = 1;
     uint64 entity_id = 2;
@@ -605,15 +588,6 @@ message GetAllEntityPropertyGroupsResponse {
     StatusCode status_code = 1;
     string error_message = 2;
     repeated EntityPropertyGroupEntry entries = 3;
-}
-
-message SetHighlightJointRequest {
-    uint64 entity_id = 1;
-    bool highlight = 2;
-}
-message SetHighlightJointResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
 }
 
 // Property Registry messages
@@ -765,7 +739,6 @@ service GrpcService {
     rpc GetProperties(GetPropertiesRequest) returns (GetPropertiesResponse);
     rpc SetProperties(SetPropertiesRequest) returns (SetPropertiesResponse);
 
-    rpc SetHighlightJoint(SetHighlightJointRequest) returns (SetHighlightJointResponse);
     rpc CustomCommand(CustomCommandRequest) returns (CustomCommandResponse);
 
     rpc SetVisibility(SetVisibilityRequest) returns (SetVisibilityResponse);
@@ -775,8 +748,6 @@ service GrpcService {
 
     // Entity hierarchy related RPCs
     rpc GetEntityHierarchy(GetEntityHierarchyRequest) returns (GetEntityHierarchyResponse);
-    rpc SetSelectedEntity(SetSelectedEntityRequest) returns (SetSelectedEntityResponse);
-    rpc SetHighlightEntityTree(SetHighlightEntityTreeRequest) returns (SetHighlightEntityTreeResponse);
     rpc GetEntityPropertyGroups(GetEntityPropertyGroupsRequest) returns (GetEntityPropertyGroupsResponse);
     rpc GetEntityPropertyGroupsBatch(GetEntityPropertyGroupsBatchRequest) returns (GetEntityPropertyGroupsBatchResponse);
     rpc GetAllEntityPropertyGroups(GetAllEntityPropertyGroupsRequest) returns (GetAllEntityPropertyGroupsResponse);

@@ -23,6 +23,7 @@ from orcalab.remote_scene import RemoteScene
 from orcalab.report.ask_statistics_dialog import AskStatisticsDialog
 from orcalab.report.report import ask_user_consent, collect_user_env, send_report_directly
 from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
+from orcalab.selection_data import SelectionData
 from orcalab.setting.settings_dialog import SettingsDialog
 from orcalab.simulation.simulation_bus import (
     SimulationRequestBus,
@@ -143,7 +144,7 @@ class MainWindow(
         _init_start = time.monotonic()
 
         self.local_scene = LocalScene()
-        self.remote_scene = RemoteScene(self.config_service)
+        self.remote_scene = RemoteScene(self.config_service, self.local_scene)
 
         self.asset_service = AssetService()
         self.url_server = UrlServiceServer(port=self._url_service_port)
@@ -256,7 +257,7 @@ class MainWindow(
 
         _post_grpc_start = time.monotonic()
         await self.remote_scene.set_sync_from_mujoco_to_scene(False)
-        await self.remote_scene.set_selection([])
+        await self.remote_scene.set_selection(SelectionData())
         await self.remote_scene.clear_scene()
         logger.info("set_sync + set_selection + clear_scene 完成, 耗时: %.2f 秒", time.monotonic() - _post_grpc_start)
 
@@ -303,7 +304,7 @@ class MainWindow(
 
         # Load cameras from remote scene.
         _cam_start = time.monotonic()
-        cameras = await self.remote_scene. get_cameras()
+        cameras = await self.remote_scene.get_cameras()
         viewport_camera_index = await self.remote_scene.get_active_camera()
         self.on_cameras_changed(cameras, viewport_camera_index)
         logger.info("get_cameras 完成, 耗时: %.2f 秒", time.monotonic() - _cam_start)
@@ -621,7 +622,6 @@ class MainWindow(
         self.add_panel(panel, "right")
 
         connect(self.manipulator_bar.recursive_display_changed, self.actor_editor_widget.set_recursive_display)
-        connect(self.manipulator_bar.recursive_display_changed, self.scene_edit_service.set_recursive_display)
 
         logger.info("创建资产浏览器…")
         self.asset_browser_widget = AssetBrowser()
@@ -712,7 +712,6 @@ class MainWindow(
     async def start_sim(self):
         await SimulationRequestBus().start_simulation()
         await self.manipulator_bar.set_translation()
-        await self.scene_edit_service.set_selection_and_active_actor([], None, True)
 
     async def stop_sim(self):
         await SimulationRequestBus().stop_simulation()
@@ -1540,16 +1539,16 @@ class MainWindow(
         SettingsDialog(self, remote_scene=self.remote_scene).exec()
 
     def can_duplicate_selection(self) -> bool:
-        if not self.local_scene.selection:
+        if not self.local_scene.selected_actors:
             return False
 
-        ok, err = self.local_scene.can_duplicate_actors(self.local_scene.selection)
+        ok, err = self.local_scene.can_duplicate_actors(self.local_scene.selected_actors)
         return ok
 
     async def duplicate_selection(self, source:str = ""):
         logger.debug("duplicate_selection. source: %s", source)
 
-        selection = self.local_scene.selection.copy()
+        selection = self.local_scene.selected_actors.copy()
         if not selection:
             return
 
@@ -1557,16 +1556,16 @@ class MainWindow(
         await bus.duplicate_actors(selection)
 
     def can_delete_selection(self) -> bool:
-        if not self.local_scene.selection:
+        if not self.local_scene.selected_actors:
             return False
 
-        ok, err = self.local_scene.can_delete_actors(self.local_scene.selection)
+        ok, err = self.local_scene.can_delete_actors(self.local_scene.selected_actors)
         return ok
 
     async def delete_selection(self, source:str = ""):
         logger.debug("delete_selection. source: %s", source)
 
-        selection = self.local_scene.selection
+        selection = self.local_scene.selected_actors
         if not selection:
             return
 

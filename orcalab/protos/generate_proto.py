@@ -18,6 +18,7 @@ protoc.main((
     f'-I{os.path.dirname(proto_file)}',
     f'--python_out={output_dir}',
     f'--grpc_python_out={output_dir}',
+    f'--pyi_out={output_dir}',
     proto_file,
 ))
 
@@ -28,5 +29,6 @@ protoc.main((
     f'-I{os.path.dirname(proto_file)}',
     f'--python_out={output_dir}',
     f'--grpc_python_out={output_dir}',
+    f'--pyi_out={output_dir}',
     proto_file,
 ))
