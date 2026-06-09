@@ -49,7 +49,7 @@ class AssetSyncCallbacks:
         """
         pass
 
-    def on_set_status(self, asset_id: str, asset_name: str, file_name: str, size: int, status: str):
+    def on_set_status(self, asset_id: str, status: str):
         """
         设置资产包状态
         status: 'ok' (已最新), 'download' (待下载), 'delete' (待删除)
@@ -62,7 +62,7 @@ class AssetSyncCallbacks:
         """
         pass
     
-    def on_download_start(self, asset_id: str, asset_name: str):
+    def on_download_start(self, asset_id: str):
         """开始下载"""
         pass
     
@@ -290,9 +290,16 @@ class AssetSyncService:
             else:
                 self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
 
-            if download_info == None:
+            if pkg_id is None:
+                logger.debug("缺少pak_id, 无法设置状态")
+                continue
+            if download_info is None:
                 self.callbacks.on_set_status(pkg_id, 'failed')
                 logger.debug("%s 获取 download url 失败", file_name)
+                continue
+            if download_info.get("_forbidden"):
+                self.callbacks.on_set_status(pkg_id, 'forbidden')
+                logger.debug("%s 无权限下载", file_name)
                 continue
             cloud_file_sha256 = download_info.get("sha256")
             if local_path.exists():
@@ -370,7 +377,10 @@ class AssetSyncService:
                 async with session.get(url, headers=self.get_headers(), timeout=aiohttp.ClientTimeout(total=self.timeout)) as response:
                     elapsed = time.monotonic() - _start
                     logger.debug("HTTP GET %s 耗时: %.3f 秒 (状态码: %s)", url, elapsed, response.status)
-                    
+
+                    if response.status == 403:
+                        logger.debug(f"❌ 获取下载链接失败: HTTP 403 无权限")
+                        return {"_forbidden": True}
                     if response.status != 200:
                         logger.debug(f"❌ 获取下载链接失败: HTTP {response.status}")
                         return None
@@ -584,6 +594,12 @@ class AssetSyncService:
                 fail_count += 1
                 with self._callback_lock:
                     self.callbacks.on_download_complete(group_id, False, "无法获取下载链接")
+                continue
+
+            if download_info.get("_forbidden"):
+                fail_count += 1
+                with self._callback_lock:
+                    self.callbacks.on_download_complete(group_id, False, "forbidden")
                 continue
             
             download_url = download_info.get('downloadUrl') or download_info.get('download_url')

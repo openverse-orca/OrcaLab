@@ -38,7 +38,7 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
     def on_set_status(self, asset_id: str, status: str):
         self.window.set_asset_status(asset_id, status)
 
-    def on_set_name_size(self, asset_id: str, name: str, size: int):
+    def on_set_name_size(self, asset_id: str, name: str, size: float):
         self.window.set_asset_name_size(asset_id, name, size)
     
     def on_download_start(self, asset_id: str):
@@ -53,6 +53,8 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
         else:
             if error == "incomplete":
                 self.window.set_asset_status(asset_id, 'incomplete')
+            elif error == "forbidden":
+                self.window.set_asset_status(asset_id, 'forbidden')
             else:
                 self.window.set_asset_status(asset_id, 'failed')
     

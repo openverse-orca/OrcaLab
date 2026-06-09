@@ -100,6 +100,9 @@ class AssetItemWidget(QtWidgets.QWidget):
         elif self.status == 'failed':
             self._status_icon_color = "red"
             self._status_icon_char = "✗"
+        elif self.status == 'forbidden':
+            self._status_icon_color = "orange"
+            self._status_icon_char = "🔒"
         elif self.status == 'incompatible':
             self._status_icon_color = ""
             self._status_icon_char = "⚠️"
@@ -133,6 +136,9 @@ class AssetItemWidget(QtWidgets.QWidget):
         elif self.status == 'failed':
             self.status_text.setText("下载失败")
             self.status_text.setStyleSheet("color: red;")
+        elif self.status == 'forbidden':
+            self.status_text.setText("无权限下载")
+            self.status_text.setStyleSheet("color: orange;")
         elif self.status == 'incompatible':
             self.status_text.setText("不兼容")
             self.status_text.setStyleSheet("color: orange;")
@@ -176,7 +182,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
     sync_failed = QtCore.Signal(str)
     
     # 内部信号（线程安全）
-    _add_asset_signal = QtCore.Signal(str, str, str, int64, str)  # id, name, file, size, status
+    _add_asset_signal = QtCore.Signal(str, str, str, float, str)  # id, name, file, size, status
     _set_status_signal = QtCore.Signal(str, str)  # asset_id, status
     _set_name_size_signal = QtCore.Signal(str, str, float)  # asset_id, name, size
     _set_progress_signal = QtCore.Signal(str, int64, float)  # asset_id, progress, speed
@@ -307,11 +313,11 @@ class SyncProgressWindow(QtWidgets.QDialog):
         # 用户选择结果（用于区分退出还是离线启动）
         self.user_choice = None  # None: 未选择, 'exit': 退出, 'offline': 离线启动, 'close': 正常关闭
     
-    def add_asset(self, asset_id: str, asset_name: str, file_name: str, size: int64, status: str):
+    def add_asset(self, asset_id: str, asset_name: str, file_name: str, size: float, status: str):
         """线程安全：添加资产包到列表"""
         self._add_asset_signal.emit(asset_id, asset_name, file_name, size, status)
     
-    def _add_asset_impl(self, asset_id: str, asset_name: str, file_name: str, size: int64, status: str):
+    def _add_asset_impl(self, asset_id: str, asset_name: str, file_name: str, size: float, status: str):
         """内部实现：添加资产包"""
         widget = AssetItemWidget(asset_name, file_name, float(size), status)
         self.asset_widgets[asset_id] = widget
