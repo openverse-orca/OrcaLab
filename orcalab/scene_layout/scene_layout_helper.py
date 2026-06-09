@@ -6,6 +6,7 @@ import numpy as np
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyKey, ActorPropertyType
 from orcalab.local_scene import LocalScene
+from orcalab.metadata_service_bus import MetadataServiceRequestBus
 import json
 import pathlib
 from orcalab.math import Transform
@@ -17,6 +18,29 @@ from PySide6 import QtCore, QtWidgets, QtGui
 from orcalab.application_util import get_remote_scene
 
 logger = logging.getLogger(__name__)
+
+
+def _show_scrollable_warning(parent, title: str, message: str, detail: str):
+    dialog = QtWidgets.QDialog(parent)
+    dialog.setWindowTitle(title)
+    dialog.setMinimumSize(600, 400)
+
+    layout = QtWidgets.QVBoxLayout(dialog)
+
+    msg_label = QtWidgets.QLabel(message)
+    msg_label.setWordWrap(True)
+    layout.addWidget(msg_label)
+
+    text_edit = QtWidgets.QTextEdit()
+    text_edit.setReadOnly(True)
+    text_edit.setPlainText(detail)
+    layout.addWidget(text_edit)
+
+    button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Ok)
+    button_box.accepted.connect(dialog.accept)
+    layout.addWidget(button_box)
+
+    dialog.exec()
 
 
 def compact_array(arr):
@@ -188,11 +212,11 @@ class SceneLayoutHelper:
             logger.warning("加载场景布局时部分Actor创建失败:\n%s", error_detail)
             QtCore.QTimer.singleShot(
                 0,
-                lambda: QtWidgets.QMessageBox.warning(
+                lambda: _show_scrollable_warning(
                     window,
                     "加载场景布局警告",
-                    f"场景布局 '{filename}' 加载过程中部分Actor创建失败:\n\n{error_detail}",
-                    QtWidgets.QMessageBox.StandardButton.Ok,
+                    f"场景布局 '{filename}' 加载过程中部分Actor创建失败:",
+                    error_detail,
                 ),
             )
 
@@ -206,7 +230,7 @@ class SceneLayoutHelper:
         requests: List[AddActorRequest] = []
         post_add_items: list = []
 
-        self._collect_layout_requests(actor_data, None, requests, post_add_items)
+        self._collect_layout_requests(actor_data, None, requests, post_add_items, errors)
 
         if actor_data.get("name") == "root":
             flycamera_transform_data = actor_data.get("flycamera_transform", {})
@@ -225,6 +249,10 @@ class SceneLayoutHelper:
                         errors.append(
                             f"创建 Actor {actor.name} 失败: {e}, asset_path: {actor.asset_path}"
                         )
+                    else:
+                        errors.append(
+                            f"创建 Actor {actor.name} 失败: {e}"
+                        )
                 return
 
         for actor, actor_data_item in post_add_items:
@@ -239,8 +267,6 @@ class SceneLayoutHelper:
 
                 if isinstance(actor, AssetActor):
                     await self._apply_modified_properties(actor, actor_data_item)
-                    for group in actor.property_groups:
-                        SceneLayoutHelper._sync_tree_display_names(group.tree_data)
             except Exception as e:
                 if isinstance(actor, AssetActor):
                     error_msg = (
@@ -255,6 +281,7 @@ class SceneLayoutHelper:
         parent_path: Path | None,
         requests: List[AddActorRequest],
         post_add_items: list,
+        errors: List[str],
     ):
         name = actor_data["name"]
         actor_type = actor_data.get("type", "BaseActor")
@@ -288,6 +315,14 @@ class SceneLayoutHelper:
         else:
             if actor_type == "AssetActor":
                 asset_path = actor_data.get("asset_path", "")
+                output = []
+                MetadataServiceRequestBus().get_asset_info(asset_path, output)
+                if not output or output[0] is None:
+                    errors.append(
+                        f"跳过 Actor {name}: 资产不存在, asset_path: {asset_path}"
+                    )
+                    logger.warning("跳过 Actor %s: 资产不存在, asset_path: %s", name, asset_path)
+                    return
                 actor = AssetActor(name=name, asset_path=asset_path)
             else:
                 actor = GroupActor(name=name)
@@ -306,7 +341,7 @@ class SceneLayoutHelper:
 
         if isinstance(actor, GroupActor):
             for child_data in actor_data.get("children", []):
-                self._collect_layout_requests(child_data, current_path, requests, post_add_items)
+                self._collect_layout_requests(child_data, current_path, requests, post_add_items, errors)
 
     async def _apply_modified_properties(self, actor: AssetActor, actor_data: dict):
         saved = actor_data.get("modified_properties", [])
