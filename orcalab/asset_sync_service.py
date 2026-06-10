@@ -607,6 +607,12 @@ class AssetSyncService:
             cloud_file_sha256 = download_info.get("sha256")
             
             # 下载当前包
+            if download_url is None or cloud_file_sha256 is None or size is None:
+                fail_count += 1
+                with self._callback_lock:
+                    self.callbacks.on_download_complete(group_id, False, "下载信息不完整")
+                continue
+            
             success = await self._download_package_with_group_progress(
                 group_id, file_name, download_url, cloud_file_sha256,
                 total_group_size, downloaded_group_size, start_time
@@ -615,6 +621,9 @@ class AssetSyncService:
             if success:
                 success_count += 1
                 downloaded_group_size += size
+                json_files_url = download_info.get('jsonFilesUrl')
+                if json_files_url:
+                    await self._download_json_files(json_files_url)
             else:
                 # 失败后重试一次
                 retry_success = await self._download_package_with_group_progress(
@@ -624,6 +633,9 @@ class AssetSyncService:
                 if retry_success:
                     success_count += 1
                     downloaded_group_size += size
+                    json_files_url = download_info.get('jsonFilesUrl')
+                    if json_files_url:
+                        await self._download_json_files(json_files_url)
                 else:
                     fail_count += 1
         
@@ -633,6 +645,35 @@ class AssetSyncService:
         
         return success_count, fail_count
     
+    async def _download_json_files(self, json_files_url: list):
+        for json_file_info in json_files_url:
+            if self._cancelled():
+                break
+            download_url = json_file_info.get('downloadUrl')
+            file_name = json_file_info.get('fileName')
+            if not download_url or not file_name:
+                continue
+            local_path = self.cache_folder / file_name
+            temp_path = self.cache_folder / f"{file_name}.tmp"
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(download_url, timeout=aiohttp.ClientTimeout(total=self.timeout * 2)) as response:
+                        if response.status != 200:
+                            logger.debug("❌ JSON文件下载失败: %s HTTP %s", file_name, response.status)
+                            continue
+                        with open(temp_path, 'wb') as f:
+                            async for chunk in response.content.iter_chunked(8192):
+                                if chunk:
+                                    f.write(chunk)
+                if local_path.exists():
+                    local_path.unlink()
+                temp_path.rename(local_path)
+                logger.debug("✓ JSON文件 %s 下载完成", file_name)
+            except Exception as e:
+                logger.debug("❌ JSON文件下载失败: %s - %s", file_name, e)
+                if temp_path.exists():
+                    temp_path.unlink()
+
     async def _download_package_with_group_progress(self, group_id: str, file_name: str, download_url: str, 
                                            cloud_file_sha256: str, total_group_size: int, downloaded_group_size: int, 
                                            group_start_time: float) -> bool:
