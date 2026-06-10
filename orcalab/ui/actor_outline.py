@@ -98,8 +98,8 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
         )
 
         if isinstance(node, EntityInfo):
-            font = FontService().apply_font_modifiers("entity_info", font)
-            painter.setFont(font)
+            entity_info_font = FontService().apply_font_modifiers("entity_info", font)
+            painter.setFont(entity_info_font)
             SectionHeader.paint_at(
                 painter=painter,
                 rect=rect,
@@ -118,6 +118,7 @@ class ActorOutlineDelegate(QtWidgets.QStyledItemDelegate):
             super().paint(painter, option, index)
             return
 
+        painter.setFont(font)
         model = index.model()
         has_children = model.hasChildren(index) if model else False
 
