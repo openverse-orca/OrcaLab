@@ -458,29 +458,6 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         return True, ReparentData(actors, actor_paths, parent_actor, parent_actor_path)
 
     @override
-    async def before_actor_added(
-        self,
-        actor: BaseActor,
-        parent_actor_path: Path,
-        source: str,
-    ):
-        parent_actor, _ = self.local_scene.get_actor_and_path(parent_actor_path)
-        parent_index = self.get_index_from_actor(parent_actor)
-        assert isinstance(parent_actor, GroupActor)
-        child_count = len(parent_actor.children)
-
-        self.beginInsertRows(parent_index, child_count, child_count)
-
-    @override
-    async def on_actor_added(
-        self,
-        actor: BaseActor,
-        parent_actor_path: Path,
-        source: str,
-    ):
-        self.endInsertRows()
-
-    @override
     async def on_actor_added_failed(
         self,
         actor: BaseActor,

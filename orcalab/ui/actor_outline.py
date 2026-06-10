@@ -179,9 +179,6 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
         self._temp_expaned_items: List[Path | FullEntityPath] = []
 
-        self._entity_fetch_version: Dict[Path, int] = {}
-        self._entity_fetch_tasks: Dict[Path, asyncio.Task] = {}
-
     def connect_bus(self):
         SceneEditNotificationBus.connect(self)
 
@@ -335,24 +332,6 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         existing_root = local_scene.get_entity_root(actor_path)
         if existing_root is not None:
             return
-
-        version = self._entity_fetch_version.get(actor_path, 0) + 1
-        self._entity_fetch_version[actor_path] = version
-
-        old_task = self._entity_fetch_tasks.pop(actor_path, None)
-        if old_task is not None and not old_task.done():
-            old_task.cancel()
-
-        async def _fetch(version: int):
-            with perf_timer("outline.fetch_entity_hierarchy", feature="OUTLINE"):
-                await SceneEditRequestBus().fetch_entity_hierarchy(
-                    actor_path, source="actor_outline"
-                )
-            if self._entity_fetch_version.get(actor_path) != version:
-                return
-
-        task = asyncio.create_task(_fetch(version))
-        self._entity_fetch_tasks[actor_path] = task
 
     def _recursive_expand(self, index: QtCore.QModelIndex, expanded: bool):
         if not index.isValid():
@@ -539,6 +518,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             selection = SelectionData()
             shift = QtCore.Qt.KeyboardModifier.ShiftModifier in event.modifiers()
             if self._update_selection_data(selection, index, shift):
+                self.set_selection(selection)
                 asyncio.create_task(
                     SceneEditRequestBus().set_selection(
                         selection, source="actor_outline"
@@ -829,13 +809,6 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
     def _before_reset_model(self):
         self._temp_expaned_items.clear()
-        self._entity_fetch_version.clear()
-
-        for task in self._entity_fetch_tasks.values():
-            if not task.done():
-                task.cancel()
-        self._entity_fetch_tasks.clear()
-
         self._save_expaneded_items(QtCore.QModelIndex(), None)
 
     def _after_reset_model(self):

@@ -544,13 +544,14 @@ message EntityInfoMessage {
     repeated EntityInfoMessage children = 4;
 }
 
-message GetEntityHierarchyRequest {
-    string actor_path = 1;
+message GetEntityHierarchyBatchRequest {
+    repeated string actor_paths = 1;
 }
-message GetEntityHierarchyResponse {
+message GetEntityHierarchyBatchResponse {
     StatusCode status_code = 1;
     string error_message = 2;
-    EntityInfoMessage root_entity = 3;
+    repeated EntityInfoMessage root_entities = 3;
+    repeated string errors = 4;
 }
 
 message GetEntityPropertyGroupsRequest {
@@ -747,8 +748,7 @@ service GrpcService {
     rpc SetMoveRotateSensitivity(SetMoveRotateSensitivityRequest) returns (SetMoveRotateSensitivityResponse);
 
     // Entity hierarchy related RPCs
-    rpc GetEntityHierarchy(GetEntityHierarchyRequest) returns (GetEntityHierarchyResponse);
-    rpc GetEntityPropertyGroups(GetEntityPropertyGroupsRequest) returns (GetEntityPropertyGroupsResponse);
+    rpc GetEntityHierarchyBatch(GetEntityHierarchyBatchRequest) returns (GetEntityHierarchyBatchResponse);
     rpc GetEntityPropertyGroupsBatch(GetEntityPropertyGroupsBatchRequest) returns (GetEntityPropertyGroupsBatchResponse);
     rpc GetAllEntityPropertyGroups(GetAllEntityPropertyGroupsRequest) returns (GetAllEntityPropertyGroupsResponse);
 

@@ -725,7 +725,7 @@ class EditServiceWrapper:
         response = await self.stub.SetMoveRotateSensitivity(request)
         self._check_response(response)
 
-    def parse_entity_info(
+    def _parse_entity_info(
         self,
         msg: edit_service_pb2.EntityInfoMessage,
         parent: EntityInfo | None,
@@ -740,7 +740,7 @@ class EditServiceWrapper:
 
         children = []
         for i, child in enumerate(msg.children):
-            result = self.parse_entity_info(child, entity_info, segments, i)
+            result = self._parse_entity_info(child, entity_info, segments, i)
             children.append(result)
 
         entity_info.children = children
@@ -750,54 +750,36 @@ class EditServiceWrapper:
 
         return entity_info
 
-    async def get_entity_hierarchy(self, actor_path: Path) -> EntityInfo | None:
-        request = edit_service_pb2.GetEntityHierarchyRequest(
-            actor_path=actor_path.string()
-        )
-        response = await self.stub.GetEntityHierarchy(request)
-        self._check_response(response)
-
-        if response.HasField("root_entity"):
-            return self.parse_entity_info(response.root_entity, None, [], 0)
-        return None
-
-    async def get_entity_property_groups(
-        self, actor_path: Path, entity_id: int
-    ) -> List[ActorPropertyGroup]:
+    async def get_entity_hierarchy_batch(
+        self, actor_paths: List[Path]
+    ) -> List[EntityInfo | None]:
         with perf_timer(
-            "grpc_wrapper.get_entity_property_groups.total", feature="PARSE"
+            "grpc_wrapper.get_entity_hierarchy_batch.total", feature="PARSE"
         ):
-            request = edit_service_pb2.GetEntityPropertyGroupsRequest(
-                actor_path=actor_path.string(),
-                entity_id=entity_id,
+            request = edit_service_pb2.GetEntityHierarchyBatchRequest(
+                actor_paths=[p.string() for p in actor_paths]
             )
             with perf_timer(
-                "grpc_wrapper.get_entity_property_groups.network", feature="PARSE"
+                "grpc_wrapper.get_entity_hierarchy_batch.network", feature="PARSE"
             ):
-                response = await self.stub.GetEntityPropertyGroups(request)
+                response: edit_service_pb2.GetEntityHierarchyBatchResponse = (
+                    await self.stub.GetEntityHierarchyBatch(request)
+                )
             self._check_response(response)
 
-            perf_log(
-                f"grpc_wrapper.get_entity_property_groups: "
-                f"actor_path={actor_path}, entity_id={entity_id}, "
-                f"status={response.status_code}, "
-                f"property_groups_count={len(response.property_groups)}",
-                feature="PROPERTY",
-            )
-
-            perf_log(
-                f"grpc_wrapper.get_entity_property_groups: parsing {len(response.property_groups)} groups",
-                feature="PARSE",
-            )
-
             with perf_timer(
-                "grpc_wrapper.get_entity_property_groups.parse", feature="PARSE"
+                "grpc_wrapper.get_entity_hierarchy_batch.parse", feature="PARSE"
             ):
-                property_groups: List[ActorPropertyGroup] = []
-                for pg_msg in response.property_groups:
-                    pg = self._parse_property_group_msg(pg_msg)
-                    property_groups.append(pg)
-            return property_groups
+                results: List[EntityInfo | None] = []
+                for root_entity, error in zip(response.root_entities, response.errors):
+                    if root_entity is not None and len(error) == 0:
+                        results.append(
+                            self._parse_entity_info(root_entity, None, [], 0)
+                        )
+                    else:
+                        # For now, error is discarded.
+                        results.append(None)
+                return results
 
     async def get_entity_property_groups_batch(
         self, actor_path: Path, entity_ids: List[int]

@@ -915,21 +915,23 @@ class EntityInfoMessage(_message.Message):
     children: _containers.RepeatedCompositeFieldContainer[EntityInfoMessage]
     def __init__(self, entity_id: _Optional[int] = ..., name: _Optional[str] = ..., entity_path: _Optional[str] = ..., children: _Optional[_Iterable[_Union[EntityInfoMessage, _Mapping]]] = ...) -> None: ...
 
-class GetEntityHierarchyRequest(_message.Message):
-    __slots__ = ("actor_path",)
-    ACTOR_PATH_FIELD_NUMBER: _ClassVar[int]
-    actor_path: str
-    def __init__(self, actor_path: _Optional[str] = ...) -> None: ...
+class GetEntityHierarchyBatchRequest(_message.Message):
+    __slots__ = ("actor_paths",)
+    ACTOR_PATHS_FIELD_NUMBER: _ClassVar[int]
+    actor_paths: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, actor_paths: _Optional[_Iterable[str]] = ...) -> None: ...
 
-class GetEntityHierarchyResponse(_message.Message):
-    __slots__ = ("status_code", "error_message", "root_entity")
+class GetEntityHierarchyBatchResponse(_message.Message):
+    __slots__ = ("status_code", "error_message", "root_entities", "errors")
     STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
     ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    ROOT_ENTITY_FIELD_NUMBER: _ClassVar[int]
+    ROOT_ENTITIES_FIELD_NUMBER: _ClassVar[int]
+    ERRORS_FIELD_NUMBER: _ClassVar[int]
     status_code: StatusCode
     error_message: str
-    root_entity: EntityInfoMessage
-    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., root_entity: _Optional[_Union[EntityInfoMessage, _Mapping]] = ...) -> None: ...
+    root_entities: _containers.RepeatedCompositeFieldContainer[EntityInfoMessage]
+    errors: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., root_entities: _Optional[_Iterable[_Union[EntityInfoMessage, _Mapping]]] = ..., errors: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class GetEntityPropertyGroupsRequest(_message.Message):
     __slots__ = ("actor_path", "entity_id")

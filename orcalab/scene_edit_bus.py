@@ -177,20 +177,6 @@ class SceneEditRequest:
     ):
         pass
 
-    async def fetch_entity_hierarchy(
-        self,
-        actor_path: Path,
-        source: str = "",
-    ) -> EntityInfo | None:
-        pass
-
-    async def get_entity_property_groups(
-        self,
-        actor_path: Path,
-        entity_id: int,
-    ) -> list:
-        return []
-
     async def set_flycamera_transform(self, transform: Transform) -> None:
         pass
 
@@ -223,22 +209,6 @@ class SceneEditNotification:
         new_transforms: List[Transform],
         source: str,
     ) -> None:
-        pass
-
-    async def before_actor_added(
-        self,
-        actor: BaseActor,
-        parent_actor_path: Path,
-        source: str,
-    ):
-        pass
-
-    async def on_actor_added(
-        self,
-        actor: BaseActor,
-        parent_actor_path: Path,
-        source: str,
-    ):
         pass
 
     async def on_actor_added_failed(

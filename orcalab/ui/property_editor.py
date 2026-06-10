@@ -6,7 +6,12 @@ from typing import override
 from PySide6 import QtCore, QtWidgets
 
 from orcalab.actor import BaseActor, AssetActor
-from orcalab.actor_property import ActorProperty, ActorPropertyGroup, ActorPropertyKey, EntityPropertyGroupEntry
+from orcalab.actor_property import (
+    ActorProperty,
+    ActorPropertyGroup,
+    ActorPropertyKey,
+    EntityPropertyGroupEntry,
+)
 from orcalab.actor_util import collect_properties
 from orcalab.application_util import get_local_scene, get_remote_scene
 from orcalab.entity_info import EntityInfo
@@ -76,7 +81,12 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         if self._actor_path is None:
             return None
         if self._entity is not None:
-            return (str(self._actor_path), self._entity.entity_id, self._recursive, self._show_transform)
+            return (
+                str(self._actor_path),
+                self._entity.entity_id,
+                self._recursive,
+                self._show_transform,
+            )
         return (str(self._actor_path), None, self._recursive, self._show_transform)
 
     def connect_bus(self):
@@ -106,7 +116,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         if self._actor == actor and self._entity is entity:
             return
 
-        perf_log(f"property_editor.set_entity: actor={actor.name}, entity={entity.name}, entity_id={entity.entity_id}", feature="PROPERTY")
+        perf_log(
+            f"property_editor.set_entity: actor={actor.name}, entity={entity.name}, entity_id={entity.entity_id}",
+            feature="PROPERTY",
+        )
 
         self._actor = actor
         self._entity = entity
@@ -128,7 +141,11 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
     def set_recursive_display(self, enabled: bool):
         self._recursive = enabled
-        if self._entity is not None and self._actor is not None and self._actor_path is not None:
+        if (
+            self._entity is not None
+            and self._actor is not None
+            and self._actor_path is not None
+        ):
             self._load_properties()
 
     def _on_show_transform_changed(self, visible: bool):
@@ -181,7 +198,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._property_edits.clear()
 
         if self._transform_edit is not None:
-            perf_log(f"_hide_active_sections: disconnect_buses and setting _transform_edit=None, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}", feature="TRACE_LIFECYCLE")
+            perf_log(
+                f"_hide_active_sections: disconnect_buses and setting _transform_edit=None, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}",
+                feature="TRACE_LIFECYCLE",
+            )
             self._transform_edit.disconnect_buses()
         self._transform_edit = None
 
@@ -203,7 +223,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._property_edits.clear()
 
         if self._transform_edit is not None:
-            perf_log(f"_clear_property_layout: disconnect_buses and setting _transform_edit=None, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}", feature="TRACE_LIFECYCLE")
+            perf_log(
+                f"_clear_property_layout: disconnect_buses and setting _transform_edit=None, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}",
+                feature="TRACE_LIFECYCLE",
+            )
             self._transform_edit.disconnect_buses()
         self._transform_edit = None
 
@@ -223,15 +246,17 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._clear_property_layout()
         label = QtWidgets.QLabel("没有选中任何对象")
         label.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignCenter
-            | QtCore.Qt.AlignmentFlag.AlignVCenter
+            QtCore.Qt.AlignmentFlag.AlignCenter | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
-        FontService().bind_widget_font(label, 'body')
+        FontService().bind_widget_font(label, "body")
         self._property_layout.addWidget(label)
 
     def _add_transform_edit(self):
         if self._transform_edit is not None:
-            perf_log(f"_add_transform_edit: replacing existing _transform_edit, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}", feature="TRACE_LIFECYCLE")
+            perf_log(
+                f"_add_transform_edit: replacing existing _transform_edit, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}",
+                feature="TRACE_LIFECYCLE",
+            )
             self._transform_edit.disconnect_buses()
             self._transform_edit.deleteLater()
             self._transform_edit = None
@@ -240,7 +265,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             return
 
         self._transform_edit = TransformEdit(self, self._actor, 160)
-        perf_log(f"_add_transform_edit: created new _transform_edit, actor={self._actor_path}, id={id(self._transform_edit)}", feature="TRACE_LIFECYCLE")
+        perf_log(
+            f"_add_transform_edit: created new _transform_edit, actor={self._actor_path}, id={id(self._transform_edit)}",
+            feature="TRACE_LIFECYCLE",
+        )
         self._transform_edit.connect_buses()
         self._property_layout.addWidget(self._transform_edit)
         self._transform_edit.show()
@@ -258,7 +286,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._active_cache_key = cache_key
 
         if cache_key is not None and cache_key in self._section_cache:
-            perf_log(f"property_editor._load_properties: cache hit for {cache_key}", feature="PROPERTY")
+            perf_log(
+                f"property_editor._load_properties: cache hit for {cache_key}",
+                feature="PROPERTY",
+            )
             self._show_cached_sections(cache_key)
             return
 
@@ -269,7 +300,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             f"entity={self._entity.name if self._entity else None}, "
             f"entity_id={self._entity.entity_id if self._entity else None}, "
             f"cache_key={cache_key}",
-            feature="PROPERTY"
+            feature="PROPERTY",
         )
 
         if self._entity is not None:
@@ -334,10 +365,15 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
     def _fetch_and_render_all(self, actor_path: Path):
         async def _fetch():
             try:
-                with perf_timer("property_editor._fetch_and_render_all.total", feature="PROPERTY"):
+                with perf_timer(
+                    "property_editor._fetch_and_render_all.total", feature="PROPERTY"
+                ):
                     remote_scene = get_remote_scene()
 
-                    with perf_timer("property_editor._fetch_and_render_all.grpc_get_all", feature="PROPERTY"):
+                    with perf_timer(
+                        "property_editor._fetch_and_render_all.grpc_get_all",
+                        feature="PROPERTY",
+                    ):
                         entries = await remote_scene.get_all_entity_property_groups(
                             actor_path
                         )
@@ -346,7 +382,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                         logger.info(f"[Actor] no entries for {actor_path}")
                         return
 
-                    perf_log(f"property_editor._fetch_and_render_all: got {len(entries)} entries", feature="PROPERTY")
+                    perf_log(
+                        f"property_editor._fetch_and_render_all: got {len(entries)} entries",
+                        feature="PROPERTY",
+                    )
 
                     groups = [e.property_group for e in entries]
                     for e in entries:
@@ -355,7 +394,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                     props: list[ActorProperty] = []
                     collect_properties(keys, props, groups, actor_path)
                     if keys:
-                        with perf_timer("property_editor._fetch_and_render_all.grpc_get_values", feature="PROPERTY"):
+                        with perf_timer(
+                            "property_editor._fetch_and_render_all.grpc_get_values",
+                            feature="PROPERTY",
+                        ):
                             values = await remote_scene.get_properties(keys)
                         for prop, value in zip(props, values):
                             if value is not None:
@@ -364,7 +406,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
                     self._raw_entries = entries
 
-                    with perf_timer("property_editor._fetch_and_render_all.data_store_set", feature="PROPERTY"):
+                    with perf_timer(
+                        "property_editor._fetch_and_render_all.data_store_set",
+                        feature="PROPERTY",
+                    ):
                         self._data_store.set_data_from_entries(entries)
 
                     if isinstance(self._actor, AssetActor):
@@ -374,147 +419,82 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                         self._data_store.get_component_type_items()
                     )
 
-                    with perf_timer("property_editor._fetch_and_render_all.render", feature="PROPERTY"):
+                    with perf_timer(
+                        "property_editor._fetch_and_render_all.render",
+                        feature="PROPERTY",
+                    ):
                         self._render_from_data_store()
             except Exception as e:
                 logger.warning(f"Failed to load actor components: {e}")
 
         self._pending_render_task = asyncio.create_task(_fetch())
 
+    async def _fetch_and_render_entity_async(self, actor_path: Path, entity_id: int):
+        with perf_timer(
+            "property_editor._fetch_and_render_entity.total", feature="PROPERTY"
+        ):
+            entity_root = get_local_scene().get_entity_root(actor_path)
+            if entity_root is None:
+                return
+
+            entity_info = entity_root.find_entity_info(entity_id)
+
+            entity_ids = [entity_id]
+            if entity_info and self._recursive:
+                entity_ids = entity_info.collect_entity_ids()
+
+            batch_results = await get_remote_scene().get_entity_property_groups_batch(
+                actor_path, entity_ids
+            )
+
+            all_groups: list[ActorPropertyGroup] = []
+            for entity_idx, groups in enumerate(batch_results):
+                if groups:
+                    sorted_groups = self._sort_property_groups(groups)
+                    child_entity_id = entity_ids[entity_idx]
+                    for g in sorted_groups:
+                        g.entity_id = child_entity_id
+                    all_groups.extend(sorted_groups)
+
+            if not all_groups:
+                return
+
+            keys: list[ActorPropertyKey] = []
+            props: list[ActorProperty] = []
+            collect_properties(keys, props, all_groups, actor_path)
+            if keys:
+                with perf_timer(
+                    "property_editor._fetch_and_render_entity.grpc_get_values_batch",
+                    feature="PROPERTY",
+                ):
+                    values = await get_remote_scene().get_properties(keys)
+                for prop, value in zip(props, values):
+                    if value is not None:
+                        prop.set_value(value)
+                        prop.set_original_value(value)
+
+            if isinstance(self._actor, AssetActor):
+                self._actor.property_groups = all_groups
+
+            self._set_transform_read_only(all_groups)
+
+            self._data_store.set_data_from_groups(
+                all_groups, entity_id, str(actor_path)
+            )
+            self._filter_bar.set_available_types(
+                self._data_store.get_component_type_items()
+            )
+
+            with perf_timer(
+                "property_editor._fetch_and_render_entity.render",
+                feature="PROPERTY",
+            ):
+                self._render_from_data_store()
+
     def _fetch_and_render_entity(self, actor_path: Path, entity_id: int):
-        async def _fetch():
-            try:
-                with perf_timer("property_editor._fetch_and_render_entity.total", feature="PROPERTY"):
-                    entity_root = get_local_scene().get_entity_root(actor_path)
-                    entity_info = entity_root.find_entity_info(entity_id) if entity_root else None
-
-                    entity_ids = entity_info.collect_entity_ids() if (entity_info and self._recursive) else [entity_id]
-
-                    perf_log(
-                        f"property_editor._fetch_and_render_entity: actor_path={actor_path}, "
-                        f"requested_entity_id={entity_id}, "
-                        f"_recursive={self._recursive}, "
-                        f"resolved_entity_ids={entity_ids}, "
-                        f"entity_root={'yes' if entity_root else 'None'}, "
-                        f"entity_info={'yes' if entity_info else 'None'}",
-                        feature="PROPERTY"
-                    )
-
-                    if len(entity_ids) == 1:
-                        with perf_timer("property_editor._fetch_and_render_entity.grpc_single", feature="PROPERTY"):
-                            groups = await get_remote_scene().get_entity_property_groups(
-                                actor_path, entity_id
-                            )
-                        if not groups:
-                            perf_log(
-                                f"property_editor._fetch_and_render_entity: NO groups for entity_id={entity_id}",
-                                feature="PROPERTY"
-                            )
-                            return
-
-                        group_details = "; ".join(
-                            f"{g.name}(props={len(g.properties)}, eid={g.entity_id})"
-                            for g in groups
-                        )
-                        perf_log(
-                            f"property_editor._fetch_and_render_entity: entity_id={entity_id}, "
-                            f"groups={len(groups)}, details=[{group_details}]",
-                            feature="PROPERTY"
-                        )
-
-                        keys: list[ActorPropertyKey] = []
-                        props: list[ActorProperty] = []
-                        collect_properties(keys, props, groups, actor_path)
-                        if keys:
-                            with perf_timer("property_editor._fetch_and_render_entity.grpc_get_values", feature="PROPERTY"):
-                                values = await get_remote_scene().get_properties(keys)
-                            for prop, value in zip(props, values):
-                                if value is not None:
-                                    prop.set_value(value)
-                                    prop.set_original_value(value)
-
-                        sorted_groups = self._sort_property_groups(groups)
-
-                        for g in sorted_groups:
-                            g.entity_id = entity_id
-
-                        if isinstance(self._actor, AssetActor):
-                            self._actor.property_groups = sorted_groups
-
-                        self._set_transform_read_only(sorted_groups)
-
-                        self._data_store.set_data_from_groups(
-                            sorted_groups, entity_id, str(actor_path)
-                        )
-                        self._filter_bar.set_available_types(
-                            self._data_store.get_component_type_items()
-                        )
-
-                        with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
-                            self._render_from_data_store()
-                    else:
-                        with perf_timer("property_editor._fetch_and_render_entity.grpc_batch", feature="PROPERTY"):
-                            batch_results = await get_remote_scene().get_entity_property_groups_batch(
-                                actor_path, entity_ids
-                            )
-
-                        perf_log(f"property_editor._fetch_and_render_entity: batch got {len(batch_results)} results for {len(entity_ids)} entities", feature="PROPERTY")
-
-                        all_groups: list[ActorPropertyGroup] = []
-                        for entity_idx, groups in enumerate(batch_results):
-                            if groups:
-                                sorted_groups = self._sort_property_groups(groups)
-                                child_entity_id = entity_ids[entity_idx]
-                                for g in sorted_groups:
-                                    g.entity_id = child_entity_id
-                                all_groups.extend(sorted_groups)
-
-                        if not all_groups:
-                            perf_log(
-                                f"property_editor._fetch_and_render_entity(batch): NO groups for entity_id={entity_id}",
-                                feature="PROPERTY"
-                            )
-                            return
-
-                        group_details = "; ".join(
-                            f"{g.name}(props={len(g.properties)})"
-                            for g in all_groups
-                        )
-                        perf_log(
-                            f"property_editor._fetch_and_render_entity(batch): entity_id={entity_id}, "
-                            f"entity_ids={entity_ids}, all_groups={len(all_groups)}, details=[{group_details}]",
-                            feature="PROPERTY"
-                        )
-
-                        keys: list[ActorPropertyKey] = []
-                        props: list[ActorProperty] = []
-                        collect_properties(keys, props, all_groups, actor_path)
-                        if keys:
-                            with perf_timer("property_editor._fetch_and_render_entity.grpc_get_values_batch", feature="PROPERTY"):
-                                values = await get_remote_scene().get_properties(keys)
-                            for prop, value in zip(props, values):
-                                if value is not None:
-                                    prop.set_value(value)
-                                    prop.set_original_value(value)
-
-                        if isinstance(self._actor, AssetActor):
-                            self._actor.property_groups = all_groups
-
-                        self._set_transform_read_only(all_groups)
-
-                        self._data_store.set_data_from_groups(
-                            all_groups, entity_id, str(actor_path)
-                        )
-                        self._filter_bar.set_available_types(
-                            self._data_store.get_component_type_items()
-                        )
-
-                        with perf_timer("property_editor._fetch_and_render_entity.render", feature="PROPERTY"):
-                            self._render_from_data_store()
-            except Exception as e:
-                logger.warning(f"Failed to load entity components: {e}", exc_info=True)
-
-        self._pending_render_task = asyncio.create_task(_fetch())
+        self._pending_render_task = asyncio.create_task(
+            self._fetch_and_render_entity_async(actor_path, entity_id)
+        )
 
     def _clear_property_groups_only(self):
         for edit in self._property_edits:
@@ -544,7 +524,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             perf_log(
                 f"property_editor._render_from_data_store: entity=None (actor selected), "
                 f"data_store has {len(self._data_store.items)} items, skipping component groups",
-                feature="PROPERTY"
+                feature="PROPERTY",
             )
             return
 
@@ -553,10 +533,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
         if not self._show_transform:
             all_types = set(self._data_store.available_component_types)
-            transform_types = {
-                t for t in all_types
-                if 'transform' in t.lower()
-            }
+            transform_types = {t for t in all_types if "transform" in t.lower()}
             if selected_types is not None:
                 selected_types = selected_types - transform_types
             else:
@@ -565,7 +542,9 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         # Log data store contents before filtering
         all_ids = set(item.entity_id for item in self._data_store.items)
         all_paths = set(item.entity_path for item in self._data_store.items)
-        all_component_types = set(item.component_type for item in self._data_store.items)
+        all_component_types = set(
+            item.component_type for item in self._data_store.items
+        )
         perf_log(
             f"property_editor._render_from_data_store: "
             f"entity={self._entity.entity_id if self._entity else 'None'}, "
@@ -574,7 +553,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             f"unique_entity_paths={all_paths}, "
             f"component_types={all_component_types}, "
             f"selected_types={selected_types}",
-            feature="PROPERTY"
+            feature="PROPERTY",
         )
 
         groups = self._data_store.get_property_groups_for_display(
@@ -586,7 +565,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             f"property_editor._render_from_data_store: after filter, "
             f"groups={len(groups)}, "
             f"group_names=[{', '.join(g.name for g in groups)}]",
-            feature="PROPERTY"
+            feature="PROPERTY",
         )
 
         if not groups:
@@ -628,14 +607,20 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                     prop.set_read_only(True)
 
     def _render_property_groups(
-        self, groups: list[ActorPropertyGroup], label_width: int, read_only: bool = False
+        self,
+        groups: list[ActorPropertyGroup],
+        label_width: int,
+        read_only: bool = False,
     ):
         if self._actor is None:
             return
 
         cache_key = self._cache_key()
 
-        perf_log(f"property_editor._render_property_groups: rendering {len(groups)} groups", feature="PROPERTY")
+        perf_log(
+            f"property_editor._render_property_groups: rendering {len(groups)} groups",
+            feature="PROPERTY",
+        )
 
         self._cancel_pending_render()
 
@@ -649,9 +634,14 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                 if self._pending_render_task is None:
                     return
 
-                with perf_timer(f"property_editor._render_property_groups.group[{i}]({group.name})", feature="PROPERTY"):
+                with perf_timer(
+                    f"property_editor._render_property_groups.group[{i}]({group.name})",
+                    feature="PROPERTY",
+                ):
                     collapsed = self._recursive
-                    edit = PropertyGroupEdit(self, actor, group, label_width, collapsed=collapsed)
+                    edit = PropertyGroupEdit(
+                        self, actor, group, label_width, collapsed=collapsed
+                    )
                     edit.connect_buses()
 
                     if read_only:
@@ -671,7 +661,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                 self._active_cache_key = cache_key
                 self._evict_cache_if_needed()
 
-            perf_log(f"property_editor._render_property_groups: {len(new_edits)} groups rendered", feature="PROPERTY")
+            perf_log(
+                f"property_editor._render_property_groups: {len(new_edits)} groups rendered",
+                feature="PROPERTY",
+            )
 
         self._pending_render_task = asyncio.create_task(_render_batched())
 
@@ -712,6 +705,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                 actor = local_scene.find_actor_by_path(actor_path)
                 if actor is not None:
                     entity_root = local_scene.get_entity_root(actor_path)
-                    entity_info = entity_root.find_entity_info_by_path(entity_path) if entity_root else None
+                    entity_info = (
+                        entity_root.find_entity_info_by_path(entity_path)
+                        if entity_root
+                        else None
+                    )
                     if entity_info is not None:
                         self.set_entity(actor, entity_info, actor_path)

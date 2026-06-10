@@ -486,6 +486,22 @@ class RemoteScene(SceneEditNotification):
         for key, prop, value in zip(keys, props, values):
             prop.set_value(value)
 
+    async def _fetch_entity_heirarchy(self, requests: List[AddActorRequest]):
+        asset_actor_paths = []
+        for request in requests:
+            if not isinstance(request.actor, AssetActor):
+                continue
+            asset_actor_paths.append(request.parent_path / request.actor.name)
+
+        if not asset_actor_paths:
+            return
+
+        infos = await self._service.get_entity_hierarchy_batch(asset_actor_paths)
+        for actor_path, info in zip(asset_actor_paths, infos):
+            if info is None:
+                continue
+            self.local_scene.set_entity_root(actor_path, info)
+
     async def add_actor_batch(
         self, requests: List[AddActorRequest], stop_on_error: bool
     ) -> Tuple[bool, List[str]]:
@@ -502,6 +518,7 @@ class RemoteScene(SceneEditNotification):
         if not success and stop_on_error:
             raise Exception("Failed to add actors")
 
+        await self._fetch_entity_heirarchy(requests)
         await self._fetch_and_set_properties(requests, errors)
         await self._apply_properties_from_template(requests, errors)
 
@@ -631,17 +648,13 @@ class RemoteScene(SceneEditNotification):
         cmd = f"change_camera_movement_type:{camera_movement_type.name.lower()}"
         async with self._grpc_lock:
             return await self._service.custom_command(cmd)
-        
-    async def change_measure_type(
-        self, measure_type: MeasureType
-    ) -> None:
+
+    async def change_measure_type(self, measure_type: MeasureType) -> None:
         cmd = f"change_measure_type:{measure_type.name.lower()}"
         async with self._grpc_lock:
             return await self._service.custom_command(cmd)
-        
-    async def change_pivot_point_type(
-        self, pivot_point_type: PivotPointType
-    ) -> None:
+
+    async def change_pivot_point_type(self, pivot_point_type: PivotPointType) -> None:
         cmd = f"change_pivot_point_type:{pivot_point_type.name.lower()}"
         async with self._grpc_lock:
             return await self._service.custom_command(cmd)
@@ -740,23 +753,7 @@ class RemoteScene(SceneEditNotification):
                 move_sensitivity, rotate_sensitivity
             )
 
-    async def get_entity_hierarchy(self, actor_path: Path) -> EntityInfo | None:
-        async with self._grpc_lock:
-            return await self._service.get_entity_hierarchy(actor_path)
 
-    async def get_entity_property_groups(
-        self, actor_path: Path, entity_id: int
-    ) -> list:
-        with perf_timer("remote_scene.get_entity_property_groups", feature="GRPC"):
-            async with self._grpc_lock:
-                result = await self._service.get_entity_property_groups(
-                    actor_path, entity_id
-                )
-                # logger.info(
-                #     f"[gRPC] get_entity_property_groups: actor_path={actor_path}, "
-                #     f"entity_id={entity_id}, groups={len(result) if result else 'None'}"
-                # )
-                return result
 
     async def get_entity_property_groups_batch(
         self, actor_path: Path, entity_ids: List[int]

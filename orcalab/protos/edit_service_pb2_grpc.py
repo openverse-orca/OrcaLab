@@ -259,15 +259,10 @@ class GrpcServiceStub(object):
                 request_serializer=edit__service__pb2.SetMoveRotateSensitivityRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetMoveRotateSensitivityResponse.FromString,
                 _registered_method=True)
-        self.GetEntityHierarchy = channel.unary_unary(
-                '/SceneEdit.GrpcService/GetEntityHierarchy',
-                request_serializer=edit__service__pb2.GetEntityHierarchyRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.GetEntityHierarchyResponse.FromString,
-                _registered_method=True)
-        self.GetEntityPropertyGroups = channel.unary_unary(
-                '/SceneEdit.GrpcService/GetEntityPropertyGroups',
-                request_serializer=edit__service__pb2.GetEntityPropertyGroupsRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.GetEntityPropertyGroupsResponse.FromString,
+        self.GetEntityHierarchyBatch = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetEntityHierarchyBatch',
+                request_serializer=edit__service__pb2.GetEntityHierarchyBatchRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetEntityHierarchyBatchResponse.FromString,
                 _registered_method=True)
         self.GetEntityPropertyGroupsBatch = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetEntityPropertyGroupsBatch',
@@ -574,15 +569,9 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetEntityHierarchy(self, request, context):
+    def GetEntityHierarchyBatch(self, request, context):
         """Entity hierarchy related RPCs
         """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetEntityPropertyGroups(self, request, context):
-        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -852,15 +841,10 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     request_deserializer=edit__service__pb2.SetMoveRotateSensitivityRequest.FromString,
                     response_serializer=edit__service__pb2.SetMoveRotateSensitivityResponse.SerializeToString,
             ),
-            'GetEntityHierarchy': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetEntityHierarchy,
-                    request_deserializer=edit__service__pb2.GetEntityHierarchyRequest.FromString,
-                    response_serializer=edit__service__pb2.GetEntityHierarchyResponse.SerializeToString,
-            ),
-            'GetEntityPropertyGroups': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetEntityPropertyGroups,
-                    request_deserializer=edit__service__pb2.GetEntityPropertyGroupsRequest.FromString,
-                    response_serializer=edit__service__pb2.GetEntityPropertyGroupsResponse.SerializeToString,
+            'GetEntityHierarchyBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetEntityHierarchyBatch,
+                    request_deserializer=edit__service__pb2.GetEntityHierarchyBatchRequest.FromString,
+                    response_serializer=edit__service__pb2.GetEntityHierarchyBatchResponse.SerializeToString,
             ),
             'GetEntityPropertyGroupsBatch': grpc.unary_unary_rpc_method_handler(
                     servicer.GetEntityPropertyGroupsBatch,
@@ -2119,7 +2103,7 @@ class GrpcService(object):
             _registered_method=True)
 
     @staticmethod
-    def GetEntityHierarchy(request,
+    def GetEntityHierarchyBatch(request,
             target,
             options=(),
             channel_credentials=None,
@@ -2132,36 +2116,9 @@ class GrpcService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/SceneEdit.GrpcService/GetEntityHierarchy',
-            edit__service__pb2.GetEntityHierarchyRequest.SerializeToString,
-            edit__service__pb2.GetEntityHierarchyResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetEntityPropertyGroups(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/SceneEdit.GrpcService/GetEntityPropertyGroups',
-            edit__service__pb2.GetEntityPropertyGroupsRequest.SerializeToString,
-            edit__service__pb2.GetEntityPropertyGroupsResponse.FromString,
+            '/SceneEdit.GrpcService/GetEntityHierarchyBatch',
+            edit__service__pb2.GetEntityHierarchyBatchRequest.SerializeToString,
+            edit__service__pb2.GetEntityHierarchyBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,
