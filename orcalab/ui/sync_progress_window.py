@@ -137,7 +137,7 @@ class AssetItemWidget(QtWidgets.QWidget):
             self.status_text.setText("下载失败")
             self.status_text.setStyleSheet("color: red;")
         elif self.status == 'forbidden':
-            self.status_text.setText("无权限下载")
+            self.status_text.setText("已下线")
             self.status_text.setStyleSheet("color: orange;")
         elif self.status == 'incompatible':
             self.status_text.setText("不兼容")

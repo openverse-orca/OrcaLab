@@ -299,7 +299,7 @@ class AssetSyncService:
                 continue
             if download_info.get("_forbidden"):
                 self.callbacks.on_set_status(pkg_id, 'forbidden')
-                logger.debug("%s 无权限下载", file_name)
+                logger.debug("%s 已下线", file_name)
                 continue
             cloud_file_sha256 = download_info.get("sha256")
             if local_path.exists():
