@@ -1,6 +1,4 @@
 import asyncio
-from platform import node
-from platform import node
 from typing import Any, Dict, List, Tuple, override
 from PySide6 import QtCore, QtWidgets, QtGui
 
@@ -11,7 +9,6 @@ from orcalab.entity_info import EntityInfo
 from orcalab.entity_path import FullEntityPath
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
-from orcalab.perf_log import perf_timer, perf_log
 from orcalab.pyside_util import connect
 from orcalab.scene_edit_bus import (
     SceneEditRequestBus,
@@ -20,7 +17,6 @@ from orcalab.scene_edit_bus import (
 )
 
 from orcalab.selection_data import SelectionData
-from orcalab.ui import actor_outline_model
 from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.collapsible.collapsible_section import SectionHeader
 from orcalab.ui.fonts.font_service import FontService
@@ -354,77 +350,69 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
 
     @QtCore.Slot()
     def show_context_menu(self, position):
-        self._current_index = self.indexAt(position)
-
         actor_outline_model = self.actor_model()
-        local_scene: LocalScene = actor_outline_model.local_scene
+        local_scene = actor_outline_model.local_scene
+
+        index = self.indexAt(position)
+        self._current_index = index
 
         is_root = False
-        current_node = None
-        if self._current_index.isValid():
-            current_node = self._current_index.internalPointer()
 
-        is_entity_node = isinstance(current_node, EntityInfo)
-
-        if current_node is None:
-            current_actor = local_scene.root_actor
+        if not index.isValid():
+            self._current_actor = local_scene.root_actor
+            self._current_actor_path = Path.root_path()
             is_root = True
-        elif isinstance(current_node, BaseActor):
-            current_actor = current_node
-        elif isinstance(current_node, EntityInfo):
-            current_actor = actor_outline_model.get_actor(self._current_index)
         else:
-            current_actor = local_scene.root_actor
-            is_root = True
+            ptr = index.internalPointer()
 
-        self._current_actor = current_actor
-        self._current_actor_path = local_scene.get_actor_path(self._current_actor)
+            if isinstance(ptr, BaseActor):
+                self._current_actor = ptr
+                self._current_actor_path = local_scene.get_actor_path(
+                    self._current_actor
+                )
+            elif isinstance(ptr, EntityInfo):
+                self._current_actor = None
+                self._current_actor_path = None
+            else:
+                logger.error(
+                    "[Coding Error] Invalid node type in actor outline: {}".format(
+                        type(ptr)
+                    )
+                )
+                self._current_actor = None
+                self._current_actor_path = None
+                return
 
         menu = QtWidgets.QMenu()
 
-        if is_entity_node:
-            action_expand = QtGui.QAction("递归展开")
-            connect(
-                action_expand.triggered, lambda: self._recursive_expand_action(True)
-            )
-            menu.addAction(action_expand)
+        action_add_group = QtGui.QAction("添加组")
+        connect(action_add_group.triggered, self._add_group)
+        menu.addAction(action_add_group)
 
-            action_collapse = QtGui.QAction("递归折叠")
-            connect(
-                action_collapse.triggered, lambda: self._recursive_expand_action(False)
-            )
-            menu.addAction(action_collapse)
-        else:
-            action_add_group = QtGui.QAction("Add Group")
-            connect(action_add_group.triggered, self._add_group)
-            menu.addAction(action_add_group)
-
-            if self._current_index.isValid():
-                menu.addSeparator()
-
-                action_delete = QtGui.QAction("Delete")
-                connect(action_delete.triggered, self._delete_actor)
-                action_delete.setEnabled(not is_root)
-                menu.addAction(action_delete)
-
-                action_rename = QtGui.QAction("Rename")
-                connect(action_rename.triggered, self._open_rename_dialog)
-                action_rename.setEnabled(not is_root)
-                menu.addAction(action_rename)
-
+        if self._current_index.isValid():
             menu.addSeparator()
 
-            action_expand = QtGui.QAction("递归展开")
-            connect(
-                action_expand.triggered, lambda: self._recursive_expand_action(True)
-            )
-            menu.addAction(action_expand)
+            action_delete = QtGui.QAction("删除")
+            connect(action_delete.triggered, self._delete_actor)
+            action_delete.setEnabled(not is_root)
+            menu.addAction(action_delete)
 
-            action_collapse = QtGui.QAction("递归折叠")
-            connect(
-                action_collapse.triggered, lambda: self._recursive_expand_action(False)
-            )
-            menu.addAction(action_collapse)
+            action_rename = QtGui.QAction("重命名")
+            connect(action_rename.triggered, self._open_rename_dialog)
+            action_rename.setEnabled(not is_root)
+            menu.addAction(action_rename)
+
+        menu.addSeparator()
+
+        action_expand = QtGui.QAction("递归展开")
+        connect(action_expand.triggered, lambda: self._recursive_expand_action(True))
+        action_expand.setEnabled(index.isValid())
+        menu.addAction(action_expand)
+
+        action_collapse = QtGui.QAction("递归折叠")
+        connect(action_collapse.triggered, lambda: self._recursive_expand_action(False))
+        action_collapse.setEnabled(index.isValid())
+        menu.addAction(action_collapse)
 
         menu.exec(self.mapToGlobal(position))
 
