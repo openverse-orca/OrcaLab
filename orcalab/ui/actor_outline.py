@@ -226,14 +226,14 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         def need_update():
             if len(new_actors) != len(actors):
                 return True
-            if local_scene.active_actor in locked_set:
+            if local_scene.active_actor_path in locked_set:
                 return True
             return False
 
         if not need_update():
             return
 
-        active_actor = local_scene.active_actor
+        active_actor = local_scene.active_actor_path
         if active_actor in locked_set:
             active_actor = None
 
@@ -649,32 +649,37 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                 # 点击锁定的actor没有任何效果
                 return False
 
-            selected = actor_path in selection.selected_actors
-            active = local_scene.active_actor == actor_path
+            selected = actor_path in local_scene.selected_actors
+            active = actor_path == local_scene.active_actor_path
 
             if shift:
                 # 按住shift点击一个actor
                 selection.selected_actors = local_scene.selected_actors
-                selection.active_actor_path = local_scene.active_actor
+                selection.active_actor_path = local_scene.active_actor_path
 
                 if selected:
                     if active:
-                        # 如果是active actor，取消选中，保持active actor不变
+                        # 如果是active actor，取消选中，清空active actor
                         selection.selected_actors.remove(actor_path)
+                        selection.active_actor_path = None
                     else:
-                        # 如果不是active actor，设为active，保持选择不变
+                        # 如果不是active actor，设为active，选择保持选择不变
                         selection.active_actor_path = actor_path
                 else:
-                    # 如果未选中，则添加到选中列表中，但不修改active actor
+                    # 如果未选中，则添加到选中列表中
                     selection.selected_actors.append(actor_path)
+                    selection.active_actor_path = actor_path
 
                 return True
             else:
-                # 点击一个未选中的actor，选中并且设为active actor
                 if not selected:
+                    # 点击一个未选中的actor，选中并且设为active actor
                     selection.selected_actors = [actor_path]
                     selection.active_actor_path = actor_path
                     return True
+                else:
+                    # 点击一个已选中的actor, 没有任何效果
+                    pass
 
         elif isinstance(ptr, EntityInfo):
             if shift:

@@ -58,7 +58,7 @@ class LocalScene:
         self._selection.selected_actors = sorted_paths
 
     @property
-    def active_actor(self) -> Path | None:
+    def active_actor_path(self) -> Path | None:
         return self._selection.active_actor_path
 
     @property
