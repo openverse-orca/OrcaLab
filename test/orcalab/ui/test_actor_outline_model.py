@@ -33,7 +33,9 @@ def outline_model(q_app):
     asset = AssetActor("asset", "assets/test.prefab")
 
     local_scene.add_actor(group, Path.root_path())
-    local_scene.add_actor(asset, local_scene.get_actor_path(group))
+    group_path = local_scene.get_actor_path(group)
+    assert group_path is not None
+    local_scene.add_actor(asset, group_path)
 
     root_entity = EntityInfo(
         entity_id=1,
@@ -68,7 +70,7 @@ def test_get_actor_resolves_entity_index_to_asset_actor(outline_model):
     entity_index = model.index(0, 0, asset_index)
 
     assert entity_index.isValid()
-    assert entity_index.internalPointer() is root_entity
+    assert entity_index.internalPointer() is root_entity.children[0]
     assert model.get_actor(entity_index) is asset
 
 
@@ -79,7 +81,7 @@ def test_parent_of_root_entity_is_its_asset_actor(outline_model):
     entity_index = model.index(0, 0, asset_index)
 
     assert entity_index.isValid()
-    assert entity_index.internalPointer() is root_entity
+    assert entity_index.internalPointer() is root_entity.children[0]
     assert model.parent(entity_index) == asset_index
 
 
@@ -87,17 +89,24 @@ def test_parent_of_nested_entity_is_parent_entity(outline_model):
     model, asset, root_entity, child_entity = outline_model
 
     asset_index = model.get_index_from_actor(asset)
-    root_entity_index = model.index(0, 0, asset_index)
-    child_entity_index = model.index(0, 0, root_entity_index)
+    child_entity_index = model.index(0, 0, asset_index)
 
     assert child_entity_index.isValid()
     assert child_entity_index.internalPointer() is child_entity
 
     parent_index = model.parent(child_entity_index)
 
-    assert parent_index.isValid()
-    assert parent_index.internalPointer() is root_entity
-    assert model.data(parent_index, Qt.ItemDataRole.DisplayRole) == "root_entity"
+    assert parent_index == asset_index
+
+
+def test_get_index_for_top_level_entity_uses_asset_children(outline_model):
+    model, asset, _, child_entity = outline_model
+
+    child_entity_index = model.get_index_for_entity(asset, child_entity.entity_path)
+
+    assert child_entity_index.isValid()
+    assert child_entity_index.internalPointer() is child_entity
+    assert model.parent(child_entity_index) == model.get_index_from_actor(asset)
 
 
 def test_qabstract_item_model_tester_handles_outline_model_updates(q_app):
@@ -171,15 +180,13 @@ def test_qabstract_item_model_tester_handles_outline_model_updates(q_app):
         top_group_index = model.index(0, 0, root_index)
         nested_group_index = model.index(0, 0, top_group_index)
         asset_index = model.index(0, 0, nested_group_index)
-        root_entity_index = model.index(0, 0, asset_index)
-        child_entity_index = model.index(0, 0, root_entity_index)
+        child_entity_index = model.index(0, 0, asset_index)
         grandchild_entity_index = model.index(0, 0, child_entity_index)
 
         assert model.rowCount(root_index) == 1
         assert model.rowCount(top_group_index) == 2
         assert model.rowCount(nested_group_index) == 1
         assert model.rowCount(asset_index) == 1
-        assert model.rowCount(root_entity_index) == 1
         assert model.rowCount(child_entity_index) == 1
         assert model.data(grandchild_entity_index, Qt.ItemDataRole.DisplayRole) == (
             "grandchild_entity"
@@ -192,6 +199,7 @@ def test_qabstract_item_model_tester_handles_outline_model_updates(q_app):
         )
 
         renamed_asset_path = local_scene.get_actor_path(asset)
+        assert renamed_asset_path is not None
         assert renamed_asset_path == nested_group_path / "asset_renamed"
         renamed_asset_index = model.index(0, 0, nested_group_index)
         assert model.data(renamed_asset_index, Qt.ItemDataRole.DisplayRole) == (
@@ -206,11 +214,8 @@ def test_qabstract_item_model_tester_handles_outline_model_updates(q_app):
             )
         )
 
-        reloaded_root_entity_index = model.index(0, 0, renamed_asset_index)
-        reloaded_child_entity_index = model.index(0, 0, reloaded_root_entity_index)
-        reloaded_grandchild_entity_index = model.index(
-            0, 0, reloaded_child_entity_index
-        )
+        reloaded_child_entity_index = model.index(0, 0, renamed_asset_index)
+        reloaded_grandchild_entity_index = model.index(0, 0, reloaded_child_entity_index)
         assert reloaded_grandchild_entity_index.isValid()
         assert model.parent(reloaded_grandchild_entity_index) == reloaded_child_entity_index
     finally:

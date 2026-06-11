@@ -58,6 +58,12 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
     def disconnect_bus(self):
         SceneEditNotificationBus.disconnect(self)
 
+    def _top_level_entities(self, actor: AssetActor) -> List[EntityInfo]:
+        entity_root = actor.entity_root
+        if entity_root is None:
+            return []
+        return entity_root.root_entity_info.children
+
     def _node_from_index(self, index: QModelIndex) -> BaseActor | EntityInfo | None:
         if not index.isValid():
             return self.m_root_group
@@ -125,13 +131,25 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
 
         parent_entity_info = entity_info.parent
         if parent_entity_info is None:
-            return self.createIndex(0, 0, entity_info)
+            logger.error(
+                "[Coding Error] EntityInfo has no parent. This should not happen for non-root entities."
+            )
+            return QModelIndex()
+
+        if parent_entity_info is entity_root.root_entity_info:
+            siblings = self._top_level_entities(actor)
+        else:
+            siblings = parent_entity_info.children
 
         index = -1
-        for i, child in enumerate(parent_entity_info.children):
+        for i, child in enumerate(siblings):
             if child is entity_info:
                 index = i
                 break
+
+        if index == -1:
+            logger.error("[Coding Error] Child not found from its parent.")
+            return QModelIndex()
 
         return self.createIndex(index, 0, entity_info)
 
@@ -157,10 +175,9 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
                     return self.createIndex(row, column, child)
 
             elif isinstance(node, AssetActor):
-                entity_root = node.entity_root
-                if entity_root is not None:
-                    if row == 0:
-                        return self.createIndex(0, column, entity_root.root_entity_info)
+                entities = self._top_level_entities(node)
+                if row < len(entities):
+                    return self.createIndex(row, column, entities[row])
 
             elif isinstance(node, EntityInfo):
                 if row < len(node.children):
@@ -186,28 +203,37 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
 
         elif isinstance(node, EntityInfo):
             parent_entity = node.parent
-            if parent_entity is not None:
-                index = -1
-                parent_of_parent = parent_entity.parent
-                siblings = (
-                    parent_of_parent.children
-                    if parent_of_parent is not None
-                    else [parent_entity]
-                )
-                for i, _child in enumerate(siblings):
-                    if _child is parent_entity:
-                        index = i
-                        break
-                return self.createIndex(index, 0, parent_entity)
 
-            # If parent_entity is None, the parent is the AssetActor
+            if parent_entity is None:
+                logger.error(
+                    "[Coding Error] EntityInfo node has no parent. This should not happen for non-root entities."
+                )
+                return QModelIndex()
 
             asset_actor = self.local_scene.find_actor_by_entity_id(node.entity_id)
             if asset_actor is None:
-                logger.error(f"Cannot find actor for entity {node.entity_path}.")
+                logger.error(f"[Coding Error] Cannot find actor for entity {node.entity_path}.")
                 return QModelIndex()
 
-            return self.get_index_from_actor(asset_actor)
+            entity_root = asset_actor.entity_root
+            if entity_root is None:
+                return QModelIndex()
+
+            if parent_entity is entity_root.root_entity_info:
+                return self.get_index_from_actor(asset_actor)
+
+            index = -1
+            parent_of_parent = parent_entity.parent
+            siblings = (
+                parent_of_parent.children
+                if parent_of_parent is not None
+                else [parent_entity]
+            )
+            for i, _child in enumerate(siblings):
+                if _child is parent_entity:
+                    index = i
+                    break
+            return self.createIndex(index, 0, parent_entity)
 
         return QModelIndex()
 
@@ -224,7 +250,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         if isinstance(node, GroupActor):
             return len(node.children) > 0
         elif isinstance(node, AssetActor):
-            return True
+            return len(self._top_level_entities(node)) > 0
         elif isinstance(node, EntityInfo):
             return len(node.children) > 0
 
@@ -245,8 +271,7 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
                 return len(node.children)
 
             elif isinstance(node, AssetActor):
-                entity_root = node.entity_root
-                return 1 if entity_root is not None else 0
+                return len(self._top_level_entities(node))
 
             elif isinstance(node, EntityInfo):
                 return len(node.children)

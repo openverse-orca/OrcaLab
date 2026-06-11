@@ -52,6 +52,7 @@ class EntityInfo:
 class EntityRoot:
     def __init__(self, root_entity_info: EntityInfo):
         # Tree structure of entities
+        # 这个根节点在大纲里是看不到的。AssetActor的子节点是这个根节点的子节点。
         self.root_entity_info = root_entity_info
 
         self._id_lookup_table: Dict[int, EntityInfo] = {}
