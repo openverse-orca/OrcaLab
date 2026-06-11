@@ -1,5 +1,4 @@
 import asyncio
-from copy import deepcopy
 from typing import Any, Dict, List, Sequence, Tuple, override
 import logging
 import numpy as np
@@ -21,7 +20,7 @@ from orcalab.post_process_dispatcher import PostProcessDispatcher
 from orcalab.remote_scene import RemoteScene
 from orcalab.math import Transform
 from orcalab.path import Path
-from orcalab.perf_log import perf_timer, perf_log
+from orcalab.perf_log import perf_logger
 from orcalab.scene_edit_bus import (
     SceneEditNotificationBus,
     SceneEditRequestBus,
@@ -571,8 +570,11 @@ class SceneEditService(SceneEditRequest):
         existing_names: List[str],
         child_positions: List[int],
     ):
+        perf = perf_logger("SERVICE", "duplicate_process_add_request")
+
         root_actor, root_actor_path = self.local_scene.normalize_actor(root_actor_path)
 
+        perf.start("prepare_parent_and_name")
         root_actor_parent_path = root_actor_path.parent()
         assert root_actor_parent_path is not None
 
@@ -581,6 +583,7 @@ class SceneEditService(SceneEditRequest):
 
         new_name = make_unique_name1(existing_names, root_actor.name)
 
+        perf.start("compute_insert_pos")
         child_pos = root_actor_parent.children.index(root_actor)
         assert child_pos != -1
 
@@ -592,6 +595,7 @@ class SceneEditService(SceneEditRequest):
         insert_pos = child_pos + offset
         child_positions.append(child_pos)
 
+        perf.start("clone_root")
         new_root_actor = clone_actor_basic(root_actor)
         new_root_actor.name = new_name
         new_root_actor_path = root_actor_parent_path / new_name
@@ -604,6 +608,7 @@ class SceneEditService(SceneEditRequest):
             )
         )
 
+        perf.start("clone_subtree")
         for actor in ActorIterator(root_actor, include_root=False):
             actor, actor_path = self.local_scene.normalize_actor(actor)
             new_actor = clone_actor_basic(actor)
@@ -657,13 +662,18 @@ class SceneEditService(SceneEditRequest):
         self._is_duplicating = True
 
         async with self._edit_lock:
+            perf = perf_logger("SERVICE", "duplicate_actors.total")
+            perf.start()
             await self._duplicate_actors(actors, undo, source)
+            perf.end()
 
         self._is_duplicating = False
 
     async def _duplicate_actors(
         self, actors: Sequence[BaseActor | Path], undo: bool = True, source: str = ""
     ):
+        perf = perf_logger("SERVICE", "duplicate_actors")
+
         _, actor_paths = self.normalize_and_clean_actors(actors)
 
         for path in actor_paths:
@@ -672,6 +682,7 @@ class SceneEditService(SceneEditRequest):
                 return
 
         # 同一节点下的 actors 需要避免重名，按照父路径对 actor 进行分组。
+        perf.start("group_paths_by_parent")
         parent_dict: Dict[Path, List[Path]] = {}
         for path in actor_paths:
             parent_path = path.parent()
@@ -680,6 +691,7 @@ class SceneEditService(SceneEditRequest):
                 parent_dict[parent_path] = []
             parent_dict[parent_path].append(path)
 
+        perf.start("build_add_requests")
         requests: List[AddActorRequest] = []
         new_actor_paths: List[Path] = []
         for parent_path, paths in parent_dict.items():
@@ -711,21 +723,25 @@ class SceneEditService(SceneEditRequest):
 
         await bus.before_actor_added_batch()
 
+        perf.start("local_scene.add_actor_batch")
         err = self.local_scene.add_actor_batch(requests)
         if err != "":
             # TODO: rollback if add failed
             logger.error("Local add_actor_batch failed: %s", err)
             raise Exception("Local add_actor_batch should not fail here.")
 
+        perf.start("remote_scene.add_actor_batch")
         suceess, errors = await self.remote_scene.add_actor_batch(requests, True)
         if not suceess:
             # TODO: rollback if remote add failed
             logger.error("Remote add_actor_batch failed: %s", errors)
             raise Exception("Remote add_actor_batch failed.")
 
+        perf.start("normalize_new_actors_and_sync_visibility_lock")
         new_actors, new_actor_paths = self.local_scene.normalize_actors(new_actor_paths)
         await self._sync_subtrees_visibility_lock_remote(new_actors)
 
+        perf.start("find_non_overlapping_position")
         transform_paths = []
         transform_values = []
         for new_actor, new_actor_path in zip(new_actors, new_actor_paths):
@@ -742,28 +758,36 @@ class SceneEditService(SceneEditRequest):
                         scale=1.0,
                     )
                 )
+        perf.end()
+
         if transform_paths:
+            perf.start("local_scene.update_transform_cache")
             await self.remote_scene.set_actor_transform_batch(
                 transform_paths, transform_values
             )
+            perf.start("local_scene.update_transform_cache")
             for actor_path, transform in zip(transform_paths, transform_values):
                 actor = self.local_scene.find_actor_by_path(actor_path)
                 if actor is not None:
                     actor._transform = transform
+            perf.end()
 
         await self._set_selection(new_selection, undo=False, source=source)
 
         await bus.on_actor_added_batch("")
 
         if not undo:
+            perf.end()
             return
 
+        perf.start("record_undo")
         command_group = CommandGroup()
         select_command = SelectionCommand(old_selection, new_selection)
         duplicate_command = DuplicateActorsCommand(actor_paths, new_actor_paths)
         command_group.commands.append(duplicate_command)
         command_group.commands.append(select_command)
         UndoRequestBus().add_command(command_group)
+        perf.end()
 
     @override
     async def set_property(
@@ -810,7 +834,7 @@ class SceneEditService(SceneEditRequest):
     async def set_transform(self, actor, transform, local, undo=True, source=""):
         """Leave for compatibility. Use set_transform_batch instead."""
         _actor, _actor_path = self.local_scene.get_actor_and_path(actor)
-        _transform = deepcopy(transform)
+        _transform = transform.clone()
 
         if not local:
             parent = _actor.parent

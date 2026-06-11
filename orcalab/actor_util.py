@@ -1,4 +1,3 @@
-from copy import deepcopy
 import logging
 from typing import Any, List, Tuple
 
@@ -194,13 +193,19 @@ def sort_actors_with_data[T](
     return list(sorted_actor_paths), list(sorted_datas)
 
 
+def clone_property_groups(
+    property_groups: List[ActorPropertyGroup],
+) -> List[ActorPropertyGroup]:
+    return [group.clone() for group in property_groups]
+
+
 def clone_actor_basic[T](actor: T) -> T:
     """Clone actor without parent-child relationships."""
     if isinstance(actor, GroupActor):
         new_actor = GroupActor(actor.name)
     elif isinstance(actor, AssetActor):
         new_actor = AssetActor(actor.name, actor.asset_path)
-        new_actor.property_groups = deepcopy(actor.property_groups)
+        new_actor.property_groups = clone_property_groups(actor.property_groups)
     else:
         raise Exception("Unsupported actor type")
 

@@ -15,7 +15,6 @@ class ActorPropertyType(Enum):
     ASSET = 6
 
 
-
 class ValueWrapper:
     """A simple wrapper to hold a value by reference."""
 
@@ -148,7 +147,19 @@ class ActorProperty:
     def set_struct_display_name(self, name: str):
         self._struct_display_name = name
 
-
+    def clone(self) -> "ActorProperty":
+        new_prop = ActorProperty(
+            self._name, self._display_name, self._type, self.value()
+        )
+        new_prop.set_read_only(self._read_only)
+        new_prop.set_editor_hint(self._editor_hint)
+        new_prop.set_enum_values(self._enum_values.copy())
+        new_prop.set_post_read_fields(self._post_read_fields.copy())
+        new_prop.set_post_read_delay_ms(self._post_read_delay_ms)
+        new_prop.set_sub_name(self._sub_name)
+        new_prop.set_parent_struct_name(self._parent_struct_name)
+        new_prop.set_struct_display_name(self._struct_display_name)
+        return new_prop
 
 
 class ActorPropertyGroup:
@@ -160,6 +171,14 @@ class ActorPropertyGroup:
         self.properties: List[ActorProperty] = []
         self.entity_id: int = 0
         self.component_type_id: str = ""
+
+    def clone(self) -> "ActorPropertyGroup":
+        new_group = ActorPropertyGroup(self.prefix, self.name, self.hint)
+        new_group.display_name = self.display_name
+        new_group.entity_id = self.entity_id
+        new_group.component_type_id = self.component_type_id
+        new_group.properties = [prop.clone() for prop in self.properties]
+        return new_group
 
 
 class ActorPropertyKey:

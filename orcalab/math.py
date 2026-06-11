@@ -28,6 +28,14 @@ class Transform:
         self.rotation = rotation
         self.scale = scale
 
+    def clone(self) -> "Transform":
+        """Return a copy of this Transform."""
+        return Transform(
+            position=np.copy(self.position),
+            rotation=np.copy(self.rotation),
+            scale=self.scale,
+        )
+
     @property
     def position(self) -> np.ndarray:
         return self._position

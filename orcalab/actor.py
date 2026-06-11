@@ -116,13 +116,13 @@ class BaseActor:
 
     @property
     def transform(self):
-        return copy.deepcopy(self._transform)
+        return self._transform.clone()
 
     @transform.setter
     def transform(self, value):
         if not isinstance(value, Transform):
             raise TypeError("transform must be an instance of Transform.")
-        self._transform = copy.deepcopy(value)
+        self._transform = value.clone()
 
         self._world_transform = None  # Invalidate world transform cache
 

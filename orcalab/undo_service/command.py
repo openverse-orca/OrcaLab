@@ -1,4 +1,3 @@
-from copy import deepcopy
 from typing import Any, List
 from orcalab.actor import BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyKey
