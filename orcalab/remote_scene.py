@@ -505,7 +505,7 @@ class RemoteScene(SceneEditNotification):
     async def add_actor_batch(
         self, requests: List[AddActorRequest], stop_on_error: bool
     ) -> Tuple[bool, List[str]]:
-        print(f"add_actor_batch: {len(requests)} actors")
+        logger.debug(f"add_actor_batch: {len(requests)} actors")
         async with self._grpc_lock:
             await self._service.custom_command("pause_render:true")
             try:
@@ -525,7 +525,7 @@ class RemoteScene(SceneEditNotification):
         return success, errors
 
     async def delete_actor_batch(self, actor_paths: List[Path]) -> None:
-        print(f"delete_actor_batch: {len(actor_paths)} actors")
+        logger.debug(f"delete_actor_batch: {len(actor_paths)} actors")
         async with self._grpc_lock:
             await self._service.custom_command("pause_render:true")
             try:
@@ -590,12 +590,12 @@ class RemoteScene(SceneEditNotification):
             )
 
     async def save_state(self):
-        print("Saving state...")
+        logger.debug("Saving state...")
         async with self._grpc_lock:
             await self._service.save_state()
 
     async def restore_state(self):
-        print("Restoring state...")
+        logger.debug("Restoring state...")
         async with self._grpc_lock:
             await self._service.restore_state()
 

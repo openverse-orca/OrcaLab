@@ -82,7 +82,7 @@ class EditServiceWrapper:
 
     def _check_response_no_exception(self, response) -> str:
         if response.status_code != Success:
-            print(f"[Error] {response.error_message}")
+            logger.error(f"[Error] {response.error_message}")
             return response.error_message
         return ""
 
@@ -134,10 +134,10 @@ class EditServiceWrapper:
         )
         response = await self.stub.AddActorBatch(batch_request)
         if response.status_code != Success:
-            print(f"Errors occur during add_actor_batch()")
+            logger.error(f"Errors occur during add_actor_batch()")
             for req, error in zip(in_requests, response.errors):
                 if error:
-                    print(
+                    logger.error(
                         f"    Error adding {req.actor.name} under {req.parent_path}: {error}"
                     )
             return False, response.errors
@@ -156,10 +156,10 @@ class EditServiceWrapper:
         response = await self.stub.DeleteActorBatch(batch_request)
 
         if response.status_code != Success:
-            print(f"Errors occur during delete_actor_batch()")
+            logger.error(f"Errors occur during delete_actor_batch()")
             for path, error in zip(actor_paths, response.errors):
                 if error:
-                    print(f"    Error deleting {path}: {error}")
+                    logger.error(f"    Error deleting {path}: {error}")
             return False, response.errors
         return True, response.errors
 
