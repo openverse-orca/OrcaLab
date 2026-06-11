@@ -59,11 +59,11 @@ class LocalScene:
 
     @property
     def active_actor(self) -> Path | None:
-        return self._selection.active_actor
+        return self._selection.active_actor_path
 
     @property
-    def active_entity(self) -> int:
-        return self._selection.active_entity
+    def active_entity(self) -> EntityPath:
+        return self._selection.active_entity_path
 
     def selection(self) -> SelectionData:
         """只读接口，返回当前的SelectionData的拷贝"""
@@ -83,18 +83,15 @@ class LocalScene:
             return actor.entity_root
         return None
 
-    def set_entity_root(self, actor_path: Path, entity_root_info: EntityInfo | None):
+    def set_entity_root(self, actor_path: Path, entity_root_info: EntityInfo):
         actor = self.find_actor_by_path(actor_path)
         if isinstance(actor, AssetActor):
-            if entity_root_info is None:
-                actor.entity_root = None
-            else:
-                entity_root = EntityRoot(entity_root_info)
-                entity_root.build_lookup_table()
-                actor.entity_root = entity_root
+            entity_root = EntityRoot(entity_root_info)
+            entity_root.build_lookup_table()
+            actor.entity_root = entity_root
 
-                for entity_id in entity_root.entity_ids():
-                    self._entity_lookup_table[entity_id] = actor
+            for entity_id in entity_root.entity_ids():
+                self._entity_lookup_table[entity_id] = actor
 
     def find_actor_by_entity_id(self, entity_id: int) -> AssetActor | None:
         return self._entity_lookup_table.get(entity_id, None)
@@ -105,22 +102,11 @@ class LocalScene:
             return None
 
         entity_root = actor.entity_root
-        if entity_root is None:
-            return None
-
         entity_info = entity_root.find_entity_info(entity_id)
         if entity_info is None:
             return None
 
         return entity_info.entity_path
-
-    # def find_entity_info_by_id(
-    #     self, actor_path: Path, entity_id: int
-    # ) -> EntityInfo | None:
-    #     entity_root = self.get_entity_root(actor_path)
-    #     if entity_root is None:
-    #         return None
-    #     return entity_root.find_entity_info(entity_id)
 
     def get_actor_path(self, actor: BaseActor) -> Path | None:
         for path, a in self._actors.items():

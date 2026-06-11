@@ -692,23 +692,40 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         source: str = "",
     ) -> None:
         with perf_timer("property_editor.on_selection_changed", feature="PROPERTY"):
-            if new_selection.active_actor is None:
-                if self._entity is not None:
-                    if self._actor is not None:
-                        self.set_actor(self._actor)
-                    else:
-                        self.clear_selection()
-            else:
-                actor_path = new_selection.active_actor
-                entity_path = new_selection.active_entity
-                local_scene = get_local_scene()
-                actor = local_scene.find_actor_by_path(actor_path)
-                if actor is not None:
-                    entity_root = local_scene.get_entity_root(actor_path)
-                    entity_info = (
-                        entity_root.find_entity_info_by_path(entity_path)
-                        if entity_root
-                        else None
-                    )
-                    if entity_info is not None:
-                        self.set_entity(actor, entity_info, actor_path)
+            active_actor_path = new_selection.active_actor_path
+            active_entity_path = new_selection.active_entity_path
+
+            if active_actor_path is None and active_entity_path.empty():
+                self.clear_selection()
+                return
+
+            if active_actor_path is None:
+                logger.error(
+                    "[Coding Error] on_selection_changed: active_entity is set but active_actor is None. This should not happen."
+                )
+                self.clear_selection()
+                return
+
+            local_scene = get_local_scene()
+            actor = local_scene.find_actor_by_path(active_actor_path)
+
+            if active_entity_path.empty():
+                self.set_actor(actor)
+                return
+
+            if not isinstance(actor, AssetActor):
+                logger.error(
+                    f"[Coding Error] on_selection_changed: active_entity is set but active_actor {active_actor_path} is not an AssetActor. This should not happen."
+                )
+                self.clear_selection()
+                return
+
+            entity_info = actor.entity_root.find_entity_info_by_path(active_entity_path)
+            if entity_info is None:
+                logger.error(
+                    f"Cannot find entity for path {active_entity_path} under actor {active_actor_path}."
+                )
+                self.set_actor(actor)
+                return
+
+            self.set_entity(actor, entity_info, active_actor_path)

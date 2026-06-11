@@ -238,32 +238,32 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             active_actor = None
 
         new_selection = SelectionData(
-            selected_actors=new_actors, active_actor=active_actor
+            selected_actors=new_actors, active_actor_path=active_actor
         )
         self.set_selection(new_selection)
         await SceneEditRequestBus().set_selection(new_selection, source="actor_outline")
 
     def _select_active_entity(self, selection: SelectionData) -> bool:
-        if selection.active_actor is None:
-            if not selection.active_entity.empty():
+        if selection.active_actor_path is None:
+            if not selection.active_entity_path.empty():
                 logger.error("Active entity is set but active actor is None.")
             return False
 
         model = self.actor_model()
         local_scene = model.local_scene
 
-        actor = local_scene.find_actor_by_path(selection.active_actor)
+        actor = local_scene.find_actor_by_path(selection.active_actor_path)
         if not isinstance(actor, AssetActor):
-            if not selection.active_entity.empty():
+            if not selection.active_entity_path.empty():
                 logger.error(
                     "Active entity is set but active actor is not an AssetActor."
                 )
             return False
 
-        if selection.active_entity.empty():
+        if selection.active_entity_path.empty():
             return False
 
-        index = model.get_index_for_entity(actor, selection.active_entity)
+        index = model.get_index_for_entity(actor, selection.active_entity_path)
         if not index.isValid():
             logger.error("Invalid index for active entity.")
             return False
@@ -655,7 +655,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             if shift:
                 # 按住shift点击一个actor
                 selection.selected_actors = local_scene.selected_actors
-                selection.active_actor = local_scene.active_actor
+                selection.active_actor_path = local_scene.active_actor
 
                 if selected:
                     if active:
@@ -663,7 +663,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                         selection.selected_actors.remove(actor_path)
                     else:
                         # 如果不是active actor，设为active，保持选择不变
-                        selection.active_actor = actor_path
+                        selection.active_actor_path = actor_path
                 else:
                     # 如果未选中，则添加到选中列表中，但不修改active actor
                     selection.selected_actors.append(actor_path)
@@ -673,7 +673,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                 # 点击一个未选中的actor，选中并且设为active actor
                 if not selected:
                     selection.selected_actors = [actor_path]
-                    selection.active_actor = actor_path
+                    selection.active_actor_path = actor_path
                     return True
 
         elif isinstance(ptr, EntityInfo):
@@ -700,8 +700,8 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
                 return False
 
             selection.selected_actors = [actor_path]
-            selection.active_actor = actor_path
-            selection.active_entity = ptr.entity_path
+            selection.active_actor_path = actor_path
+            selection.active_entity_path = ptr.entity_path
             return True
 
         return False
@@ -785,9 +785,6 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             return
 
         entity_root = actor.entity_root
-        if entity_root is None:
-            return
-
         entity_info = entity_root.find_entity_info_by_path(full_entity_path.entity_path)
         if entity_info is None:
             return

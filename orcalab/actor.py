@@ -196,7 +196,7 @@ class AssetActor(BaseActor):
         super().__init__(name, parent)
         self._asset_path = asset_path
         self.property_groups: List[ActorPropertyGroup] = []
-        self._entity_root: EntityRoot | None = None
+        self._entity_root: EntityRoot = EntityRoot(EntityInfo(0, ""))
 
     def __repr__(self):
         return f"AssetActor(name={self.name})"
@@ -212,9 +212,12 @@ class AssetActor(BaseActor):
         self._asset_path = value
 
     @property
-    def entity_root(self) -> EntityRoot | None:
+    def entity_root(self) -> EntityRoot:
         return self._entity_root
 
     @entity_root.setter
-    def entity_root(self, value: EntityRoot | None):
+    def entity_root(self, value: EntityRoot):
+        assert isinstance(
+            value, EntityRoot
+        ), "entity_root must be an instance of EntityRoot."
         self._entity_root = value

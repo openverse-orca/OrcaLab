@@ -300,13 +300,13 @@ class SceneEditService(SceneEditRequest):
             else:
                 new_selection.selected_actors.append(selected_path)
 
-        if old_selection.active_actor in _actor_paths:
-            new_selection.active_actor = None
-            new_selection.active_entity = EntityPath()
+        if old_selection.active_actor_path in _actor_paths:
+            new_selection.active_actor_path = None
+            new_selection.active_entity_path = EntityPath()
             selection_changed = True
         else:
-            new_selection.active_actor = old_selection.active_actor
-            new_selection.active_entity = old_selection.active_entity
+            new_selection.active_actor_path = old_selection.active_actor_path
+            new_selection.active_entity_path = old_selection.active_entity_path
 
         bus = SceneEditNotificationBus()
 
@@ -383,14 +383,14 @@ class SceneEditService(SceneEditRequest):
             else:
                 new_selection.selected_actors.append(selected_path)
 
-        if old_selection.active_actor == actor_path:
-            new_selection.active_actor = new_actor_path
+        if old_selection.active_actor_path == actor_path:
+            new_selection.active_actor_path = new_actor_path
             # active_entity 不变，因为重命名不影响 active entity
-            new_selection.active_entity = old_selection.active_entity
+            new_selection.active_entity_path = old_selection.active_entity_path
             selection_changed = True
         else:
-            new_selection.active_actor = old_selection.active_actor
-            new_selection.active_entity = old_selection.active_entity
+            new_selection.active_actor_path = old_selection.active_actor_path
+            new_selection.active_entity_path = old_selection.active_entity_path
 
         # commit changes
 
@@ -503,14 +503,14 @@ class SceneEditService(SceneEditRequest):
                     new_selection.selected_actors.append(selected_path)
 
         for old_path, new_path in zip(_old_actor_paths, new_actor_paths):
-            if old_selection.active_actor == old_path:
-                new_selection.active_actor = new_path
+            if old_selection.active_actor_path == old_path:
+                new_selection.active_actor_path = new_path
                 # active_entity 不变，因为移动不影响 active entity
-                new_selection.active_entity = old_selection.active_entity
+                new_selection.active_entity_path = old_selection.active_entity_path
                 selection_changed = True
             else:
-                new_selection.active_actor = old_selection.active_actor
-                new_selection.active_entity = old_selection.active_entity
+                new_selection.active_actor_path = old_selection.active_actor_path
+                new_selection.active_entity_path = old_selection.active_entity_path
 
         # commit changes
 

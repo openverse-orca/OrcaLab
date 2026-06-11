@@ -753,8 +753,6 @@ class RemoteScene(SceneEditNotification):
                 move_sensitivity, rotate_sensitivity
             )
 
-
-
     async def get_entity_property_groups_batch(
         self, actor_path: Path, entity_ids: List[int]
     ) -> List[List[ActorPropertyGroup]]:
@@ -776,28 +774,29 @@ class RemoteScene(SceneEditNotification):
     def _to_backend_selection_data(
         self, selection: SelectionData
     ) -> BackendSelectionData:
-        data = BackendSelectionData(selection.selected_actors, selection.active_actor)
+        data = BackendSelectionData(
+            selection.selected_actors, selection.active_actor_path
+        )
 
-        if selection.active_entity.empty():
+        if selection.active_entity_path.empty():
             return data
 
-        if selection.active_actor is None:
+        if selection.active_actor_path is None:
             logger.error("Active actor is None while active entity is set")
             return data
 
-        actor = self.local_scene.find_actor_by_path(selection.active_actor)
+        actor = self.local_scene.find_actor_by_path(selection.active_actor_path)
         if not isinstance(actor, AssetActor):
             logger.error("Active actor is not an AssetActor while active entity is set")
             return data
 
-        if not actor.entity_root:
-            logger.error("Active actor has no entity root while active entity is set")
-            return data
-
-        entity_id = actor.entity_root.find_entity_id_by_path(selection.active_entity)
-        if entity_id is None:
+        entity_id = actor.entity_root.find_entity_id_by_path(
+            selection.active_entity_path
+        )
+        if entity_id == 0:
             logger.error(
-                "Failed to find entity id by path: " + selection.active_entity.string()
+                "Failed to find entity id by path: "
+                + selection.active_entity_path.string()
             )
             return data
 
@@ -829,10 +828,6 @@ class RemoteScene(SceneEditNotification):
             logger.error("Active actor is not an AssetActor while active entity is set")
             return data
 
-        if not actor.entity_root:
-            logger.error("Active actor has no entity root while active actor is set")
-            return data
-
         entity_path = actor.entity_root.find_entity_path_by_id(
             backend_selection.active_entity
         )
@@ -843,5 +838,5 @@ class RemoteScene(SceneEditNotification):
             )
             return data
 
-        data.active_entity = entity_path
+        data.active_entity_path = entity_path
         return data
