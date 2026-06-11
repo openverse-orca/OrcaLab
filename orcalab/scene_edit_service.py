@@ -712,7 +712,7 @@ class SceneEditService(SceneEditRequest):
         await bus.before_actor_added_batch()
 
         err = self.local_scene.add_actor_batch(requests)
-        if err == "":
+        if err != "":
             # TODO: rollback if add failed
             logger.error("Local add_actor_batch failed: %s", err)
             raise Exception("Local add_actor_batch should not fail here.")
