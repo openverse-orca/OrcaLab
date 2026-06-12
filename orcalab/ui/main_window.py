@@ -104,6 +104,8 @@ class MainWindow(
         self._is_runtime_mode = False
         self._url_service_port = url_service_port
 
+        self._selection_before_sim : SelectionData | None = None
+
         # 状态指示器（顶部蓝色条）
         self._status_indicator = None
 
@@ -710,13 +712,19 @@ class MainWindow(
         self._set_window_border_style(is_runtime=False)
 
     async def start_sim(self):
-        await SimulationRequestBus().start_simulation()
+        self._selection_before_sim = self.local_scene.selection()
+        await SceneEditRequestBus().set_selection(SelectionData(), undo=False)
         await self.manipulator_bar.set_translation()
+        await SimulationRequestBus().start_simulation()
 
     async def stop_sim(self):
         await SimulationRequestBus().stop_simulation()
         if self.manipulator_bar._grab == True:
             await self.manipulator_bar.set_runtime_grab()
+        
+        if self._selection_before_sim:
+            await SceneEditRequestBus().set_selection(self._selection_before_sim, undo=False)
+            self._selection_before_sim = None
 
     def _set_window_border_style(self, is_runtime: bool):
         """设置运行时状态指示：运行时显示蓝色指示器，编辑模式隐藏"""
