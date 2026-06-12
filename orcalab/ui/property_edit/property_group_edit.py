@@ -41,6 +41,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         self._actor_path = actor_path
 
         self._property_edits: List[BasePropertyEdit] = []
+        self._recording_read_only_overrides: dict[str, bool] = {}
 
         with perf_timer(f"property_group_edit.init({group.name})", feature="PROPERTY"):
             self._section = CollapsibleSection(
@@ -67,7 +68,52 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
                 property_edits=self._property_edits,
                 collapsed=False,
             )
+            self._apply_initial_recording_state()
             return content
+
+    @staticmethod
+    def _is_recording_property(prop_name: str) -> bool:
+        last_seg = prop_name.rsplit(".", 1)[-1] if "." in prop_name else prop_name
+        return last_seg == "IsRecording"
+
+    def _get_is_recording_value(self) -> bool:
+        for prop in self._group.properties:
+            if self._is_recording_property(prop.name()):
+                return bool(prop.value())
+        return False
+
+    def _apply_initial_recording_state(self):
+        if not self._get_is_recording_value():
+            return
+        for edit in self._property_edits:
+            if self._is_recording_property(edit.context.prop.name()):
+                continue
+            self._recording_read_only_overrides[edit.context.prop.name()] = (
+                edit.context.prop.is_read_only()
+            )
+            edit.set_read_only(True)
+            edit.context.prop.set_read_only(True)
+
+    def _on_recording_changed(self, is_recording: bool):
+        if is_recording:
+            for edit in self._property_edits:
+                if self._is_recording_property(edit.context.prop.name()):
+                    continue
+                if edit.context.prop.name() not in self._recording_read_only_overrides:
+                    self._recording_read_only_overrides[edit.context.prop.name()] = (
+                        edit.context.prop.is_read_only()
+                    )
+                edit.set_read_only(True)
+                edit.context.prop.set_read_only(True)
+        else:
+            for edit in self._property_edits:
+                if self._is_recording_property(edit.context.prop.name()):
+                    continue
+                original = self._recording_read_only_overrides.pop(
+                    edit.context.prop.name(), False
+                )
+                edit.set_read_only(original)
+                edit.context.prop.set_read_only(original)
 
     def connect_buses(self):
         SceneEditNotificationBus.connect(self)
@@ -113,6 +159,10 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
             return
 
         if property_key.group_prefix != self._group.prefix:
+            return
+
+        if self._is_recording_property(property_key.property_name):
+            self._on_recording_changed(bool(value))
             return
 
         if source == "ui":
