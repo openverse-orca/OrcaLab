@@ -6,7 +6,7 @@ from orcalab.actor import BaseActor, GroupActor, AssetActor
 from orcalab.actor_util import make_unique_name
 from orcalab.application_util import get_local_scene
 from orcalab.entity_info import EntityInfo
-from orcalab.entity_path import FullEntityPath
+from orcalab.entity_path import EntityPath, FullEntityPath
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.pyside_util import connect
@@ -209,8 +209,12 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             return
 
         local_scene = self.actor_model().local_scene
-        actors = local_scene.selected_actors
-        if not actors:
+        selection = local_scene.selection()
+        actors = selection.selected_actors
+        active_actor_path = selection.active_actor_path
+        active_entity_path = selection.active_entity_path
+
+        if not actors and active_actor_path is None:
             return
 
         locked_set = set(paths_to_update)
@@ -222,20 +226,18 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         def need_update():
             if len(new_actors) != len(actors):
                 return True
-            if local_scene.active_actor_path in locked_set:
+            if active_actor_path in locked_set:
                 return True
             return False
 
         if not need_update():
             return
 
-        active_actor = local_scene.active_actor_path
-        if active_actor in locked_set:
-            active_actor = None
+        if active_actor_path in locked_set:
+            active_actor_path = None
+            active_entity_path = EntityPath()
 
-        new_selection = SelectionData(
-            selected_actors=new_actors, active_actor_path=active_actor
-        )
+        new_selection = SelectionData(new_actors, active_actor_path, active_entity_path)
         self.set_selection(new_selection)
         await SceneEditRequestBus().set_selection(new_selection, source="actor_outline")
 
