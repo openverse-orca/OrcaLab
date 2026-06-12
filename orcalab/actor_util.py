@@ -163,6 +163,8 @@ def collect_properties_duplicate_data(
         for prop in src_group.properties:
             if prop.is_read_only():
                 continue
+            if src_group.prefix == '/:变换':
+                continue # 复制时 actor 对应的 entity 变换单独处理，不通过复制属性的方式设置
             key = ActorPropertyKey(
                 dst_actor_path,
                 src_group.prefix,

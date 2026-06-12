@@ -742,6 +742,7 @@ class SceneEditService(SceneEditRequest):
         await self._sync_subtrees_visibility_lock_remote(new_actors)
 
         perf.start("find_non_overlapping_position")
+        await self.remote_scene.custom_command("update_existing_aabbs")
         transform_paths = []
         transform_values = []
         for new_actor, new_actor_path in zip(new_actors, new_actor_paths):
