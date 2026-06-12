@@ -1478,6 +1478,9 @@ class MainWindow(
         else:
             await self.remote_scene.custom_command(f"user_control:false")
 
+    async def set_recursive_display(self, enabled: bool):
+            await self.remote_scene.set_recursive_display(enabled)
+
     def _mark_layout_clean(self):
         self._layout_modified = False
         self._update_title()

@@ -840,3 +840,8 @@ class RemoteScene(SceneEditNotification):
 
         data.active_entity_path = entity_path
         return data
+
+    async def set_recursive_display(self, enable: bool):
+        await self.custom_command(
+            f"set_recursive_display:{'true' if enable else 'false'}"
+        )
