@@ -359,6 +359,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         self._current_index = index
 
         is_root = False
+        is_entity = False
 
         if not index.isValid():
             self._current_actor = local_scene.root_actor
@@ -375,6 +376,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
             elif isinstance(ptr, EntityInfo):
                 self._current_actor = None
                 self._current_actor_path = None
+                is_entity = True
             else:
                 logger.error(
                     "[Coding Error] Invalid node type in actor outline: {}".format(
@@ -391,7 +393,7 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         connect(action_add_group.triggered, self._add_group)
         menu.addAction(action_add_group)
 
-        if self._current_index.isValid():
+        if self._current_index.isValid() and not is_entity:
             menu.addSeparator()
 
             action_delete = QtGui.QAction("删除")

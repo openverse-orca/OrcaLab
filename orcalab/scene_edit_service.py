@@ -46,25 +46,6 @@ from orcalab.undo_service.undo_service_bus import UndoRequestBus
 logger = logging.getLogger(__name__)
 
 
-def _show_duplicate_name_warning(name: str, existing_names: set):
-    try:
-        from PySide6 import QtWidgets, QtCore
-
-        parent = QtWidgets.QApplication.activeWindow()
-        msg_box = QtWidgets.QMessageBox(parent)
-        msg_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
-        msg_box.setWindowTitle("关节名称重复")
-        msg_box.setText(
-            f"关节名称 '{name}' 已存在，无法使用重复名称。\n\n"
-            f"请使用不同的名称，或移除有问题的资产后重新操作。"
-        )
-        msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Ok)
-        msg_box.setModal(False)
-        msg_box.show()
-    except Exception:
-        logger.warning(f"Joint name '{name}' already exists, rename rejected.")
-
-
 class SceneEditService(SceneEditRequest):
 
     def __init__(self, local_scene: LocalScene, remote_scene: RemoteScene):
@@ -798,7 +779,18 @@ class SceneEditService(SceneEditRequest):
         undo: bool = True,
         source: str = "",
     ):
-        # TODO: refject invalid joint rename!!!!!
+        is_name_property = (
+            property_key.property_name.lower().endswith(".name")
+            or property_key.property_name.lower() == "name"
+        ) and isinstance(value, str)
+
+        if is_name_property:
+            logger.info(
+                "Name property change: property_name='%s', new_value='%s', source='%s'",
+                property_key.property_name,
+                value,
+                source,
+            )
 
         bus = SceneEditNotificationBus()
 
