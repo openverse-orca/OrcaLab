@@ -713,7 +713,7 @@ class MainWindow(
 
     async def start_sim(self):
         self._selection_before_sim = self.local_scene.selection()
-        await SceneEditRequestBus().set_selection(SelectionData(), undo=False)
+        await SceneEditRequestBus().set_selection(SelectionData(selected_actors=[]), undo=False)
         await self.manipulator_bar.set_translation()
         await SimulationRequestBus().start_simulation()
 
