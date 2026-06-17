@@ -11,6 +11,7 @@ OrcaLab 资产同步服务
 import json
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from numpy import int64
 import requests
 import aiohttp
@@ -392,16 +393,20 @@ class AssetSyncService:
             return None
     
     def get_image_url(self, asset_id: str) -> str:
-        get_asset_metadata_url = f"{self.base_url}/asset/{asset_id}/"
-        _start = time.monotonic()
-        response = requests.get(get_asset_metadata_url, headers=self.get_headers(), timeout=self.timeout)
-        elapsed = time.monotonic() - _start
-        logger.debug("HTTP GET %s/asset/%s/ 耗时: %.3f 秒 (状态码: %s)", self.base_url, asset_id, elapsed, response.status_code)
-        if response.status_code != 200:
-            logger.debug(f"Get image url failed. Asset Id: {asset_id} Status: {response.status_code}")
+        try:
+            get_asset_metadata_url = f"{self.base_url}/asset/{asset_id}/"
+            _start = time.monotonic()
+            response = requests.get(get_asset_metadata_url, headers=self.get_headers(), timeout=self.timeout)
+            elapsed = time.monotonic() - _start
+            logger.debug("HTTP GET %s/asset/%s/ 耗时: %.3f 秒 (状态码: %s)", self.base_url, asset_id, elapsed, response.status_code)
+            if response.status_code != 200:
+                logger.debug(f"Get image url failed. Asset Id: {asset_id} Status: {response.status_code}")
+                return None
+            asset_metadata = response.json()
+            return json.dumps(asset_metadata, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.debug(f"❌ 获取资产元数据失败: {e}")
             return None
-        asset_metadata = response.json()
-        return json.dumps(asset_metadata, ensure_ascii=False, indent=2)
 
     def check_metadata(self, packages: List[Dict], to_delete: List[str], to_missing: List[Dict]):
         metadata_path = self.cache_folder / "metadata.json"
@@ -516,13 +521,11 @@ class AssetSyncService:
             remote_metadata = remote_metadata_published + remote_metadata_unpublished
 
             updated_count = 0
-            total_remote = len(remote_metadata)
+            assets_need_images = []
             for index, sub_metadata in enumerate(remote_metadata, start=1):
                 if self._cancelled():
                     logger.debug("元数据同步已取消")
                     return
-                if total_remote > 0 and (index == 1 or index % 20 == 0 or index == total_remote):
-                    self.callbacks.on_metadata_sync('scanning', index, total_remote)
                 if sub_metadata['id'] in to_update_metadata:
                     for key, value in sub_metadata.items():
                         if sub_metadata['id'] not in metadata.keys():
@@ -536,14 +539,29 @@ class AssetSyncService:
                         metadata[sub_metadata['parentPackageId']] = {}
                         metadata[sub_metadata['parentPackageId']]['children'] = []
                     metadata[sub_metadata['parentPackageId']]['children'].append(sub_metadata)
-                    
-                    asset_id = sub_metadata['id']
-                    image_url = self.get_image_url(asset_id)
-                    if image_url is not None:
-                        image_url = json.loads(image_url)
-                        sub_metadata['pictures'] = image_url['pictures']
-            
-            # 完成同步
+                    assets_need_images.append((sub_metadata['id'], sub_metadata))
+
+            # 并发获取 image_url
+            total_images = len(assets_need_images)
+            completed_images = 0
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                future_to_sub = {
+                    executor.submit(self.get_image_url, asset_id): sub_metadata
+                    for asset_id, sub_metadata in assets_need_images
+                }
+                for future in as_completed(future_to_sub):
+                    sub_metadata = future_to_sub[future]
+                    try:
+                        image_url = future.result()
+                        if image_url is not None:
+                            image_url = json.loads(image_url)
+                            sub_metadata['pictures'] = image_url['pictures']
+                    except Exception as e:
+                        logger.debug("并发获取图片URL失败: %s", e)
+                    completed_images += 1
+                    if total_images > 0 and (completed_images == 1 or completed_images % 5 == 0 or completed_images == total_images):
+                        self.callbacks.on_metadata_sync('scanning', completed_images, total_images)
+
             self.callbacks.on_metadata_sync('complete', updated_count, len(to_update_metadata))
             
         with open(metadata_path, 'w', encoding='utf-8') as f:
