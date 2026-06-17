@@ -5,7 +5,7 @@ from typing import override
 
 from PySide6 import QtCore, QtWidgets
 
-from orcalab.actor import BaseActor, AssetActor
+from orcalab.actor import BaseActor, AssetActor, GroupActor
 from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
@@ -334,6 +334,10 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         assert self._actor is not None
 
         if self._actor_path is None:
+            return
+        
+        if isinstance(self._actor, GroupActor):
+            self._add_transform_edit()
             return
 
         if isinstance(self._actor, AssetActor) and self._actor.property_groups:

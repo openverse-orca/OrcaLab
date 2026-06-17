@@ -7,7 +7,7 @@ class SelectionData:
 
     def __init__(
         self,
-        selected_actors: list[Path] = [],
+        selected_actors: list[Path] | None = None,
         active_actor_path: Path | None = None,
         active_entity_path: EntityPath = EntityPath(),
     ):
@@ -54,10 +54,10 @@ class BackendSelectionData:
 
     def __init__(
         self,
-        selected_actors: list[Path] = [],
+        selected_actors: list[Path] | None = None,
         active_actor: Path | None = None,
         active_entity: int = 0,
     ):
-        self.selected_actors = selected_actors
+        self.selected_actors = selected_actors if selected_actors is not None else []
         self.active_actor = active_actor
         self.active_entity = active_entity

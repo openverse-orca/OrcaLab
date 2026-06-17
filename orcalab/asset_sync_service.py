@@ -392,7 +392,7 @@ class AssetSyncService:
             logger.debug(f"❌ 获取下载链接失败: {e}")
             return None
     
-    def get_image_picture(self, asset_id: str) -> str:
+    def get_image_picture(self, asset_id: str) -> Optional[str]:
         try:
             get_asset_metadata_url = f"{self.base_url}/asset/{asset_id}/picture"
             _start = time.monotonic()
