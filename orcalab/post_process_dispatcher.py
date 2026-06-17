@@ -1,3 +1,5 @@
+from typing import List
+from orcalab.actor_property import ActorEntities, ActorPropertyGroup, PropertyData
 import asyncio
 import logging
 
@@ -22,7 +24,7 @@ class PostProcessDispatcher:
 
     def on_property_set(self, property_key: ActorPropertyKey) -> None:
         rules = PostProcessRegistry.instance().find_rules(
-            property_key.component_type, property_key.property_name
+            property_key.component_type_id, property_key.property_name
         )
         if not rules:
             return
@@ -30,7 +32,7 @@ class PostProcessDispatcher:
         timer_key = (
             property_key.actor_path,
             property_key.entity_id,
-            property_key.component_type,
+            property_key.component_type_id,
             property_key.property_name,
         )
 
@@ -78,52 +80,60 @@ class PostProcessDispatcher:
     async def _execute_read_action(
         self, trigger_key: ActorPropertyKey, read_properties: list[str]
     ) -> None:
-        try:
-            actor, group, _ = self._local_scene.parse_property_key(trigger_key)
-        except Exception as e:
-            logger.warning("PostProcess: failed to parse trigger key: %s", e)
+        actor, actor_path = self._local_scene.normalize_actor(trigger_key.actor_path)
+        entity_id = actor.entity_root.find_entity_id_by_path(trigger_key.entity_path)
+
+        groups_list = await self._remote_scene.get_entity_property_groups(
+            ActorEntities(actor_path, [entity_id])
+        )
+        if not groups_list:
+            return
+
+        groups = groups_list[0]
+        if not groups:
+            return
+
+        trigger_group: ActorPropertyGroup | None = None
+        for group in groups:
+            if (
+                group.component_type_id == trigger_key.component_type_id
+                and group.component_type_index == trigger_key.component_type_index
+            ):
+                trigger_group = group
+                break
+
+        if not trigger_group:
             return
 
         keys: list[ActorPropertyKey] = []
-        props: list[ActorProperty] = []
+        datas: list[PropertyData] = []
 
-        def _collect_from_properties(prop_list):
-            for prop in prop_list:
-                matched_read_name = None
-                for read_name in read_properties:
-                    if prop.name() == read_name or prop.name().startswith(
-                        read_name + "."
-                    ):
-                        matched_read_name = read_name
-                        break
-                if matched_read_name is None:
-                    continue
-                if prop.name() in [k.property_name for k in keys]:
-                    continue
-                key = ActorPropertyKey(
-                    trigger_key.actor_path,
-                    trigger_key.group_prefix,
-                    prop.name(),
-                    prop.value_type(),
-                    entity_id=trigger_key.entity_id,
-                    component_type=trigger_key.component_type,
-                )
-                keys.append(key)
-                props.append(prop)
-
-        _collect_from_properties(group.properties)
-
-        if not keys:
-            return
-
-        try:
-            values = await self._remote_scene.get_properties(keys)
-        except Exception as e:
-            logger.warning("PostProcess: failed to read properties: %s", e)
-            return
-
-        for prop, value in zip(props, values):
-            prop.set_value(value)
+        for prop in trigger_group.properties:
+            matched_read_name = None
+            for read_name in read_properties:
+                if read_name == "<all>":
+                    matched_read_name = read_name
+                    break
+                if prop.name() == read_name or prop.name().startswith(read_name + "."):
+                    matched_read_name = read_name
+                    break
+            if matched_read_name is None:
+                continue
+            if prop.name() in [k.property_name for k in keys]:
+                continue
+            key = ActorPropertyKey(
+                actor_path=actor_path,
+                entity_id=entity_id,
+                entity_path=trigger_key.entity_path,
+                component_type_id=trigger_key.component_type_id,
+                component_type_index=trigger_key.component_type_index,
+                property_name=prop.name(),
+                property_type=prop.value_type(),
+            )
+            keys.append(key)
+            datas.append(
+                PropertyData(prop.is_read_only(), prop.value(), prop.base_value())
+            )
 
         bus = SceneEditNotificationBus()
-        await bus.on_properties_changed(keys, values, source="post_process")
+        await bus.on_properties_changed(keys, datas, source="post_process")

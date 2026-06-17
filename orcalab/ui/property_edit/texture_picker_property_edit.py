@@ -1,6 +1,8 @@
+import asyncio
 from typing import override
 from PySide6 import QtCore, QtWidgets
 
+from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.ui.property_edit.base_property_edit import (
     BasePropertyEdit,
     PropertyEditContext,
@@ -13,10 +15,21 @@ from orcalab.texture_asset_cache import TextureAssetCache
 def _extract_texture_display_name(path: str) -> str:
     filename = path.replace("\\", "/").split("/")[-1]
     if filename.endswith(".streamingimage"):
-        filename = filename[:-len(".streamingimage")]
-    for ext in (".png", ".jpg", ".jpeg", ".tga", ".dds", ".bmp", ".tif", ".tiff", ".exr", ".hdr"):
+        filename = filename[: -len(".streamingimage")]
+    for ext in (
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".tga",
+        ".dds",
+        ".bmp",
+        ".tif",
+        ".tiff",
+        ".exr",
+        ".hdr",
+    ):
         if filename.lower().endswith(ext):
-            filename = filename[:-len(ext)]
+            filename = filename[: -len(ext)]
             break
     return filename
 
@@ -83,11 +96,21 @@ class TexturePickerPropertyEdit(BasePropertyEdit[str]):
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             uuid_str = dialog.selected_uuid()
             if uuid_str is not None:
+                old_value = self.context.prop.value()
+
                 self._block_events = True
                 self.context.prop.set_value(uuid_str)
                 self._update_display()
                 self._block_events = False
-                self._do_set_value(uuid_str, undo=True)
+
+                task = SceneEditRequestBus().set_property(
+                    property_key=self.context.key,
+                    value=uuid_str,
+                    undo=True,
+                    old_value=old_value,
+                    source="ui",
+                )
+                asyncio.create_task(task)
 
     @override
     def set_value(self, value: str):

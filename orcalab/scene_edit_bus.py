@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Sequence
 
 from orcalab.actor import BaseActor, GroupActor
-from orcalab.actor_property import ActorPropertyKey
+from orcalab.actor_property import ActorPropertyKey, PropertyData
 from orcalab.camera_data_png_result import CameraDataPNGResult
 from orcalab.entity_info import EntityInfo
 from orcalab.math import Transform
@@ -106,23 +106,17 @@ class SceneEditRequest:
         property_key: ActorPropertyKey,
         value: Any,
         undo: bool,
+        old_value: Any = None,
         source: str = "",
     ):
         pass
 
-    async def set_properties(
-        self,
-        property_keys: List[ActorPropertyKey],
-        values: List[Any],
-        undo: bool = True,
-        source: str = "",
+    async def start_change_property(
+        self, property_key: ActorPropertyKey, old_value: Any, timeout: float
     ):
         pass
 
-    def start_change_property(self, property_key: ActorPropertyKey):
-        pass
-
-    def end_change_property(self, property_key: ActorPropertyKey):
+    async def end_change_property(self, property_key: ActorPropertyKey, new_value: Any):
         pass
 
     async def set_transform(
@@ -253,28 +247,11 @@ class SceneEditNotification:
     async def on_actor_reparented(self):
         pass
 
-    async def on_property_changed(
-        self,
-        property_key: ActorPropertyKey,
-        value: Any,
-        source: str,
-    ):
-        pass
-
     async def on_properties_changed(
         self,
         property_keys: List[ActorPropertyKey],
-        values: List[Any],
+        values: List[Any | PropertyData],
         source: str,
-    ):
-        pass
-
-    async def on_property_read_only_changed(
-        self,
-        actor_path: Path,
-        group_prefix: str,
-        property_name: str,
-        read_only: bool,
     ):
         pass
 

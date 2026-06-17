@@ -108,7 +108,7 @@ class TestPostProcessDispatcherDebounce(unittest.TestCase):
                 property_name="testProp",
                 property_type=ActorPropertyType.FLOAT,
                 entity_id=1,
-                component_type="{UUID-1}",
+                component_type_id="{UUID-1}",
             )
 
             loop = asyncio.new_event_loop()
@@ -143,7 +143,7 @@ class TestPostProcessDispatcherDebounce(unittest.TestCase):
                 property_name="testProp",
                 property_type=ActorPropertyType.FLOAT,
                 entity_id=1,
-                component_type="{UUID-1}",
+                component_type_id="{UUID-1}",
             )
 
             loop = asyncio.new_event_loop()
@@ -179,7 +179,7 @@ class TestPostProcessDispatcherDebounce(unittest.TestCase):
                 property_name="testProp",
                 property_type=ActorPropertyType.FLOAT,
                 entity_id=1,
-                component_type="{UUID-1}",
+                component_type_id="{UUID-1}",
             )
 
             loop = asyncio.new_event_loop()
@@ -209,7 +209,7 @@ class TestPostProcessDispatcherDebounce(unittest.TestCase):
                 group_prefix="group",
                 property_name="nonexistent",
                 property_type=ActorPropertyType.FLOAT,
-                component_type="{UUID-1}",
+                component_type_id="{UUID-1}",
             )
 
             loop = asyncio.new_event_loop()
@@ -254,7 +254,7 @@ class TestPostProcessDispatcherExecute(unittest.TestCase):
                 property_name="physicalMaterial",
                 property_type=ActorPropertyType.INTEGER,
                 entity_id=1,
-                component_type="{UUID-1}",
+                component_type_id="{UUID-1}",
             )
 
             loop = asyncio.new_event_loop()
@@ -303,7 +303,7 @@ class TestPostProcessDispatcherExecute(unittest.TestCase):
                 property_name="physicalMaterial",
                 property_type=ActorPropertyType.INTEGER,
                 entity_id=1,
-                component_type="{UUID-1}",
+                component_type_id="{UUID-1}",
             )
 
             loop = asyncio.new_event_loop()
@@ -347,7 +347,7 @@ class TestPostProcessDispatcherExecute(unittest.TestCase):
                 property_name="physicalMaterial",
                 property_type=ActorPropertyType.INTEGER,
                 entity_id=1,
-                component_type="{UUID-1}",
+                component_type_id="{UUID-1}",
             )
 
             loop = asyncio.new_event_loop()
@@ -396,7 +396,7 @@ class TestPostProcessDispatcherExecute(unittest.TestCase):
                 property_name="a",
                 property_type=ActorPropertyType.FLOAT,
                 entity_id=1,
-                component_type="{UUID-1}",
+                component_type_id="{UUID-1}",
             )
 
             loop = asyncio.new_event_loop()
@@ -472,7 +472,7 @@ class TestAutoRegisterFromPropertyGroup(unittest.TestCase):
             prop_msg.post_read_fields.extend(["density", "friction", "solref", "solimp", "condim"])
             prop_msg.post_read_delay_ms = 100
 
-            pg = wrapper._parse_property_group_msg(pg_msg)
+            pg = wrapper._read_property_group(pg_msg)
 
             registry = PostProcessRegistry.instance()
             rules = registry.find_rules("{39E400EC-2015-416D-8483-3C64041787A5}", "physicalMaterial")
@@ -506,7 +506,7 @@ class TestAutoRegisterFromPropertyGroup(unittest.TestCase):
             prop_msg.name = "density"
             prop_msg.display_name = "密度"
 
-            wrapper._parse_property_group_msg(pg_msg)
+            wrapper._read_property_group(pg_msg)
 
             registry = PostProcessRegistry.instance()
             rules = registry.find_rules("{39E400EC-2015-416D-8483-3C64041787A5}", "density")

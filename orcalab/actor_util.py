@@ -131,51 +131,6 @@ class ActorIterator:
         return current
 
 
-def collect_properties(
-    keys: List[ActorPropertyKey],
-    props: List[ActorProperty],
-    properties: List[ActorPropertyGroup],
-    actor_path: Path,
-):
-    for group in properties:
-        for prop in group.properties:
-            key = ActorPropertyKey(
-                actor_path,
-                group.prefix,
-                prop.name(),
-                prop.value_type(),
-                entity_id=group.entity_id,
-                component_type=group.component_type_id,
-            )
-            props.append(prop)
-            keys.append(key)
-
-
-def collect_properties_duplicate_data(
-    keys: List[ActorPropertyKey],
-    props: List[ActorProperty],
-    values: List[Any],
-    src_properties: List[ActorPropertyGroup],
-    dst_properties: List[ActorPropertyGroup],
-    dst_actor_path: Path,
-):
-    for src_group, dst_group in zip(src_properties, dst_properties):
-        for prop in src_group.properties:
-            if prop.is_read_only():
-                continue
-            if src_group.prefix == '/:变换':
-                continue # 复制时 actor 对应的 entity 变换单独处理，不通过复制属性的方式设置
-            key = ActorPropertyKey(
-                dst_actor_path,
-                src_group.prefix,
-                prop.name(),
-                prop.value_type(),
-                entity_id=dst_group.entity_id,
-                component_type=dst_group.component_type_id,
-            )
-            keys.append(key)
-            props.append(prop)
-            values.append(prop.value())
 
 
 def sort_actors_with_data[T](
@@ -195,19 +150,12 @@ def sort_actors_with_data[T](
     return list(sorted_actor_paths), list(sorted_datas)
 
 
-def clone_property_groups(
-    property_groups: List[ActorPropertyGroup],
-) -> List[ActorPropertyGroup]:
-    return [group.clone() for group in property_groups]
-
-
 def clone_actor_basic[T](actor: T) -> T:
     """Clone actor without parent-child relationships."""
     if isinstance(actor, GroupActor):
         new_actor = GroupActor(actor.name)
     elif isinstance(actor, AssetActor):
         new_actor = AssetActor(actor.name, actor.asset_path)
-        new_actor.property_groups = clone_property_groups(actor.property_groups)
     else:
         raise Exception("Unsupported actor type")
 

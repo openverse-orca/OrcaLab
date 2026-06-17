@@ -735,11 +735,27 @@ class PropertyValue(_message.Message):
     value_asset: str
     def __init__(self, value_bool: bool = ..., value_int: _Optional[int] = ..., value_float: _Optional[float] = ..., value_string: _Optional[str] = ..., value_asset: _Optional[str] = ...) -> None: ...
 
-class PropertyValueList(_message.Message):
-    __slots__ = ("items",)
-    ITEMS_FIELD_NUMBER: _ClassVar[int]
-    items: _containers.RepeatedCompositeFieldContainer[PropertyValue]
-    def __init__(self, items: _Optional[_Iterable[_Union[PropertyValue, _Mapping]]] = ...) -> None: ...
+class PropertyMetadata(_message.Message):
+    __slots__ = ("read_only",)
+    READ_ONLY_FIELD_NUMBER: _ClassVar[int]
+    read_only: bool
+    def __init__(self, read_only: bool = ...) -> None: ...
+
+class PropertyGetInfo(_message.Message):
+    __slots__ = ("metadata", "value", "base_value")
+    METADATA_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    BASE_VALUE_FIELD_NUMBER: _ClassVar[int]
+    metadata: PropertyMetadata
+    value: PropertyValue
+    base_value: PropertyValue
+    def __init__(self, metadata: _Optional[_Union[PropertyMetadata, _Mapping]] = ..., value: _Optional[_Union[PropertyValue, _Mapping]] = ..., base_value: _Optional[_Union[PropertyValue, _Mapping]] = ...) -> None: ...
+
+class PropertySetInfo(_message.Message):
+    __slots__ = ("value",)
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    value: PropertyValue
+    def __init__(self, value: _Optional[_Union[PropertyValue, _Mapping]] = ...) -> None: ...
 
 class AssetInfo(_message.Message):
     __slots__ = ("asset_id", "relative_path")
@@ -776,11 +792,13 @@ class GetAssetsByTypePageResponse(_message.Message):
     def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., page_index: _Optional[int] = ..., total_pages: _Optional[int] = ..., total_count: _Optional[int] = ..., assets: _Optional[_Iterable[_Union[AssetInfo, _Mapping]]] = ...) -> None: ...
 
 class Property(_message.Message):
-    __slots__ = ("type", "name", "display_name", "read_only", "editor_hint", "enum_values", "post_read_fields", "post_read_delay_ms")
+    __slots__ = ("type", "name", "display_name", "metadata", "value", "base_value", "editor_hint", "enum_values", "post_read_fields", "post_read_delay_ms")
     TYPE_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
-    READ_ONLY_FIELD_NUMBER: _ClassVar[int]
+    METADATA_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    BASE_VALUE_FIELD_NUMBER: _ClassVar[int]
     EDITOR_HINT_FIELD_NUMBER: _ClassVar[int]
     ENUM_VALUES_FIELD_NUMBER: _ClassVar[int]
     POST_READ_FIELDS_FIELD_NUMBER: _ClassVar[int]
@@ -788,90 +806,88 @@ class Property(_message.Message):
     type: PropertyType
     name: str
     display_name: str
-    read_only: bool
+    metadata: PropertyMetadata
+    value: PropertyValue
+    base_value: PropertyValue
     editor_hint: str
     enum_values: _containers.RepeatedScalarFieldContainer[str]
     post_read_fields: _containers.RepeatedScalarFieldContainer[str]
     post_read_delay_ms: int
-    def __init__(self, type: _Optional[_Union[PropertyType, str]] = ..., name: _Optional[str] = ..., display_name: _Optional[str] = ..., read_only: bool = ..., editor_hint: _Optional[str] = ..., enum_values: _Optional[_Iterable[str]] = ..., post_read_fields: _Optional[_Iterable[str]] = ..., post_read_delay_ms: _Optional[int] = ...) -> None: ...
+    def __init__(self, type: _Optional[_Union[PropertyType, str]] = ..., name: _Optional[str] = ..., display_name: _Optional[str] = ..., metadata: _Optional[_Union[PropertyMetadata, _Mapping]] = ..., value: _Optional[_Union[PropertyValue, _Mapping]] = ..., base_value: _Optional[_Union[PropertyValue, _Mapping]] = ..., editor_hint: _Optional[str] = ..., enum_values: _Optional[_Iterable[str]] = ..., post_read_fields: _Optional[_Iterable[str]] = ..., post_read_delay_ms: _Optional[int] = ...) -> None: ...
 
 class PropertyGroup(_message.Message):
-    __slots__ = ("prefix", "name", "display_name", "hint", "properties", "entity_id", "component_type_id")
-    PREFIX_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("name", "hint", "entity_id", "component_type_id", "component_type_index", "properties")
     NAME_FIELD_NUMBER: _ClassVar[int]
-    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
     HINT_FIELD_NUMBER: _ClassVar[int]
-    PROPERTIES_FIELD_NUMBER: _ClassVar[int]
     ENTITY_ID_FIELD_NUMBER: _ClassVar[int]
     COMPONENT_TYPE_ID_FIELD_NUMBER: _ClassVar[int]
-    prefix: str
+    COMPONENT_TYPE_INDEX_FIELD_NUMBER: _ClassVar[int]
+    PROPERTIES_FIELD_NUMBER: _ClassVar[int]
     name: str
-    display_name: str
     hint: str
-    properties: _containers.RepeatedCompositeFieldContainer[Property]
     entity_id: int
     component_type_id: str
-    def __init__(self, prefix: _Optional[str] = ..., name: _Optional[str] = ..., display_name: _Optional[str] = ..., hint: _Optional[str] = ..., properties: _Optional[_Iterable[_Union[Property, _Mapping]]] = ..., entity_id: _Optional[int] = ..., component_type_id: _Optional[str] = ...) -> None: ...
+    component_type_index: int
+    properties: _containers.RepeatedCompositeFieldContainer[Property]
+    def __init__(self, name: _Optional[str] = ..., hint: _Optional[str] = ..., entity_id: _Optional[int] = ..., component_type_id: _Optional[str] = ..., component_type_index: _Optional[int] = ..., properties: _Optional[_Iterable[_Union[Property, _Mapping]]] = ...) -> None: ...
+
+class PropertyGroups(_message.Message):
+    __slots__ = ("elements",)
+    ELEMENTS_FIELD_NUMBER: _ClassVar[int]
+    elements: _containers.RepeatedCompositeFieldContainer[PropertyGroup]
+    def __init__(self, elements: _Optional[_Iterable[_Union[PropertyGroup, _Mapping]]] = ...) -> None: ...
+
+class PropertyGroupsList(_message.Message):
+    __slots__ = ("elements",)
+    ELEMENTS_FIELD_NUMBER: _ClassVar[int]
+    elements: _containers.RepeatedCompositeFieldContainer[PropertyGroups]
+    def __init__(self, elements: _Optional[_Iterable[_Union[PropertyGroups, _Mapping]]] = ...) -> None: ...
+
+class PropertyGroupsListArray(_message.Message):
+    __slots__ = ("elements",)
+    ELEMENTS_FIELD_NUMBER: _ClassVar[int]
+    elements: _containers.RepeatedCompositeFieldContainer[PropertyGroupsList]
+    def __init__(self, elements: _Optional[_Iterable[_Union[PropertyGroupsList, _Mapping]]] = ...) -> None: ...
 
 class PropertyKey(_message.Message):
-    __slots__ = ("actor_path", "entity_id", "component_type", "field_path", "property_type")
+    __slots__ = ("actor_path", "entity_id", "component_type_id", "component_type_index", "field_path", "property_type")
     ACTOR_PATH_FIELD_NUMBER: _ClassVar[int]
     ENTITY_ID_FIELD_NUMBER: _ClassVar[int]
-    COMPONENT_TYPE_FIELD_NUMBER: _ClassVar[int]
+    COMPONENT_TYPE_ID_FIELD_NUMBER: _ClassVar[int]
+    COMPONENT_TYPE_INDEX_FIELD_NUMBER: _ClassVar[int]
     FIELD_PATH_FIELD_NUMBER: _ClassVar[int]
     PROPERTY_TYPE_FIELD_NUMBER: _ClassVar[int]
     actor_path: str
     entity_id: int
-    component_type: str
+    component_type_id: str
+    component_type_index: int
     field_path: str
     property_type: PropertyType
-    def __init__(self, actor_path: _Optional[str] = ..., entity_id: _Optional[int] = ..., component_type: _Optional[str] = ..., field_path: _Optional[str] = ..., property_type: _Optional[_Union[PropertyType, str]] = ...) -> None: ...
-
-class PropertyKeyList(_message.Message):
-    __slots__ = ("items",)
-    ITEMS_FIELD_NUMBER: _ClassVar[int]
-    items: _containers.RepeatedCompositeFieldContainer[PropertyKey]
-    def __init__(self, items: _Optional[_Iterable[_Union[PropertyKey, _Mapping]]] = ...) -> None: ...
-
-class GetPropertyGroupsRequest(_message.Message):
-    __slots__ = ("actor_path",)
-    ACTOR_PATH_FIELD_NUMBER: _ClassVar[int]
-    actor_path: str
-    def __init__(self, actor_path: _Optional[str] = ...) -> None: ...
-
-class GetPropertyGroupsResponse(_message.Message):
-    __slots__ = ("status_code", "error_message", "property_groups")
-    STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
-    ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    PROPERTY_GROUPS_FIELD_NUMBER: _ClassVar[int]
-    status_code: StatusCode
-    error_message: str
-    property_groups: _containers.RepeatedCompositeFieldContainer[PropertyGroup]
-    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., property_groups: _Optional[_Iterable[_Union[PropertyGroup, _Mapping]]] = ...) -> None: ...
+    def __init__(self, actor_path: _Optional[str] = ..., entity_id: _Optional[int] = ..., component_type_id: _Optional[str] = ..., component_type_index: _Optional[int] = ..., field_path: _Optional[str] = ..., property_type: _Optional[_Union[PropertyType, str]] = ...) -> None: ...
 
 class GetPropertiesRequest(_message.Message):
     __slots__ = ("keys",)
     KEYS_FIELD_NUMBER: _ClassVar[int]
-    keys: PropertyKeyList
-    def __init__(self, keys: _Optional[_Union[PropertyKeyList, _Mapping]] = ...) -> None: ...
+    keys: _containers.RepeatedCompositeFieldContainer[PropertyKey]
+    def __init__(self, keys: _Optional[_Iterable[_Union[PropertyKey, _Mapping]]] = ...) -> None: ...
 
 class GetPropertiesResponse(_message.Message):
-    __slots__ = ("status_code", "error_message", "values")
+    __slots__ = ("status_code", "error_message", "infos")
     STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
     ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    VALUES_FIELD_NUMBER: _ClassVar[int]
+    INFOS_FIELD_NUMBER: _ClassVar[int]
     status_code: StatusCode
     error_message: str
-    values: PropertyValueList
-    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., values: _Optional[_Union[PropertyValueList, _Mapping]] = ...) -> None: ...
+    infos: _containers.RepeatedCompositeFieldContainer[PropertyGetInfo]
+    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., infos: _Optional[_Iterable[_Union[PropertyGetInfo, _Mapping]]] = ...) -> None: ...
 
 class SetPropertiesRequest(_message.Message):
-    __slots__ = ("keys", "values")
+    __slots__ = ("keys", "infos")
     KEYS_FIELD_NUMBER: _ClassVar[int]
-    VALUES_FIELD_NUMBER: _ClassVar[int]
-    keys: PropertyKeyList
-    values: PropertyValueList
-    def __init__(self, keys: _Optional[_Union[PropertyKeyList, _Mapping]] = ..., values: _Optional[_Union[PropertyValueList, _Mapping]] = ...) -> None: ...
+    INFOS_FIELD_NUMBER: _ClassVar[int]
+    keys: _containers.RepeatedCompositeFieldContainer[PropertyKey]
+    infos: _containers.RepeatedCompositeFieldContainer[PropertySetInfo]
+    def __init__(self, keys: _Optional[_Iterable[_Union[PropertyKey, _Mapping]]] = ..., infos: _Optional[_Iterable[_Union[PropertySetInfo, _Mapping]]] = ...) -> None: ...
 
 class SetPropertiesResponse(_message.Message):
     __slots__ = ("status_code", "error_message")
@@ -881,27 +897,67 @@ class SetPropertiesResponse(_message.Message):
     error_message: str
     def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ...) -> None: ...
 
-class PropertyGroupList(_message.Message):
+class PropertyOverride(_message.Message):
+    __slots__ = ("entity_id", "component_type_id", "component_type_index", "field_path", "property_type", "value")
+    ENTITY_ID_FIELD_NUMBER: _ClassVar[int]
+    COMPONENT_TYPE_ID_FIELD_NUMBER: _ClassVar[int]
+    COMPONENT_TYPE_INDEX_FIELD_NUMBER: _ClassVar[int]
+    FIELD_PATH_FIELD_NUMBER: _ClassVar[int]
+    PROPERTY_TYPE_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    entity_id: int
+    component_type_id: str
+    component_type_index: int
+    field_path: str
+    property_type: PropertyType
+    value: PropertyValue
+    def __init__(self, entity_id: _Optional[int] = ..., component_type_id: _Optional[str] = ..., component_type_index: _Optional[int] = ..., field_path: _Optional[str] = ..., property_type: _Optional[_Union[PropertyType, str]] = ..., value: _Optional[_Union[PropertyValue, _Mapping]] = ...) -> None: ...
+
+class PropertyOverrides(_message.Message):
     __slots__ = ("elements",)
     ELEMENTS_FIELD_NUMBER: _ClassVar[int]
-    elements: _containers.RepeatedCompositeFieldContainer[PropertyGroup]
-    def __init__(self, elements: _Optional[_Iterable[_Union[PropertyGroup, _Mapping]]] = ...) -> None: ...
+    elements: _containers.RepeatedCompositeFieldContainer[PropertyOverride]
+    def __init__(self, elements: _Optional[_Iterable[_Union[PropertyOverride, _Mapping]]] = ...) -> None: ...
 
-class GetPropertyGroupsBatchRequest(_message.Message):
-    __slots__ = ("actor_paths",)
-    ACTOR_PATHS_FIELD_NUMBER: _ClassVar[int]
-    actor_paths: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, actor_paths: _Optional[_Iterable[str]] = ...) -> None: ...
+class PropertyOverridesList(_message.Message):
+    __slots__ = ("elements",)
+    ELEMENTS_FIELD_NUMBER: _ClassVar[int]
+    elements: _containers.RepeatedCompositeFieldContainer[PropertyOverrides]
+    def __init__(self, elements: _Optional[_Iterable[_Union[PropertyOverrides, _Mapping]]] = ...) -> None: ...
 
-class GetPropertyGroupsBatchResponse(_message.Message):
-    __slots__ = ("status_code", "error_message", "property_group_lists")
+class PropertyOverridesListArray(_message.Message):
+    __slots__ = ("elements",)
+    ELEMENTS_FIELD_NUMBER: _ClassVar[int]
+    elements: _containers.RepeatedCompositeFieldContainer[PropertyOverridesList]
+    def __init__(self, elements: _Optional[_Iterable[_Union[PropertyOverridesList, _Mapping]]] = ...) -> None: ...
+
+class ActorPaths(_message.Message):
+    __slots__ = ("elements",)
+    ELEMENTS_FIELD_NUMBER: _ClassVar[int]
+    elements: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, elements: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class ActorPathsList(_message.Message):
+    __slots__ = ("elements",)
+    ELEMENTS_FIELD_NUMBER: _ClassVar[int]
+    elements: _containers.RepeatedCompositeFieldContainer[ActorPaths]
+    def __init__(self, elements: _Optional[_Iterable[_Union[ActorPaths, _Mapping]]] = ...) -> None: ...
+
+class GetActorOverridesBatchRequest(_message.Message):
+    __slots__ = ("actor_paths_list",)
+    ACTOR_PATHS_LIST_FIELD_NUMBER: _ClassVar[int]
+    actor_paths_list: ActorPathsList
+    def __init__(self, actor_paths_list: _Optional[_Union[ActorPathsList, _Mapping]] = ...) -> None: ...
+
+class GetActorOverridesBatchResponse(_message.Message):
+    __slots__ = ("status_code", "error_message", "overrides_list_array")
     STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
     ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    PROPERTY_GROUP_LISTS_FIELD_NUMBER: _ClassVar[int]
+    OVERRIDES_LIST_ARRAY_FIELD_NUMBER: _ClassVar[int]
     status_code: StatusCode
     error_message: str
-    property_group_lists: _containers.RepeatedCompositeFieldContainer[PropertyGroupList]
-    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., property_group_lists: _Optional[_Iterable[_Union[PropertyGroupList, _Mapping]]] = ...) -> None: ...
+    overrides_list_array: PropertyOverridesListArray
+    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., overrides_list_array: _Optional[_Union[PropertyOverridesListArray, _Mapping]] = ...) -> None: ...
 
 class EntityInfoMessage(_message.Message):
     __slots__ = ("entity_id", "name", "entity_path", "children")
@@ -933,25 +989,7 @@ class GetEntityHierarchyBatchResponse(_message.Message):
     errors: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., root_entities: _Optional[_Iterable[_Union[EntityInfoMessage, _Mapping]]] = ..., errors: _Optional[_Iterable[str]] = ...) -> None: ...
 
-class GetEntityPropertyGroupsRequest(_message.Message):
-    __slots__ = ("actor_path", "entity_id")
-    ACTOR_PATH_FIELD_NUMBER: _ClassVar[int]
-    ENTITY_ID_FIELD_NUMBER: _ClassVar[int]
-    actor_path: str
-    entity_id: int
-    def __init__(self, actor_path: _Optional[str] = ..., entity_id: _Optional[int] = ...) -> None: ...
-
-class GetEntityPropertyGroupsResponse(_message.Message):
-    __slots__ = ("status_code", "error_message", "property_groups")
-    STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
-    ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    PROPERTY_GROUPS_FIELD_NUMBER: _ClassVar[int]
-    status_code: StatusCode
-    error_message: str
-    property_groups: _containers.RepeatedCompositeFieldContainer[PropertyGroup]
-    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., property_groups: _Optional[_Iterable[_Union[PropertyGroup, _Mapping]]] = ...) -> None: ...
-
-class GetEntityPropertyGroupsBatchRequest(_message.Message):
+class ActorEntities(_message.Message):
     __slots__ = ("actor_path", "entity_ids")
     ACTOR_PATH_FIELD_NUMBER: _ClassVar[int]
     ENTITY_IDS_FIELD_NUMBER: _ClassVar[int]
@@ -959,45 +997,37 @@ class GetEntityPropertyGroupsBatchRequest(_message.Message):
     entity_ids: _containers.RepeatedScalarFieldContainer[int]
     def __init__(self, actor_path: _Optional[str] = ..., entity_ids: _Optional[_Iterable[int]] = ...) -> None: ...
 
+class GetEntityPropertyGroupsBatchRequest(_message.Message):
+    __slots__ = ("actor_entities_list",)
+    ACTOR_ENTITIES_LIST_FIELD_NUMBER: _ClassVar[int]
+    actor_entities_list: _containers.RepeatedCompositeFieldContainer[ActorEntities]
+    def __init__(self, actor_entities_list: _Optional[_Iterable[_Union[ActorEntities, _Mapping]]] = ...) -> None: ...
+
 class GetEntityPropertyGroupsBatchResponse(_message.Message):
-    __slots__ = ("status_code", "error_message", "property_group_lists")
+    __slots__ = ("status_code", "error_message", "property_groups_list_array")
     STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
     ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    PROPERTY_GROUP_LISTS_FIELD_NUMBER: _ClassVar[int]
+    PROPERTY_GROUPS_LIST_ARRAY_FIELD_NUMBER: _ClassVar[int]
     status_code: StatusCode
     error_message: str
-    property_group_lists: _containers.RepeatedCompositeFieldContainer[PropertyGroupList]
-    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., property_group_lists: _Optional[_Iterable[_Union[PropertyGroupList, _Mapping]]] = ...) -> None: ...
+    property_groups_list_array: PropertyGroupsListArray
+    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., property_groups_list_array: _Optional[_Union[PropertyGroupsListArray, _Mapping]] = ...) -> None: ...
 
-class EntityPropertyGroupEntry(_message.Message):
-    __slots__ = ("entity_id", "entity_path", "component_type", "component_display_name", "property_group")
-    ENTITY_ID_FIELD_NUMBER: _ClassVar[int]
-    ENTITY_PATH_FIELD_NUMBER: _ClassVar[int]
-    COMPONENT_TYPE_FIELD_NUMBER: _ClassVar[int]
-    COMPONENT_DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
-    PROPERTY_GROUP_FIELD_NUMBER: _ClassVar[int]
-    entity_id: int
-    entity_path: str
-    component_type: str
-    component_display_name: str
-    property_group: PropertyGroup
-    def __init__(self, entity_id: _Optional[int] = ..., entity_path: _Optional[str] = ..., component_type: _Optional[str] = ..., component_display_name: _Optional[str] = ..., property_group: _Optional[_Union[PropertyGroup, _Mapping]] = ...) -> None: ...
+class GetActorPropertyGroupsBatchRequest(_message.Message):
+    __slots__ = ("actor_paths",)
+    ACTOR_PATHS_FIELD_NUMBER: _ClassVar[int]
+    actor_paths: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, actor_paths: _Optional[_Iterable[str]] = ...) -> None: ...
 
-class GetAllEntityPropertyGroupsRequest(_message.Message):
-    __slots__ = ("actor_path",)
-    ACTOR_PATH_FIELD_NUMBER: _ClassVar[int]
-    actor_path: str
-    def __init__(self, actor_path: _Optional[str] = ...) -> None: ...
-
-class GetAllEntityPropertyGroupsResponse(_message.Message):
-    __slots__ = ("status_code", "error_message", "entries")
+class GetActorPropertyGroupsBatchResponse(_message.Message):
+    __slots__ = ("status_code", "error_message", "property_groups_list")
     STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
     ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    ENTRIES_FIELD_NUMBER: _ClassVar[int]
+    PROPERTY_GROUPS_LIST_FIELD_NUMBER: _ClassVar[int]
     status_code: StatusCode
     error_message: str
-    entries: _containers.RepeatedCompositeFieldContainer[EntityPropertyGroupEntry]
-    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., entries: _Optional[_Iterable[_Union[EntityPropertyGroupEntry, _Mapping]]] = ...) -> None: ...
+    property_groups_list: PropertyGroupsList
+    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., property_groups_list: _Optional[_Union[PropertyGroupsList, _Mapping]] = ...) -> None: ...
 
 class FieldValue(_message.Message):
     __slots__ = ("field_path", "type", "value", "read_only", "display_name", "enum_values")
@@ -1044,58 +1074,6 @@ class EntityFieldWrite(_message.Message):
     field_path: str
     value: PropertyValue
     def __init__(self, entity_id: _Optional[int] = ..., component_type: _Optional[str] = ..., field_path: _Optional[str] = ..., value: _Optional[_Union[PropertyValue, _Mapping]] = ...) -> None: ...
-
-class GetEntityAllFieldValuesRequest(_message.Message):
-    __slots__ = ("actor_path", "entity_id")
-    ACTOR_PATH_FIELD_NUMBER: _ClassVar[int]
-    ENTITY_ID_FIELD_NUMBER: _ClassVar[int]
-    actor_path: str
-    entity_id: int
-    def __init__(self, actor_path: _Optional[str] = ..., entity_id: _Optional[int] = ...) -> None: ...
-
-class GetEntityAllFieldValuesResponse(_message.Message):
-    __slots__ = ("status_code", "error_message", "entity_values")
-    STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
-    ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    ENTITY_VALUES_FIELD_NUMBER: _ClassVar[int]
-    status_code: StatusCode
-    error_message: str
-    entity_values: EntityFieldValues
-    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., entity_values: _Optional[_Union[EntityFieldValues, _Mapping]] = ...) -> None: ...
-
-class SetEntityFieldValuesRequest(_message.Message):
-    __slots__ = ("actor_path", "writes")
-    ACTOR_PATH_FIELD_NUMBER: _ClassVar[int]
-    WRITES_FIELD_NUMBER: _ClassVar[int]
-    actor_path: str
-    writes: _containers.RepeatedCompositeFieldContainer[EntityFieldWrite]
-    def __init__(self, actor_path: _Optional[str] = ..., writes: _Optional[_Iterable[_Union[EntityFieldWrite, _Mapping]]] = ...) -> None: ...
-
-class SetEntityFieldValuesResponse(_message.Message):
-    __slots__ = ("status_code", "error_message")
-    STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
-    ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    status_code: StatusCode
-    error_message: str
-    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ...) -> None: ...
-
-class GetEntityAllFieldValuesBatchRequest(_message.Message):
-    __slots__ = ("actor_path", "entity_ids")
-    ACTOR_PATH_FIELD_NUMBER: _ClassVar[int]
-    ENTITY_IDS_FIELD_NUMBER: _ClassVar[int]
-    actor_path: str
-    entity_ids: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, actor_path: _Optional[str] = ..., entity_ids: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class GetEntityAllFieldValuesBatchResponse(_message.Message):
-    __slots__ = ("status_code", "error_message", "entity_values_list")
-    STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
-    ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    ENTITY_VALUES_LIST_FIELD_NUMBER: _ClassVar[int]
-    status_code: StatusCode
-    error_message: str
-    entity_values_list: _containers.RepeatedCompositeFieldContainer[EntityFieldValues]
-    def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., entity_values_list: _Optional[_Iterable[_Union[EntityFieldValues, _Mapping]]] = ...) -> None: ...
 
 class CustomCommandRequest(_message.Message):
     __slots__ = ("command",)

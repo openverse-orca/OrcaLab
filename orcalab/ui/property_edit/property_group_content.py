@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List
 import logging
 
 from PySide6 import QtWidgets
@@ -7,6 +7,7 @@ from orcalab.actor import BaseActor
 from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
+    ActorPropertyKey,
     ActorPropertyType,
     StructPropertyGroup,
 )
@@ -62,11 +63,17 @@ def _create_property_edit(
     prop: ActorProperty,
     label_width: int,
 ) -> BasePropertyEdit:
-    context = PropertyEditContext(
-        actor=actor,
+    key = ActorPropertyKey(
         actor_path=actor_path,
-        group=group,
-        prop=prop,
+        entity_id=group.entity_id,
+        entity_path=group.entity_path,
+        component_type_id=group.component_type_id,
+        component_type_index=group.component_type_index,
+        property_name=prop.name(),
+        property_type=prop.value_type(),
+    )
+    context = PropertyEditContext(
+        actor=actor, actor_path=actor_path, group=group, prop=prop, key=key
     )
 
     match prop.value_type():
@@ -92,7 +99,7 @@ def _create_property_edit(
 
 def _build_struct_tree(
     group: ActorPropertyGroup,
-) -> Tuple[List[StructPropertyGroup], List[ActorProperty]]:
+) -> List[ActorProperty | StructPropertyGroup]:
     """V2: 从属性名的点号分隔符自动推断 struct 分组关系。
 
     C++ 侧 FlattenField 跳过 "Config" 前缀后，属性名如 "axis.x"、"axis.y"、"axis.z"
@@ -102,7 +109,8 @@ def _build_struct_tree(
     - 横排判定: 子字段名均为单字符且类型为 Float → Vector2/3/4 横排绘制
     """
     struct_groups: dict[str, List[ActorProperty]] = {}
-    standalone_props: List[ActorProperty] = []
+    ordered_entries: List[ActorProperty | str] = []
+    ordered_struct_roots: set[str] = set()
 
     for prop in group.properties:
         name = prop.name()
@@ -110,16 +118,20 @@ def _build_struct_tree(
         if dot_pos != -1:
             parent_name = name[:dot_pos]
             struct_groups.setdefault(parent_name, []).append(prop)
+            if parent_name not in ordered_struct_roots:
+                ordered_struct_roots.add(parent_name)
+                ordered_entries.append(parent_name)
         else:
-            standalone_props.append(prop)
+            ordered_entries.append(prop)
 
     if not struct_groups:
-        return [], standalone_props
+        return [entry for entry in ordered_entries if isinstance(entry, ActorProperty)]
 
     perf_log(
         f"_build_struct_tree: group={group.name}, total_props={len(group.properties)}, "
         f"prop_names={[p.name() for p in group.properties[:10]]}, "
-        f"struct_group_keys={list(struct_groups.keys())}, standalone_props={len(standalone_props)}",
+        f"struct_group_keys={list(struct_groups.keys())}, "
+        f"ordered_entries={[e if isinstance(e, str) else e.name() for e in ordered_entries[:10]]}",
         feature="PROPERTY",
     )
 
@@ -203,11 +215,18 @@ def _build_struct_tree(
             sg.layout = "horizontal"
         return sg
 
-    result = []
+    struct_root_map: dict[str, StructPropertyGroup] = {}
     for struct_name, props in struct_groups.items():
-        result.append(_build(struct_name, props))
+        struct_root_map[struct_name] = _build(struct_name, props)
 
-    return result, standalone_props
+    ordered_nodes: List[ActorProperty | StructPropertyGroup] = []
+    for entry in ordered_entries:
+        if isinstance(entry, ActorProperty):
+            ordered_nodes.append(entry)
+        else:
+            ordered_nodes.append(struct_root_map[entry])
+
+    return ordered_nodes
 
 
 def _render_struct_group(
@@ -281,16 +300,13 @@ def _create_horizontal_tuple_content(
     row_layout.setContentsMargins(indent, 0, 0, 0)
     row_layout.setSpacing(8)
 
+    fs = FontService()
+    compact_label_width = fs.indent_unit_px(14)
+
     for prop in struct_group.properties:
-        dot_pos = prop.name().rfind(".")
-        sub_name = prop.name()[dot_pos + 1 :] if dot_pos != -1 else prop.name()
-        context = PropertyEditContext(
-            actor=actor,
-            actor_path=actor_path,
-            group=group,
-            prop=prop,
+        editor = _create_property_edit(
+            parent, actor, actor_path, group, prop, compact_label_width
         )
-        editor = FloatPropertyEdit(parent, context, 0, display_text=sub_name)
         if prop.is_read_only():
             editor.set_read_only(True)
         property_edits.append(editor)
@@ -383,38 +399,39 @@ def create_property_group_content(
     content_layout.setContentsMargins(0, 0, 0, 0)
     content_layout.setSpacing(2)
 
-    # 第一步：重建结构体树
-    struct_roots, standalone_props = _build_struct_tree(group)
+    # 重建结构体树并按原始属性顺序渲染
+    ordered_nodes = _build_struct_tree(group)
 
-    # 第二步：渲染非结构体属性
-    for prop in standalone_props:
-        try:
-            if prop.editor_hint() in ("container", "struct"):
-                editor = _create_property_edit(
-                    parent, actor, actor_path, group, prop, label_width
-                )
-                editor.set_read_only(True)
-                property_edits.append(editor)
-                content_layout.addWidget(editor)
-            else:
-                editor = _create_property_edit(
-                    parent, actor, actor_path, group, prop, label_width
-                )
-                if prop.is_read_only():
+    for idx, node in enumerate(ordered_nodes):
+        if isinstance(node, ActorProperty):
+            prop = node
+            try:
+                if prop.editor_hint() in ("container", "struct"):
+                    editor = _create_property_edit(
+                        parent, actor, actor_path, group, prop, label_width
+                    )
                     editor.set_read_only(True)
-                property_edits.append(editor)
-                content_layout.addWidget(editor)
-        except Exception as e:
-            logging.getLogger(__name__).error(
-                f"render prop name={prop.name()} failed: "
-                f"type={type(e).__name__} msg={e}",
-                exc_info=True,
-            )
-            err_label = QtWidgets.QLabel(f"⚠ {prop.name()}: {e}")
-            content_layout.addWidget(err_label)
+                    property_edits.append(editor)
+                    content_layout.addWidget(editor)
+                else:
+                    editor = _create_property_edit(
+                        parent, actor, actor_path, group, prop, label_width
+                    )
+                    if prop.is_read_only():
+                        editor.set_read_only(True)
+                    property_edits.append(editor)
+                    content_layout.addWidget(editor)
+            except Exception as e:
+                logging.getLogger(__name__).error(
+                    f"render prop name={prop.name()} failed: "
+                    f"type={type(e).__name__} msg={e}",
+                    exc_info=True,
+                )
+                err_label = QtWidgets.QLabel(f"⚠ {prop.name()}: {e}")
+                content_layout.addWidget(err_label)
+            continue
 
-    # 第三步：递归渲染结构体树
-    for idx, struct_root in enumerate(struct_roots):
+        struct_root = node
         try:
             _render_struct_group(
                 parent,

@@ -2,7 +2,6 @@ import asyncio
 from typing import Any, Dict, List, Sequence, Tuple, override
 import logging
 import numpy as np
-import random
 
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.actor_property import (
@@ -13,7 +12,6 @@ from orcalab.actor_util import (
     clone_actor_basic,
     make_unique_name1,
 )
-from orcalab.entity_info import EntityInfo
 from orcalab.entity_path import EntityPath
 from orcalab.local_scene import LocalScene
 from orcalab.post_process_dispatcher import PostProcessDispatcher
@@ -30,6 +28,7 @@ from orcalab.scene_edit_bus import (
 from orcalab.scene_edit_types import AddActorRequest
 from orcalab.selection_data import SelectionData
 from orcalab.undo_service.command import (
+    ActorReconstructInfo,
     CommandGroup,
     AddActorCommand,
     DeleteActorCommand,
@@ -57,6 +56,7 @@ class SceneEditService(SceneEditRequest):
         self._post_process_dispatcher = PostProcessDispatcher(local_scene, remote_scene)
 
         # For property change tracking
+        self.property_edit_lock = asyncio.Lock()
         self.property_key: ActorPropertyKey | None = None
         self.old_property_value: Any = None
 
@@ -208,26 +208,6 @@ class SceneEditService(SceneEditRequest):
         async with self._edit_lock:
             await self._delete_actors(actors, undo, source)
 
-    # def remove_paths_from(
-    #     self,
-    #     out: List[Path],
-    #     src: List[Path],
-    #     to_remove: List[Path],
-    # ) -> bool:
-    #     """Remove paths in to_remove from src and put the result in out. Return True if any path is removed."""
-    #     removed = False
-    #     for path in src:
-    #         should_remove = False
-    #         for remove_path in to_remove:
-    #             if path == remove_path:
-    #                 should_remove = True
-    #                 break
-    #         if not should_remove:
-    #             out.append(path)
-    #         else:
-    #             removed = True
-    #     return removed
-
     async def _delete_actors(
         self,
         actors: Sequence[BaseActor | Path],
@@ -253,20 +233,35 @@ class SceneEditService(SceneEditRequest):
                 logger.error("Cannot delete actor in editing: %s", _actor_path)
                 return
 
-        parent_paths = []
-        indexes = []
-
-        for _actor in _actors:
+        actor_paths_list: List[List[Path]] = []
+        infos: List[ActorReconstructInfo] = []
+        for _actor, _actor_path in zip(_actors, _actor_paths):
             parent_actor = _actor.parent
             assert isinstance(parent_actor, GroupActor)
             index = parent_actor.children.index(_actor)
             assert index != -1
 
-            parent_actor_path = self.local_scene.get_actor_path(parent_actor)
-            assert parent_actor_path is not None
+            infos.append(
+                ActorReconstructInfo(
+                    actor=_actor,
+                    actor_path=_actor_path,
+                    position=index,
+                    actor_overrides_dict={},
+                )
+            )
 
-            parent_paths.append(parent_actor_path)
-            indexes.append(index)
+            actor_paths = [_actor_path]
+            for actor in ActorIterator(_actor, include_root=False):
+                _, p = self.local_scene.normalize_actor(actor)
+                actor_paths.append(p)
+            actor_paths_list.append(actor_paths)
+
+        lll = await self.remote_scene.get_actor_overrides_batch_grouped(
+            actor_paths_list
+        )
+        for info, actor_paths, ll in zip(infos, actor_paths_list, lll):
+            for actor_path, overrides in zip(actor_paths, ll):
+                info.actor_overrides_dict[actor_path] = overrides
 
         # update selection
 
@@ -308,7 +303,7 @@ class SceneEditService(SceneEditRequest):
             return
 
         deselect_command = SelectionCommand(old_selection, new_selection)
-        delete_command = DeleteActorCommand(_actors, parent_paths, indexes)
+        delete_command = DeleteActorCommand(actor_reconstruct_info=infos)
 
         if selection_changed:
             command_group = CommandGroup()
@@ -547,6 +542,7 @@ class SceneEditService(SceneEditRequest):
     def _duplicate_process_add_request(
         self,
         requests: List[AddActorRequest],
+        template_actor_paths: List[Path],
         root_actor_path: Path,
         existing_names: List[str],
         child_positions: List[int],
@@ -585,9 +581,10 @@ class SceneEditService(SceneEditRequest):
                 new_root_actor,
                 root_actor_parent_path,
                 insert_pos,
-                root_actor,
+                [],
             )
         )
+        template_actor_paths.append(root_actor_path)
 
         perf.start("clone_subtree")
         for actor in ActorIterator(root_actor, include_root=False):
@@ -596,7 +593,8 @@ class SceneEditService(SceneEditRequest):
             dst_path = actor_path.replace_parent(root_actor_path, new_root_actor_path)
             new_parent_path = dst_path.parent()
             assert new_parent_path is not None
-            requests.append(AddActorRequest(new_actor, new_parent_path, -1, actor))
+            requests.append(AddActorRequest(new_actor, new_parent_path, -1, []))
+            template_actor_paths.append(actor_path)
 
         return new_root_actor_path
 
@@ -674,6 +672,7 @@ class SceneEditService(SceneEditRequest):
 
         perf.start("build_add_requests")
         requests: List[AddActorRequest] = []
+        template_actor_paths: List[Path] = []
         new_actor_paths: List[Path] = []
         for parent_path, paths in parent_dict.items():
             # 收集同一父路径下的已有名字，避免重复
@@ -686,10 +685,20 @@ class SceneEditService(SceneEditRequest):
             child_positions: List[int] = []
             for path in paths:
                 new_actor_path = self._duplicate_process_add_request(
-                    requests, path, exsiting_names, child_positions
+                    requests,
+                    template_actor_paths,
+                    path,
+                    exsiting_names,
+                    child_positions,
                 )
                 new_actor_paths.append(new_actor_path)
                 exsiting_names.append(new_actor_path.name())
+
+        overrides = await self.remote_scene.get_actor_overrides_batch(
+            template_actor_paths
+        )
+        for req, override in zip(requests, overrides):
+            req.property_overrides = override
 
         # update selection
         # 复制操作后默认选中新的 actor，且保持 active 不变
@@ -777,48 +786,63 @@ class SceneEditService(SceneEditRequest):
         property_key: ActorPropertyKey,
         value: Any,
         undo: bool = True,
+        old_value: Any = None,
         source: str = "",
     ):
-        is_name_property = (
-            property_key.property_name.lower().endswith(".name")
-            or property_key.property_name.lower() == "name"
-        ) and isinstance(value, str)
-
-        if is_name_property:
-            logger.info(
-                "Name property change: property_name='%s', new_value='%s', source='%s'",
-                property_key.property_name,
-                value,
-                source,
-            )
-
         bus = SceneEditNotificationBus()
 
-        await bus.on_property_changed(property_key, value, source)
+        if undo and old_value is None:
+            info = await self.remote_scene.get_property(property_key, True)
+            old_value = info.value
 
+        await self.remote_scene.set_property(property_key, value)
         self._post_process_dispatcher.on_property_set(property_key)
 
-        if undo:
-            actor, group, prop = self.local_scene.parse_property_key(property_key)
-            if self.old_property_value is None:
-                old_value = prop.value()
-            else:
-                old_value = self.old_property_value
+        await bus.on_properties_changed([property_key], [value], source)
 
-            command = PropertyChangeCommand(property_key, old_value, value)
+        if undo:
+            clean_key = property_key.clone()
+            clean_key.entity_id = 0
+            command = PropertyChangeCommand(clean_key, old_value, value)
             UndoRequestBus().add_command(command)
 
     @override
-    def start_change_property(self, property_key: ActorPropertyKey):
-        assert self.old_property_value is None and self.property_key is None
+    async def start_change_property(
+        self, property_key: ActorPropertyKey, old_value: Any, timeout: float
+    ):
+        async with asyncio.timeout(timeout):
+            await self.property_edit_lock.acquire()
+            logger.debug(
+                f"start_change_property, key: {property_key}, old_value: {old_value}"
+            )
 
-        actor, group, prop = self.local_scene.parse_property_key(property_key)
-        self.old_property_value = prop.value()
-        self.property_key = property_key
+            assert (
+                self.property_key is None
+            ), "Another property is already being edited."
+            assert (
+                self.old_property_value is None
+            ), "Old property value should be None when starting a new property edit."
+
+            self.old_property_value = old_value
+            self.property_key = property_key
 
     @override
-    def end_change_property(self, property_key: ActorPropertyKey):
-        assert self.old_property_value is not None and self.property_key == property_key
+    async def end_change_property(self, property_key: ActorPropertyKey, new_value: Any):
+        self.property_edit_lock.release()
+        logger.debug(f"end_change_property, key: {property_key}, new_value:{new_value}")
+
+        assert (
+            self.property_key == property_key
+        ), "Property key mismatch between start and end change property."
+        assert self.old_property_value is not None, "Old property value is not set."
+        assert type(new_value) == type(
+            self.old_property_value
+        ), "New value type does not match old value type."
+
+        clean_key = property_key.clone()
+        clean_key.entity_id = 0
+        command = PropertyChangeCommand(clean_key, self.old_property_value, new_value)
+        UndoRequestBus().add_command(command)
 
         self.old_property_value = None
         self.property_key = None

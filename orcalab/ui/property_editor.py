@@ -7,12 +7,11 @@ from PySide6 import QtCore, QtWidgets
 
 from orcalab.actor import BaseActor, AssetActor, GroupActor
 from orcalab.actor_property import (
+    ActorEntities,
     ActorProperty,
     ActorPropertyGroup,
     ActorPropertyKey,
-    EntityPropertyGroupEntry,
 )
-from orcalab.actor_util import collect_properties
 from orcalab.application_util import get_local_scene, get_remote_scene
 from orcalab.entity_info import EntityInfo
 from orcalab.path import Path
@@ -22,7 +21,6 @@ from orcalab.ui.filter_bar import FilterBar
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.property_data_store import PropertyDataStore
 from orcalab.ui.property_edit.property_group_edit import PropertyGroupEdit
-from orcalab.ui.property_edit.transform_edit import TransformEdit
 
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
@@ -45,11 +43,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._entity: EntityInfo | None = None
         self._actor_path: Path | None = None
         self._property_edits: list[PropertyGroupEdit] = []
-        self._raw_entries: list[EntityPropertyGroupEntry] = []
-        self._transform_edit: TransformEdit | None = None
 
-        self._section_cache: OrderedDict[tuple, list[PropertyGroupEdit]] = OrderedDict()
-        self._active_cache_key: tuple | None = None
         self._pending_render_task: asyncio.Task | None = None
 
         self._recursive = False
@@ -135,8 +129,6 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         self._entity = None
         self._actor_path = None
         self._data_store.clear()
-        self._raw_entries.clear()
-        self._clear_cache()
         self._show_empty()
 
     def set_recursive_display(self, enabled: bool):
@@ -158,87 +150,18 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             self._pending_render_task.cancel()
             self._pending_render_task = None
 
-    def _clear_cache(self):
-        for cached_edits in self._section_cache.values():
-            for edit in cached_edits:
-                edit.disconnect_buses()
-                edit.deleteLater()
-        self._section_cache.clear()
-        self._active_cache_key = None
-
-    def _evict_cache_if_needed(self):
-        while len(self._section_cache) > _MAX_CACHE_SIZE:
-            oldest_key, oldest_edits = next(iter(self._section_cache.items()))
-            if oldest_key == self._active_cache_key:
-                self._section_cache.move_to_end(oldest_key)
-                if len(self._section_cache) <= _MAX_CACHE_SIZE:
-                    break
-                oldest_key, oldest_edits = next(iter(self._section_cache.items()))
-            for edit in oldest_edits:
-                edit.disconnect_buses()
-                edit.deleteLater()
-            del self._section_cache[oldest_key]
-
-    def _cached_widget_ids(self) -> set[int]:
-        ids = set()
-        for edits in self._section_cache.values():
-            for edit in edits:
-                ids.add(id(edit))
-        return ids
-
-    def _hide_active_sections(self):
-        if self._active_cache_key is not None:
-            cached = self._section_cache.get(self._active_cache_key)
-            if cached is not None:
-                for edit in cached:
-                    edit.hide()
-
-        for edit in self._property_edits:
-            edit.hide()
-        self._property_edits.clear()
-
-        if self._transform_edit is not None:
-            perf_log(
-                f"_hide_active_sections: disconnect_buses and setting _transform_edit=None, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}",
-                feature="TRACE_LIFECYCLE",
-            )
-            self._transform_edit.disconnect_buses()
-        self._transform_edit = None
-
-        cached_ids = self._cached_widget_ids()
-        while self._property_layout.count():
-            item = self._property_layout.takeAt(0)
-            if item.widget():
-                w = item.widget()
-                self._property_layout.removeWidget(w)
-                w.hide()
-                if id(w) not in cached_ids:
-                    w.deleteLater()
-            elif item.layout():
-                self._property_layout.removeItem(item)
-
     def _clear_property_layout(self):
         for edit in self._property_edits:
             edit.disconnect_buses()
         self._property_edits.clear()
 
-        if self._transform_edit is not None:
-            perf_log(
-                f"_clear_property_layout: disconnect_buses and setting _transform_edit=None, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}",
-                feature="TRACE_LIFECYCLE",
-            )
-            self._transform_edit.disconnect_buses()
-        self._transform_edit = None
-
-        cached_ids = self._cached_widget_ids()
         while self._property_layout.count():
-            item = self._property_layout.takeAt(0)
+            item = self._property_layout.takeAt(self._property_layout.count() - 1)
             if item.widget():
                 w = item.widget()
                 self._property_layout.removeWidget(w)
                 w.hide()
-                if id(w) not in cached_ids:
-                    w.deleteLater()
+                w.deleteLater()
             elif item.layout():
                 self._property_layout.removeItem(item)
 
@@ -251,111 +174,21 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         FontService().bind_widget_font(label, "body")
         self._property_layout.addWidget(label)
 
-    def _add_transform_edit(self):
-        if self._transform_edit is not None:
-            perf_log(
-                f"_add_transform_edit: replacing existing _transform_edit, actor={self._transform_edit._actor_path}, id={id(self._transform_edit)}",
-                feature="TRACE_LIFECYCLE",
-            )
-            self._transform_edit.disconnect_buses()
-            self._transform_edit.deleteLater()
-            self._transform_edit = None
-
-        if self._actor is None:
-            return
-
-        self._transform_edit = TransformEdit(self, self._actor, 160)
-        perf_log(
-            f"_add_transform_edit: created new _transform_edit, actor={self._actor_path}, id={id(self._transform_edit)}",
-            feature="TRACE_LIFECYCLE",
-        )
-        self._transform_edit.connect_buses()
-        self._property_layout.addWidget(self._transform_edit)
-        self._transform_edit.show()
-
     def _load_properties(self):
         self._cancel_pending_render()
-        self._hide_active_sections()
-
-        if self._actor is None:
-            self._active_cache_key = None
-            self._show_empty()
-            return
-
-        cache_key = self._cache_key()
-        self._active_cache_key = cache_key
-
-        if cache_key is not None and cache_key in self._section_cache:
-            perf_log(
-                f"property_editor._load_properties: cache hit for {cache_key}",
-                feature="PROPERTY",
-            )
-            self._show_cached_sections(cache_key)
-            return
-
         self._clear_property_layout()
-
-        perf_log(
-            f"property_editor._load_properties: actor={self._actor.name}, "
-            f"entity={self._entity.name if self._entity else None}, "
-            f"entity_id={self._entity.entity_id if self._entity else None}, "
-            f"cache_key={cache_key}",
-            feature="PROPERTY",
-        )
 
         if self._entity is not None:
             self._load_entity_properties()
         else:
             self._load_actor_properties()
 
-    def _show_cached_sections(self, cache_key: tuple):
-        self._clear_property_layout()
-
-        cached = self._section_cache.get(cache_key)
-        if cached is None:
-            return
-
-        if cache_key[1] is None:
-            self._add_transform_edit()
-
-        self._property_edits = list(cached)
-
-        for edit in cached:
-            self._property_layout.addWidget(edit)
-            edit.show()
-
-        self._section_cache.move_to_end(cache_key)
-
-        if isinstance(self._actor, AssetActor) and cached:
-            cached_groups = [edit._group for edit in cached]
-            self._actor.property_groups = cached_groups
-
     def _load_actor_properties(self):
         assert self._actor is not None
+        assert self._actor_path is not None
 
-        if self._actor_path is None:
-            return
-        
-        if isinstance(self._actor, GroupActor):
-            self._add_transform_edit()
-            return
-
-        if isinstance(self._actor, AssetActor) and self._actor.property_groups:
-            # logger.info(
-            #     f"[PropertyEditor] _load_actor_properties: actor={self._actor.name}, "
-            #     f"has_raw_entries={bool(self._raw_entries)}, "
-            #     f"raw_entries_count={len(self._raw_entries)}, "
-            #     f"property_groups_count={len(self._actor.property_groups)}"
-            # )
-            if self._raw_entries:
-                self._data_store.set_data_from_entries(self._raw_entries)
-                self._filter_bar.set_available_types(
-                    self._data_store.get_component_type_items()
-                )
-            self._render_from_data_store()
-            return
-
-        self._fetch_and_render_all(self._actor_path)
+        coro = self._fetch_and_render_actor_async(self._actor, self._actor_path)
+        self._pending_render_task = asyncio.create_task(coro)
 
     def _load_entity_properties(self):
         assert self._entity is not None
@@ -364,173 +197,88 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         if self._actor_path is None:
             return
 
-        self._fetch_and_render_entity(self._actor_path, self._entity.entity_id)
+        coro = self._fetch_and_render_entity_async(
+            self._actor_path, self._entity.entity_id
+        )
+        self._pending_render_task = asyncio.create_task(coro)
 
-    def _fetch_and_render_all(self, actor_path: Path):
-        async def _fetch():
-            try:
-                with perf_timer(
-                    "property_editor._fetch_and_render_all.total", feature="PROPERTY"
-                ):
-                    remote_scene = get_remote_scene()
+    async def _fetch_and_render_actor_async(self, actor: BaseActor, actor_path: Path):
+        remote_scene = get_remote_scene()
 
-                    with perf_timer(
-                        "property_editor._fetch_and_render_all.grpc_get_all",
-                        feature="PROPERTY",
-                    ):
-                        entries = await remote_scene.get_all_entity_property_groups(
-                            actor_path
-                        )
+        groups = await remote_scene.get_actor_property_groups(actor_path)
+        if not groups:
+            logger.info(f"[Actor] no property groups for {actor_path}")
+            return
 
-                    if not entries:
-                        logger.info(f"[Actor] no entries for {actor_path}")
-                        return
-
-                    perf_log(
-                        f"property_editor._fetch_and_render_all: got {len(entries)} entries",
-                        feature="PROPERTY",
-                    )
-
-                    groups = [e.property_group for e in entries]
-                    for e in entries:
-                        e.property_group.entity_id = e.entity_id
-                    keys: list[ActorPropertyKey] = []
-                    props: list[ActorProperty] = []
-                    collect_properties(keys, props, groups, actor_path)
-                    if keys:
-                        with perf_timer(
-                            "property_editor._fetch_and_render_all.grpc_get_values",
-                            feature="PROPERTY",
-                        ):
-                            values = await remote_scene.get_properties(keys)
-                        for prop, value in zip(props, values):
-                            if value is not None:
-                                prop.set_value(value)
-                                prop.set_original_value(value)
-
-                    self._raw_entries = entries
-
-                    with perf_timer(
-                        "property_editor._fetch_and_render_all.data_store_set",
-                        feature="PROPERTY",
-                    ):
-                        self._data_store.set_data_from_entries(entries)
-
-                    if isinstance(self._actor, AssetActor):
-                        self._actor.property_groups = self._sort_property_groups(groups)
-
-                    self._filter_bar.set_available_types(
-                        self._data_store.get_component_type_items()
-                    )
-
-                    with perf_timer(
-                        "property_editor._fetch_and_render_all.render",
-                        feature="PROPERTY",
-                    ):
-                        self._render_from_data_store()
-            except Exception as e:
-                logger.warning(f"Failed to load actor components: {e}")
-
-        self._pending_render_task = asyncio.create_task(_fetch())
-
-    async def _fetch_and_render_entity_async(self, actor_path: Path, entity_id: int):
-        with perf_timer(
-            "property_editor._fetch_and_render_entity.total", feature="PROPERTY"
-        ):
-            entity_root = get_local_scene().get_entity_root(actor_path)
-            if entity_root is None:
-                return
-
-            entity_info = entity_root.find_entity_info(entity_id)
-
-            entity_ids = [entity_id]
-            if entity_info and self._recursive:
-                entity_ids = entity_info.collect_entity_ids()
-
-            batch_results = await get_remote_scene().get_entity_property_groups_batch(
-                actor_path, entity_ids
-            )
-
-            all_groups: list[ActorPropertyGroup] = []
-            for entity_idx, groups in enumerate(batch_results):
-                if groups:
-                    sorted_groups = self._sort_property_groups(groups)
-                    child_entity_id = entity_ids[entity_idx]
-                    for g in sorted_groups:
-                        g.entity_id = child_entity_id
-                    all_groups.extend(sorted_groups)
-
-            if not all_groups:
-                return
-
-            keys: list[ActorPropertyKey] = []
-            props: list[ActorProperty] = []
-            collect_properties(keys, props, all_groups, actor_path)
-            if keys:
-                with perf_timer(
-                    "property_editor._fetch_and_render_entity.grpc_get_values_batch",
-                    feature="PROPERTY",
-                ):
-                    values = await get_remote_scene().get_properties(keys)
-                for prop, value in zip(props, values):
-                    if value is not None:
-                        prop.set_value(value)
-                        prop.set_original_value(value)
-
-            if isinstance(self._actor, AssetActor):
-                self._actor.property_groups = all_groups
-
-            self._set_transform_read_only(all_groups)
-
-            self._data_store.set_data_from_groups(
-                all_groups, entity_id, str(actor_path)
-            )
-            self._filter_bar.set_available_types(
-                self._data_store.get_component_type_items()
-            )
-
-            with perf_timer(
-                "property_editor._fetch_and_render_entity.render",
-                feature="PROPERTY",
-            ):
-                self._render_from_data_store()
-
-    def _fetch_and_render_entity(self, actor_path: Path, entity_id: int):
-        self._pending_render_task = asyncio.create_task(
-            self._fetch_and_render_entity_async(actor_path, entity_id)
+        self._data_store.set_data_from_groups(groups)
+        self._filter_bar.set_available_types(
+            self._data_store.get_component_type_items()
         )
 
-    def _clear_property_groups_only(self):
-        for edit in self._property_edits:
-            edit.disconnect_buses()
-        self._property_edits.clear()
+        self._render_from_data_store()
 
-        cached_ids = self._cached_widget_ids()
-        i = self._property_layout.count() - 1
-        while i >= 0:
-            item = self._property_layout.itemAt(i)
-            if item and item.widget() and isinstance(item.widget(), PropertyGroupEdit):
-                w = item.widget()
-                self._property_layout.removeWidget(w)
-                w.hide()
-                if id(w) not in cached_ids:
-                    w.deleteLater()
-            i -= 1
+    async def _fetch_and_render_entity_async(self, actor_path: Path, entity_id: int):
+        entity_root = get_local_scene().get_entity_root(actor_path)
+        if entity_root is None:
+            return
+
+        remote_scene = get_remote_scene()
+
+        entity_info = entity_root.find_entity_info(entity_id)
+        assert entity_info is not None
+
+        entity_ids = [entity_id]
+        if self._recursive:
+            entity_ids = entity_info.collect_entity_ids()
+
+        results = await remote_scene.get_entity_property_groups(
+            ActorEntities(actor_path, entity_ids)
+        )
+
+        all_groups: list[ActorPropertyGroup] = []
+        for entity_idx, groups in enumerate(results):
+            if groups:
+                sorted_groups = self._sort_property_groups(groups)
+                child_entity_id = entity_ids[entity_idx]
+                for g in sorted_groups:
+                    g.entity_id = child_entity_id
+                all_groups.extend(sorted_groups)
+
+        if not all_groups:
+            return
+
+        keys: list[ActorPropertyKey] = []
+        props: list[ActorProperty] = []
+        for group in all_groups:
+            for prop in group.properties:
+                key = ActorPropertyKey(
+                    actor_path=actor_path,
+                    entity_id=group.entity_id,
+                    entity_path=entity_info.entity_path,
+                    component_type_id=group.component_type_id,
+                    component_type_index=group.component_type_index,
+                    property_name=prop.name(),
+                    property_type=prop.value_type(),
+                )
+                keys.append(key)
+                props.append(prop)
+
+        infos = await remote_scene.get_properties(keys, refill_entity_id=False)
+        for prop, info in zip(props, infos):
+            if info is not None:
+                prop.set_value(info.value)
+                prop.set_base_value(info.base_value)
+                prop.set_read_only(info.read_only)
+
+        self._data_store.set_data_from_groups(all_groups)
+        self._filter_bar.set_available_types(
+            self._data_store.get_component_type_items()
+        )
+
+        self._render_from_data_store()
 
     def _render_from_data_store(self):
-        self._clear_property_groups_only()
-
-        if self._actor is None:
-            return
-
-        if self._entity is None:
-            self._add_transform_edit()
-            perf_log(
-                f"property_editor._render_from_data_store: entity=None (actor selected), "
-                f"data_store has {len(self._data_store.items)} items, skipping component groups",
-                feature="PROPERTY",
-            )
-            return
+        self._clear_property_layout()
 
         search_text = self._filter_bar.get_search_text()
         selected_types = self._filter_bar.get_selected_component_types()
@@ -543,33 +291,9 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
             else:
                 selected_types = all_types - transform_types
 
-        # Log data store contents before filtering
-        all_ids = set(item.entity_id for item in self._data_store.items)
-        all_paths = set(item.entity_path for item in self._data_store.items)
-        all_component_types = set(
-            item.component_type for item in self._data_store.items
-        )
-        perf_log(
-            f"property_editor._render_from_data_store: "
-            f"entity={self._entity.entity_id if self._entity else 'None'}, "
-            f"data_store_items={len(self._data_store.items)}, "
-            f"unique_entity_ids={all_ids}, "
-            f"unique_entity_paths={all_paths}, "
-            f"component_types={all_component_types}, "
-            f"selected_types={selected_types}",
-            feature="PROPERTY",
-        )
-
         groups = self._data_store.get_property_groups_for_display(
             component_types=selected_types,
             search_text=search_text,
-        )
-
-        perf_log(
-            f"property_editor._render_from_data_store: after filter, "
-            f"groups={len(groups)}, "
-            f"group_names=[{', '.join(g.name for g in groups)}]",
-            feature="PROPERTY",
         )
 
         if not groups:
@@ -584,10 +308,6 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
 
         if not self._data_store.items:
             return
-
-        cache_key = self._cache_key()
-        if cache_key is not None and cache_key in self._section_cache:
-            del self._section_cache[cache_key]
 
         self._render_from_data_store()
 
@@ -618,8 +338,6 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
     ):
         if self._actor is None:
             return
-
-        cache_key = self._cache_key()
 
         perf_log(
             f"property_editor._render_property_groups: rendering {len(groups)} groups",
@@ -659,11 +377,6 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
                 if batch_count >= _RENDER_BATCH_SIZE:
                     batch_count = 0
                     await asyncio.sleep(0)
-
-            if cache_key is not None:
-                self._section_cache[cache_key] = new_edits
-                self._active_cache_key = cache_key
-                self._evict_cache_if_needed()
 
             perf_log(
                 f"property_editor._render_property_groups: {len(new_edits)} groups rendered",

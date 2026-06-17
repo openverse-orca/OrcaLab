@@ -2,6 +2,7 @@ from enum import Enum
 from dataclasses import dataclass, field
 from typing import Any, List
 
+from orcalab.entity_path import EntityPath
 from orcalab.path import Path
 
 
@@ -24,13 +25,18 @@ class ValueWrapper:
 
 class ActorProperty:
     def __init__(
-        self, name: str, display_name: str | None, type: ActorPropertyType, value
+        self,
+        name: str,
+        display_name: str | None,
+        type: ActorPropertyType,
+        value: Any,
+        original_value: Any,
     ):
         self._name = name
         self._display_name: str = display_name if display_name is not None else name
         self._type = type
         self._value = ValueWrapper(value)
-        self._original_value = ValueWrapper(value)
+        self._base_value = ValueWrapper(value)
         self._read_only = False
         self._editor_hint = ""
         self._enum_values: List[str] = []
@@ -55,17 +61,17 @@ class ActorProperty:
     def set_value(self, value):
         self._set_value(self._value, value)
 
-    def original_value(self):
-        return self._original_value.value
+    def base_value(self):
+        return self._base_value.value
 
-    def set_original_value(self, value):
-        self._set_value(self._original_value, value)
+    def set_base_value(self, value):
+        self._set_value(self._base_value, value)
 
     def is_modified(self) -> bool:
         if self._type == ActorPropertyType.FLOAT:
-            return abs(self.value() - self.original_value()) > 1e-6
+            return abs(self.value() - self.base_value()) > 1e-6
 
-        return self.value() != self.original_value()
+        return self.value() != self.base_value()
 
     def _set_value(self, target, value):
         match self._type:
@@ -147,75 +153,55 @@ class ActorProperty:
     def set_struct_display_name(self, name: str):
         self._struct_display_name = name
 
-    def clone(self) -> "ActorProperty":
-        new_prop = ActorProperty(
-            self._name, self._display_name, self._type, self.value()
-        )
-        new_prop.set_read_only(self._read_only)
-        new_prop.set_editor_hint(self._editor_hint)
-        new_prop.set_enum_values(self._enum_values.copy())
-        new_prop.set_post_read_fields(self._post_read_fields.copy())
-        new_prop.set_post_read_delay_ms(self._post_read_delay_ms)
-        new_prop.set_sub_name(self._sub_name)
-        new_prop.set_parent_struct_name(self._parent_struct_name)
-        new_prop.set_struct_display_name(self._struct_display_name)
-        return new_prop
 
-
+@dataclass
 class ActorPropertyGroup:
-    def __init__(self, prefix: str, name: str, hint: str):
-        self.prefix = prefix
-        self.name = name
-        self.display_name = name
-        self.hint = hint
-        self.properties: List[ActorProperty] = []
-        self.entity_id: int = 0
-        self.component_type_id: str = ""
+    name: str
+    hint: str
+    entity_id: int
+    entity_path: EntityPath
+    component_type_id: str
+    component_type_index: int
+    properties: List[ActorProperty]
 
-    def clone(self) -> "ActorPropertyGroup":
-        new_group = ActorPropertyGroup(self.prefix, self.name, self.hint)
-        new_group.display_name = self.display_name
-        new_group.entity_id = self.entity_id
-        new_group.component_type_id = self.component_type_id
-        new_group.properties = [prop.clone() for prop in self.properties]
-        return new_group
+    def set_value(self, name: str, value: Any):
+        for prop in self.properties:
+            if prop.name() == name:
+                prop.set_value(value)
+                return
 
 
+@dataclass
 class ActorPropertyKey:
-    def __init__(
-        self,
-        actor_path: Path,
-        group_prefix: str,
-        property_name: str,
-        property_type: ActorPropertyType,
-        entity_id: int = 0,
-        component_type: str = "",
-    ):
-        self.actor_path = actor_path
-        self.group_prefix = group_prefix
-        self.property_name = property_name
-        self.property_type = property_type
-        self.entity_id = entity_id
-        self.component_type = component_type
+    actor_path: Path
+    entity_id: int
+    entity_path: EntityPath
+    component_type_id: str
+    component_type_index: int
+    property_name: str
+    property_type: ActorPropertyType
 
-    def __eq__(self, other):
-        if not isinstance(other, ActorPropertyKey):
-            return NotImplemented
-
-        return (
-            self.actor_path == other.actor_path
-            and self.group_prefix == other.group_prefix
-            and self.property_name == other.property_name
-            and self.property_type == other.property_type
+    def clone(self) -> "ActorPropertyKey":
+        return ActorPropertyKey(
+            actor_path=self.actor_path,
+            entity_id=self.entity_id,
+            entity_path=self.entity_path,
+            component_type_id=self.component_type_id,
+            component_type_index=self.component_type_index,
+            property_name=self.property_name,
+            property_type=self.property_type,
         )
 
-    def __hash__(self):
-        return hash(
-            (self.actor_path, self.group_prefix, self.property_name, self.property_type)
-        )
 
-    def __repr__(self):
-        return f"ActorPropertyKey(actor_path={self.actor_path}, group_prefix='{self.group_prefix}', property_name='{self.property_name}', property_type={self.property_type})"
+@dataclass
+class PropertyOverride:
+    entity_id: int
+    entity_path: EntityPath
+    component_type_id: str
+    component_type_index: int
+    property_name: str
+    property_type: ActorPropertyType
+    value: Any
 
 
 @dataclass
@@ -230,29 +216,16 @@ class StructPropertyGroup:
 
 
 @dataclass
-class EntityPropertyGroupEntry:
-    entity_id: int
-    entity_path: str
-    component_type: str
-    component_display_name: str
-    property_group: ActorPropertyGroup
+class ActorEntities:
+    actor_path: Path
+    entity_ids: List[int]
 
 
 @dataclass
-class FlatPropertyItem:
-    entity_id: int
-    entity_path: str
-    component_type: str
-    component_display_name: str
-    property_name: str
-    property_display_name: str
-    property_type: ActorPropertyType
+class PropertyGetInfo:
+    read_only: bool
     value: Any
-    is_readonly: bool
-    group_prefix: str
-    component_type_id: str = ""
-    sub_name: str = ""
-    parent_struct_name: str = ""
-    struct_display_name: str = ""
-    group_id: int = 0
-    enum_values: List[str] = field(default_factory=list)
+    base_value: Any
+
+
+PropertyData = PropertyGetInfo

@@ -205,16 +205,16 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
                 )
                 return QModelIndex()
 
-            asset_actor = self.local_scene.find_actor_by_entity_id(node.entity_id)
-            if asset_actor is None:
+            actor = self.local_scene.find_actor_by_entity_id(node.entity_id)
+            if actor is None:
                 logger.error(
                     f"[Coding Error] Cannot find actor for entity {node.entity_path}."
                 )
                 return QModelIndex()
 
-            entity_root = asset_actor.entity_root
+            entity_root = actor.entity_root
             if parent_entity is entity_root.root_entity_info:
-                return self.get_index_from_actor(asset_actor)
+                return self.get_index_from_actor(actor)
 
             index = -1
             parent_of_parent = parent_entity.parent

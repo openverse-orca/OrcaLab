@@ -1,11 +1,12 @@
 import asyncio
 import logging
-from typing import override
+from typing import List, override
 from PySide6 import QtCore, QtWidgets
 
 from orcalab.actor import AssetActor
-from orcalab.actor_property import ActorPropertyKey
-from orcalab.application_util import get_remote_scene
+from orcalab.actor_property import ActorEntities, ActorPropertyGroup, ActorPropertyKey
+from orcalab.application_util import get_local_scene, get_remote_scene
+from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.ui.property_edit.base_property_edit import (
     BasePropertyEdit,
     PropertyEditContext,
@@ -44,56 +45,50 @@ def _is_mujoco_valid_name(name: str) -> tuple[bool, str]:
     return True, ""
 
 
-def _collect_names_from_groups(groups, exclude_key: ActorPropertyKey | None = None) -> set[str]:
+def _collect_names_from_groups(
+    groups: List[ActorPropertyGroup], exclude_key: ActorPropertyKey | None = None
+) -> set[str]:
     result: set[str] = set()
     for group in groups:
         for prop in group.properties:
             if not _is_name_property(prop.name()):
                 continue
             if exclude_key is not None:
-                if group.prefix == exclude_key.group_prefix and prop.name() == exclude_key.property_name:
+                if (
+                    group.entity_id == exclude_key.entity_id
+                    and group.component_type_id == exclude_key.component_type_id
+                    and group.component_type_index == exclude_key.component_type_index
+                    and prop.name() == exclude_key.property_name
+                ):
                     continue
+
             val = prop.value()
             if isinstance(val, str) and val:
                 result.add(val)
     return result
 
 
-async def _fetch_all_existing_names(actor_path, exclude_key: ActorPropertyKey | None = None) -> set[str]:
-    try:
-        remote_scene = get_remote_scene()
-        entries = await remote_scene.get_all_entity_property_groups(actor_path)
-        all_groups = [entry.property_group for entry in entries]
-        for entry in entries:
-            entry.property_group.entity_id = entry.entity_id
-
-        name_keys: list[ActorPropertyKey] = []
-        name_props: list = []
-        for group in all_groups:
-            for prop in group.properties:
-                if not _is_name_property(prop.name()):
-                    continue
-                key = ActorPropertyKey(
-                    actor_path,
-                    group.prefix,
-                    prop.name(),
-                    prop.value_type(),
-                    entity_id=group.entity_id,
-                    component_type=group.component_type_id,
-                )
-                name_keys.append(key)
-                name_props.append(prop)
-
-        if name_keys:
-            values = await remote_scene.get_properties(name_keys)
-            for prop, value in zip(name_props, values):
-                if value is not None:
-                    prop.set_value(value)
-
-        return _collect_names_from_groups(all_groups, exclude_key)
-    except Exception as e:
-        logger.warning("Failed to fetch all entity property groups for name validation: %s", e)
+async def _fetch_all_existing_names(
+    actor_path, exclude_key: ActorPropertyKey | None = None
+) -> set[str]:
+    names = set()
+    local_scene = get_local_scene()
+    entity_root = local_scene.get_entity_root(actor_path)
+    if entity_root is None:
         return set()
+
+    entity_ids = entity_root.root_entity_info.collect_entity_ids()
+
+    remote_scene = get_remote_scene()
+    ll = await remote_scene.get_entity_property_groups(
+        ActorEntities(actor_path, entity_ids)
+    )
+
+    for groups in ll:
+        for group in groups:
+            names.update(_collect_names_from_groups([group], exclude_key))
+
+    return names
 
 
 class StringPropertyEdit(BasePropertyEdit[str]):
@@ -107,7 +102,9 @@ class StringPropertyEdit(BasePropertyEdit[str]):
         super().__init__(parent, context)
 
         is_multiline = context.prop.editor_hint() == "multi_line"
-        is_name_prop = _is_name_property(context.prop.name()) and isinstance(context.actor, AssetActor)
+        is_name_prop = _is_name_property(context.prop.name()) and isinstance(
+            context.actor, AssetActor
+        )
 
         if is_name_prop:
             root_layout = QtWidgets.QHBoxLayout(self)
@@ -121,13 +118,13 @@ class StringPropertyEdit(BasePropertyEdit[str]):
             editor.setReadOnly(True)
             editor.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
             editor.setStyleSheet(self.base_style)
-            FontService().bind_widget_font(editor, 'property_edit')
+            FontService().bind_widget_font(editor, "property_edit")
 
             rename_btn = QtWidgets.QPushButton("✎")
             rename_btn.setFixedWidth(28)
             rename_btn.setToolTip("重命名")
             rename_btn.clicked.connect(self._on_rename_clicked)
-            FontService().bind_widget_font(rename_btn, 'property_edit')
+            FontService().bind_widget_font(rename_btn, "property_edit")
 
             root_layout.addWidget(label)
             root_layout.addWidget(editor)
@@ -140,12 +137,14 @@ class StringPropertyEdit(BasePropertyEdit[str]):
             root_layout.setSpacing(4)
 
             label = self._create_label(label_width)
-            label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+            label.setAlignment(
+                QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+            )
 
             editor = MultilineStringEdit()
             editor.setText(context.prop.value())
             editor.value_changed.connect(self._on_text_changed)
-            FontService().bind_widget_font(editor, 'property_edit')
+            FontService().bind_widget_font(editor, "property_edit")
 
             root_layout.addWidget(label)
             root_layout.addWidget(editor)
@@ -161,7 +160,7 @@ class StringPropertyEdit(BasePropertyEdit[str]):
             editor.value_changed.connect(self._on_text_changed)
             editor.setStyleSheet(self.base_style)
             editor.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
-            FontService().bind_widget_font(editor, 'property_edit')
+            FontService().bind_widget_font(editor, "property_edit")
 
             root_layout.addWidget(label)
             root_layout.addWidget(editor)
@@ -178,7 +177,10 @@ class StringPropertyEdit(BasePropertyEdit[str]):
             return False, reason
 
         if self._all_existing_names is None:
-            logger.warning("重名检查被跳过（未能获取已有名称列表），关节名称 '%s' 可能重复", new_name)
+            logger.warning(
+                "重名检查被跳过（未能获取已有名称列表），关节名称 '%s' 可能重复",
+                new_name,
+            )
         elif new_name in self._all_existing_names:
             return False, f"关节名称 '{new_name}' 已存在，无法使用重复名称。"
 
@@ -191,12 +193,24 @@ class StringPropertyEdit(BasePropertyEdit[str]):
             parent=QtWidgets.QApplication.activeWindow(),
         )
 
-        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted and dialog.new_name is not None:
+        if (
+            dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted
+            and dialog.new_name is not None
+        ):
+            old_text = self.context.prop.value()
             self._block_events = True
             self.context.prop.set_value(dialog.new_name)
             self._editor.set_value(dialog.new_name)
             self._block_events = False
-            self._do_set_value(dialog.new_name, undo=True)
+
+            task = SceneEditRequestBus().set_property(
+                property_key=self.context.key,
+                value=dialog.new_name,
+                undo=True,
+                old_value=old_text,
+                source="ui",
+            )
+            asyncio.create_task(task)
 
         self._all_existing_names = None
         self._rename_btn.setEnabled(True)
@@ -219,7 +233,10 @@ class StringPropertyEdit(BasePropertyEdit[str]):
                     self._all_existing_names,
                 )
             except Exception as e:
-                logger.warning("Failed to fetch existing names, dialog will skip duplicate check: %s", e)
+                logger.warning(
+                    "Failed to fetch existing names, dialog will skip duplicate check: %s",
+                    e,
+                )
                 self._all_existing_names = None
 
             QtCore.QTimer.singleShot(0, lambda: self._show_rename_dialog(current_name))
@@ -230,13 +247,21 @@ class StringPropertyEdit(BasePropertyEdit[str]):
         if self._block_events:
             return
 
+        old_text = self.context.prop.value()
         text = self._editor.text()
         normalized = _normalize_float_vec(text)
         commit_text = normalized if normalized is not None else text
 
         self.context.prop.set_value(commit_text)
-        undo = not self.in_dragging
-        self._do_set_value(commit_text, undo)
+
+        task = SceneEditRequestBus().set_property(
+            property_key=self.context.key,
+            value=text,
+            undo=True,
+            old_value=old_text,
+            source="ui",
+        )
+        asyncio.create_task(task)
 
         if normalized is not None and normalized != text:
             self._block_events = True
@@ -257,7 +282,7 @@ class StringPropertyEdit(BasePropertyEdit[str]):
     @override
     def set_read_only(self, read_only: bool):
         if self._is_name_prop:
-            if hasattr(self, '_rename_btn'):
+            if hasattr(self, "_rename_btn"):
                 self._rename_btn.setEnabled(not read_only)
             return
 
@@ -265,11 +290,13 @@ class StringPropertyEdit(BasePropertyEdit[str]):
 
         if self._is_multiline and read_only:
             from orcalab.ui.theme_service import ThemeService
+
             theme = ThemeService()
             bg_color = theme.get_color_hex("property_group_bg")
             text_color = theme.get_color_hex("text")
 
-            self._editor.setStyleSheet(f"""
+            self._editor.setStyleSheet(
+                f"""
                 QPlainTextEdit {{
                     background-color: {bg_color};
                     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -277,4 +304,5 @@ class StringPropertyEdit(BasePropertyEdit[str]):
                     padding: 4px;
                     color: {text_color};
                 }}
-            """)
+            """
+            )

@@ -49,11 +49,6 @@ class FloatEdit(BaseNumberEdit[float]):
             return False
 
         self._value = clamped
-
-        if self._state != BaseNumberEditState.Typing:
-            text = self._value_to_text(self.value())
-            if self.text() != text:
-                self.setText(text)
         return True
 
     @override

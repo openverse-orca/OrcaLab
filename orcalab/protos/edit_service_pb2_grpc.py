@@ -28,7 +28,7 @@ if _version_not_supported:
 class GrpcServiceStub(object):
     """Missing associated documentation comment in .proto file."""
 
-    def __init__(self, channel):
+    def __init__(self, channel: grpc.aio.Channel):
         """Constructor.
 
         Args:
@@ -38,262 +38,242 @@ class GrpcServiceStub(object):
                 '/SceneEdit.GrpcService/Aloha',
                 request_serializer=edit__service__pb2.AlohaRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.AlohaResponse.FromString,
-                _registered_method=True)
+                )
         self.AddActorBatch = channel.unary_unary(
                 '/SceneEdit.GrpcService/AddActorBatch',
                 request_serializer=edit__service__pb2.AddActorBatchRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.AddActorBatchResponse.FromString,
-                _registered_method=True)
+                )
         self.DeleteActorBatch = channel.unary_unary(
                 '/SceneEdit.GrpcService/DeleteActorBatch',
                 request_serializer=edit__service__pb2.DeleteActorBatchRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.DeleteActorBatchResponse.FromString,
-                _registered_method=True)
+                )
         self.GetPendingOperations = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetPendingOperations',
                 request_serializer=edit__service__pb2.GetPendingOperationsRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetPendingOperationsResponse.FromString,
-                _registered_method=True)
+                )
         self.GetPendingActorTransformBatch = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetPendingActorTransformBatch',
                 request_serializer=edit__service__pb2.GetPendingActorTransformBatchRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetPendingActorTransformBatchResponse.FromString,
-                _registered_method=True)
+                )
         self.SetActorTransformBatch = channel.unary_unary(
                 '/SceneEdit.GrpcService/SetActorTransformBatch',
                 request_serializer=edit__service__pb2.SetActorTransformBatchRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetActorTransformBatchResponse.FromString,
-                _registered_method=True)
+                )
         self.ClearScene = channel.unary_unary(
                 '/SceneEdit.GrpcService/ClearScene',
                 request_serializer=edit__service__pb2.ClearSceneRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.ClearSceneResponse.FromString,
-                _registered_method=True)
+                )
         self.GetActorAssets = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetActorAssets',
                 request_serializer=edit__service__pb2.GetActorAssetsRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetActorAssetsResponse.FromString,
-                _registered_method=True)
+                )
         self.GetPendingSelectionChange = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetPendingSelectionChange',
                 request_serializer=edit__service__pb2.GetPendingSelectionChangeRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetPendingSelectionChangeResponse.FromString,
-                _registered_method=True)
+                )
         self.GetPendingAddItem = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetPendingAddItem',
                 request_serializer=edit__service__pb2.GetPendingAddItemRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetPendingAddItemResponse.FromString,
-                _registered_method=True)
+                )
         self.SetSelection = channel.unary_unary(
                 '/SceneEdit.GrpcService/SetSelection',
                 request_serializer=edit__service__pb2.SetSelectionRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetSelectionResponse.FromString,
-                _registered_method=True)
+                )
         self.SaveState = channel.unary_unary(
                 '/SceneEdit.GrpcService/SaveState',
                 request_serializer=edit__service__pb2.SaveStateRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SaveStateResponse.FromString,
-                _registered_method=True)
+                )
         self.RestoreState = channel.unary_unary(
                 '/SceneEdit.GrpcService/RestoreState',
                 request_serializer=edit__service__pb2.RestoreStateRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.RestoreStateResponse.FromString,
-                _registered_method=True)
+                )
         self.RenameActor = channel.unary_unary(
                 '/SceneEdit.GrpcService/RenameActor',
                 request_serializer=edit__service__pb2.RenameActorRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.RenameActorResponse.FromString,
-                _registered_method=True)
+                )
         self.MoveActorBatch = channel.unary_unary(
                 '/SceneEdit.GrpcService/MoveActorBatch',
                 request_serializer=edit__service__pb2.MoveActorBatchRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.MoveActorBatchResponse.FromString,
-                _registered_method=True)
+                )
         self.GetWindowId = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetWindowId',
                 request_serializer=edit__service__pb2.GetWindowIdRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetWindowIdResponse.FromString,
-                _registered_method=True)
+                )
         self.GetGeneratePos = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetGeneratePos',
                 request_serializer=edit__service__pb2.GetGeneratePosRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetGeneratePosResponse.FromString,
-                _registered_method=True)
+                )
         self.GetCacheFolder = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetCacheFolder',
                 request_serializer=edit__service__pb2.GetCacheFolderRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetCacheFolderResponse.FromString,
-                _registered_method=True)
+                )
         self.LoadPackage = channel.unary_unary(
                 '/SceneEdit.GrpcService/LoadPackage',
                 request_serializer=edit__service__pb2.LoadPackageRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.LoadPackageResponse.FromString,
-                _registered_method=True)
+                )
         self.ChangeSimState = channel.unary_unary(
                 '/SceneEdit.GrpcService/ChangeSimState',
                 request_serializer=edit__service__pb2.ChangeSimStateRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.ChangeSimStateResponse.FromString,
-                _registered_method=True)
+                )
         self.GetSyncFromMujocoToScene = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetSyncFromMujocoToScene',
                 request_serializer=edit__service__pb2.GetSyncFromMujocoToSceneRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetSyncFromMujocoToSceneResponse.FromString,
-                _registered_method=True)
+                )
         self.SetSyncFromMujocoToScene = channel.unary_unary(
                 '/SceneEdit.GrpcService/SetSyncFromMujocoToScene',
                 request_serializer=edit__service__pb2.SetSyncFromMujocoToSceneRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetSyncFromMujocoToSceneResponse.FromString,
-                _registered_method=True)
+                )
         self.PublishScene = channel.unary_unary(
                 '/SceneEdit.GrpcService/PublishScene',
                 request_serializer=edit__service__pb2.PublishSceneRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.PublishSceneResponse.FromString,
-                _registered_method=True)
+                )
         self.ChangeManipulatorType = channel.unary_unary(
                 '/SceneEdit.GrpcService/ChangeManipulatorType',
                 request_serializer=edit__service__pb2.ChangeManipulatorTypeRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.ChangeManipulatorTypeResponse.FromString,
-                _registered_method=True)
+                )
         self.GetCameraPNG = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetCameraPNG',
                 request_serializer=edit__service__pb2.GetCameraPNGRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetCameraPNGResponse.FromString,
-                _registered_method=True)
+                )
         self.GetActorAssetAabb = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetActorAssetAabb',
                 request_serializer=edit__service__pb2.GetActorAssetAabbRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetActorAssetAabbResponse.FromString,
-                _registered_method=True)
+                )
         self.FindNonOverlappingPosition = channel.unary_unary(
                 '/SceneEdit.GrpcService/FindNonOverlappingPosition',
                 request_serializer=edit__service__pb2.FindNonOverlappingPositionRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.FindNonOverlappingPositionResponse.FromString,
-                _registered_method=True)
+                )
         self.QueueMouseEvent = channel.unary_unary(
                 '/SceneEdit.GrpcService/QueueMouseEvent',
                 request_serializer=edit__service__pb2.QueueMouseEventRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.QueueMouseEventResponse.FromString,
-                _registered_method=True)
+                )
         self.QueueMouseWheelEvent = channel.unary_unary(
                 '/SceneEdit.GrpcService/QueueMouseWheelEvent',
                 request_serializer=edit__service__pb2.QueueMouseWheelEventRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.QueueMouseWheelEventResponse.FromString,
-                _registered_method=True)
+                )
         self.QueueKeyEvent = channel.unary_unary(
                 '/SceneEdit.GrpcService/QueueKeyEvent',
                 request_serializer=edit__service__pb2.QueueKeyEventRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.QueueKeyEventResponse.FromString,
-                _registered_method=True)
+                )
         self.GetCameras = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetCameras',
                 request_serializer=edit__service__pb2.GetCamerasRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetCamerasResponse.FromString,
-                _registered_method=True)
+                )
         self.GetActiveCamera = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetActiveCamera',
                 request_serializer=edit__service__pb2.GetActiveCameraRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetActiveCameraResponse.FromString,
-                _registered_method=True)
+                )
         self.SetActiveCamera = channel.unary_unary(
                 '/SceneEdit.GrpcService/SetActiveCamera',
                 request_serializer=edit__service__pb2.SetActiveCameraRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetActiveCameraResponse.FromString,
-                _registered_method=True)
+                )
         self.GetFlyCameraTransform = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetFlyCameraTransform',
                 request_serializer=edit__service__pb2.GetFlyCameraTransformRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetFlyCameraTransformResponse.FromString,
-                _registered_method=True)
+                )
         self.SetFlyCameraTransform = channel.unary_unary(
                 '/SceneEdit.GrpcService/SetFlyCameraTransform',
                 request_serializer=edit__service__pb2.SetFlyCameraTransformRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetFlyCameraTransformResponse.FromString,
-                _registered_method=True)
+                )
         self.GetViewportCameraTransform = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetViewportCameraTransform',
                 request_serializer=edit__service__pb2.GetViewportCameraTransformRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetViewportCameraTransformResponse.FromString,
-                _registered_method=True)
+                )
         self.GetCameraDataPNG = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetCameraDataPNG',
                 request_serializer=edit__service__pb2.GetCameraDataPNGRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetCameraDataPNGResponse.FromString,
-                _registered_method=True)
-        self.GetPropertyGroups = channel.unary_unary(
-                '/SceneEdit.GrpcService/GetPropertyGroups',
-                request_serializer=edit__service__pb2.GetPropertyGroupsRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.GetPropertyGroupsResponse.FromString,
-                _registered_method=True)
-        self.GetPropertyGroupsBatch = channel.unary_unary(
-                '/SceneEdit.GrpcService/GetPropertyGroupsBatch',
-                request_serializer=edit__service__pb2.GetPropertyGroupsBatchRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.GetPropertyGroupsBatchResponse.FromString,
-                _registered_method=True)
-        self.GetProperties = channel.unary_unary(
-                '/SceneEdit.GrpcService/GetProperties',
-                request_serializer=edit__service__pb2.GetPropertiesRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.GetPropertiesResponse.FromString,
-                _registered_method=True)
-        self.SetProperties = channel.unary_unary(
-                '/SceneEdit.GrpcService/SetProperties',
-                request_serializer=edit__service__pb2.SetPropertiesRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.SetPropertiesResponse.FromString,
-                _registered_method=True)
+                )
         self.CustomCommand = channel.unary_unary(
                 '/SceneEdit.GrpcService/CustomCommand',
                 request_serializer=edit__service__pb2.CustomCommandRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.CustomCommandResponse.FromString,
-                _registered_method=True)
+                )
         self.SetVisibility = channel.unary_unary(
                 '/SceneEdit.GrpcService/SetVisibility',
                 request_serializer=edit__service__pb2.SetVisibilityRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetVisibilityResponse.FromString,
-                _registered_method=True)
+                )
         self.SetLock = channel.unary_unary(
                 '/SceneEdit.GrpcService/SetLock',
                 request_serializer=edit__service__pb2.SetLockRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetLockResponse.FromString,
-                _registered_method=True)
+                )
         self.SetMoveRotateSensitivity = channel.unary_unary(
                 '/SceneEdit.GrpcService/SetMoveRotateSensitivity',
                 request_serializer=edit__service__pb2.SetMoveRotateSensitivityRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.SetMoveRotateSensitivityResponse.FromString,
-                _registered_method=True)
+                )
         self.GetEntityHierarchyBatch = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetEntityHierarchyBatch',
                 request_serializer=edit__service__pb2.GetEntityHierarchyBatchRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetEntityHierarchyBatchResponse.FromString,
-                _registered_method=True)
+                )
         self.GetEntityPropertyGroupsBatch = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetEntityPropertyGroupsBatch',
                 request_serializer=edit__service__pb2.GetEntityPropertyGroupsBatchRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetEntityPropertyGroupsBatchResponse.FromString,
-                _registered_method=True)
-        self.GetAllEntityPropertyGroups = channel.unary_unary(
-                '/SceneEdit.GrpcService/GetAllEntityPropertyGroups',
-                request_serializer=edit__service__pb2.GetAllEntityPropertyGroupsRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.GetAllEntityPropertyGroupsResponse.FromString,
-                _registered_method=True)
-        self.GetEntityAllFieldValues = channel.unary_unary(
-                '/SceneEdit.GrpcService/GetEntityAllFieldValues',
-                request_serializer=edit__service__pb2.GetEntityAllFieldValuesRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.GetEntityAllFieldValuesResponse.FromString,
-                _registered_method=True)
-        self.SetEntityFieldValues = channel.unary_unary(
-                '/SceneEdit.GrpcService/SetEntityFieldValues',
-                request_serializer=edit__service__pb2.SetEntityFieldValuesRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.SetEntityFieldValuesResponse.FromString,
-                _registered_method=True)
-        self.GetEntityAllFieldValuesBatch = channel.unary_unary(
-                '/SceneEdit.GrpcService/GetEntityAllFieldValuesBatch',
-                request_serializer=edit__service__pb2.GetEntityAllFieldValuesBatchRequest.SerializeToString,
-                response_deserializer=edit__service__pb2.GetEntityAllFieldValuesBatchResponse.FromString,
-                _registered_method=True)
+                )
+        self.GetActorPropertyGroupsBatch = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetActorPropertyGroupsBatch',
+                request_serializer=edit__service__pb2.GetActorPropertyGroupsBatchRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetActorPropertyGroupsBatchResponse.FromString,
+                )
+        self.GetProperties = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetProperties',
+                request_serializer=edit__service__pb2.GetPropertiesRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetPropertiesResponse.FromString,
+                )
+        self.SetProperties = channel.unary_unary(
+                '/SceneEdit.GrpcService/SetProperties',
+                request_serializer=edit__service__pb2.SetPropertiesRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.SetPropertiesResponse.FromString,
+                )
+        self.GetActorOverridesBatch = channel.unary_unary(
+                '/SceneEdit.GrpcService/GetActorOverridesBatch',
+                request_serializer=edit__service__pb2.GetActorOverridesBatchRequest.SerializeToString,
+                response_deserializer=edit__service__pb2.GetActorOverridesBatchResponse.FromString,
+                )
         self.GetAssetsByTypePage = channel.unary_unary(
                 '/SceneEdit.GrpcService/GetAssetsByTypePage',
                 request_serializer=edit__service__pb2.GetAssetsByTypePageRequest.SerializeToString,
                 response_deserializer=edit__service__pb2.GetAssetsByTypePageResponse.FromString,
-                _registered_method=True)
+                )
 
 
 class GrpcServiceServicer(object):
@@ -521,30 +501,6 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetPropertyGroups(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetPropertyGroupsBatch(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetProperties(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SetProperties(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def CustomCommand(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -582,33 +538,33 @@ class GrpcServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetAllEntityPropertyGroups(self, request, context):
+    def GetActorPropertyGroupsBatch(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetEntityAllFieldValues(self, request, context):
-        """Property Registry RPCs
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SetEntityFieldValues(self, request, context):
+    def GetProperties(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetEntityAllFieldValuesBatch(self, request, context):
+    def SetProperties(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetActorOverridesBatch(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetAssetsByTypePage(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Property Registry RPCs
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -801,26 +757,6 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     request_deserializer=edit__service__pb2.GetCameraDataPNGRequest.FromString,
                     response_serializer=edit__service__pb2.GetCameraDataPNGResponse.SerializeToString,
             ),
-            'GetPropertyGroups': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetPropertyGroups,
-                    request_deserializer=edit__service__pb2.GetPropertyGroupsRequest.FromString,
-                    response_serializer=edit__service__pb2.GetPropertyGroupsResponse.SerializeToString,
-            ),
-            'GetPropertyGroupsBatch': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetPropertyGroupsBatch,
-                    request_deserializer=edit__service__pb2.GetPropertyGroupsBatchRequest.FromString,
-                    response_serializer=edit__service__pb2.GetPropertyGroupsBatchResponse.SerializeToString,
-            ),
-            'GetProperties': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetProperties,
-                    request_deserializer=edit__service__pb2.GetPropertiesRequest.FromString,
-                    response_serializer=edit__service__pb2.GetPropertiesResponse.SerializeToString,
-            ),
-            'SetProperties': grpc.unary_unary_rpc_method_handler(
-                    servicer.SetProperties,
-                    request_deserializer=edit__service__pb2.SetPropertiesRequest.FromString,
-                    response_serializer=edit__service__pb2.SetPropertiesResponse.SerializeToString,
-            ),
             'CustomCommand': grpc.unary_unary_rpc_method_handler(
                     servicer.CustomCommand,
                     request_deserializer=edit__service__pb2.CustomCommandRequest.FromString,
@@ -851,25 +787,25 @@ def add_GrpcServiceServicer_to_server(servicer, server):
                     request_deserializer=edit__service__pb2.GetEntityPropertyGroupsBatchRequest.FromString,
                     response_serializer=edit__service__pb2.GetEntityPropertyGroupsBatchResponse.SerializeToString,
             ),
-            'GetAllEntityPropertyGroups': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetAllEntityPropertyGroups,
-                    request_deserializer=edit__service__pb2.GetAllEntityPropertyGroupsRequest.FromString,
-                    response_serializer=edit__service__pb2.GetAllEntityPropertyGroupsResponse.SerializeToString,
+            'GetActorPropertyGroupsBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetActorPropertyGroupsBatch,
+                    request_deserializer=edit__service__pb2.GetActorPropertyGroupsBatchRequest.FromString,
+                    response_serializer=edit__service__pb2.GetActorPropertyGroupsBatchResponse.SerializeToString,
             ),
-            'GetEntityAllFieldValues': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetEntityAllFieldValues,
-                    request_deserializer=edit__service__pb2.GetEntityAllFieldValuesRequest.FromString,
-                    response_serializer=edit__service__pb2.GetEntityAllFieldValuesResponse.SerializeToString,
+            'GetProperties': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetProperties,
+                    request_deserializer=edit__service__pb2.GetPropertiesRequest.FromString,
+                    response_serializer=edit__service__pb2.GetPropertiesResponse.SerializeToString,
             ),
-            'SetEntityFieldValues': grpc.unary_unary_rpc_method_handler(
-                    servicer.SetEntityFieldValues,
-                    request_deserializer=edit__service__pb2.SetEntityFieldValuesRequest.FromString,
-                    response_serializer=edit__service__pb2.SetEntityFieldValuesResponse.SerializeToString,
+            'SetProperties': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetProperties,
+                    request_deserializer=edit__service__pb2.SetPropertiesRequest.FromString,
+                    response_serializer=edit__service__pb2.SetPropertiesResponse.SerializeToString,
             ),
-            'GetEntityAllFieldValuesBatch': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetEntityAllFieldValuesBatch,
-                    request_deserializer=edit__service__pb2.GetEntityAllFieldValuesBatchRequest.FromString,
-                    response_serializer=edit__service__pb2.GetEntityAllFieldValuesBatchResponse.SerializeToString,
+            'GetActorOverridesBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetActorOverridesBatch,
+                    request_deserializer=edit__service__pb2.GetActorOverridesBatchRequest.FromString,
+                    response_serializer=edit__service__pb2.GetActorOverridesBatchResponse.SerializeToString,
             ),
             'GetAssetsByTypePage': grpc.unary_unary_rpc_method_handler(
                     servicer.GetAssetsByTypePage,
@@ -912,7 +848,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def AddActorBatch(request,
@@ -939,7 +875,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def DeleteActorBatch(request,
@@ -966,7 +902,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetPendingOperations(request,
@@ -993,7 +929,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetPendingActorTransformBatch(request,
@@ -1020,7 +956,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def SetActorTransformBatch(request,
@@ -1047,7 +983,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def ClearScene(request,
@@ -1074,7 +1010,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetActorAssets(request,
@@ -1101,7 +1037,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetPendingSelectionChange(request,
@@ -1128,7 +1064,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetPendingAddItem(request,
@@ -1155,7 +1091,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def SetSelection(request,
@@ -1182,7 +1118,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def SaveState(request,
@@ -1209,7 +1145,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def RestoreState(request,
@@ -1236,7 +1172,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def RenameActor(request,
@@ -1263,7 +1199,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def MoveActorBatch(request,
@@ -1290,7 +1226,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetWindowId(request,
@@ -1317,7 +1253,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetGeneratePos(request,
@@ -1344,7 +1280,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetCacheFolder(request,
@@ -1371,7 +1307,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def LoadPackage(request,
@@ -1398,7 +1334,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def ChangeSimState(request,
@@ -1425,7 +1361,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetSyncFromMujocoToScene(request,
@@ -1452,7 +1388,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def SetSyncFromMujocoToScene(request,
@@ -1479,7 +1415,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def PublishScene(request,
@@ -1506,7 +1442,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def ChangeManipulatorType(request,
@@ -1533,7 +1469,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetCameraPNG(request,
@@ -1560,7 +1496,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetActorAssetAabb(request,
@@ -1587,7 +1523,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def FindNonOverlappingPosition(request,
@@ -1614,7 +1550,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def QueueMouseEvent(request,
@@ -1641,7 +1577,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def QueueMouseWheelEvent(request,
@@ -1668,7 +1604,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def QueueKeyEvent(request,
@@ -1695,7 +1631,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetCameras(request,
@@ -1722,7 +1658,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetActiveCamera(request,
@@ -1749,7 +1685,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def SetActiveCamera(request,
@@ -1776,7 +1712,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetFlyCameraTransform(request,
@@ -1803,7 +1739,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def SetFlyCameraTransform(request,
@@ -1830,7 +1766,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetViewportCameraTransform(request,
@@ -1857,7 +1793,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetCameraDataPNG(request,
@@ -1884,115 +1820,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetPropertyGroups(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/SceneEdit.GrpcService/GetPropertyGroups',
-            edit__service__pb2.GetPropertyGroupsRequest.SerializeToString,
-            edit__service__pb2.GetPropertyGroupsResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetPropertyGroupsBatch(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/SceneEdit.GrpcService/GetPropertyGroupsBatch',
-            edit__service__pb2.GetPropertyGroupsBatchRequest.SerializeToString,
-            edit__service__pb2.GetPropertyGroupsBatchResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetProperties(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/SceneEdit.GrpcService/GetProperties',
-            edit__service__pb2.GetPropertiesRequest.SerializeToString,
-            edit__service__pb2.GetPropertiesResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def SetProperties(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/SceneEdit.GrpcService/SetProperties',
-            edit__service__pb2.SetPropertiesRequest.SerializeToString,
-            edit__service__pb2.SetPropertiesResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def CustomCommand(request,
@@ -2019,7 +1847,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def SetVisibility(request,
@@ -2046,7 +1874,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def SetLock(request,
@@ -2073,7 +1901,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def SetMoveRotateSensitivity(request,
@@ -2100,7 +1928,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetEntityHierarchyBatch(request,
@@ -2127,7 +1955,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetEntityPropertyGroupsBatch(request,
@@ -2154,10 +1982,10 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
-    def GetAllEntityPropertyGroups(request,
+    def GetActorPropertyGroupsBatch(request,
             target,
             options=(),
             channel_credentials=None,
@@ -2170,9 +1998,9 @@ class GrpcService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/SceneEdit.GrpcService/GetAllEntityPropertyGroups',
-            edit__service__pb2.GetAllEntityPropertyGroupsRequest.SerializeToString,
-            edit__service__pb2.GetAllEntityPropertyGroupsResponse.FromString,
+            '/SceneEdit.GrpcService/GetActorPropertyGroupsBatch',
+            edit__service__pb2.GetActorPropertyGroupsBatchRequest.SerializeToString,
+            edit__service__pb2.GetActorPropertyGroupsBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2181,10 +2009,10 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
-    def GetEntityAllFieldValues(request,
+    def GetProperties(request,
             target,
             options=(),
             channel_credentials=None,
@@ -2197,9 +2025,9 @@ class GrpcService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/SceneEdit.GrpcService/GetEntityAllFieldValues',
-            edit__service__pb2.GetEntityAllFieldValuesRequest.SerializeToString,
-            edit__service__pb2.GetEntityAllFieldValuesResponse.FromString,
+            '/SceneEdit.GrpcService/GetProperties',
+            edit__service__pb2.GetPropertiesRequest.SerializeToString,
+            edit__service__pb2.GetPropertiesResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2208,10 +2036,10 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
-    def SetEntityFieldValues(request,
+    def SetProperties(request,
             target,
             options=(),
             channel_credentials=None,
@@ -2224,9 +2052,9 @@ class GrpcService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/SceneEdit.GrpcService/SetEntityFieldValues',
-            edit__service__pb2.SetEntityFieldValuesRequest.SerializeToString,
-            edit__service__pb2.SetEntityFieldValuesResponse.FromString,
+            '/SceneEdit.GrpcService/SetProperties',
+            edit__service__pb2.SetPropertiesRequest.SerializeToString,
+            edit__service__pb2.SetPropertiesResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2235,10 +2063,10 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
-    def GetEntityAllFieldValuesBatch(request,
+    def GetActorOverridesBatch(request,
             target,
             options=(),
             channel_credentials=None,
@@ -2251,9 +2079,9 @@ class GrpcService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/SceneEdit.GrpcService/GetEntityAllFieldValuesBatch',
-            edit__service__pb2.GetEntityAllFieldValuesBatchRequest.SerializeToString,
-            edit__service__pb2.GetEntityAllFieldValuesBatchResponse.FromString,
+            '/SceneEdit.GrpcService/GetActorOverridesBatch',
+            edit__service__pb2.GetActorOverridesBatchRequest.SerializeToString,
+            edit__service__pb2.GetActorOverridesBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2262,7 +2090,7 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )
 
     @staticmethod
     def GetAssetsByTypePage(request,
@@ -2289,4 +2117,4 @@ class GrpcService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            )

@@ -1,14 +1,11 @@
-from typing import Dict, List, override
+from typing import Dict, List
 
-from orcalab.actor_property import ActorPropertyGroup
 from orcalab.entity_info import EntityInfo, EntityRoot
+from orcalab.entity_path import EntityPath
 from orcalab.path import Path
 from orcalab.math import Transform
 
-import copy
-
 type ParentActor = GroupActor | None
-
 
 class BaseActor:
     def __init__(self, name: str, parent: ParentActor):
@@ -22,6 +19,7 @@ class BaseActor:
         self._is_locked = False
         self._is_parent_visible = True
         self._is_parent_locked = False
+        self._entity_root: EntityRoot = EntityRoot(EntityInfo(0, ""))
 
     def to_dict(self) -> dict:
         return {
@@ -149,8 +147,24 @@ class BaseActor:
             self.transform = self.parent.world_transform.inverse() * value
 
         self._world_transform = value
+    
 
 
+    @property
+    def entity_root(self) -> EntityRoot:
+        return self._entity_root
+
+    @entity_root.setter
+    def entity_root(self, value: EntityRoot):
+        assert isinstance(
+            value, EntityRoot
+        ), "entity_root must be an instance of EntityRoot."
+        self._entity_root = value
+
+    @property
+    def root_entity_id(self) -> int:
+        return self.entity_root.root_entity_info.entity_id
+ 
 class GroupActor(BaseActor):
     def __init__(self, name: str, parent: ParentActor = None):
         self._children: List[BaseActor] = []
@@ -195,8 +209,6 @@ class AssetActor(BaseActor):
     def __init__(self, name: str, asset_path: str, parent: GroupActor | None = None):
         super().__init__(name, parent)
         self._asset_path = asset_path
-        self.property_groups: List[ActorPropertyGroup] = []
-        self._entity_root: EntityRoot = EntityRoot(EntityInfo(0, ""))
 
     def __repr__(self):
         return f"AssetActor(name={self.name})"
@@ -210,14 +222,3 @@ class AssetActor(BaseActor):
         if not isinstance(value, str) or len(value) == 0:
             raise ValueError("asset_path name must be non-empty string")
         self._asset_path = value
-
-    @property
-    def entity_root(self) -> EntityRoot:
-        return self._entity_root
-
-    @entity_root.setter
-    def entity_root(self, value: EntityRoot):
-        assert isinstance(
-            value, EntityRoot
-        ), "entity_root must be an instance of EntityRoot."
-        self._entity_root = value

@@ -5,8 +5,10 @@ from orcalab.actor import BaseActor
 from orcalab.actor_property import (
     ActorPropertyKey,
     ActorPropertyGroup,
+    PropertyData,
 )
 from orcalab.application_util import get_local_scene
+from orcalab.math import Transform, as_euler
 from orcalab.path import Path
 from orcalab.perf_log import perf_timer
 from orcalab.scene_edit_bus import (
@@ -15,7 +17,9 @@ from orcalab.scene_edit_bus import (
 )
 from orcalab.ui.collapsible.collapsible_section import CollapsibleSection
 from orcalab.ui.property_edit.base_property_edit import BasePropertyEdit
-from orcalab.ui.property_edit.property_group_content import create_property_group_content
+from orcalab.ui.property_edit.property_group_content import (
+    create_property_group_content,
+)
 from orcalab.ui.styled_widget import StyledWidget
 
 
@@ -40,13 +44,15 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         assert actor_path is not None
         self._actor_path = actor_path
 
+        root_entity_path = self._actor.entity_root.root_entity_info.entity_path
+        self._is_actor_root_entity = group.entity_path == root_entity_path
+
         self._property_edits: List[BasePropertyEdit] = []
-        self._recording_read_only_overrides: dict[str, bool] = {}
 
         with perf_timer(f"property_group_edit.init({group.name})", feature="PROPERTY"):
             self._section = CollapsibleSection(
                 parent=self,
-                title=group.display_name or group.name,
+                title=group.name,
                 badge=group.hint,
                 collapsed=collapsed,
                 content_factory=lambda: self._create_content(),
@@ -58,7 +64,9 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
             layout.addWidget(self._section)
 
     def _create_content(self) -> QtWidgets.QWidget:
-        with perf_timer(f"PropertyGroupEdit._create_content({self._group.name})", feature="PROPERTY"):
+        with perf_timer(
+            f"PropertyGroupEdit._create_content({self._group.name})", feature="PROPERTY"
+        ):
             content = create_property_group_content(
                 parent=self,
                 actor=self._actor,
@@ -68,52 +76,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
                 property_edits=self._property_edits,
                 collapsed=False,
             )
-            self._apply_initial_recording_state()
             return content
-
-    @staticmethod
-    def _is_recording_property(prop_name: str) -> bool:
-        last_seg = prop_name.rsplit(".", 1)[-1] if "." in prop_name else prop_name
-        return last_seg == "IsRecording"
-
-    def _get_is_recording_value(self) -> bool:
-        for prop in self._group.properties:
-            if self._is_recording_property(prop.name()):
-                return bool(prop.value())
-        return False
-
-    def _apply_initial_recording_state(self):
-        if not self._get_is_recording_value():
-            return
-        for edit in self._property_edits:
-            if self._is_recording_property(edit.context.prop.name()):
-                continue
-            self._recording_read_only_overrides[edit.context.prop.name()] = (
-                edit.context.prop.is_read_only()
-            )
-            edit.set_read_only(True)
-            edit.context.prop.set_read_only(True)
-
-    def _on_recording_changed(self, is_recording: bool):
-        if is_recording:
-            for edit in self._property_edits:
-                if self._is_recording_property(edit.context.prop.name()):
-                    continue
-                if edit.context.prop.name() not in self._recording_read_only_overrides:
-                    self._recording_read_only_overrides[edit.context.prop.name()] = (
-                        edit.context.prop.is_read_only()
-                    )
-                edit.set_read_only(True)
-                edit.context.prop.set_read_only(True)
-        else:
-            for edit in self._property_edits:
-                if self._is_recording_property(edit.context.prop.name()):
-                    continue
-                original = self._recording_read_only_overrides.pop(
-                    edit.context.prop.name(), False
-                )
-                edit.set_read_only(original)
-                edit.context.prop.set_read_only(original)
 
     def connect_buses(self):
         SceneEditNotificationBus.connect(self)
@@ -133,7 +96,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         if self._actor_path == renamed_path:
             return new_renamed
         if self._actor_path.is_descendant_of(renamed_path):
-            suffix = self._actor_path.string()[len(renamed_path.string()):]
+            suffix = self._actor_path.string()[len(renamed_path.string()) :]
             return Path(new_renamed.string() + suffix)
         return None
 
@@ -149,34 +112,10 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
             edit.context.key.actor_path = new_path
 
     @override
-    async def on_property_changed(
-        self,
-        property_key: ActorPropertyKey,
-        value: Any,
-        source: str,
-    ):
-        if property_key.actor_path != self._actor_path:
-            return
-
-        if property_key.group_prefix != self._group.prefix:
-            return
-
-        if self._is_recording_property(property_key.property_name):
-            self._on_recording_changed(bool(value))
-            return
-
-        if source == "ui":
-            return
-
-        for edit in self._property_edits:
-            if edit.context.prop.name() == property_key.property_name:
-                edit.set_value(value)
-
-    @override
     async def on_properties_changed(
         self,
-        property_keys: list,
-        values: list,
+        property_keys: list[ActorPropertyKey],
+        values: list[Any | PropertyData],
         source: str,
     ):
         if source == "ui":
@@ -185,31 +124,56 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         for key, value in zip(property_keys, values):
             if key.actor_path != self._actor_path:
                 continue
-            if key.group_prefix != self._group.prefix:
+            if key.entity_path != self._group.entity_path:
+                continue
+            if key.component_type_id != self._group.component_type_id:
+                continue
+            if key.component_type_index != self._group.component_type_index:
                 continue
 
             for edit in self._property_edits:
                 if edit.context.prop.name() == key.property_name:
-                    edit.set_value(value)
+                    if isinstance(value, PropertyData):
+                        edit.set_value(value.value)
+                        edit.set_base_value(value.base_value)
+                        edit.set_read_only(value.read_only)
+                    else:
+                        edit.set_value(value)
 
     @override
-    async def on_property_read_only_changed(
+    async def on_transforms_changed(
         self,
-        actor_path,
-        group_prefix: str,
-        property_name: str,
-        read_only: bool,
-    ):
-        if actor_path != self._actor_path:
+        actor_paths: List[Path],
+        old_transforms: List[Transform],
+        new_transforms: List[Transform],
+        source: str,
+    ) -> None:
+        if source == "ui":
             return
 
-        if group_prefix != self._group.prefix:
+        if self._group.component_type_id != "{22B10178-39B6-4C12-BB37-77DB45FDD3B6}":
             return
 
+        if not self._is_actor_root_entity:
+            return
+
+        for actor_path, new_transform in zip(actor_paths, new_transforms):
+            if actor_path != self._actor_path:
+                continue
+
+            self._set_named_property_value("translate.x", new_transform.position[0])
+            self._set_named_property_value("translate.y", new_transform.position[1])
+            self._set_named_property_value("translate.z", new_transform.position[2])
+            angles = as_euler(new_transform.rotation, "xyz", degrees=True)
+            self._set_named_property_value("rotate.x", angles[0])
+            self._set_named_property_value("rotate.y", angles[1])
+            self._set_named_property_value("rotate.z", angles[2])
+            self._set_named_property_value("uniformScale", new_transform.scale)
+
+    def _set_named_property_value(self, name: str, value: Any):
         for edit in self._property_edits:
-            if edit.context.prop.name() == property_name:
-                edit.set_read_only(read_only)
-                return
+            if edit.context.prop.name() == name:
+                edit.set_value(value)
 
     def expand(self):
         self._section.expand()

@@ -1,6 +1,8 @@
+import asyncio
 from typing import override
 from PySide6 import QtWidgets, QtCore
 
+from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.property_edit.base_property_edit import (
     BasePropertyEdit,
@@ -27,6 +29,7 @@ class _PropertyComboBox(QtWidgets.QComboBox):
         else:
             event.ignore()
 
+
 class ComboBoxPropertyEdit(BasePropertyEdit[str]):
     """枚举属性编辑器：使用标签文本进行交互，通过 enum_values 或 editor_hint "options:A,B,C" 解析选项。"""
 
@@ -48,7 +51,11 @@ class ComboBoxPropertyEdit(BasePropertyEdit[str]):
             options = enum_vals
         else:
             hint = context.prop.editor_hint()
-            options = hint[len("options:"):].split(",") if hint.startswith("options:") else []
+            options = (
+                hint[len("options:") :].split(",")
+                if hint.startswith("options:")
+                else []
+            )
 
         editor = _PropertyComboBox()
         editor.addItems(options)
@@ -62,7 +69,7 @@ class ComboBoxPropertyEdit(BasePropertyEdit[str]):
         root_layout.addWidget(label)
         root_layout.addWidget(editor)
 
-        FontService().bind_widget_font(editor, 'property_edit')
+        FontService().bind_widget_font(editor, "property_edit")
 
         self._editor = editor
         self._options = options
@@ -71,9 +78,18 @@ class ComboBoxPropertyEdit(BasePropertyEdit[str]):
     def _on_index_changed(self, index: int):
         if self._block_events:
             return
-        text = self._editor.currentText()
-        self.context.prop.set_value(text)
-        self._do_set_value(text, undo=True)
+        value = self._editor.currentText()
+        old_value = self.context.prop.value()
+        self.context.prop.set_value(value)
+
+        task = SceneEditRequestBus().set_property(
+            property_key=self.context.key,
+            value=value,
+            undo=True,
+            old_value=old_value,
+            source="ui",
+        )
+        asyncio.create_task(task)
 
     @override
     def set_value(self, value: str):

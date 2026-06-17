@@ -208,7 +208,7 @@ class MainWindow(
         message_box.setText("正在初始化引擎，请稍候...   ")
         message_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.NoButton)
         message_box.show()
-        
+
         await asyncio.sleep(0.2) 
         self._viewport_widget.init_viewport()
         logger.info("init_viewport 完成, 耗时: %.2f 秒", time.monotonic() - _engine_start)
@@ -217,7 +217,7 @@ class MainWindow(
         self._viewport_widget.start_viewport_main_loop()
         await asyncio.sleep(0.5)
         logger.info("start_viewport_main_loop + sleep(0.5) 完成, 耗时: %.2f 秒", time.monotonic() - _vp_loop_start)
-        
+
         message_box.accept()
         logger.info("引擎初始化完成, 耗时: %.2f 秒", time.monotonic() - start_time)
 
@@ -721,7 +721,7 @@ class MainWindow(
         await SimulationRequestBus().stop_simulation()
         if self.manipulator_bar._grab == True:
             await self.manipulator_bar.set_runtime_grab()
-        
+
         if self._selection_before_sim:
             await SceneEditRequestBus().set_selection(self._selection_before_sim, undo=False)
             self._selection_before_sim = None
@@ -1078,7 +1078,6 @@ class MainWindow(
         action_settings = self.menu_edit.addAction("配置")
         connect(action_settings.triggered, self.open_settings)
 
-
     def prepare_run_menu(self):
         self.menu_run.clear()
 
@@ -1213,14 +1212,18 @@ class MainWindow(
 
         msg_box.exec()
 
-    async def undo(self, source:str = ""):
+    async def undo(self, source: str = ""):
         logger.debug("undo. source: %s", source)
-        if can_undo():
+        edit_actors = []
+        self.scene_edit_service.get_editing_actor_path(edit_actors)
+        if not edit_actors and can_undo():
             await self.undo_service.undo()
 
     async def redo(self, source:str = ""):
         logger.debug("redo. source: %s", source)
-        if can_redo():
+        edit_actors = []
+        self.scene_edit_service.get_editing_actor_path(edit_actors)
+        if not edit_actors and can_redo():
             await self.undo_service.redo()
 
     async def get_transform_and_add_item(self, asset_name, x, y):
@@ -1479,7 +1482,7 @@ class MainWindow(
             await self.remote_scene.custom_command(f"user_control:false")
 
     async def set_recursive_display(self, enabled: bool):
-            await self.remote_scene.set_recursive_display(enabled)
+        await self.remote_scene.set_recursive_display(enabled)
 
     def _mark_layout_clean(self):
         self._layout_modified = False

@@ -35,17 +35,22 @@ class ColorPropertyEdit(StyledWidget):
 
         self._channels: dict[str, ActorProperty] = {}
         for prop in struct_group.properties:
-            last_seg = prop.name().rsplit(".", 1)[-1] if "." in prop.name() else prop.name()
+            last_seg = (
+                prop.name().rsplit(".", 1)[-1] if "." in prop.name() else prop.name()
+            )
             if last_seg in self.COLOR_CHANNEL_NAMES:
                 self._channels[last_seg] = prop
 
         self._channel_keys: dict[str, ActorPropertyKey] = {}
         for ch_name, prop in self._channels.items():
             self._channel_keys[ch_name] = ActorPropertyKey(
-                actor_path, group.prefix, prop.name(),
-                prop.value_type(),
+                actor_path=actor_path,
                 entity_id=group.entity_id,
-                component_type=group.component_type_id,
+                entity_path=group.entity_path,
+                component_type_id=group.component_type_id,
+                component_type_index=group.component_type_index,
+                property_name=prop.name(),
+                property_type=prop.value_type(),
             )
 
         self._build_ui(label_width)
@@ -66,7 +71,7 @@ class ColorPropertyEdit(StyledWidget):
         root_layout.addWidget(self._preview_btn)
 
         self._value_label = QtWidgets.QLabel()
-        FontService().bind_widget_font(self._value_label, 'property_edit')
+        FontService().bind_widget_font(self._value_label, "property_edit")
         root_layout.addWidget(self._value_label)
 
         root_layout.addStretch()
@@ -79,7 +84,7 @@ class ColorPropertyEdit(StyledWidget):
         label.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
-        FontService().bind_widget_font(label, 'property_edit')
+        FontService().bind_widget_font(label, "property_edit")
         return label
 
     def _read_current_color(self) -> QtGui.QColor:
@@ -145,18 +150,12 @@ class ColorPropertyEdit(StyledWidget):
     def _commit_color_change(
         self, r_val: float, g_val: float, b_val: float, a_val: float
     ):
-        asyncio.create_task(
-            self._commit_color_change_async(r_val, g_val, b_val, a_val)
-        )
+        asyncio.create_task(self._commit_color_change_async(r_val, g_val, b_val, a_val))
 
     async def _commit_color_change_async(
         self, r_val: float, g_val: float, b_val: float, a_val: float
     ):
         bus = SceneEditRequestBus()
-
-        r_key = self._channel_keys.get("r")
-        if r_key:
-            bus.start_change_property(r_key)
 
         channels_in_order = [
             ("r", r_val),
@@ -169,8 +168,6 @@ class ColorPropertyEdit(StyledWidget):
             key = self._channel_keys.get(ch_name)
             if key is None:
                 continue
-            is_last = (idx == last_idx)
+            is_last = idx == last_idx
             await bus.set_property(key, ch_val, undo=is_last, source="ui")
-
-        if r_key:
-            bus.end_change_property(r_key)
+            # TODO set_property_batch

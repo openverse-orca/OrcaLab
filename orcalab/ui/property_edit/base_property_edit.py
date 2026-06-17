@@ -1,4 +1,4 @@
-import asyncio
+from dataclasses import dataclass
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.actor import BaseActor
@@ -8,35 +8,18 @@ from orcalab.actor_property import (
     ActorPropertyKey,
 )
 from orcalab.path import Path
-from orcalab.scene_edit_bus import (
-    SceneEditRequestBus,
-)
 from orcalab.ui.styled_widget import StyledWidget
 from orcalab.ui.theme_service import ThemeService
 from orcalab.ui.fonts.font_service import FontService
 
 
+@dataclass
 class PropertyEditContext:
-    def __init__(
-        self,
-        actor: BaseActor,
-        actor_path: Path,
-        group: ActorPropertyGroup,
-        prop: ActorProperty,
-    ):
-        self.actor = actor
-        self.actor_path = actor_path
-        self.group = group
-        self.prop = prop
-
-        self.key = ActorPropertyKey(
-            self.actor_path,
-            self.group.prefix,
-            prop.name(),
-            prop.value_type(),
-            entity_id=self.group.entity_id,
-            component_type=self.group.component_type_id,
-        )
+    actor: BaseActor
+    actor_path: Path
+    group: ActorPropertyGroup
+    prop: ActorProperty
+    key: ActorPropertyKey
 
 
 def get_property_edit_style_sheet() -> str:
@@ -82,57 +65,34 @@ class BasePropertyEdit[T](StyledWidget):
         super().__init__(parent)
 
         self.context = context
-        self.in_dragging = False
         self.base_style = get_property_edit_style_sheet()
 
-    async def _do_set_value_async(self, value: T, undo: bool):
-        await SceneEditRequestBus().set_property(
-            self.context.key,
-            value=value,
-            undo=undo,
-            source="ui",
-        )
+    def _create_label(self, label_width: int) -> QtWidgets.QLabel:
+        display_name = self.context.prop.display_name()
+        if not display_name:
+            display_name = self.context.prop.name()
 
-    def _do_set_value(self, value: T, undo: bool):
-        asyncio.create_task(self._do_set_value_async(value, undo))
+        if display_name.rfind(".") != -1:
+            display_name = display_name.split(".")[-1]
 
-    def _on_start_drag(self):
-        SceneEditRequestBus().start_change_property(self.context.key)
-        self.in_dragging = True
-
-    def _on_end_drag(self):
-        async def warpper():
-            # We must await here to ensure the property change is commited.
-            await self._do_set_value_async(self.context.prop.value(), undo=True)
-            SceneEditRequestBus().end_change_property(self.context.key)
-            self.in_dragging = False
-
-        asyncio.create_task(warpper())
-
-    def set_value(self, value: T):
-        pass
-
-    def _create_label(self, label_width: int, display_text: str | None = None) -> QtWidgets.QLabel:
-        if display_text is not None:
-            text = display_text
-        else:
-            text = self.context.prop.display_name()
-            if not text:
-                text = self.context.prop.name()
-        label = QtWidgets.QLabel(text)
-        if label_width > 0:
-            label.setMinimumWidth(label_width)
-            label.setMaximumWidth(label_width * 2)
-        else:
-            label.setSizePolicy(
-                QtWidgets.QSizePolicy.Policy.Preferred,
-                QtWidgets.QSizePolicy.Policy.Preferred,
-            )
+        label = QtWidgets.QLabel(display_name)
+        label.setMinimumWidth(label_width)
+        label.setMaximumWidth(label_width * 2)
         label.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
-        FontService().bind_widget_font(label, 'property_edit')
+        FontService().bind_widget_font(label, "property_edit")
         return label
-    
+
+    def set_value(self, value: T):
+        """Set UI value"""
+        raise NotImplementedError()
+
+    def set_base_value(self, value: T):
+        """Set UI base value"""
+        self.context.prop.set_base_value(value)
+        # TODO: update UI
+
     def set_read_only(self, read_only: bool):
-        pass
+        """Set UI read only"""
+        raise NotImplementedError()

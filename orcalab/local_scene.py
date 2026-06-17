@@ -12,6 +12,9 @@ from orcalab.entity_path import EntityPath
 from orcalab.path import Path
 from orcalab.scene_edit_types import AddActorRequest
 from orcalab.selection_data import SelectionData
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class LocalScene:
@@ -23,7 +26,7 @@ class LocalScene:
 
         self._selection: SelectionData = SelectionData()
 
-        self._entity_lookup_table: Dict[int, AssetActor] = {}
+        self._entity_lookup_table: Dict[int, BaseActor] = {}
 
     def __contains__(self, path: Path) -> bool:
         return path in self._actors
@@ -85,15 +88,17 @@ class LocalScene:
 
     def set_entity_root(self, actor_path: Path, entity_root_info: EntityInfo):
         actor = self.find_actor_by_path(actor_path)
-        if isinstance(actor, AssetActor):
-            entity_root = EntityRoot(entity_root_info)
-            entity_root.build_lookup_table()
-            actor.entity_root = entity_root
+        if actor is None:
+            logger.error(f"Actor at path {actor_path} does not exist.")
+            return
+        entity_root = EntityRoot(entity_root_info)
+        entity_root.build_lookup_table()
+        actor.entity_root = entity_root
 
-            for entity_id in entity_root.entity_ids():
-                self._entity_lookup_table[entity_id] = actor
+        for entity_id in entity_root.entity_ids():
+            self._entity_lookup_table[entity_id] = actor
 
-    def find_actor_by_entity_id(self, entity_id: int) -> AssetActor | None:
+    def find_actor_by_entity_id(self, entity_id: int) -> BaseActor | None:
         return self._entity_lookup_table.get(entity_id, None)
 
     def find_entity_path_by_id(self, entity_id: int) -> EntityPath | None:
@@ -107,6 +112,17 @@ class LocalScene:
             return None
 
         return entity_info.entity_path
+
+    def find_entity_id(self, actor_path: Path, entity_path: EntityPath) -> int:
+        actor = self.find_actor_by_path(actor_path)
+        if actor is None or actor.entity_root is None:
+            return 0
+
+        entity_info = actor.entity_root.find_entity_info_by_path(entity_path)
+        if entity_info is None:
+            return 0
+
+        return entity_info.entity_id
 
     def get_actor_path(self, actor: BaseActor) -> Path | None:
         for path, a in self._actors.items():
@@ -215,11 +231,6 @@ class LocalScene:
 
             if not isinstance(actor, BaseActor):
                 return False, "Invalid actor."
-
-            if request.actor_template is not None:
-                same_type = type(request.actor_template) is type(request.actor)
-                if not same_type:
-                    return False, "Actor template type does not match actor type."
 
             if parent_path not in actor_list:
                 return False, f"Parent {parent_path} does not exist during add."
@@ -398,26 +409,26 @@ class LocalScene:
             if isinstance(node, GroupActor):
                 q.extend(node.children)
 
-    def parse_property_key(
-        self, property_key: ActorPropertyKey
-    ) -> Tuple[BaseActor, ActorPropertyGroup, ActorProperty]:
-        actor = self.find_actor_by_path(property_key.actor_path)
+    # def parse_property_key(
+    #     self, property_key: ActorPropertyKey
+    # ) -> Tuple[BaseActor, ActorPropertyGroup, ActorProperty]:
+    #     actor = self.find_actor_by_path(property_key.actor_path)
 
-        if actor is None:
-            raise Exception("Actor does not exist.")
+    #     if actor is None:
+    #         raise Exception("Actor does not exist.")
 
-        assert isinstance(actor, AssetActor), "Only asset actor has properties."
+    #     assert isinstance(actor, AssetActor), "Only asset actor has properties."
 
-        for group in actor.property_groups:
-            if group.prefix == property_key.group_prefix:
-                for prop in group.properties:
-                    if (
-                        prop.name() == property_key.property_name
-                        and prop.value_type() == property_key.property_type
-                    ):
-                        return actor, group, prop
+    #     for group in actor.property_groups:
+    #         if group.prefix == property_key.group_prefix:
+    #             for prop in group.properties:
+    #                 if (
+    #                     prop.name() == property_key.property_name
+    #                     and prop.value_type() == property_key.property_type
+    #                 ):
+    #                     return actor, group, prop
 
-        raise Exception("Property not found.")
+    #     raise Exception("Property not found.")
 
     def update_visible_recursive(
         self, actor: BaseActor, paths_to_update: List, visible: bool

@@ -428,16 +428,27 @@ enum PropertyType {
 
 message PropertyValue {
     oneof value_oneof {
-        bool value_bool = 3;
-        int32 value_int = 4;
-        float value_float = 5;
-        string value_string = 6;
-        string value_asset = 7;
+        bool value_bool = 1;
+        int32 value_int = 2;
+        float value_float = 3;
+        string value_string = 4;
+        string value_asset = 5;
     }
 }
 
-message PropertyValueList {
-    repeated PropertyValue items = 1;
+message PropertyMetadata{
+    bool read_only = 1;
+}
+
+message PropertyGetInfo {
+    PropertyMetadata metadata = 1;
+    PropertyValue value = 2;
+    PropertyValue base_value = 3;
+}
+
+message PropertySetInfo {
+    // PropertyMetadata metadata = 1;
+    PropertyValue value = 2;
 }
 
 message AssetInfo {
@@ -464,58 +475,62 @@ message Property {
     PropertyType type = 1;
     string name = 2;
     string display_name = 3;
-    bool read_only = 4;
-    string editor_hint = 5;
-    repeated string enum_values = 6;
-    repeated string post_read_fields = 7;
-    int32 post_read_delay_ms = 8;
+    PropertyMetadata metadata = 4;
+    PropertyValue value = 5;
+    PropertyValue base_value = 6;
+    string editor_hint = 7;
+    repeated string enum_values = 8;
+    repeated string post_read_fields = 9;
+    int32 post_read_delay_ms = 10;
 }
 
-
+// Naming convention:
+// 1D array: type + "s"
+// 2D array: 1D array + "List"
+// 3D array: 2D array + "Array"
 
 message PropertyGroup {
-    string prefix = 1;
-    string name = 2;
-    string display_name = 3;
-    string hint = 4;
-    repeated Property properties = 5;
-    uint64 entity_id = 6;
-    string component_type_id = 7;
+    string name = 1;
+    string hint = 2;
+    uint64 entity_id = 3;
+    string component_type_id = 4;
+    uint64 component_type_index = 5;
+    repeated Property properties = 6;
+}
+
+message PropertyGroups {
+    repeated PropertyGroup elements = 1;
+}
+
+message PropertyGroupsList{
+    repeated PropertyGroups elements = 1;
+}
+
+message PropertyGroupsListArray {
+    repeated PropertyGroupsList elements = 1;
 }
 
 message PropertyKey {
     string actor_path = 1;
     uint64 entity_id = 2;
-    string component_type = 3;
-    string field_path = 4;
-    PropertyType property_type = 5;
-}
-
-message PropertyKeyList {
-    repeated PropertyKey items = 1;
-}
-
-message GetPropertyGroupsRequest {
-    string actor_path = 1;
-}
-message GetPropertyGroupsResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-    repeated PropertyGroup property_groups = 3;
+    string component_type_id = 3;
+    uint64 component_type_index = 4;
+    string field_path = 5;
+    PropertyType property_type = 6;
 }
 
 message GetPropertiesRequest {
-    PropertyKeyList keys = 1;
+    repeated PropertyKey keys = 1;
 }
 message GetPropertiesResponse {
     StatusCode status_code = 1;
     string error_message = 2;
-    PropertyValueList values = 3;
+    repeated PropertyGetInfo infos = 3;
 }
 
 message SetPropertiesRequest {
-    PropertyKeyList keys = 1;
-    PropertyValueList values = 2;
+    repeated PropertyKey keys = 1;
+    repeated PropertySetInfo infos = 2;
 }
 message SetPropertiesResponse {
     StatusCode status_code = 1;
@@ -523,16 +538,36 @@ message SetPropertiesResponse {
 }
 
 
-message PropertyGroupList {
-    repeated PropertyGroup elements = 1;
+message PropertyOverride {
+    uint64 entity_id = 1;
+    string component_type_id = 2;
+    uint64 component_type_index = 3;
+    string field_path = 4;
+    PropertyType property_type = 5;
+    PropertyValue value = 6;
 }
-message GetPropertyGroupsBatchRequest {
-    repeated string actor_paths = 1;
+message PropertyOverrides{
+    repeated PropertyOverride elements = 1;
 }
-message GetPropertyGroupsBatchResponse {
+message PropertyOverridesList {
+    repeated PropertyOverrides elements = 1;
+}
+message PropertyOverridesListArray {
+    repeated PropertyOverridesList elements = 1;
+}
+message ActorPaths{
+    repeated string elements = 1; 
+}
+message ActorPathsList{
+    repeated ActorPaths elements = 1; 
+}
+message GetActorOverridesBatchRequest {
+    ActorPathsList actor_paths_list = 1;
+}
+message GetActorOverridesBatchResponse {
     StatusCode status_code = 1;
     string error_message = 2;
-    repeated PropertyGroupList property_group_lists = 3;
+    PropertyOverridesListArray overrides_list_array = 3;
 }
 
 // Entity hierarchy messages
@@ -554,41 +589,26 @@ message GetEntityHierarchyBatchResponse {
     repeated string errors = 4;
 }
 
-message GetEntityPropertyGroupsRequest {
-    string actor_path = 1;
-    uint64 entity_id = 2;
-}
-message GetEntityPropertyGroupsResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-    repeated PropertyGroup property_groups = 3;
-}
-
-message GetEntityPropertyGroupsBatchRequest {
+message ActorEntities {
     string actor_path = 1;
     repeated uint64 entity_ids = 2;
+}
+message GetEntityPropertyGroupsBatchRequest {
+    repeated ActorEntities actor_entities_list = 1;
 }
 message GetEntityPropertyGroupsBatchResponse {
     StatusCode status_code = 1;
     string error_message = 2;
-    repeated PropertyGroupList property_group_lists = 3;
+    PropertyGroupsListArray property_groups_list_array = 3;
 }
 
-message EntityPropertyGroupEntry {
-    uint64 entity_id = 1;
-    string entity_path = 2;
-    string component_type = 3;
-    string component_display_name = 4;
-    PropertyGroup property_group = 5;
+message GetActorPropertyGroupsBatchRequest {
+    repeated string actor_paths = 1;
 }
-
-message GetAllEntityPropertyGroupsRequest {
-    string actor_path = 1;
-}
-message GetAllEntityPropertyGroupsResponse {
+message GetActorPropertyGroupsBatchResponse {
     StatusCode status_code = 1;
     string error_message = 2;
-    repeated EntityPropertyGroupEntry entries = 3;
+    PropertyGroupsList property_groups_list = 3;
 }
 
 // Property Registry messages
@@ -620,34 +640,7 @@ message EntityFieldWrite {
     PropertyValue value = 4;
 }
 
-message GetEntityAllFieldValuesRequest {
-    string actor_path = 1;
-    uint64 entity_id = 2;
-}
-message GetEntityAllFieldValuesResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-    EntityFieldValues entity_values = 3;
-}
 
-message SetEntityFieldValuesRequest {
-    string actor_path = 1;
-    repeated EntityFieldWrite writes = 2;
-}
-message SetEntityFieldValuesResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-}
-
-message GetEntityAllFieldValuesBatchRequest {
-    string actor_path = 1;
-    repeated uint64 entity_ids = 2;
-}
-message GetEntityAllFieldValuesBatchResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-    repeated EntityFieldValues entity_values_list = 3;
-}
 
 message CustomCommandRequest {
     string command = 1;
@@ -735,11 +728,6 @@ service GrpcService {
     rpc GetViewportCameraTransform(GetViewportCameraTransformRequest) returns (GetViewportCameraTransformResponse);
     rpc GetCameraDataPNG(GetCameraDataPNGRequest) returns (GetCameraDataPNGResponse);
 
-    rpc GetPropertyGroups(GetPropertyGroupsRequest) returns (GetPropertyGroupsResponse);
-    rpc GetPropertyGroupsBatch(GetPropertyGroupsBatchRequest) returns (GetPropertyGroupsBatchResponse);
-    rpc GetProperties(GetPropertiesRequest) returns (GetPropertiesResponse);
-    rpc SetProperties(SetPropertiesRequest) returns (SetPropertiesResponse);
-
     rpc CustomCommand(CustomCommandRequest) returns (CustomCommandResponse);
 
     rpc SetVisibility(SetVisibilityRequest) returns (SetVisibilityResponse);
@@ -750,11 +738,11 @@ service GrpcService {
     // Entity hierarchy related RPCs
     rpc GetEntityHierarchyBatch(GetEntityHierarchyBatchRequest) returns (GetEntityHierarchyBatchResponse);
     rpc GetEntityPropertyGroupsBatch(GetEntityPropertyGroupsBatchRequest) returns (GetEntityPropertyGroupsBatchResponse);
-    rpc GetAllEntityPropertyGroups(GetAllEntityPropertyGroupsRequest) returns (GetAllEntityPropertyGroupsResponse);
+    rpc GetActorPropertyGroupsBatch(GetActorPropertyGroupsBatchRequest) returns (GetActorPropertyGroupsBatchResponse);
+    rpc GetProperties(GetPropertiesRequest) returns (GetPropertiesResponse);
+    rpc SetProperties(SetPropertiesRequest) returns (SetPropertiesResponse);
+    rpc GetActorOverridesBatch(GetActorOverridesBatchRequest) returns (GetActorOverridesBatchResponse);
 
     // Property Registry RPCs
-    rpc GetEntityAllFieldValues(GetEntityAllFieldValuesRequest) returns (GetEntityAllFieldValuesResponse);
-    rpc SetEntityFieldValues(SetEntityFieldValuesRequest) returns (SetEntityFieldValuesResponse);
-    rpc GetEntityAllFieldValuesBatch(GetEntityAllFieldValuesBatchRequest) returns (GetEntityAllFieldValuesBatchResponse);
     rpc GetAssetsByTypePage(GetAssetsByTypePageRequest) returns (GetAssetsByTypePageResponse);
 }
