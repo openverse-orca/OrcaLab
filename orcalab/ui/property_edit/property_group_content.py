@@ -296,7 +296,6 @@ def _create_horizontal_tuple_content(
         property_edits.append(editor)
         row_layout.addWidget(editor)
 
-    row_layout.addStretch()
     return row
 
 
@@ -344,7 +343,6 @@ def _create_struct_content(
             row_layout.setContentsMargins(prop_indent, 0, 0, 0)
             row_layout.setSpacing(0)
             row_layout.addWidget(editor)
-            row_layout.addStretch()
             content_layout.addWidget(row)
 
     for child in struct_group.children:
