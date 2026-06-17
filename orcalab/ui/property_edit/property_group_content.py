@@ -274,20 +274,23 @@ def _create_horizontal_tuple_content(
     indent: int,
 ) -> QtWidgets.QWidget:
     """创建横向平铺的三元组/四元组内容行"""
+    from orcalab.ui.property_edit.float_property_edit import FloatPropertyEdit
+
     row = QtWidgets.QWidget()
     row_layout = QtWidgets.QHBoxLayout(row)
     row_layout.setContentsMargins(indent, 0, 0, 0)
     row_layout.setSpacing(8)
 
-    fs = FontService()
-    compact_label_width = fs.indent_unit_px(14)
-
     for prop in struct_group.properties:
         dot_pos = prop.name().rfind(".")
         sub_name = prop.name()[dot_pos + 1 :] if dot_pos != -1 else prop.name()
-        editor = _create_property_edit(
-            parent, actor, actor_path, group, prop, compact_label_width
+        context = PropertyEditContext(
+            actor=actor,
+            actor_path=actor_path,
+            group=group,
+            prop=prop,
         )
+        editor = FloatPropertyEdit(parent, context, 0, display_text=sub_name)
         if prop.is_read_only():
             editor.set_read_only(True)
         property_edits.append(editor)

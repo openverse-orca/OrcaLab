@@ -17,13 +17,14 @@ class FloatPropertyEdit(BasePropertyEdit[float]):
         parent: QtWidgets.QWidget | None,
         context: PropertyEditContext,
         label_width: int,
+        display_text: str | None = None,
     ):
         super().__init__(parent, context)
         root_layout = QtWidgets.QHBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(4)
 
-        label = self._create_label(label_width)
+        label = self._create_label(label_width, display_text=display_text)
 
         editor = FloatEdit()
         editor.set_value(context.prop.value())

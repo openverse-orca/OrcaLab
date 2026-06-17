@@ -112,13 +112,22 @@ class BasePropertyEdit[T](StyledWidget):
     def set_value(self, value: T):
         pass
 
-    def _create_label(self, label_width: int) -> QtWidgets.QLabel:
-        display_name = self.context.prop.display_name()
-        if not display_name:
-            display_name = self.context.prop.name()
-        label = QtWidgets.QLabel(display_name)
-        label.setMinimumWidth(label_width)
-        label.setMaximumWidth(label_width * 2)
+    def _create_label(self, label_width: int, display_text: str | None = None) -> QtWidgets.QLabel:
+        if display_text is not None:
+            text = display_text
+        else:
+            text = self.context.prop.display_name()
+            if not text:
+                text = self.context.prop.name()
+        label = QtWidgets.QLabel(text)
+        if label_width > 0:
+            label.setMinimumWidth(label_width)
+            label.setMaximumWidth(label_width * 2)
+        else:
+            label.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Preferred,
+                QtWidgets.QSizePolicy.Policy.Preferred,
+            )
         label.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
