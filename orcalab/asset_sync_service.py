@@ -392,13 +392,13 @@ class AssetSyncService:
             logger.debug(f"❌ 获取下载链接失败: {e}")
             return None
     
-    def get_image_url(self, asset_id: str) -> str:
+    def get_image_picture(self, asset_id: str) -> str:
         try:
-            get_asset_metadata_url = f"{self.base_url}/asset/{asset_id}/"
+            get_asset_metadata_url = f"{self.base_url}/asset/{asset_id}/picture"
             _start = time.monotonic()
             response = requests.get(get_asset_metadata_url, headers=self.get_headers(), timeout=self.timeout)
             elapsed = time.monotonic() - _start
-            logger.debug("HTTP GET %s/asset/%s/ 耗时: %.3f 秒 (状态码: %s)", self.base_url, asset_id, elapsed, response.status_code)
+            logger.debug("HTTP GET %s 耗时: %.3f 秒 (状态码: %s)", get_asset_metadata_url, elapsed, response.status_code)
             if response.status_code != 200:
                 logger.debug(f"Get image url failed. Asset Id: {asset_id} Status: {response.status_code}")
                 return None
@@ -546,16 +546,16 @@ class AssetSyncService:
             completed_images = 0
             with ThreadPoolExecutor(max_workers=8) as executor:
                 future_to_sub = {
-                    executor.submit(self.get_image_url, asset_id): sub_metadata
+                    executor.submit(self.get_image_picture, asset_id): sub_metadata
                     for asset_id, sub_metadata in assets_need_images
                 }
                 for future in as_completed(future_to_sub):
                     sub_metadata = future_to_sub[future]
                     try:
-                        image_url = future.result()
-                        if image_url is not None:
-                            image_url = json.loads(image_url)
-                            sub_metadata['pictures'] = image_url['pictures']
+                        pictures = future.result()
+                        if pictures is not None:
+                            pictures = json.loads(pictures)
+                            sub_metadata['pictures'] = pictures['pictures']
                     except Exception as e:
                         logger.debug("并发获取图片URL失败: %s", e)
                     completed_images += 1
