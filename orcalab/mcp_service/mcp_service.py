@@ -28,6 +28,7 @@ from orcalab.undo_service.undo_service_bus import UndoRequestBus
 from orcalab.actor_property import ActorPropertyKey, ActorPropertyType
 from orcalab.asset_service_bus import AssetServiceRequestBus
 from orcalab.http_service.http_bus import HttpServiceRequestBus
+from orcalab.project_util import get_cache_folder
 from orcalab.ui.panel_bus import PanelRequestBus
 from orcalab.copilot.service import CopilotService
 from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
@@ -608,6 +609,150 @@ class OrcaLabMCPServer:
             return json.dumps(
                 {"code": 500, "message": f"搜索失败: {e}"},
                 ensure_ascii=False,
+            )
+
+    async def get_asset_json_by_name(self, asset_name: str) -> str:
+        '''
+        通过资产名称匹配获取资产对应的metadata JSON 文件内容
+        优先通过当前场景中的 Actor 名称查找资产路径，再获取资产 ID 和 JSON 文件。
+        如果场景中未找到，则回退到名称前缀匹配方式。
+
+        Args:
+            asset_name: 资产名称，如 "黄色越野车"（场景中 Actor 的名称）
+        Returns:
+            JSON 文件内容的 json 字符串格式，或错误信息。
+        '''
+        try:
+            name = asset_name.strip()
+            if not name:
+                return json.dumps(
+                    {"success": False, "message": "asset_name 不能为空"},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+
+            # 先获取资产映射（无论哪种方式都需要）
+            output = []
+            self.metadata_service_bus.get_asset_map(output)
+            asset_map = output[0] if output else {}
+
+            if not asset_map:
+                return json.dumps(
+                    {"success": False, "message": "本地资产映射为空，请先同步资产"},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+
+            asset_id = None
+            matched_info = {}
+
+            # === 方式一：通过当前场景中的 Actor 查找 ===
+            actors: List[Dict[Path, BaseActor]] = []
+            self.scene_edit_bus.get_all_actors(actors)
+            if actors and actors[0] is not None:
+                scene_actors: Dict[Path, BaseActor] = actors[0]
+                for _, actor in scene_actors.items():
+                    if isinstance(actor, AssetActor) and actor.name == name:
+                        actor_asset_path = (actor.asset_path or "").lower()
+                        # 在资产映射中查找匹配的 asset_path
+                        for map_key, meta in asset_map.items():
+                            map_path = map_key.lower()
+                            if map_path == actor_asset_path or map_path == actor_asset_path.removesuffix(".spawnable"):
+                                asset_id = meta.get("id", "")
+                                matched_info = {
+                                    "id": asset_id,
+                                    "name": meta.get("name"),
+                                    "assetPath": map_key,
+                                    "version": meta.get("version"),
+                                }
+                                break
+                        if asset_id:
+                            break
+
+            # === 方式二：回退到名称前缀匹配 ===
+            if not asset_id:
+                import re
+                base_name = re.sub(r'_\d+$', '', name, count=1)
+                needle = base_name.strip().lower()
+
+                candidates = []
+                for _, asset_metadata in asset_map.items():
+                    asset_name_val = (asset_metadata.get("name") or "").lower()
+                    if asset_name_val.startswith(needle):
+                        candidates.append(asset_metadata)
+
+                if not candidates:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "message": f"未找到名称以「{base_name}」开头的资产（共扫描 {len(asset_map)} 条记录）",
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+
+                def _parse_version(v: str):
+                    try:
+                        parts = v.split(".")
+                        return tuple(int(p) for p in parts)
+                    except (ValueError, TypeError):
+                        return (0, 0, 0)
+
+                candidates.sort(
+                    key=lambda m: _parse_version(m.get("version", "")),
+                    reverse=True,
+                )
+                best = candidates[0]
+                asset_id = best.get("id", "")
+                if not asset_id:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "message": f"匹配到资产「{best.get('name')}」但缺少 id 字段",
+                            "matched_asset": best,
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                matched_info = {
+                    "id": asset_id,
+                    "name": best.get("name"),
+                    "assetPath": best.get("assetPath"),
+                    "version": best.get("version"),
+                }
+
+            # 从缓存目录中查找 JSON 文件
+            cache_folder = get_cache_folder()
+            json_path = cache_folder / f"{asset_id}.json"
+            if not json_path.exists():
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": f"JSON 文件不存在: {json_path}",
+                        "matched_asset": matched_info,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+
+            with open(json_path, "r", encoding="utf-8") as f:
+                json_content = json.load(f)
+
+            return json.dumps(
+                {
+                    "success": True,
+                    "matched_asset": matched_info,
+                    "json_file": str(json_path),
+                    "data": json_content,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"获取资产 JSON 失败: {e}"},
+                ensure_ascii=False,
+                indent=2,
             )
 
     async def post_generate_task(self, type: str, text: str = "", time_period: str = "", image_path: str = "") -> str:
@@ -2110,6 +2255,7 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.get_my_metadata)
         self.mcp.tool(self.get_asset_detail)
         self.mcp.tool(self.search_assets)
+        self.mcp.tool(self.get_asset_json_by_name)
         self.mcp.tool(self.post_generate_task)
         self.mcp.tool(self.get_generate_task_status)
         self.mcp.tool(self.get_user_generate_tasks)
@@ -2174,7 +2320,7 @@ class OrcaLabMCPServer:
 
     async def run(self):
         self.config_service.mark_mcp_ready()
-        await self.mcp.run_async(transport="http", port=self.port)
+        await self.mcp.run_async(transport="http", port=self.port, show_banner=False)
 
     def stop(self):
         if self._task and not self._task.done():
