@@ -32,8 +32,8 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
     def on_query_complete(self, packages):
         pass
     
-    def on_asset_status(self, asset_id: str, asset_name: str, file_name: str, size: int, status: str):
-        self.window.add_asset(asset_id, asset_name, file_name, size, status)
+    def on_asset_status(self, asset_id: str, asset_name: str, file_name: str, size: int, status: str, has_local: bool = False):
+        self.window.add_asset(asset_id, asset_name, file_name, size, status, has_local)
 
     def on_set_status(self, asset_id: str, status: str):
         self.window.set_asset_status(asset_id, status)
@@ -48,6 +48,7 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
         self.window.set_asset_progress(asset_id, progress, speed)
     
     def on_download_complete(self, asset_id: str, success: bool, error: str = ""):
+        logger.debug("on_download_complete: asset_id=%s, success=%s, error=%s", asset_id, success, error)
         if success:
             self.window.set_asset_status(asset_id, 'completed')
         else:
@@ -221,6 +222,26 @@ def run_asset_sync_ui(config_service) -> bool:
 
     # 创建同步进度窗口
     sync_window = SyncProgressWindow(cancel_event=cancel_event)
+
+    from orcalab.project_util import get_cache_folder, get_downloaded_packages_folder
+    _cache_folder = get_cache_folder()
+    _downloaded_folder = get_downloaded_packages_folder()
+
+    def _on_delete_local_file(file_name: str):
+        try:
+            pak_id = file_name.removesuffix('.pak')
+            for file_path in _cache_folder.glob(f"{pak_id}*"):
+                if file_path.is_file():
+                    file_path.unlink()
+                    logger.info(f"✓ 已删除本地文件 {file_path.name}")
+            for file_path in _downloaded_folder.glob(f"{pak_id}*"):
+                if file_path.is_file():
+                    file_path.unlink()
+                    logger.info(f"✓ 已删除缓存文件 {file_path.name}")
+        except Exception as e:
+            logger.warning(f"✗ 删除本地文件失败 {file_name}: {e}")
+
+    sync_window.delete_local_file.connect(_on_delete_local_file)
 
     # 创建回调
     callbacks = SyncCallbacksImpl(sync_window)

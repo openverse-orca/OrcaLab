@@ -43,10 +43,10 @@ class AssetSyncCallbacks:
         """查询完成"""
         pass
     
-    def on_asset_status(self, asset_id: str, asset_name: str, file_name: str, size: int, status: str):
+    def on_asset_status(self, asset_id: str, asset_name: str, file_name: str, size: int, status: str, has_local: bool = False):
         """
         资产包状态
-        status: 'ok' (已最新), 'download' (待下载), 'delete' (待删除)
+        status: 'ok' (已最新), 'download' (待下载), 'delete' (待删除), 'cloud_deleted' (云端已删除)
         """
         pass
 
@@ -227,11 +227,9 @@ class AssetSyncService:
         """
         missing_packages = []
         
-        self.base_pkg_map = {}
-        self.patch_to_base_map = {}
-        self.base_to_patch_map = {}
-        self.download_info_cache = {}
         required_pkg_ids = set()
+        self.base_pkg_map = {}
+        self.download_info_cache = {}
 
         for pkg in packages:
             required_pkg_ids.add(pkg['id'])
@@ -240,21 +238,6 @@ class AssetSyncService:
                 continue
             base_name = file_name.removesuffix(".pak")
             self.base_pkg_map[base_name] = pkg['id']
-
-        for pkg in packages:
-            file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
-
-            if "_patch_" not in file_name:
-                continue
-
-            base_name = file_name.split("_patch_")[0]
-            base_pkg_id = self.base_pkg_map.get(base_name)
-            if base_pkg_id:
-                self.patch_to_base_map[pkg['id']] = base_pkg_id
-                # 构建全量包到增量包的映射
-                if base_pkg_id not in self.base_to_patch_map:
-                    self.base_to_patch_map[base_pkg_id] = []
-                self.base_to_patch_map[base_pkg_id].append(pkg)
 
         # 并发获取所有下载信息
         if required_pkg_ids:
@@ -271,6 +254,24 @@ class AssetSyncService:
                     self.download_info_cache[pkg_id] = None
                 else:
                     self.download_info_cache[pkg_id] = result
+                    logger.debug(result)
+
+        self.patch_to_base_map = {}
+        self.base_to_patch_map = {}
+        for pkg in packages:
+            file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
+
+            if "_patch_" not in file_name or self.download_info_cache[pkg['id']]["isDeleted"] == True:
+                continue
+
+            base_name = file_name.split("_patch_")[0]
+            base_pkg_id = self.base_pkg_map.get(base_name)
+            if base_pkg_id:
+                self.patch_to_base_map[pkg['id']] = base_pkg_id
+                # 构建全量包到增量包的映射
+                if base_pkg_id not in self.base_to_patch_map:
+                    self.base_to_patch_map[base_pkg_id] = []
+                self.base_to_patch_map[base_pkg_id].append(pkg)
 
         for pkg in packages:
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
@@ -281,23 +282,37 @@ class AssetSyncService:
             size = pkg['size']
             
             download_info = self.download_info_cache.get(pkg_id)
-            if download_info is None:
-                logger.debug("download_info_cache 中未找到包 %s 的下载信息", pkg_id)
-
-            if "_patch_" in file_name:
-                pkg_id = self.patch_to_base_map.get(pkg['id'])
-                if pkg_id is None:
-                    logger.debug("patch_to_base_map 中未找到包 %s 对应的全量包映射", pkg['id'])
-            else:
-                self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
 
             if pkg_id is None:
                 logger.debug("缺少pak_id, 无法设置状态")
                 continue
+
+            if "_patch_" not in file_name:
+                if download_info is None:
+                    self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
+                    self.callbacks.on_set_status(pkg_id, 'failed')
+                    logger.debug("%s 获取 download url 失败", file_name)
+                    continue
+                else:
+                    if download_info.get("isDeleted") == False:
+                        self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
+                    else:
+                        has_local = local_path.exists() or downloaded_path.exists()
+                        self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'cloud_deleted', has_local)
+                        logger.debug("%s 已被云端删除", file_name)
+                        continue
+            else:
+                if download_info and download_info.get("isDeleted") == True:
+                    logger.debug("%s 已被云端删除", file_name)
+                    continue # 跳过已被云端删除的增量包
+                pkg_id = self.patch_to_base_map.get(pkg['id'])
+                if pkg_id is None:
+                    logger.debug("patch_to_base_map 中未找到包 %s 对应的全量包映射", file_name)
+                    continue
+            
             if download_info is None:
-                self.callbacks.on_set_status(pkg_id, 'failed')
-                logger.debug("%s 获取 download url 失败", file_name)
                 continue
+            
             if download_info.get("_forbidden"):
                 self.callbacks.on_set_status(pkg_id, 'forbidden')
                 logger.debug("%s 已下线", file_name)
@@ -625,7 +640,7 @@ class AssetSyncService:
             cloud_file_sha256 = download_info.get("sha256")
             
             # 下载当前包
-            if download_url is None or cloud_file_sha256 is None or size is None:
+            if download_url is None or size is None:
                 fail_count += 1
                 with self._callback_lock:
                     self.callbacks.on_download_complete(group_id, False, "下载信息不完整")
@@ -693,7 +708,7 @@ class AssetSyncService:
                     temp_path.unlink()
 
     async def _download_package_with_group_progress(self, group_id: str, file_name: str, download_url: str, 
-                                           cloud_file_sha256: str, total_group_size: int, downloaded_group_size: int, 
+                                           cloud_file_sha256: str | None, total_group_size: int, downloaded_group_size: int, 
                                            group_start_time: float) -> bool:
         """
         下载单个包并更新组进度
@@ -923,6 +938,7 @@ class AssetSyncService:
             self.log("同步已由用户取消（跳过元数据与本地清理）")
             self.callbacks.on_complete(False, "用户已取消")
             return False
+        
         
         # check metadata
         self.check_metadata(packages, to_delete, missing_packages)
