@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 Success = edit_service_pb2.StatusCode.Success
 Error = edit_service_pb2.StatusCode.Error
 
-LOG_GRPC_TRAFFIC = True
+LOG_GRPC_TRAFFIC = False
 
 
 class EditServiceWrapper:
@@ -106,7 +106,7 @@ class EditServiceWrapper:
     ) -> Tuple[bool, List[str]]:
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] add_actor_batch() called with {len(in_requests)} requests, stop_on_error={stop_on_error}"
+                f"[GRPC TRAFFIC] add_actor_batch() called with {len(in_requests)} requests, stop_on_error={stop_on_error}"
             )
 
         requests = []
@@ -157,7 +157,7 @@ class EditServiceWrapper:
     ) -> Tuple[bool, List[str]]:
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] delete_actor_batch() called with {len(actor_paths)} actor paths"
+                f"[GRPC TRAFFIC] delete_actor_batch() called with {len(actor_paths)} actor paths"
             )
 
         paths = []
@@ -188,7 +188,7 @@ class EditServiceWrapper:
     ) -> List[Transform]:
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] get_pending_actor_transform_batch() called with {len(paths)} actor paths"
+                f"[GRPC TRAFFIC] get_pending_actor_transform_batch() called with {len(paths)} actor paths"
             )
 
         request = edit_service_pb2.GetPendingActorTransformBatchRequest(
@@ -210,7 +210,7 @@ class EditServiceWrapper:
     ):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] set_actor_transform_batch() called with {len(paths)} actor paths and {len(transforms)} transforms"
+                f"[GRPC TRAFFIC] set_actor_transform_batch() called with {len(paths)} actor paths and {len(transforms)} transforms"
             )
 
         if len(paths) != len(transforms):
@@ -226,14 +226,14 @@ class EditServiceWrapper:
 
     async def publish_scene(self):
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] publish_scene() called")
+            logger.info("[GRPC TRAFFIC] publish_scene() called")
         request = edit_service_pb2.PublishSceneRequest()
         response = await self.stub.PublishScene(request)
         self._check_response(response)
 
     async def get_sync_from_mujoco_to_scene(self) -> bool:
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] get_sync_from_mujoco_to_scene() called")
+            logger.info("[GRPC TRAFFIC] get_sync_from_mujoco_to_scene() called")
         request = edit_service_pb2.GetSyncFromMujocoToSceneRequest()
         response = await self.stub.GetSyncFromMujocoToScene(request)
         self._check_response(response)
@@ -242,7 +242,7 @@ class EditServiceWrapper:
     async def set_sync_from_mujoco_to_scene(self, value: bool):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] set_sync_from_mujoco_to_scene() called with value={value}"
+                f"[GRPC TRAFFIC] set_sync_from_mujoco_to_scene() called with value={value}"
             )
         request = edit_service_pb2.SetSyncFromMujocoToSceneRequest(value=value)
         response = await self.stub.SetSyncFromMujocoToScene(request)
@@ -250,14 +250,14 @@ class EditServiceWrapper:
 
     async def clear_scene(self):
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] clear_scene() called")
+            logger.info("[GRPC TRAFFIC] clear_scene() called")
         request = edit_service_pb2.ClearSceneRequest()
         response = await self.stub.ClearScene(request)
         self._check_response(response)
 
     async def get_pending_add_item(self) -> Tuple[Transform, str]:
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] get_pending_add_item() called")
+            logger.info("[GRPC TRAFFIC] get_pending_add_item() called")
         request = edit_service_pb2.GetPendingAddItemRequest()
         response = await self.stub.GetPendingAddItem(request)
         self._check_response(response)
@@ -300,7 +300,7 @@ class EditServiceWrapper:
 
     async def get_pending_selection_change(self) -> BackendSelectionData:
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] get_pending_selection_change() called")
+            logger.info("[GRPC TRAFFIC] get_pending_selection_change() called")
         request = edit_service_pb2.GetPendingSelectionChangeRequest()
         response = await self.stub.GetPendingSelectionChange(request)
         self._check_response(response)
@@ -309,7 +309,7 @@ class EditServiceWrapper:
     async def set_selection(self, selection: BackendSelectionData):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] set_selection() called with {len(selection.selected_actors)} selected actors and active actor {selection.active_actor}"
+                f"[GRPC TRAFFIC] set_selection() called with {len(selection.selected_actors)} selected actors and active actor {selection.active_actor}"
             )
         selection_data = self._to_grpc_selection_data(selection)
         request = edit_service_pb2.SetSelectionRequest(selection=selection_data)
@@ -318,7 +318,7 @@ class EditServiceWrapper:
 
     async def get_actor_assets(self) -> List[str]:
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] get_actor_assets() called")
+            logger.info("[GRPC TRAFFIC] get_actor_assets() called")
         request = edit_service_pb2.GetActorAssetsRequest()
         response = await self.stub.GetActorAssets(request)
         self._check_response(response)
@@ -326,14 +326,14 @@ class EditServiceWrapper:
 
     async def save_state(self):
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] save_state() called")
+            logger.info("[GRPC TRAFFIC] save_state() called")
         request = edit_service_pb2.SaveStateRequest()
         response = await self.stub.SaveState(request)
         self._check_response(response)
 
     async def restore_state(self):
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] restore_state() called")
+            logger.info("[GRPC TRAFFIC] restore_state() called")
         request = edit_service_pb2.RestoreStateRequest()
         response = await self.stub.RestoreState(request)
         self._check_response(response)
@@ -341,7 +341,7 @@ class EditServiceWrapper:
     async def rename_actor(self, actor_path: Path, new_name: str):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] rename_actor() called with actor_path={actor_path} and new_name={new_name}"
+                f"[GRPC TRAFFIC] rename_actor() called with actor_path={actor_path} and new_name={new_name}"
             )
         request = edit_service_pb2.RenameActorRequest(
             actor_path=actor_path.string(),
@@ -355,7 +355,7 @@ class EditServiceWrapper:
     ):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] move_actor_batch() called with {len(actor_paths)} actor paths and {len(new_parent_paths)} new parent paths"
+                f"[GRPC TRAFFIC] move_actor_batch() called with {len(actor_paths)} actor paths and {len(new_parent_paths)} new parent paths"
             )
         actor_paths_str = [p.string() for p in actor_paths]
         new_parent_paths_str = [p.string() for p in new_parent_paths]
@@ -369,7 +369,7 @@ class EditServiceWrapper:
 
     async def get_window_id(self):
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] get_window_id() called")
+            logger.info("[GRPC TRAFFIC] get_window_id() called")
         request = edit_service_pb2.GetWindowIdRequest()
         response = await self.stub.GetWindowId(request)
         self._check_response(response)
@@ -378,7 +378,7 @@ class EditServiceWrapper:
     async def get_generate_pos(self, posX, posY) -> Transform:
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] get_generate_pos() called with posX={posX} and posY={posY}"
+                f"[GRPC TRAFFIC] get_generate_pos() called with posX={posX} and posY={posY}"
             )
         request = edit_service_pb2.GetGeneratePosRequest(posX=posX, posY=posY)
         response = await self.stub.GetGeneratePos(request)
@@ -387,7 +387,7 @@ class EditServiceWrapper:
 
     async def get_cache_folder(self) -> str:
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] get_cache_folder() called")
+            logger.info("[GRPC TRAFFIC] get_cache_folder() called")
         request = edit_service_pb2.GetCacheFolderRequest()
         response = await self.stub.GetCacheFolder(request)
         self._check_response(response)
@@ -396,7 +396,7 @@ class EditServiceWrapper:
     async def load_package(self, package_path: str) -> None:
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] load_package() called with package_path={package_path}"
+                f"[GRPC TRAFFIC] load_package() called with package_path={package_path}"
             )
         request = edit_service_pb2.LoadPackageRequest(file_path=package_path)
         response = await self.stub.LoadPackage(request)
@@ -405,7 +405,7 @@ class EditServiceWrapper:
     async def change_sim_state(self, sim_process_running: bool):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] change_sim_state() called with sim_process_running={sim_process_running}"
+                f"[GRPC TRAFFIC] change_sim_state() called with sim_process_running={sim_process_running}"
             )
         request = edit_service_pb2.ChangeSimStateRequest(
             sim_process_running=sim_process_running
@@ -419,7 +419,7 @@ class EditServiceWrapper:
     ) -> bool:
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] get_camera_png() called with camera_name={camera_name}, png_path={png_path}, png_name={png_name}"
+                f"[GRPC TRAFFIC] get_camera_png() called with camera_name={camera_name}, png_path={png_path}, png_name={png_name}"
             )
         request = edit_service_pb2.GetCameraPNGRequest(
             camera_name=camera_name,
@@ -436,7 +436,7 @@ class EditServiceWrapper:
     ) -> CameraDataPNGResult:
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] get_camera_data_png() called with camera_name={camera_name}, png_path={png_path}, index={index}"
+                f"[GRPC TRAFFIC] get_camera_data_png() called with camera_name={camera_name}, png_path={png_path}, index={index}"
             )
         request = edit_service_pb2.GetCameraDataPNGRequest(
             camera_name=camera_name,
@@ -457,7 +457,7 @@ class EditServiceWrapper:
     async def get_actor_asset_aabb(self, actor_path: Path, output: List[float]):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] get_actor_asset_aabb() called with actor_path={actor_path}"
+                f"[GRPC TRAFFIC] get_actor_asset_aabb() called with actor_path={actor_path}"
             )
         request = edit_service_pb2.GetActorAssetAabbRequest(
             actor_path=actor_path.string()
@@ -474,7 +474,7 @@ class EditServiceWrapper:
     ):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] find_non_overlapping_position() called with actor_path={actor_path}"
+                f"[GRPC TRAFFIC] find_non_overlapping_position() called with actor_path={actor_path}"
             )
         request = edit_service_pb2.FindNonOverlappingPositionRequest(
             actor_path=actor_path.string()
@@ -505,7 +505,7 @@ class EditServiceWrapper:
 
     async def get_cameras(self) -> List[CameraBrief]:
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] get_cameras() called")
+            logger.info("[GRPC TRAFFIC] get_cameras() called")
         request = edit_service_pb2.GetCamerasRequest()
         response = await self.stub.GetCameras(request)
         self._check_response(response)
@@ -520,7 +520,7 @@ class EditServiceWrapper:
 
     async def get_active_camera(self) -> int:
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] get_active_camera() called")
+            logger.info("[GRPC TRAFFIC] get_active_camera() called")
         request = edit_service_pb2.GetActiveCameraRequest()
         response = await self.stub.GetActiveCamera(request)
 
@@ -532,7 +532,7 @@ class EditServiceWrapper:
     async def set_active_camera(self, camera_index: int) -> None:
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] set_active_camera() called with camera_index={camera_index}"
+                f"[GRPC TRAFFIC] set_active_camera() called with camera_index={camera_index}"
             )
         request = edit_service_pb2.SetActiveCameraRequest(index=camera_index)
         response = await self.stub.SetActiveCamera(request)
@@ -540,7 +540,7 @@ class EditServiceWrapper:
 
     async def get_flycamera_transform(self) -> Transform:
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] get_flycamera_transform() called")
+            logger.info("[GRPC TRAFFIC] get_flycamera_transform() called")
         request = edit_service_pb2.GetFlyCameraTransformRequest()
         response = await self.stub.GetFlyCameraTransform(request)
         self._check_response(response)
@@ -550,7 +550,7 @@ class EditServiceWrapper:
     async def set_flycamera_transform(self, flycamera_transform: Transform) -> None:
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] set_flycamera_transform() called with flycamera_transform={flycamera_transform}"
+                f"[GRPC TRAFFIC] set_flycamera_transform() called with flycamera_transform={flycamera_transform}"
             )
         request = edit_service_pb2.SetFlyCameraTransformRequest(
             flycamera_transform=self._create_transform_message(flycamera_transform)
@@ -560,7 +560,7 @@ class EditServiceWrapper:
 
     async def get_viewport_camera_transform(self) -> Transform:
         if LOG_GRPC_TRAFFIC:
-            logger.info("[GRPCTRAFFIC] get_viewport_camera_transform() called")
+            logger.info("[GRPC TRAFFIC] get_viewport_camera_transform() called")
         request = edit_service_pb2.GetViewportCameraTransformRequest()
         response = await self.stub.GetViewportCameraTransform(request)
         self._check_response(response)
@@ -765,7 +765,7 @@ class EditServiceWrapper:
     ) -> List[PropertyGetInfo]:
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] get_properties() called with {len(keys)} property keys"
+                f"[GRPC TRAFFIC] get_properties() called with {len(keys)} property keys"
             )
         request = edit_service_pb2.GetPropertiesRequest()
         for key in keys:
@@ -784,7 +784,7 @@ class EditServiceWrapper:
     async def set_properties(self, keys: List[ActorPropertyKey], values: List[Any]):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] set_properties() called with {len(keys)} property keys and {len(values)} values"
+                f"[GRPC TRAFFIC] set_properties() called with {len(keys)} property keys and {len(values)} values"
             )
 
         if len(keys) != len(values):
@@ -802,7 +802,9 @@ class EditServiceWrapper:
 
     async def custom_command(self, command: str):
         if LOG_GRPC_TRAFFIC:
-            logger.info(f"[GRPCTRAFFIC] custom_command() called with command={command}")
+            logger.info(
+                f"[GRPC TRAFFIC] custom_command() called with command={command}"
+            )
         request = edit_service_pb2.CustomCommandRequest(command=command)
         response = await self.stub.CustomCommand(request)
         self._check_response(response)
@@ -810,7 +812,7 @@ class EditServiceWrapper:
     async def set_visibility(self, visible: bool, actor_paths: List[Path]):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] set_visibility() called with visible={visible} and {len(actor_paths)} actor paths"
+                f"[GRPC TRAFFIC] set_visibility() called with visible={visible} and {len(actor_paths)} actor paths"
             )
         paths = []
         for p in actor_paths:
@@ -827,7 +829,7 @@ class EditServiceWrapper:
     async def set_lock(self, locked: bool, actor_paths: List[Path]):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] set_lock() called with locked={locked} and {len(actor_paths)} actor paths"
+                f"[GRPC TRAFFIC] set_lock() called with locked={locked} and {len(actor_paths)} actor paths"
             )
         paths = []
         for p in actor_paths:
@@ -844,7 +846,7 @@ class EditServiceWrapper:
     ):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] set_move_rotate_sensitivity() called with move_sensitivity={move_sensitivity} and rotate_sensitivity={rotate_sensitivity}"
+                f"[GRPC TRAFFIC] set_move_rotate_sensitivity() called with move_sensitivity={move_sensitivity} and rotate_sensitivity={rotate_sensitivity}"
             )
         request = edit_service_pb2.SetMoveRotateSensitivityRequest(
             move_sensitivity=move_sensitivity, rotate_sensitivity=rotate_sensitivity
@@ -887,7 +889,7 @@ class EditServiceWrapper:
     ) -> List[EntityInfo | None]:
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] get_entity_hierarchy_batch() called with {len(actor_paths)} actor paths"
+                f"[GRPC TRAFFIC] get_entity_hierarchy_batch() called with {len(actor_paths)} actor paths"
             )
         request = edit_service_pb2.GetEntityHierarchyBatchRequest(
             actor_paths=[p.string() for p in actor_paths]
@@ -924,7 +926,7 @@ class EditServiceWrapper:
     ) -> List[List[List[ActorPropertyGroup]]]:
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] get_entity_property_groups_batch() called with {len(actor_entities_list)} actor entities"
+                f"[GRPC TRAFFIC] get_entity_property_groups_batch() called with {len(actor_entities_list)} actor entities"
             )
 
         if not actor_entities_list:
@@ -956,7 +958,7 @@ class EditServiceWrapper:
     ) -> List[List[ActorPropertyGroup]]:
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] get_actor_property_groups_batch() called with {len(actor_paths)} actor paths"
+                f"[GRPC TRAFFIC] get_actor_property_groups_batch() called with {len(actor_paths)} actor paths"
             )
 
         if not actor_paths:
@@ -1013,7 +1015,7 @@ class EditServiceWrapper:
         if LOG_GRPC_TRAFFIC:
 
             logger.info(
-                f"[GRPCTRAFFIC] get_actor_overrides_batch() called with {count} actor paths"
+                f"[GRPC TRAFFIC] get_actor_overrides_batch() called with {count} actor paths"
             )
 
         if count == 0:
@@ -1045,7 +1047,7 @@ class EditServiceWrapper:
     ):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPCTRAFFIC] get_assets_by_type_page() called with asset_type_uuid={asset_type_uuid}, page_index={page_index}, page_size={page_size}"
+                f"[GRPC TRAFFIC] get_assets_by_type_page() called with asset_type_uuid={asset_type_uuid}, page_index={page_index}, page_size={page_size}"
             )
         request = edit_service_pb2.GetAssetsByTypePageRequest(
             asset_type_uuid=asset_type_uuid,
