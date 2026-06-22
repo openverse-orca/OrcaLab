@@ -63,13 +63,8 @@ from orcalab.undo_service.undo_service import UndoService
 from orcalab.scene_edit_service import SceneEditService
 from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.undo_service.undo_service_bus import can_redo, can_undo
-from orcalab.url_service.url_service import UrlServiceServer
-from orcalab.asset_service import AssetService
 from orcalab.texture_asset_cache import get_texture_asset_cache
-from orcalab.asset_service_bus import (
-    AssetServiceNotification,
-    AssetServiceNotificationBus,
-)
+
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 from orcalab.token_storage import TokenStorage
 from orcalab.mcp_service.mcp_service import OrcaLabMCPServer
@@ -82,7 +77,6 @@ logger = logging.getLogger(__name__)
 class MainWindow(
     PanelManager,
     ApplicationRequest,
-    AssetServiceNotification,
     UserEventRequest,
     CameraNotification,
     CameraRequest,
@@ -93,7 +87,7 @@ class MainWindow(
     add_item_by_drag = QtCore.Signal(str, Transform)
     load_scene_layout_sig = QtCore.Signal(str)
 
-    def __init__(self, url_service_port: int = 50651):
+    def __init__(self):
         super().__init__()
         self.cwd = os.getcwd()
         self.config_service = ConfigService()
@@ -103,7 +97,6 @@ class MainWindow(
         self._cleanup_in_progress = False
         self._cleanup_completed = False
         self._is_runtime_mode = False
-        self._url_service_port = url_service_port
 
         self._selection_before_sim : SelectionData | None = None
 
@@ -121,7 +114,6 @@ class MainWindow(
     def connect_buses(self):
         super().connect_buses()
         ApplicationRequestBus.connect(self)
-        AssetServiceNotificationBus.connect(self)
         UserEventRequestBus.connect(self)
         CameraNotificationBus.connect(self)
         CameraRequestBus.connect(self)
@@ -133,7 +125,6 @@ class MainWindow(
         StateSyncRequestBus.disconnect(self)
         SimulationNotificationBus.disconnect(self)
         UserEventRequestBus.disconnect(self)
-        AssetServiceNotificationBus.disconnect(self)
         ApplicationRequestBus.disconnect(self)
         CameraNotificationBus.disconnect(self)
         CameraRequestBus.disconnect(self)
@@ -149,8 +140,6 @@ class MainWindow(
         self.local_scene = LocalScene()
         self.remote_scene = RemoteScene(self.config_service, self.local_scene)
 
-        self.asset_service = AssetService()
-        self.url_server = UrlServiceServer(port=self._url_service_port)
         self.simulation_service = SimulationService()
         self.undo_service = UndoService()
 
@@ -295,10 +284,6 @@ class MainWindow(
         _cache_start = time.monotonic()
         self.cache_folder = await self.remote_scene.get_cache_folder()
         logger.info("get_cache_folder 完成, 耗时: %.2f 秒", time.monotonic() - _cache_start)
-
-        _url_start = time.monotonic()
-        await self.url_server.start()
-        logger.info("url_server.start 完成, 耗时: %.2f 秒", time.monotonic() - _url_start)
 
         logger.info("启动异步资产加载…")
         asyncio.create_task(self._load_assets_async())
@@ -784,12 +769,6 @@ class MainWindow(
             self._set_window_border_style(is_runtime=False)
             self._update_title()
 
-    @override
-    async def on_asset_downloaded(self, file):
-        await self.remote_scene.load_package(file)
-        assets = await self.remote_scene.get_actor_assets()
-        self.asset_browser_widget.set_assets(assets)
-
     def prepare_file_menu(self):
         self.menu_file.clear()
         self.menu_file.addAction(self.action_open_layout)
@@ -1253,10 +1232,6 @@ class MainWindow(
                 logger.info("cleanup: 调用 remote_scene.destroy_grpc()…")
                 await self.remote_scene.destroy_grpc()
                 logger.info("cleanup: remote_scene.destroy_grpc() 完成")
-
-            # 5. 停止URL服务器
-            if hasattr(self, 'url_server'):
-                await self.url_server.stop()
 
             # 6. 停止MCP服务
             if hasattr(self, 'mcp_service'):

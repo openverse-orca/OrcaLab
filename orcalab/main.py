@@ -35,7 +35,6 @@ import orcalab.assets.rc_assets
 from qasync import QEventLoop
 from orcalab.python_project_installer import ensure_python_project_installed
 from orcalab.ui.icon_util import app_window_icon, set_windows_app_user_model_id
-from orcalab.url_service.url_service import find_free_port, DEFAULT_PORT as URL_SERVICE_DEFAULT_PORT
 
 # This is needed to display the app icon on the taskbar on Windows
 if os.name == 'nt':
@@ -85,7 +84,7 @@ def register_signal_handlers():
         signal.signal(signal.SIGHUP, signal_handler)  # Hangup signal
 
 
-async def main_async(q_app, fullscreen: bool, url_service_port: int):
+async def main_async(q_app, fullscreen: bool):
     global _main_window
 
     app_close_event = asyncio.Event()
@@ -93,7 +92,7 @@ async def main_async(q_app, fullscreen: bool, url_service_port: int):
     if fullscreen:
         main_window = MainWindowFullScreen()
     else:
-        main_window = MainWindow(url_service_port=url_service_port)
+        main_window = MainWindow()
     _main_window = main_window  # Store reference for signal handlers
     await main_window.init()
     await app_close_event.wait()
@@ -401,24 +400,10 @@ def main():
     event_loop = QEventLoop(q_app)
     asyncio.set_event_loop(event_loop)
 
-    cli_port = getattr(args, "port", None)
-    if cli_port is not None:
-        url_service_port = find_free_port(start_port=cli_port)
-        logger.info("使用命令行指定的URL服务端口: %s", url_service_port)
-    else:
-        config_port = config_service.url_service_port()
-        url_service_port = find_free_port(start_port=config_port)
-        if url_service_port != config_port:
-            logger.warning("默认端口 %s 不可用，已自动切换到端口 %s", config_port, url_service_port)
-        else:
-            logger.info("使用默认URL服务端口: %s", url_service_port)
-
-    config_service.write_url_service_port(url_service_port)
-
     try:
         fullscreen = args.full_screen
         
-        event_loop.run_until_complete(main_async(q_app, fullscreen, url_service_port))
+        event_loop.run_until_complete(main_async(q_app, fullscreen))
     except KeyboardInterrupt:
         logger.info("Received KeyboardInterrupt, cleaning up...")
     except Exception as e:
@@ -429,12 +414,6 @@ def main():
     # 确保MCP状态文件被清理
     try:
         ConfigService().clear_mcp_status()
-    except Exception:
-        pass
-
-    # 确保URL服务状态文件被清理
-    try:
-        ConfigService().clear_url_service_status()
     except Exception:
         pass
 

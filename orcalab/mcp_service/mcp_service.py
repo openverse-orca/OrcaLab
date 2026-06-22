@@ -25,8 +25,6 @@ from orcalab.application_util import get_remote_scene
 from orcalab.application_bus import ApplicationRequestBus
 from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.undo_service.undo_service_bus import UndoRequestBus
-from orcalab.actor_property import ActorEntities, ActorPropertyGroup, ActorPropertyKey, ActorPropertyType
-from orcalab.asset_service_bus import AssetServiceRequestBus
 from orcalab.http_service.http_bus import HttpServiceRequestBus
 from orcalab.project_util import get_cache_folder
 from orcalab.ui.panel_bus import PanelRequestBus
@@ -45,7 +43,6 @@ class OrcaLabMCPServer:
         self.simulation_bus = SimulationRequestBus()
         self.undo_bus = UndoRequestBus()
         self.camera_bus = CameraRequestBus()
-        self.asset_service_bus = AssetServiceRequestBus()
         self.http_service_bus = HttpServiceRequestBus()
         self.panel_bus = PanelRequestBus()
         self.copilot_service = CopilotService()
