@@ -816,13 +816,8 @@ class MainWindow(
             return False
 
     def _write_scene_layout_file(self, filename: str):
-        root = self.local_scene.root_actor
-        scene_layout_dict = self.actor_to_dict(root)
-
         try:
-            with open(filename, "w", encoding="utf-8") as f:
-                json.dump(scene_layout_dict, f, indent=4, ensure_ascii=False)
-            logger.info("场景布局已保存至 %s", filename)
+            self.scene_layout_helper.save_scene_layout(filename)
         except Exception as e:
             logger.exception("保存场景布局失败: %s", e)
         else:
@@ -859,50 +854,6 @@ class MainWindow(
         self.scene_layout_helper.flycamera_transform = await self.remote_scene.get_flycamera_transform()
         self._write_scene_layout_file(filename)
         self.cwd = os.path.dirname(filename)
-
-    def actor_to_dict(self, actor: AssetActor | GroupActor):
-        def to_list(v):
-            lst = v.tolist() if hasattr(v, "tolist") else v
-            return lst
-        def compact_array(arr):
-            return "[" + ",".join(str(x) for x in arr) + "]"
-
-        data = {
-            "name": actor.name,
-            "path": self.local_scene.get_actor_path(actor)._p,
-            "transform": {
-                "position": compact_array(to_list(actor.transform.position)),
-                "rotation": compact_array(to_list(actor.transform.rotation)),
-                "scale": actor.transform.scale,
-            },
-            "is_visible": actor.is_visible,
-            "is_parent_visible": actor.is_parent_visible,
-            "is_locked": actor.is_locked,
-            "is_parent_locked": actor.is_parent_locked,
-        }
-
-        if actor.name == "root":
-            flycamera_transform = self.scene_layout_helper.flycamera_transform
-            new_fields = {
-                "version": "2.0",
-                "flycamera_transform": {
-                    "position": compact_array(to_list(flycamera_transform.position)),
-                    "rotation": compact_array(to_list(flycamera_transform.rotation)),
-                    "scale": flycamera_transform.scale,
-                }
-            }
-            data = {**new_fields, **data}
-
-        if isinstance(actor, AssetActor):
-            data["type"] = "AssetActor"
-            data["asset_path"] = actor._asset_path
-            data["modified_properties"] = SceneLayoutHelper.collect_modified_properties(actor)
-
-        if isinstance(actor, GroupActor):
-            data["type"] = "GroupActor"
-            data["children"] = [self.actor_to_dict(child) for child in actor.children]
-
-        return data
 
     async def create_scene_layout(self):
         def select_file():

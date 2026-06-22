@@ -82,45 +82,6 @@ class OrcaLabMCPServer:
             base += ".json"
         return base
 
-    @staticmethod
-    def _actor_to_layout_dict(local_scene, actor: AssetActor | GroupActor) -> dict:
-        def _to_list(v):
-            return v.tolist() if hasattr(v, "tolist") else v
-
-        def _compact_array(arr):
-            return "[" + ",".join(str(x) for x in arr) + "]"
-
-        actor_path = local_scene.get_actor_path(actor)
-        path_str = actor_path._p if actor_path is not None else "/"
-        data = {
-            "name": actor.name,
-            "path": path_str,
-            "transform": {
-                "position": _compact_array(_to_list(actor.transform.position)),
-                "rotation": _compact_array(_to_list(actor.transform.rotation)),
-                "scale": actor.transform.scale,
-            },
-            "is_visible": actor.is_visible,
-            "is_parent_visible": actor.is_parent_visible,
-            "is_locked": actor.is_locked,
-            "is_parent_locked": actor.is_parent_locked,
-        }
-
-        if actor.name == "root":
-            data = {"version": "2.0", **data}
-
-        if isinstance(actor, AssetActor):
-            data["type"] = "AssetActor"
-            data["asset_path"] = getattr(actor, "_asset_path", getattr(actor, "asset_path", ""))
-            data["modified_properties"] = SceneLayoutHelper.collect_modified_properties(actor)
-        elif isinstance(actor, GroupActor):
-            data["type"] = "GroupActor"
-            data["children"] = [
-                OrcaLabMCPServer._actor_to_layout_dict(local_scene, child) for child in actor.children
-            ]
-
-        return data
-
     def get_asset_map(self, project_name: str=None, category: str=None) -> str:
         '''
         获取所有已订阅资产的元数据信息
@@ -2184,10 +2145,8 @@ class OrcaLabMCPServer:
                 return json.dumps({"success": False, "message": "获取本地场景失败"}, ensure_ascii=False)
 
             local_scene = local_scene_out[0]
-            root = local_scene.root_actor
-            scene_layout_dict = self._actor_to_layout_dict(local_scene, root)
-            with open(save_path, "w", encoding="utf-8") as f:
-                json.dump(scene_layout_dict, f, ensure_ascii=False, indent=4)
+            helper = SceneLayoutHelper(local_scene)
+            helper.save_scene_layout(save_path)
 
             return json.dumps(
                 {
