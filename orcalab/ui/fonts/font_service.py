@@ -1,8 +1,13 @@
 import math
 import os
-import tomllib
+import sys
 import logging
 from typing import Dict, Callable
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from PySide6 import QtCore, QtGui, QtWidgets
 

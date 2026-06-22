@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, Dict, List, Tuple, override
+from typing import Any, List, Tuple
+from typing_extensions import override
 
 import logging
 import time
@@ -23,7 +24,7 @@ from orcalab.config_service import ConfigService
 from orcalab.entity_info import EntityInfo
 from orcalab.entity_path import EntityPath
 from orcalab.local_scene import LocalScene
-from orcalab.math import Transform
+from orcalab.transform import Transform
 from orcalab.path import Path
 from orcalab.actor import BaseActor, GroupActor, AssetActor
 from orcalab.scene_edit_bus import (

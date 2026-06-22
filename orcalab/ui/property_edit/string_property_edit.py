@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from typing import List, override
+from typing import List
+from typing_extensions import override
 from PySide6 import QtCore, QtWidgets
 
 from orcalab.actor import AssetActor

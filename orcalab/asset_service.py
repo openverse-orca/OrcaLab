@@ -6,7 +6,7 @@ import aiohttp
 import aiofiles
 import time
 
-from typing import override
+from typing_extensions import override
 
 import logging
 logger = logging.getLogger(__name__)

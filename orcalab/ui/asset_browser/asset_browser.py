@@ -4,7 +4,8 @@ import os
 import shutil
 import time
 import webbrowser
-from typing import List, Tuple, override
+from typing import List, Tuple
+from typing_extensions import override
 from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import Qt
 import logging

@@ -1,5 +1,6 @@
 import asyncio
-from typing import Dict, override, List
+from typing import Dict, List
+from typing_extensions import override
 import logging
 from orcalab.actor import BaseActor, GroupActor, AssetActor
 from orcalab.actor_property import PropertyOverride

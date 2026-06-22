@@ -3,6 +3,9 @@ import asyncio
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from enum import Enum, auto
+from typing import TypeVar, Generic, Union
+
+_T_num = TypeVar("_T_num", int, float)
 
 
 class BaseNumberEditState(Enum):
@@ -24,7 +27,10 @@ async def on_value_changed_default():
     pass
 
 
-class BaseNumberEdit[T: (int, float)](QtWidgets.QLineEdit):
+class BaseNumberEdit(Generic[_T_num], QtWidgets.QLineEdit):
+    value_changed = QtCore.Signal()
+    start_drag = QtCore.Signal()
+    stop_drag = QtCore.Signal()
 
     def __init__(self, parent: QtWidgets.QWidget | None = None):
         super().__init__(parent)
@@ -39,7 +45,7 @@ class BaseNumberEdit[T: (int, float)](QtWidgets.QLineEdit):
         self._real_time_type = False
         self._real_time_drag = True
 
-        self._original_value: T | None = None
+        self._original_value: _T_num | None = None
 
         self._dragging = False
 
@@ -190,16 +196,23 @@ class BaseNumberEdit[T: (int, float)](QtWidgets.QLineEdit):
         if self._set_value_only(value) and self._real_time_type:
             self._notify_value_changed()
 
-    def _increase(self, notify: bool):
+    def _set_value_and_text(self, value: _T_num) -> bool:
+        if self._set_value_only(value):
+            text = self._value_to_text(value)
+            self.setText(text)
+            return True
+        return False
+
+    def _increase(self, emit_signal: bool):
         new_value = self.value() + self.step()
         if self._set_value_and_text(new_value):
-            if notify:
+            if emit_signal:
                 self._notify_value_changed()
 
-    def _decrease(self, notify: bool):
+    def _decrease(self, emit_signal: bool):
         new_value = self.value() - self.step()
         if self._set_value_and_text(new_value):
-            if notify:
+            if emit_signal:
                 self._notify_value_changed()
 
     def _on_drag(self, delta_x: float):
@@ -211,37 +224,22 @@ class BaseNumberEdit[T: (int, float)](QtWidgets.QLineEdit):
         else:
             self._decrease(self._real_time_drag)
 
-    def _text_to_value(self, text: str) -> T | None:
+    def _text_to_value(self, text: str) -> _T_num | None:
         raise NotImplementedError()
 
-    def _value_to_text(self, value: T) -> str:
+    def _value_to_text(self, value: _T_num) -> str:
         raise NotImplementedError()
 
-    def value(self) -> T:
+    def value(self) -> _T_num:
         raise NotImplementedError()
 
-    def set_value(self, value: T):
+    def set_value(self, value: _T_num):
         self._set_value_and_text(value)
 
-    def _set_value_only(self, value: T) -> bool:
-        """
-        Set the value of the edit without updating the text.
-        Return True if the value is changed, False otherwise.
-        """
+    def _set_value_only(self, value: _T_num) -> bool:
         raise NotImplementedError()
 
-    def _set_value_and_text(self, value: T) -> bool:
-        """
-        Set both the text and value of the edit to the value.
-        Return True if the value is changed, False otherwise.
-        """
-        if self._set_value_only(value):
-            text = self._value_to_text(value)
-            self.setText(text)
-            return True
-        return False
-
-    def step(self) -> T:
+    def step(self) -> _T_num:
         raise NotImplementedError()
 
     def paintEvent(self, event):

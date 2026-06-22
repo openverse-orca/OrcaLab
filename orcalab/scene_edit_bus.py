@@ -4,7 +4,7 @@ from orcalab.actor import BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyKey, PropertyData
 from orcalab.camera_data_png_result import CameraDataPNGResult
 from orcalab.entity_info import EntityInfo
-from orcalab.math import Transform
+from orcalab.transform import Transform
 from orcalab.event_bus import create_event_bus
 from orcalab.path import Path
 from orcalab.scene_edit_types import AddActorRequest

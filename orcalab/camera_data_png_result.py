@@ -1,6 +1,6 @@
 from attr import dataclass, field
 
-from orcalab.math import Transform
+from orcalab.transform import Transform
 
 
 @dataclass

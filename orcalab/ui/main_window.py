@@ -3,7 +3,8 @@ import math
 import time
 import webbrowser
 
-from typing import Any, Dict, List, Tuple, override
+from typing import Any, Dict, List, Tuple
+from typing_extensions import override
 import numpy as np
 import logging
 
@@ -56,7 +57,7 @@ from orcalab.ui.terminal_widget import TerminalWidget
 from orcalab.ui.viewport import Viewport
 from orcalab.ui.panel_manager import PanelManager
 from orcalab.ui.panel import Panel
-from orcalab.math import Transform
+from orcalab.transform import Transform
 from orcalab.config_service import ConfigService
 from orcalab.undo_service.undo_service import UndoService
 from orcalab.scene_edit_service import SceneEditService

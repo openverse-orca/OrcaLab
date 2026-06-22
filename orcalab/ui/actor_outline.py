@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, Dict, List, Tuple, override
+from typing import Any, Dict, List, Tuple
+from typing_extensions import override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.actor import BaseActor, GroupActor, AssetActor

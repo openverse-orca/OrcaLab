@@ -1,5 +1,4 @@
 import os
-import tomllib
 import sys
 import pathlib
 import importlib.metadata
@@ -7,6 +6,11 @@ import logging
 import tomli_w
 import json
 import time
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from orcalab.project_util import get_project_dir
 
@@ -74,8 +78,6 @@ class ConfigService:
         except importlib.metadata.PackageNotFoundError:
             # 如果包未安装，尝试从 pyproject.toml 读取
             try:
-                import tomllib
-
                 pyproject_path = os.path.join(
                     os.path.dirname(__file__), "..", "pyproject.toml"
                 )

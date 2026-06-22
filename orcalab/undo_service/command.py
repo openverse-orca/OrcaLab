@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 
 from orcalab.actor import BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyKey, PropertyOverride
-from orcalab.math import Transform
+from orcalab.transform import Transform
 from orcalab.path import Path
 from orcalab.scene_edit_types import AddActorRequest
 from orcalab.selection_data import SelectionData

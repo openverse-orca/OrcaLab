@@ -396,7 +396,7 @@ from orcalab.scene_edit_bus import (
 )
 from orcalab.actor import AssetActor
 from orcalab.path import Path
-from orcalab.math import Transform
+from orcalab.transform import Transform
 
 # 1. 创建监听器
 class MySceneListener(SceneEditNotification):

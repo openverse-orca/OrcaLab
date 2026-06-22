@@ -1,11 +1,14 @@
-from typing import Dict, List
+from typing import Dict, List, Optional, Union
+from typing_extensions import override
 
 from orcalab.entity_info import EntityInfo, EntityRoot
 from orcalab.entity_path import EntityPath
 from orcalab.path import Path
-from orcalab.math import Transform
+from orcalab.transform import Transform
 
-type ParentActor = GroupActor | None
+import copy
+
+ParentActor = Union["GroupActor", None]
 
 class BaseActor:
     def __init__(self, name: str, parent: ParentActor):
@@ -147,7 +150,7 @@ class BaseActor:
             self.transform = self.parent.world_transform.inverse() * value
 
         self._world_transform = value
-    
+
 
 
     @property
@@ -164,7 +167,7 @@ class BaseActor:
     @property
     def root_entity_id(self) -> int:
         return self.entity_root.root_entity_info.entity_id
- 
+
 class GroupActor(BaseActor):
     def __init__(self, name: str, parent: ParentActor = None):
         self._children: List[BaseActor] = []

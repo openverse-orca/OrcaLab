@@ -1,5 +1,5 @@
 import logging
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, TypeVar
 
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.actor_property import (
@@ -14,6 +14,8 @@ from orcalab.path import Path
 from orcalab.metadata_service_bus import MetadataServiceRequestBus
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 
 def is_valid_char(c: str) -> bool:
@@ -133,16 +135,16 @@ class ActorIterator:
 
 
 
-def sort_actors_with_data[T](
-    actor_paths: List[Path], datas: List[T]
-) -> Tuple[List[Path], List[T]]:
+def sort_actors_with_data(
+    actor_paths: List[Path], datas: List[_T]
+) -> Tuple[List[Path], List[_T]]:
     if len(actor_paths) != len(datas):
         raise Exception("actor_paths and datas must have the same length")
 
     if len(actor_paths) == 0:
         return [], []
 
-    def _key(pair: Tuple[Path, T]):
+    def _key(pair: Tuple[Path, _T]):
         return pair[0]
 
     sorted_pairs = sorted(zip(actor_paths, datas), key=_key)

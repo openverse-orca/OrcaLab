@@ -4,7 +4,8 @@ import logging
 from collections import defaultdict
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from typing import Any, List, Optional, override
+from typing import Any, List, Optional
+from typing_extensions import override
 
 from orcalab.path import Path
 from orcalab.scene_edit_bus import SceneEditNotification, SceneEditNotificationBus

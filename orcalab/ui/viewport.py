@@ -1,6 +1,7 @@
 import asyncio
+import os
 import time
-from typing import override
+from typing_extensions import override
 from PySide6 import QtCore, QtWidgets, QtGui
 import pathlib
 import logging

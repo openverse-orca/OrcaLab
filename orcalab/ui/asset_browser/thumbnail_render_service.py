@@ -12,9 +12,9 @@ from orcalab.scene_edit_bus import SceneEditNotificationBus, SceneEditRequestBus
 from orcalab.ui.asset_browser.thumbnail_render_bus import ThumbnailRenderRequest, ThumbnailRenderRequestBus, ThumbnailRenderNotification, ThumbnailRenderNotificationBus
 from orcalab.application_bus import ApplicationRequestBus
 from orcalab.path import Path
-from typing import override
+from typing_extensions import override
 import numpy as np
-from orcalab.math import Transform
+from orcalab.transform import Transform
 import os
 from orcalab.ui.image_utils import ImageProcessor
 

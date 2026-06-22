@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt
 from orcalab.actor import BaseActor, AssetActor, GroupActor
 from orcalab.path import Path
 from orcalab.copilot import CopilotService
-from orcalab.math import Transform
+from orcalab.transform import Transform
 import orca_gym.utils.rotations as rotations
 from orcalab.metadata_service_bus import MetadataServiceRequestBus, MetadataServiceRequest
 from orcalab.scene_edit_bus import SceneEditRequestBus

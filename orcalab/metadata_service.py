@@ -1,6 +1,7 @@
 import json
 from orcalab.metadata_service_bus import MetadataServiceRequest, MetadataServiceRequestBus
-from typing import List, override
+from typing import List
+from typing_extensions import override
 from orcalab.metadata_service_bus import AssetMetadata, AssetMap
 from orcalab.project_util import get_cache_folder
 

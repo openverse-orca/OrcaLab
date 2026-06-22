@@ -1,5 +1,6 @@
 import asyncio
-from typing import List, Tuple, override
+from typing import List, Tuple
+from typing_extensions import override
 
 from PySide6.QtCore import (
     QAbstractItemModel,

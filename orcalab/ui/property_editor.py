@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from collections import OrderedDict
-from typing import override
+from typing_extensions import override
 
 from PySide6 import QtCore, QtWidgets
 

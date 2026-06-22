@@ -12,12 +12,6 @@ DIST_DIR="$PROJECT_ROOT/dist"
 
 cd "$SCRIPT_DIR"
 
-cleanup() {
-    [ -f "$SCRIPT_DIR/orcalab.bat.bak" ] && mv "$SCRIPT_DIR/orcalab.bat.bak" "$SCRIPT_DIR/orcalab.bat"
-    [ -f "$SCRIPT_DIR/setup.nsi.bak" ]   && mv "$SCRIPT_DIR/setup.nsi.bak"   "$SCRIPT_DIR/setup.nsi"
-}
-trap cleanup EXIT
-
 echo "🔧 Building OrcaLab Windows Installer..."
 echo ""
 

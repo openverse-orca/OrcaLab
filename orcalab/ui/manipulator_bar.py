@@ -1,4 +1,4 @@
-from typing import override
+from typing_extensions import override
 
 from PySide6 import QtCore, QtWidgets, QtGui
 from orcalab.state_sync_bus import (

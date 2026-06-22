@@ -9,7 +9,7 @@ from orcalab.local_scene import LocalScene
 from orcalab.metadata_service_bus import MetadataServiceRequestBus
 import json
 import pathlib
-from orcalab.math import Transform
+from orcalab.transform import Transform
 from orcalab.path import Path
 from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.scene_edit_types import AddActorRequest

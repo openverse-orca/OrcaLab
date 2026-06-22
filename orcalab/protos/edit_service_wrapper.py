@@ -19,7 +19,7 @@ from orcalab.entity_info import EntityInfo
 import orcalab.protos.edit_service_pb2_grpc as edit_service_pb2_grpc
 import orcalab.protos.edit_service_pb2 as edit_service_pb2
 
-from orcalab.math import Transform
+from orcalab.transform import Transform
 from orcalab.path import Path
 from orcalab.actor import GroupActor, AssetActor
 from orcalab.actor_property import (

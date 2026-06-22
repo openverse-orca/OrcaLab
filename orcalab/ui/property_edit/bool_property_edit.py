@@ -1,5 +1,5 @@
 import asyncio
-from typing import override
+from typing_extensions import override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.scene_edit_bus import SceneEditRequestBus
