@@ -468,14 +468,13 @@ class SceneEditService(SceneEditRequest):
         new_selection = SelectionData()
         selection_changed = False
 
-        for selected_path in old_selection.selected_actors:
-            for old_path, new_path in zip(_old_actor_paths, new_actor_paths):
-                if selected_path == old_path:
-                    new_selection.selected_actors.append(new_path)
-                    selection_changed = True
-                    break
-                else:
-                    new_selection.selected_actors.append(selected_path)
+        for old_path, new_path, selected_path in zip(_old_actor_paths, new_actor_paths, old_selection.selected_actors):
+            if selected_path == old_path:
+                new_selection.selected_actors.append(new_path)
+                selection_changed = True
+                break
+            else:
+                new_selection.selected_actors.append(selected_path)
 
         for old_path, new_path in zip(_old_actor_paths, new_actor_paths):
             if old_selection.active_actor_path == old_path:
