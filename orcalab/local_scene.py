@@ -318,6 +318,14 @@ class LocalScene:
         if not Path.is_valid_name(new_name):
             return False, "Invalid name."
 
+        actor_parent = actor.parent
+        if actor_parent is None:
+            return False, "Invalid actor."
+
+        for sibling in actor_parent.children:
+            if sibling != actor and sibling.name == new_name:
+                return False, "Name already exists."
+            
         return True, ""
 
     def rename_actor(self, actor: BaseActor | Path, new_name):
