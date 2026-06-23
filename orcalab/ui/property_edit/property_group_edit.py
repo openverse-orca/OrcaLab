@@ -9,7 +9,7 @@ from orcalab.actor_property import (
     PropertyData,
 )
 from orcalab.application_util import get_local_scene
-from orcalab.math import Transform, as_euler
+from orcalab.transform import Transform, as_euler
 from orcalab.path import Path
 from orcalab.perf_log import perf_timer
 from orcalab.scene_edit_bus import (

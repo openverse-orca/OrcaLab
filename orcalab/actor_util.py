@@ -152,7 +152,10 @@ def sort_actors_with_data(
     return list(sorted_actor_paths), list(sorted_datas)
 
 
-def clone_actor_basic[T](actor: T) -> T:
+_T_clone = TypeVar("_T_clone", BaseActor, AssetActor, GroupActor)
+
+
+def clone_actor_basic(actor: _T_clone) -> _T_clone:
     """Clone actor without parent-child relationships."""
     if isinstance(actor, GroupActor):
         new_actor = GroupActor(actor.name)
