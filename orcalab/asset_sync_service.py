@@ -188,7 +188,7 @@ class AssetSyncService:
             _start = time.monotonic()
             response = requests.get(url, headers=self.get_headers(), timeout=self.timeout)
             elapsed = time.monotonic() - _start
-            logger.debug("HTTP GET %s/orcalab/subscribed_packages/ 耗时: %.3f 秒 (状态码: %s)", url, elapsed, response.status_code)
+            logger.debug("HTTP GET %s 耗时: %.3f 秒 (状态码: %s)", url, elapsed, response.status_code)
             
             if response.status_code == 401:
                 logger.debug("认证失败（Token 可能已过期）. Status code: %d", response.status_code)

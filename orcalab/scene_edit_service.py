@@ -466,24 +466,12 @@ class SceneEditService(SceneEditRequest):
         empty_selection = SelectionData()
         old_selection = self.local_scene.selection()
         new_selection = SelectionData()
-        selection_changed = False
-
-        for old_path, new_path, selected_path in zip(_old_actor_paths, new_actor_paths, old_selection.selected_actors):
-            if selected_path == old_path:
-                new_selection.selected_actors.append(new_path)
-                selection_changed = True
-                break
-            else:
-                new_selection.selected_actors.append(selected_path)
 
         for old_path, new_path in zip(_old_actor_paths, new_actor_paths):
+            new_selection.selected_actors.append(new_path)
             if old_selection.active_actor_path == old_path:
                 new_selection.active_actor_path = new_path
                 # active_entity 不变，因为移动不影响 active entity
-                new_selection.active_entity_path = old_selection.active_entity_path
-                selection_changed = True
-            else:
-                new_selection.active_actor_path = old_selection.active_actor_path
                 new_selection.active_entity_path = old_selection.active_entity_path
 
         # commit changes
@@ -492,8 +480,7 @@ class SceneEditService(SceneEditRequest):
 
         await bus.before_actor_reparented()
 
-        if selection_changed:
-            await self._set_selection(empty_selection, undo=False, source=source)
+        await self._set_selection(empty_selection, undo=False, source=source)
 
         self.local_scene.move_actors(old_actors, new_parent_paths, insert_positions)
         await self.remote_scene.move_actor_batch(_old_actor_paths, new_parent_paths)
@@ -501,8 +488,7 @@ class SceneEditService(SceneEditRequest):
             self.local_scene.refresh_subtree_parent_visibility_lock(root)
         await self._sync_subtrees_visibility_lock_remote(_old_actros)
 
-        if selection_changed:
-            await self._set_selection(new_selection, undo=False, source=source)
+        await self._set_selection(new_selection, undo=False, source=source)
 
         await bus.on_actor_reparented()
 
@@ -517,14 +503,11 @@ class SceneEditService(SceneEditRequest):
             _old_actor_paths, old_positions, new_parent_paths, insert_positions
         )
 
-        if selection_changed:
-            command_group = CommandGroup()
-            command_group.commands.append(deselect_command)
-            command_group.commands.append(move_command)
-            command_group.commands.append(select_command)
-            UndoRequestBus().add_command(command_group)
-        else:
-            UndoRequestBus().add_command(move_command)
+        command_group = CommandGroup()
+        command_group.commands.append(deselect_command)
+        command_group.commands.append(move_command)
+        command_group.commands.append(select_command)
+        UndoRequestBus().add_command(command_group)
 
     def _split_actor_pairs_by_parent(
         self, actor_pairs: List[Tuple[BaseActor, Path]]
