@@ -12,7 +12,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 from orcalab.application_bus import ApplicationRequestBus
 from orcalab.config_service import ConfigService
 from orcalab.local_scene import LocalScene
-from orcalab.math import Transform
+from orcalab.transform import Transform
 from orcalab.remote_scene import RemoteScene
 from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper

@@ -10,7 +10,7 @@ from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyType, PropertyOverride
 from orcalab.entity_path import EntityPath, NameWithIndex
 from orcalab.local_scene import LocalScene
-from orcalab.math import Transform
+from orcalab.transform import Transform
 from orcalab.metadata_service_bus import MetadataServiceRequestBus
 from orcalab.path import Path
 from orcalab.remote_scene import RemoteScene
