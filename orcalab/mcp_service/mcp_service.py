@@ -25,13 +25,14 @@ from orcalab.application_util import get_remote_scene
 from orcalab.application_bus import ApplicationRequestBus
 from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.undo_service.undo_service_bus import UndoRequestBus
-from orcalab.actor_property import ActorPropertyKey, ActorPropertyType
+from orcalab.actor_property import ActorEntities, ActorPropertyGroup, ActorPropertyKey, ActorPropertyType
 from orcalab.asset_service_bus import AssetServiceRequestBus
 from orcalab.http_service.http_bus import HttpServiceRequestBus
 from orcalab.project_util import get_cache_folder
 from orcalab.ui.panel_bus import PanelRequestBus
 from orcalab.copilot.service import CopilotService
 from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
+from orcalab.entity_path import EntityPath, NameWithIndex
 
 class OrcaLabMCPServer:
     def __init__(self, port):
@@ -2245,6 +2246,293 @@ class OrcaLabMCPServer:
         except Exception as e:
             return json.dumps({"success": False, "message": f"加载布局失败: {e}"}, ensure_ascii=False)
 
+    @staticmethod
+    def _parse_entity_path(entity_path_str: str) -> EntityPath:
+        if not entity_path_str or not entity_path_str.strip():
+            return EntityPath()
+        segments = []
+        for seg in entity_path_str.strip("/").split("/"):
+            seg = seg.strip()
+            if not seg:
+                continue
+            if ":" in seg:
+                name, index_str = seg.rsplit(":", 1)
+                try:
+                    index = int(index_str)
+                except ValueError:
+                    index = 0
+            else:
+                name = seg
+                index = 0
+            segments.append(NameWithIndex(name, index))
+        return EntityPath(segments)
+
+    @staticmethod
+    def _entity_info_to_dict(entity_info) -> dict:
+        return {
+            "entity_id": entity_info.entity_id,
+            "name": entity_info.name,
+            "entity_path": entity_info.entity_path.string(),
+            "children": [
+                OrcaLabMCPServer._entity_info_to_dict(child)
+                for child in entity_info.children
+            ],
+        }
+
+    @staticmethod
+    def _find_entity_id_in_tree(entity_info, target_entity_path_str: str) -> int:
+        if entity_info.entity_path.string() == target_entity_path_str:
+            return entity_info.entity_id
+        for child in entity_info.children:
+            result = OrcaLabMCPServer._find_entity_id_in_tree(child, target_entity_path_str)
+            if result != 0:
+                return result
+        return 0
+
+    @staticmethod
+    def _split_combined_path(asset_path: str) -> tuple[Path, str | None]:
+        parts = asset_path.strip("/").split("/", 1)
+        actor_path = Path(f"/{parts[0]}")
+        entity_name = parts[1] if len(parts) > 1 else None
+        return actor_path, entity_name
+
+    @staticmethod
+    def _find_entity_by_name_in_tree(entity_info, target_name: str) -> tuple[int, str] | None:
+        if entity_info.name == target_name:
+            return entity_info.entity_id, entity_info.entity_path.string()
+        for child in entity_info.children:
+            result = OrcaLabMCPServer._find_entity_by_name_in_tree(child, target_name)
+            if result is not None:
+                return result
+        return None
+
+    async def get_actor_properties(self, asset_path: str) -> str:
+        '''
+        获取Actor或指定Entity的所有属性组及其属性值
+        Args:
+            asset_path: Actor在场景中的路径，如 "/actor_name"（Actor级）或 "/actor_name/Entity名"（Entity级）
+        Returns:
+            包含所有属性组和属性的json字符串格式，每个属性包含名称、显示名、类型、值、基础值、只读状态等信息
+        '''
+        try:
+            actor_path, entity_name = self._split_combined_path(asset_path)
+            remote_scene = get_remote_scene()
+
+            if entity_name is None:
+                # Actor 级别
+                groups = await remote_scene.get_actor_property_groups(actor_path)
+                result = []
+                for group in groups:
+                    group_dict = {
+                        "name": group.name,
+                        "hint": group.hint,
+                        "entity_path": group.entity_path.string(),
+                        "component_type_id": group.component_type_id,
+                        "component_type_index": group.component_type_index,
+                        "properties": [
+                            {
+                                "name": prop.name(),
+                                "display_name": prop.display_name(),
+                                "type": prop.value_type().name,
+                                "value": prop.value(),
+                                "base_value": prop.base_value(),
+                                "read_only": prop.is_read_only(),
+                                "editor_hint": prop.editor_hint(),
+                                "enum_values": prop.enum_values(),
+                            }
+                            for prop in group.properties
+                        ]
+                    }
+                    result.append(group_dict)
+                return json.dumps(result, ensure_ascii=False)
+            else:
+                # Entity 级别 — 按 entity 名在层级树中查找
+                infos = await remote_scene._service.get_entity_hierarchy_batch([actor_path])
+                if not infos or infos[0] is None:
+                    return json.dumps(
+                        {"error": f"未找到Actor '{actor_path}' 的Entity层级结构"},
+                        ensure_ascii=False,
+                    )
+
+                found = self._find_entity_by_name_in_tree(infos[0], entity_name)
+                if found is None:
+                    return json.dumps(
+                        {"error": f"未找到名为 '{entity_name}' 的Entity"},
+                        ensure_ascii=False,
+                    )
+
+                entity_id, _ = found
+                actor_entities = ActorEntities(actor_path, [entity_id])
+                groups_list = await remote_scene.get_entity_property_groups(actor_entities)
+                if not groups_list or not groups_list[0]:
+                    return json.dumps([], ensure_ascii=False)
+
+                groups = groups_list[0]
+                result = []
+                for group in groups:
+                    group_dict = {
+                        "name": group.name,
+                        "hint": group.hint,
+                        "entity_path": group.entity_path.string(),
+                        "component_type_id": group.component_type_id,
+                        "component_type_index": group.component_type_index,
+                        "properties": [
+                            {
+                                "name": prop.name(),
+                                "display_name": prop.display_name(),
+                                "type": prop.value_type().name,
+                                "value": prop.value(),
+                                "base_value": prop.base_value(),
+                                "read_only": prop.is_read_only(),
+                                "editor_hint": prop.editor_hint(),
+                                "enum_values": prop.enum_values(),
+                            }
+                            for prop in group.properties
+                        ]
+                    }
+                    result.append(group_dict)
+                return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+    async def set_actor_properties(self, asset_path: str, property_name: str, property_value: object) -> str:
+        '''
+        设置Actor或指定Entity的属性值
+        Args:
+            asset_path: Actor在场景中的路径，如 "/actor_name"（Actor级）或 "/actor_name/Entity名"（Entity级）
+            property_name: 属性名称
+            property_value: 属性值（根据属性类型传入对应类型：bool/整数/浮点数/字符串）
+        Returns:
+            操作结果的json字符串格式
+        '''
+        try:
+            actor_path, entity_name = self._split_combined_path(asset_path)
+            remote_scene = get_remote_scene()
+            keys = []
+            values = []
+
+            if entity_name is None:
+                # Actor 级别
+                groups = await remote_scene.get_actor_property_groups(actor_path)
+                for group in groups:
+                    for prop in group.properties:
+                        if prop.name() == property_name:
+                            key = ActorPropertyKey(
+                                actor_path=actor_path,
+                                entity_id=0,
+                                entity_path=group.entity_path,
+                                component_type_id=group.component_type_id,
+                                component_type_index=group.component_type_index,
+                                property_name=prop.name(),
+                                property_type=prop.value_type(),
+                            )
+                            keys.append(key)
+                            values.append(property_value)
+            else:
+                # Entity 级别 — 按 entity 名在层级树中查找
+                infos = await remote_scene._service.get_entity_hierarchy_batch([actor_path])
+                if not infos or infos[0] is None:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "message": f"未找到Actor '{actor_path}' 的Entity层级结构",
+                        },
+                        ensure_ascii=False,
+                    )
+
+                found = self._find_entity_by_name_in_tree(infos[0], entity_name)
+                if found is None:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "message": f"未找到名为 '{entity_name}' 的Entity",
+                        },
+                        ensure_ascii=False,
+                    )
+
+                entity_id, _ = found
+                actor_entities = ActorEntities(actor_path, [entity_id])
+                groups_list = await remote_scene.get_entity_property_groups(actor_entities)
+                if not groups_list or not groups_list[0]:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "message": f"未找到Entity '{entity_name}' 的属性组",
+                        },
+                        ensure_ascii=False,
+                    )
+
+                groups = groups_list[0]
+                for group in groups:
+                    for prop in group.properties:
+                        if prop.name() == property_name:
+                            key = ActorPropertyKey(
+                                actor_path=actor_path,
+                                entity_id=0,
+                                entity_path=group.entity_path,
+                                component_type_id=group.component_type_id,
+                                component_type_index=group.component_type_index,
+                                property_name=prop.name(),
+                                property_type=prop.value_type(),
+                            )
+                            keys.append(key)
+                            values.append(property_value)
+
+            if not keys:
+                return json.dumps(
+                    {"success": False, "message": f"未找到属性 '{property_name}'"},
+                    ensure_ascii=False,
+                )
+            await remote_scene.set_properties(keys, values)
+            return json.dumps(
+                {"success": True, "message": f"成功设置属性 '{property_name}'"},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"设置属性失败: {e}"},
+                ensure_ascii=False,
+            )
+        
+    async def get_entity_hierarchy(self, asset_path: str) -> str:
+        '''
+        获取Actor的Entity层级结构树
+        Args:
+            asset_path: Actor在场景中的路径
+        Returns:
+            Entity层级结构的json字符串格式，包含entity_id、name、entity_path和children
+        '''
+        try:
+            remote_scene = get_remote_scene()
+            # 优先从远程服务获取 Entity 层级结构
+            infos = await remote_scene._service.get_entity_hierarchy_batch(
+                [Path(asset_path)]
+            )
+            if infos and infos[0] is not None:
+                return json.dumps(self._entity_info_to_dict(infos[0]), ensure_ascii=False)
+
+            # 如果远程获取失败，尝试从本地场景获取
+            actors: List[Dict[Path, BaseActor]] = []
+            self.scene_edit_bus.get_all_actors(actors)
+            if len(actors) > 0 and actors[0] is not None:
+                actors_dict: Dict[Path, BaseActor] = actors[0]
+                path = Path(asset_path)
+                if path in actors_dict:
+                    actor = actors_dict[path]
+                    if isinstance(actor, AssetActor) and actor.entity_root is not None:
+                        print(actor.entity_root.root_entity_info)
+                        return json.dumps(
+                            # self._entity_info_to_dict(actor.entity_root.root_entity_info),
+                            ensure_ascii=False,
+                        )
+
+            return json.dumps(
+                {"error": f"未找到Actor '{asset_path}' 的Entity层级结构"},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+
     def add_tools(self):
         # 资产元数据类
         self.mcp.tool(self.get_asset_map)
@@ -2273,6 +2561,8 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.get_all_actors)
         self.mcp.tool(self.get_actor_transform)
         self.mcp.tool(self.get_selection)
+        self.mcp.tool(self.get_actor_properties)
+        self.mcp.tool(self.get_entity_hierarchy)
 
         # Actor 编辑类
         self.mcp.tool(self.set_actor_transform)
@@ -2281,7 +2571,8 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.rename_actor)
         self.mcp.tool(self.reparent_actor)
         self.mcp.tool(self.duplicate_actors)
-        
+        self.mcp.tool(self.set_actor_properties)
+
         # 选择操作类
         self.mcp.tool(self.set_selection_and_active_actor)
         self.mcp.tool(self.clear_selection)
