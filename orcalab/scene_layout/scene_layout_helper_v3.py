@@ -205,7 +205,7 @@ class SceneLayoutV3Parser:
         self.warnings: List[str] = []
         self.data = _LayoutData(
             version="",
-            viewport_camera_transform=Transform(),
+            viewport_camera_transform= None,
             actors=[],
         )
 

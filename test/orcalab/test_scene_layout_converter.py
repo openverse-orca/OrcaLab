@@ -1,4 +1,3 @@
-import ast
 import json
 from pathlib import Path
 
@@ -6,10 +5,6 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 from orcalab.scene_layout_converter import SceneLayoutConverter
-
-
-def _parse_array(text: str) -> np.ndarray:
-    return np.array(ast.literal_eval(text), dtype=float)
 
 
 def test_convert_scene_produces_group_and_asset_structure():
@@ -70,17 +65,15 @@ def test_convert_scene_produces_group_and_asset_structure():
 
     result = converter.convert_scene(scene)
 
-    assert result["name"] == "root"
-    assert result["path"] == "/"
-    assert result["type"] == "GroupActor"
-    assert result["children"]
+    assert result["version"] == "3.0"
+    assert result["actors"]
 
-    root_entity = result["children"][0]
+    root_entity = result["actors"][0]
     assert root_entity["name"] == "Root_Entity"
     assert root_entity["path"] == "/Root_Entity"
     assert root_entity["type"] == "GroupActor"
     np.testing.assert_allclose(
-        _parse_array(root_entity["transform"]["position"]),
+        np.array(root_entity["transform"]["position"], dtype=float),
         np.array([1.0, 2.0, 3.0]),
     )
     expected_root_quat = Rotation.from_euler("xyz", [0.0, 90.0, 0.0], degrees=True).as_quat()
@@ -88,7 +81,7 @@ def test_convert_scene_produces_group_and_asset_structure():
         [expected_root_quat[3], expected_root_quat[0], expected_root_quat[1], expected_root_quat[2]]
     )
     np.testing.assert_allclose(
-        _parse_array(root_entity["transform"]["rotation"]),
+        np.array(root_entity["transform"]["rotation"], dtype=float),
         expected_root_quat,
         atol=1e-6,
     )
@@ -102,7 +95,7 @@ def test_convert_scene_produces_group_and_asset_structure():
         [expected_table_quat[3], expected_table_quat[0], expected_table_quat[1], expected_table_quat[2]]
     )
     np.testing.assert_allclose(
-        _parse_array(table_actor["transform"]["rotation"]),
+        np.array(table_actor["transform"]["rotation"], dtype=float),
         expected_table_quat,
         atol=1e-6,
     )
@@ -140,6 +133,6 @@ def test_convert_file_emits_layouts(tmp_path):
     assert expected_output.exists()
 
     data = json.loads(expected_output.read_text(encoding="utf-8"))
-    assert data["name"] == "root"
-    assert data["children"][0]["name"] == "Level"
+    assert data["version"] == "3.0"
+    assert data["actors"][0]["name"] == "Level"
 
