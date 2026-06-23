@@ -148,17 +148,9 @@ class SceneEditService(SceneEditRequest):
         bus = SceneEditNotificationBus()
 
         await bus.before_actor_added_batch()
-        err = self.local_scene.add_actor_batch(requests)
-        if err == "":
-            suceess, errors = await self.remote_scene.add_actor_batch(requests, True)
-            if suceess:
-                await bus.on_actor_added_batch("")
-            else:
-                actors_to_delete = []
-                for request in requests:
-                    actors_to_delete.append(request.actor)
-                self.local_scene.delete_actors(actors_to_delete)
-                await bus.on_actor_added_failed("")  # TODO: Fix wrong parameter
+        self.local_scene.add_actor_batch(requests)
+        await self.remote_scene.add_actor_batch(requests)
+        await bus.on_actor_added_batch("")
 
         if undo:
             command = AddActorCommand(requests)
@@ -697,18 +689,9 @@ class SceneEditService(SceneEditRequest):
         await bus.before_actor_added_batch()
 
         perf.start("local_scene.add_actor_batch")
-        err = self.local_scene.add_actor_batch(requests)
-        if err != "":
-            # TODO: rollback if add failed
-            logger.error("Local add_actor_batch failed: %s", err)
-            raise Exception("Local add_actor_batch should not fail here.")
-
+        self.local_scene.add_actor_batch(requests)
         perf.start("remote_scene.add_actor_batch")
-        suceess, errors = await self.remote_scene.add_actor_batch(requests, True)
-        if not suceess:
-            # TODO: rollback if remote add failed
-            logger.error("Remote add_actor_batch failed: %s", errors)
-            raise Exception("Remote add_actor_batch failed.")
+        await self.remote_scene.add_actor_batch(requests)
 
         perf.start("normalize_new_actors_and_sync_visibility_lock")
         new_actors, new_actor_paths = self.local_scene.normalize_actors(new_actor_paths)

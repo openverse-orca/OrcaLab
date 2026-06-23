@@ -254,13 +254,13 @@ class LocalScene:
         actor_path = parent_path / actor.name
         self._actors[actor_path] = actor
 
-    def add_actor1(self, request: AddActorRequest) -> str:
+    def add_actor1(self, request: AddActorRequest):
         actor = request.actor
         parent_path = request.parent_path
 
         ok, err = self.can_add_actor(actor, parent_path)
         if not ok:
-            return err
+            raise Exception(err)
 
         parent_actor, parent_path = self.normalize_actor(parent_path)
         assert isinstance(parent_actor, GroupActor)
@@ -271,16 +271,13 @@ class LocalScene:
 
         return ""
 
-    def add_actor_batch(self, requests: List[AddActorRequest]) -> str:
+    def add_actor_batch(self, requests: List[AddActorRequest]):
         ok, err = self.can_add_actors(requests)
         if not ok:
-            return err
+            raise Exception(err)
 
         for request in requests:
-            result = self.add_actor1(request)
-            if result != "":
-                return result
-        return ""
+            self.add_actor1(request)
 
     def can_duplicate_actors(
         self, actors: Sequence[BaseActor | Path]

@@ -101,12 +101,10 @@ class EditServiceWrapper:
         except Exception as e:
             return False
 
-    async def add_actor_batch(
-        self, in_requests: List[AddActorRequest], stop_on_error
-    ) -> Tuple[bool, List[str]]:
+    async def add_actor_batch(self, in_requests: List[AddActorRequest]):
         if LOG_GRPC_TRAFFIC:
             logger.info(
-                f"[GRPC TRAFFIC] add_actor_batch() called with {len(in_requests)} requests, stop_on_error={stop_on_error}"
+                f"[GRPC TRAFFIC] add_actor_batch() called with {len(in_requests)} requests"
             )
 
         requests = []
@@ -139,18 +137,17 @@ class EditServiceWrapper:
             requests.append(request_union)
 
         batch_request = edit_service_pb2.AddActorBatchRequest(
-            requests=requests, stop_on_error=stop_on_error
+            requests=requests, stop_on_error=True
         )
         response = await self.stub.AddActorBatch(batch_request)
         if response.status_code != Success:
-            logger.error(f"Errors occur during add_actor_batch()")
+            msg = f"Errors occur during add_actor_batch()"
+            logger.error(msg)
+
             for req, error in zip(in_requests, response.errors):
                 if error:
-                    logger.error(
-                        f"    Error adding {req.actor.name} under {req.parent_path}: {error}"
-                    )
-            return False, list(response.errors)
-        return True, list(response.errors)
+                    msg = f"Failed adding {req.actor.name} under {req.parent_path}: {error}"
+                    logger.error(msg)
 
     async def delete_actor_batch(
         self, actor_paths: List[Path]
@@ -867,7 +864,7 @@ class EditServiceWrapper:
         name = msg.name
         if parent is None:
             # 根节点，使用特殊名称，消除Actor名称的影响。
-            name = "<root>"
+            name = EntityPath.root_name
 
         segment = NameWithIndex(name=name, index=position)
         segments.append(segment)

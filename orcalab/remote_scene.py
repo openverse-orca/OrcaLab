@@ -410,21 +410,16 @@ class RemoteScene(SceneEditNotification):
         await self._service.set_properties(keys, values)
 
     async def add_actor_batch(
-        self, requests: List[AddActorRequest], stop_on_error: bool
-    ) -> Tuple[bool, List[str]]:
+        self, requests: List[AddActorRequest],
+    ):
         logger.debug(f"add_actor_batch: {len(requests)} actors")
         async with self._grpc_lock:
-            success, errors = await self._service.add_actor_batch(
-                requests, stop_on_error
+            await self._service.add_actor_batch(
+                requests
             )
-
-        if not success and stop_on_error:
-            raise Exception("Failed to add actors")
 
         await self._fetch_entity_heirarchy(requests)
         await self._apply_overrides(requests)
-
-        return success, errors
 
     async def delete_actor_batch(self, actor_paths: List[Path]) -> None:
         logger.debug(f"delete_actor_batch: {len(actor_paths)} actors")
@@ -851,6 +846,15 @@ class RemoteScene(SceneEditNotification):
             result = await self._get_actor_overrides_batch([actor_paths_list])
             if result and len(result) > 0:
                 return result[0]
+            return []
+        
+    async def get_actor_overrides(
+        self, actor_path: Path
+    ) -> List[PropertyOverride]:
+        async with self._grpc_lock:
+            result = await self._get_actor_overrides_batch([[actor_path]])
+            if result and len(result) > 0 and len(result[0]) > 0:
+                return result[0][0]
             return []
 
     def _to_backend_selection_data(

@@ -9,6 +9,7 @@ class NameWithIndex:
     """
     用于解决同名Entity的问题。我们假设同一个Actor下的Entity结构保持不变。
     """
+
     name: str
     index: int  # 在父节点下的位置
 
@@ -21,6 +22,9 @@ class EntityPath:
 
     __slots__ = ("_segments", "_string", "_hash")
 
+    # 根节点的名称，用于表示Actor自己。
+    root_name = "<root>"
+
     def __init__(self, segments: List[NameWithIndex] = []):
         self._segments = segments
         self._string = ""
@@ -28,7 +32,7 @@ class EntityPath:
         for seg in segments:
             self._hash = hash((self._hash, seg.name, seg.index))
             if seg.index == 0:
-                self._string += f"{seg.name}"
+                self._string += f"/{seg.name}"
             else:
                 self._string += f"/{seg.name}:{seg.index}"
 
@@ -61,6 +65,12 @@ class EntityPath:
 
     def empty(self) -> bool:
         return len(self._segments) == 0
+
+    def is_root(self) -> bool:
+        if len(self._segments) != 1:
+            return False
+
+        return self._segments[0].name == EntityPath.root_name
 
 
 class FullEntityPath:

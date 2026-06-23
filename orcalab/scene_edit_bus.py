@@ -205,14 +205,6 @@ class SceneEditNotification:
     ) -> None:
         pass
 
-    async def on_actor_added_failed(
-        self,
-        actor: BaseActor,
-        parent_actor_path: Path,
-        source: str,
-    ):
-        pass
-
     async def before_actor_added_batch(self):
         pass
 

@@ -29,6 +29,9 @@ class ApplicationRequest:
     def get_widget(self, name: str, output: List[Any]):
         pass
 
+    def update_title(self):
+        pass
+
 
 ApplicationRequestBus = create_event_bus(ApplicationRequest)
 

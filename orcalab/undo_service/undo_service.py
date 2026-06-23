@@ -97,6 +97,11 @@ class UndoService(UndoRequest):
             await self._redo_command(command)
 
             self._in_undo_redo = False
+        
+    @override
+    def clear_history(self):
+        self.command_history = []
+        self.command_history_index = -1
 
     def _get_actor(self, actor_path: Path) -> BaseActor:
         local_scene = get_local_scene()

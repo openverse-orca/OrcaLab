@@ -1,5 +1,4 @@
 import asyncio
-import math
 import time
 import webbrowser
 
@@ -9,21 +8,18 @@ import numpy as np
 import logging
 
 import json
-import ast
 import os
-from pathlib import Path as SystemPath
 from PySide6 import QtCore, QtWidgets, QtGui
 from qasync import asyncWrap
 
-from orcalab.actor import AssetActor, BaseActor, GroupActor
+from orcalab.actor import AssetActor, GroupActor
 from orcalab.actor_util import make_unique_name
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.pyside_util import connect
 from orcalab.remote_scene import RemoteScene
-from orcalab.report.ask_statistics_dialog import AskStatisticsDialog
 from orcalab.report.report import ask_user_consent, collect_user_env, send_report_directly
-from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
+from orcalab.scene_layout.scene_layout_service import SceneLayoutService
 from orcalab.selection_data import SelectionData
 from orcalab.setting.settings_dialog import SettingsDialog
 from orcalab.simulation.simulation_bus import (
@@ -85,15 +81,12 @@ class MainWindow(
 ):
 
     add_item_by_drag = QtCore.Signal(str, Transform)
-    load_scene_layout_sig = QtCore.Signal(str)
 
     def __init__(self):
         super().__init__()
-        self.cwd = os.getcwd()
         self.config_service = ConfigService()
         self._base_title = self.config_service._get_package_version()
-        self.default_layout_path: str | None = None
-        self.current_layout_path: str | None = None
+
         self._cleanup_in_progress = False
         self._cleanup_completed = False
         self._is_runtime_mode = False
@@ -148,20 +141,18 @@ class MainWindow(
         def add_command_with_dirty(command, _orig=original_add_command):
             _orig(command)
             if not self.undo_service._in_undo_redo:
-                self._layout_modified = True
-                self._update_title()
+                self.layout_service.layout_modified = True
+                self.update_title()
 
         self.undo_service.add_command = add_command_with_dirty
 
         self.scene_edit_service = SceneEditService(self.local_scene, self.remote_scene)
+        self.layout_service = SceneLayoutService(self.local_scene, self.remote_scene, self)
 
         self._viewport_widget = Viewport()
 
-        self.scene_layout_helper = SceneLayoutHelper(self.local_scene)
-
         self._current_scene_name: str | None = None
         self._current_layout_name: str | None = None
-        self._layout_modified: bool = False
 
         logger.info("开始初始化 UI…")
         await self._init_ui()
@@ -225,7 +216,6 @@ class MainWindow(
         connect(self.menu_help.aboutToShow, self.prepare_help_menu)
 
         connect(self.add_item_by_drag, self.add_item_drag)
-        connect(self.load_scene_layout_sig, self.load_scene_layout)
 
         connect(self._viewport_widget.assetDropped, self.get_transform_and_add_item)
 
@@ -257,29 +247,7 @@ class MainWindow(
         await get_texture_asset_cache().initialize(self.remote_scene)
         logger.info("纹理资产缓存初始化完成, 耗时: %.2f 秒", time.monotonic() - _texture_cache_start)
 
-        self.default_layout_path = self._resolve_path(self.config_service.default_layout_file())
-        if self.default_layout_path and SystemPath(self.default_layout_path).exists():
-            _layout_start = time.monotonic()
-            try:
-                await self.load_scene_layout(self.default_layout_path)
-                logger.info("load_scene_layout 完成, 耗时: %.2f 秒", time.monotonic() - _layout_start)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("加载默认布局失败: %s", exc)
-                import traceback
-
-                detail_text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-                QtWidgets.QMessageBox.critical(
-                    self,
-                    "加载默认布局失败",
-                    "所选场景的默认布局加载失败。\n"
-                    "请复制下方错误信息寻求帮助，并重新启动程序选择“空白布局”。\n\n"
-                    f"{detail_text}",
-                    QtWidgets.QMessageBox.StandardButton.Ok,
-                )
-                QtWidgets.QApplication.quit()
-                return
-            else:
-                self._mark_layout_clean()
+        await self.layout_service.start_up_open_layout()
 
         _cache_start = time.monotonic()
         self.cache_folder = await self.remote_scene.get_cache_folder()
@@ -287,8 +255,6 @@ class MainWindow(
 
         logger.info("启动异步资产加载…")
         asyncio.create_task(self._load_assets_async())
-
-        await self.scene_layout_helper.get_flycamera_transform()
 
         # Load cameras from remote scene.
         _cam_start = time.monotonic()
@@ -660,25 +626,25 @@ class MainWindow(
         self.action_create_layout = QtGui.QAction("新建布局…", self)
         self.action_create_layout.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.New))
         self.action_create_layout.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(self.action_create_layout.triggered, self.create_scene_layout)
+        connect(self.action_create_layout.triggered, self.layout_service.create_scene_layout)
         self.addAction(self.action_create_layout)
 
         self.action_open_layout = QtGui.QAction("打开布局…", self)
         self.action_open_layout.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Open))
         self.action_open_layout.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(self.action_open_layout.triggered, self.open_scene_layout)
+        connect(self.action_open_layout.triggered, self.layout_service.open_scene_layout)
         self.addAction(self.action_open_layout)
 
         self.action_save_layout = QtGui.QAction("保存布局", self)
         self.action_save_layout.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Save))
         self.action_save_layout.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(self.action_save_layout.triggered, self.save_scene_layout)
+        connect(self.action_save_layout.triggered, self.layout_service.save_scene_layout)
         self.addAction(self.action_save_layout)
 
         self.action_save_layout_as = QtGui.QAction("另存为…", self)
         self.action_save_layout_as.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.SaveAs))
         self.action_save_layout_as.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(self.action_save_layout_as.triggered, self.save_scene_layout_as)
+        connect(self.action_save_layout_as.triggered, self.layout_service.save_scene_layout_as)
         self.addAction(self.action_save_layout_as)
 
         self.action_exit = QtGui.QAction("退出", self)
@@ -759,7 +725,7 @@ class MainWindow(
             self.tool_bar.action_stop.setEnabled(True)
             self._is_runtime_mode = True
             self._set_window_border_style(is_runtime=True)
-            self._update_title()
+            self.update_title()
 
         if new_state == SimulationState.Stopped:
             self._enable_edit()
@@ -767,7 +733,7 @@ class MainWindow(
             self.tool_bar.action_stop.setEnabled(False)
             self._is_runtime_mode = False
             self._set_window_border_style(is_runtime=False)
-            self._update_title()
+            self.update_title()
 
     def prepare_file_menu(self):
         self.menu_file.clear()
@@ -778,185 +744,7 @@ class MainWindow(
         self.menu_file.addSeparator()
         self.menu_file.addAction(self.action_exit)
 
-    def _resolve_path(self, path: str | None) -> str | None:
-        if not path:
-            return None
-        try:
-            return str(SystemPath(path).expanduser().resolve())
-        except Exception:
-            return str(path)
-
-    def _is_default_layout(self, path: str | None) -> bool:
-        if not path or not self.default_layout_path:
-            return False
-        try:
-            return SystemPath(path).expanduser().resolve() == SystemPath(self.default_layout_path).expanduser().resolve()
-        except Exception:
-            return False
-
-    def _write_scene_layout_file(self, filename: str):
-        try:
-            self.scene_layout_helper.save_scene_layout(filename)
-        except Exception as e:
-            logger.exception("保存场景布局失败: %s", e)
-        else:
-            self.current_layout_path = self._resolve_path(filename)
-            self._infer_scene_and_layout_names()
-            self._mark_layout_clean()
-            logger.debug("_write_scene_layout_file: 保存完成 path=%s", self.current_layout_path)
-            self._update_title()
-
-    async def save_scene_layout(self):       
-        if not self.current_layout_path or self._is_default_layout(self.current_layout_path):
-            await self.save_scene_layout_as()
-            return
-        self.scene_layout_helper.flycamera_transform = await self.remote_scene.get_flycamera_transform()
-        self._write_scene_layout_file(self.current_layout_path)
-
-    async def save_scene_layout_as(self):
-        def select_file():
-            filename, _ = QtWidgets.QFileDialog.getSaveFileName(
-                self,
-                "保存场景布局",
-                self.cwd,
-                "布局文件 (*.json);;所有文件 (*)"
-            )
-            return filename
-
-        filename = await asyncWrap(select_file)
-
-        if not filename:
-            return
-        if not filename.lower().endswith(".json"):
-            filename += ".json"
-
-        self.scene_layout_helper.flycamera_transform = await self.remote_scene.get_flycamera_transform()
-        self._write_scene_layout_file(filename)
-        self.cwd = os.path.dirname(filename)
-
-    async def create_scene_layout(self):
-        def select_file():
-            filename, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self,
-            "新建场景布局",
-            self.cwd,
-            "布局文件 (*.json);;所有文件 (*)"
-            )
-            return filename
-
-        filename =await asyncWrap(select_file)
-
-        if not filename:
-            return
-        if not filename.lower().endswith(".json"):
-            filename += ".json"
-
-        if not await self._confirm_discard_changes(close_after_save=False):
-            return
-
-        self.scene_layout_helper.create_empty_layout(filename)
-
-        await self.scene_layout_helper.clear_layout()
-
-        self.cwd = os.path.dirname(filename)
-        self.current_layout_path = filename
-        self._infer_scene_and_layout_names()
-        self._mark_layout_clean()
-        self._update_title()
-        logger.debug("create_scene_layout: 用户新建布局 path=%s", filename)
-        self.undo_service.command_history = []
-        self.undo_service.command_history_index = -1
-
-    async def open_scene_layout(self):
-        def select_file():
-            return QtWidgets.QFileDialog.getOpenFileName(
-                self,
-                "打开场景布局",
-                self.cwd,
-                "布局文件 (*.json);;所有文件 (*)"
-            )
-
-        filename, _ = await asyncWrap(select_file)
-        if not filename:
-            return
-        if not await self._confirm_discard_changes(close_after_save=False):
-            return
-        self.load_scene_layout_sig.emit(filename)
-        self.cwd = os.path.dirname(filename)
-        self._infer_scene_and_layout_names()
-        self._mark_layout_clean()
-        self._update_title()
-        logger.debug("open_scene_layout: 用户打开 path=%s", filename)
-
-    def _show_scene_loading_dialog(self):
-        """显示「场景加载中」弹窗并禁用主窗口操作。"""
-        self._scene_loading_in_progress = True
-        if self._scene_loading_dialog is None:
-            self._scene_loading_dialog = QtWidgets.QDialog(self)
-            self._scene_loading_dialog.installEventFilter(self)
-            self._scene_loading_dialog.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
-            self._scene_loading_dialog.setWindowFlags(
-                QtCore.Qt.WindowType.Dialog
-                | QtCore.Qt.WindowType.MSWindowsFixedSizeDialogHint
-                & ~QtCore.Qt.WindowType.WindowCloseButtonHint
-            )
-            self._scene_loading_dialog.setWindowTitle("Orcalab")
-            self._scene_loading_dialog.setMinimumSize(220, 136)
-            layout = QtWidgets.QVBoxLayout(self._scene_loading_dialog)
-            layout.setContentsMargins(32, 32, 32, 32)
-            layout.addStretch()
-            row_label = QtWidgets.QHBoxLayout()
-            row_label.addStretch()
-            label = QtWidgets.QLabel("场景加载中", self._scene_loading_dialog)
-            label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            self._fs.bind_widget_font(label, "loading_dialog")
-            row_label.addWidget(label)
-            row_label.addStretch()
-            layout.addLayout(row_label)
-            layout.addStretch()
-            self._scene_loading_dialog._label = label
-        self._scene_loading_dialog._label.setText("场景加载中")
-        self._scene_loading_dialog.resize(220, 136)
-        self._scene_loading_dialog.show()
-        self.setEnabled(False)
-
-    def _hide_scene_loading_dialog(self):
-        """关闭「场景加载中」弹窗并恢复主窗口操作。"""
-        self._scene_loading_in_progress = False
-        if self._scene_loading_dialog is not None:
-            self._scene_loading_dialog.close()
-        self.setEnabled(True)
-
-    def eventFilter(self, obj, event):
-        """布局加载期间禁止用户关闭弹窗，忽略关闭操作。"""
-        if (
-            obj is self._scene_loading_dialog
-            and event.type() == QtCore.QEvent.Type.Close
-            and self._scene_loading_in_progress
-        ):
-            event.ignore()
-            return True
-        return super().eventFilter(obj, event)
-
-    async def load_scene_layout(self, filename):
-        resolved = self._resolve_path(filename)
-        show_loading = self.isVisible()
-        if show_loading:
-            self._show_scene_loading_dialog()
-        try:
-            if not await self.scene_layout_helper.load_scene_layout(self, filename):
-                return
-
-            self.current_layout_path = resolved
-            self._infer_scene_and_layout_names()
-            self._mark_layout_clean()
-            self.undo_service.command_history = []
-            self.undo_service.command_history_index = -1
-
-            logger.debug("create_actor_from_scene_layout: 标记布局已修改")
-        finally:
-            if show_loading:
-                self._hide_scene_loading_dialog()
+   
 
     def prepare_edit_menu(self):
         self.menu_edit.clear()
@@ -999,10 +787,7 @@ class MainWindow(
 
         action_set_flycamera_transform = self.menu_edit.addAction("恢复视角")
         action_set_flycamera_transform.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
-        async def set_flycamera_transform_wrapper():
-            await self.scene_layout_helper.set_flycamera_transform()
-            logger.info("恢复视角")
-        connect(action_set_flycamera_transform.triggered, set_flycamera_transform_wrapper)
+        connect(action_set_flycamera_transform.triggered, self.layout_service.restore_flycamera_transform)
 
         self.menu_edit.addSeparator()
 
@@ -1253,18 +1038,19 @@ class MainWindow(
 
     def closeEvent(self, event):
         """Handle window close event"""
-        logger.info("Window close 事件触发 (cleanup_in_progress=%s, layout_modified=%s)", getattr(self, '_cleanup_in_progress', False), self._layout_modified)
+        logger.info("Window close 事件触发 (cleanup_in_progress=%s, layout_modified=%s)", getattr(self, '_cleanup_in_progress', False), self.layout_service.layout_modified)
 
         if self._cleanup_completed:
             logger.debug("closeEvent: 清理已完成，接受关闭")
             event.accept()
             return
 
-        if self._layout_modified:
+        if self.layout_service.layout_modified:
+            logger.debug("closeEvent: 布局已修改，忽略关闭事件")
             event.ignore()
 
             async def confirm_and_close():
-                if not await self._confirm_discard_changes(close_after_save=True):
+                if not await self.layout_service.confirm_discard_changes(close_after_save=True):
                     logger.debug("closeEvent: 用户取消关闭")
                     return
                 if hasattr(self, '_cleanup_in_progress') and self._cleanup_in_progress:
@@ -1410,27 +1196,12 @@ class MainWindow(
 
     async def set_recursive_display(self, enabled: bool):
         await self.remote_scene.set_recursive_display(enabled)
-
-    def _mark_layout_clean(self):
-        self._layout_modified = False
-        self._update_title()
-
-    def _infer_scene_and_layout_names(self):
-        level_info = self.config_service.current_level_info()
-        self._current_scene_name = None
-        if level_info:
-            name = level_info.get("name") or level_info.get("path")
-            self._current_scene_name = name
-
-        if self.current_layout_path:
-            self._current_layout_name = SystemPath(self.current_layout_path).stem
-        else:
-            self._current_layout_name = None
-
-    def _update_title(self):
+    
+    @override
+    def update_title(self):
         scene_part = self._current_scene_name or "Unknown Scene"
         layout_part = self._current_layout_name or "Unsaved Layout"
-        if self._layout_modified:
+        if self.layout_service.layout_modified:
             layout_label = f"[* {layout_part}]"
         else:
             layout_label = f"[{layout_part}]"
@@ -1438,37 +1209,7 @@ class MainWindow(
         mode_label = "RunTime" if self._is_runtime_mode else "Editor"
         self.setWindowTitle(f"{self._base_title}    [{scene_part}]    {layout_label}    [{mode_label}]")
 
-    async def _confirm_discard_changes(self, close_after_save: bool = True) -> bool:
-        if not self._layout_modified:
-            return True
-        logger.debug("_confirm_discard_changes: 布局已修改，弹窗确认")
-        message_box = QtWidgets.QMessageBox(self)
-        message_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
-        message_box.setWindowTitle("未保存的修改")
-        message_box.setText("当前布局有未保存的修改")
-
-        cancel_button = message_box.addButton("取消", QtWidgets.QMessageBox.ButtonRole.RejectRole)
-        discard_button = message_box.addButton("放弃修改", QtWidgets.QMessageBox.ButtonRole.DestructiveRole)
-        save_button = message_box.addButton("保存修改", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
-        message_box.setDefaultButton(save_button)
-
-        await asyncWrap(message_box.exec)
-        clicked = message_box.clickedButton()
-
-        if clicked == cancel_button:
-            return False
-        if clicked == save_button:
-            await self.save_scene_layout()
-            self._mark_layout_clean()
-            if close_after_save:
-                self.close()
-                return False
-            return True
-        # 放弃修改
-        logger.debug("_confirm_discard_changes: 用户选择放弃修改，重置状态")
-        self._mark_layout_clean()
-        return True
-
+   
     async def send_statistics(self):
         if not await ask_user_consent():
             return

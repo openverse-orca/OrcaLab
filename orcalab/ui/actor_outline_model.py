@@ -478,15 +478,6 @@ class ActorOutlineModel(QAbstractItemModel, SceneEditNotification):
         return True, ReparentData(actors, actor_paths, parent_actor, parent_actor_path)
 
     @override
-    async def on_actor_added_failed(
-        self,
-        actor: BaseActor,
-        parent_actor_path: Path,
-        source: str,
-    ):
-        self.endResetModel()
-
-    @override
     async def before_actors_deleted(self, actor_paths: List[Path], source: str):
         self.beginResetModel()
 
