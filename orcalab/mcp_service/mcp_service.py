@@ -2312,7 +2312,7 @@ class OrcaLabMCPServer:
         Args:
             asset_path: Actor在场景中的路径，如 "/actor_name"（Actor级）或 "/actor_name/Entity名"（Entity级）
         Returns:
-            包含所有属性组和属性的json字符串格式，每个属性包含名称、显示名、类型、值、基础值、只读状态等信息
+            包含所有属性组和属性的json字符串格式，每个属性包含名称、类型和值
         '''
         try:
             actor_path, entity_name = self._split_combined_path(asset_path)
@@ -2324,21 +2324,11 @@ class OrcaLabMCPServer:
                 result = []
                 for group in groups:
                     group_dict = {
-                        "name": group.name,
-                        "hint": group.hint,
-                        "entity_path": group.entity_path.string(),
-                        "component_type_id": group.component_type_id,
-                        "component_type_index": group.component_type_index,
                         "properties": [
                             {
                                 "name": prop.name(),
-                                "display_name": prop.display_name(),
                                 "type": prop.value_type().name,
                                 "value": prop.value(),
-                                "base_value": prop.base_value(),
-                                "read_only": prop.is_read_only(),
-                                "editor_hint": prop.editor_hint(),
-                                "enum_values": prop.enum_values(),
                             }
                             for prop in group.properties
                         ]
@@ -2371,21 +2361,11 @@ class OrcaLabMCPServer:
                 result = []
                 for group in groups:
                     group_dict = {
-                        "name": group.name,
-                        "hint": group.hint,
-                        "entity_path": group.entity_path.string(),
-                        "component_type_id": group.component_type_id,
-                        "component_type_index": group.component_type_index,
                         "properties": [
                             {
                                 "name": prop.name(),
-                                "display_name": prop.display_name(),
                                 "type": prop.value_type().name,
                                 "value": prop.value(),
-                                "base_value": prop.base_value(),
-                                "read_only": prop.is_read_only(),
-                                "editor_hint": prop.editor_hint(),
-                                "enum_values": prop.enum_values(),
                             }
                             for prop in group.properties
                         ]
@@ -2408,15 +2388,13 @@ class OrcaLabMCPServer:
         try:
             actor_path, entity_name = self._split_combined_path(asset_path)
             remote_scene = get_remote_scene()
-            keys = []
-            values = []
 
             if entity_name is None:
                 # Actor 级别
                 groups = await remote_scene.get_actor_property_groups(actor_path)
                 for group in groups:
                     for prop in group.properties:
-                        if prop.name() == property_name:
+                        if prop.name().lower() == property_name.lower():
                             key = ActorPropertyKey(
                                 actor_path=actor_path,
                                 entity_id=0,
@@ -2426,8 +2404,9 @@ class OrcaLabMCPServer:
                                 property_name=prop.name(),
                                 property_type=prop.value_type(),
                             )
-                            keys.append(key)
-                            values.append(property_value)
+                            await SceneEditRequestBus().set_property(
+                                key, property_value, undo=False, source="mcp"
+                            )
             else:
                 # Entity 级别 — 按 entity 名在层级树中查找
                 infos = await remote_scene._service.get_entity_hierarchy_batch([actor_path])
@@ -2465,7 +2444,7 @@ class OrcaLabMCPServer:
                 groups = groups_list[0]
                 for group in groups:
                     for prop in group.properties:
-                        if prop.name() == property_name:
+                        if prop.name().lower() == property_name.lower():
                             key = ActorPropertyKey(
                                 actor_path=actor_path,
                                 entity_id=0,
@@ -2475,15 +2454,10 @@ class OrcaLabMCPServer:
                                 property_name=prop.name(),
                                 property_type=prop.value_type(),
                             )
-                            keys.append(key)
-                            values.append(property_value)
+                            await SceneEditRequestBus().set_property(
+                                key, property_value, undo=False, source="mcp"
+                            )
 
-            if not keys:
-                return json.dumps(
-                    {"success": False, "message": f"未找到属性 '{property_name}'"},
-                    ensure_ascii=False,
-                )
-            await remote_scene.set_properties(keys, values)
             return json.dumps(
                 {"success": True, "message": f"成功设置属性 '{property_name}'"},
                 ensure_ascii=False,
