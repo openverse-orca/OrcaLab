@@ -116,12 +116,27 @@ echo   ----------------------------------------
 echo   [INFO] Installing orca-lab==__ORCALAB_VERSION__ ...
 echo   [INFO] This step may take a while on slow networks.
 
-"%CONDA_EXE%" run --no-capture-output --prefix "%ENV_PREFIX%" pip install --quiet orca-lab==__ORCALAB_VERSION__ -i https://pypi.tuna.tsinghua.edu.cn/simple __PIP_EXTRA_INDEX_URLS__
-if !ERRORLEVEL! NEQ 0 (
-    echo   [ERROR] Failed to install orca-lab.
-    echo   [INFO] Troubleshooting:
-    echo         1. Check your internet connection.
-    echo         2. Verify version __ORCALAB_VERSION__ exists.
+set "PIP_OK=0"
+for /L %%i in (1,1,3) do (
+    if "!PIP_OK!"=="0" (
+        echo   [INFO] pip install attempt %%i/3 ...
+        "%CONDA_EXE%" run --no-capture-output --prefix "%ENV_PREFIX%" pip install --quiet orca-lab==__ORCALAB_VERSION__ --retries 5 --timeout 60 -i https://pypi.tuna.tsinghua.edu.cn/simple __PIP_EXTRA_INDEX_URLS__
+        if !ERRORLEVEL! NEQ 0 (
+            echo   [WARN] pip install attempt %%i failed (possible network issue^). Retrying...
+        ) else (
+            REM -- Verify the install is actually complete by importing it --
+            "%CONDA_EXE%" run --no-capture-output --prefix "%ENV_PREFIX%" python -c "import orcalab" >nul 2>&1
+            if !ERRORLEVEL! EQU 0 (
+                set "PIP_OK=1"
+            ) else (
+                echo   [WARN] orca-lab installed but import failed (incomplete install^). Retrying...
+            )
+        )
+    )
+)
+if "!PIP_OK!"=="0" (
+    echo   [ERROR] Failed to install orca-lab after multiple attempts.
+    echo   [INFO] Troubleshooting: Check your internet connection.
     if "%SETUP_ONLY%"=="1" exit /b 1
     pause
     exit /b 1
