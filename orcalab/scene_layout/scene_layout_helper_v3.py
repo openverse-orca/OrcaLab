@@ -180,7 +180,24 @@ def _parse_property_type(prop_type_data: Any) -> ActorPropertyType | None:
         return ActorPropertyType.ENUM
     elif prop_type == "asset":
         return ActorPropertyType.ASSET
+    logger.error("unknow type")
     return None
+
+def _property_type_to_string(prop_type: ActorPropertyType) -> str:
+    if prop_type == ActorPropertyType.BOOL:
+        return "bool"
+    elif prop_type == ActorPropertyType.FLOAT:
+        return "float"
+    elif prop_type == ActorPropertyType.INTEGER:
+        return "int"
+    elif prop_type == ActorPropertyType.STRING:
+        return "string"
+    elif prop_type == ActorPropertyType.ENUM:
+        return "enum"
+    elif prop_type == ActorPropertyType.ASSET:
+        return "asset"
+    logger.error("unknow type")
+    return ""
 
 
 def _parse_value(prop_type: ActorPropertyType, value_data: Any) -> Any | None:
@@ -505,6 +522,7 @@ class SceneLayoutV3Serializer:
         return {
             "name": override.property_name,
             "value": override.value,
+            "type": _property_type_to_string(override.type),
         }
 
 
