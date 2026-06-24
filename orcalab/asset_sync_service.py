@@ -125,10 +125,10 @@ class AssetSyncService:
         self.downloaded_packages_folder = downloaded_packages_folder
         self.timeout = timeout
         self.aiohttp_timeout = aiohttp.ClientTimeout(
-            total=timeout,
+            total=None,
             connect=5,
             sock_connect=5,
-            sock_read=5,
+            sock_read=timeout,
         )
         self.callbacks = callbacks or AssetSyncCallbacks()
         self.verbose = verbose
