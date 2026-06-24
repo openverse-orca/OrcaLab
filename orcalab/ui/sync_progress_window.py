@@ -69,6 +69,7 @@ class AssetItemWidget(QtWidgets.QWidget):
         self.delete_local_button = QtWidgets.QPushButton("删除本地")
         self.delete_local_button.setFixedWidth(70)
         self.delete_local_button.setVisible(self._has_local)
+        self.delete_local_button.setStyleSheet("color: white; background-color: red;")
         self.delete_local_button.clicked.connect(lambda: self.delete_local_clicked.emit(self.file_name))
         layout.addWidget(self.delete_local_button)
 
@@ -154,8 +155,8 @@ class AssetItemWidget(QtWidgets.QWidget):
             self.status_text.setText("不兼容")
             self.status_text.setStyleSheet("color: orange;")
         elif self.status == 'cloud_deleted':
-            self.status_text.setText("远程已删除")
-            self.status_text.setStyleSheet("color: orange;")
+            self.status_text.setText("云端已删除")
+            self.status_text.setStyleSheet("color: red;")
         elif self.status == 'incomplete':
             self.status_text.setText("文件下载不完整")
             self.status_text.setStyleSheet("color: orange;")
@@ -181,6 +182,8 @@ class AssetItemWidget(QtWidgets.QWidget):
         self.update_status_text()
         self.progress_bar.setVisible(status in ['download', 'downloading'])
         self.delete_local_button.setVisible(status == 'cloud_deleted' and self._has_local)
+        if status == 'cloud_deleted':
+            self.setVisible(not self._has_local)
 
     def set_name_size(self, name: str, size: float):
         """更新资产包名字"""
@@ -341,9 +344,10 @@ class SyncProgressWindow(QtWidgets.QDialog):
         
         if status == 'cloud_deleted':
             self.asset_list_layout.insertWidget(0, widget)
+            widget.setVisible(has_local)
         else:
             count = self.asset_list_layout.count()
-            self.asset_list_layout.insertWidget(count - 1, widget)  
+            self.asset_list_layout.insertWidget(count - 1, widget)
 
         self.update_stats()
 
