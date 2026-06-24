@@ -291,7 +291,7 @@ class AssetSyncService:
                 if download_info is None:
                     self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
                     self.callbacks.on_set_status(pkg_id, 'failed')
-                    logger.debug("%s 获取 download url 失败", file_name)
+                    logger.debug("%s %s 获取 download url 失败", file_name, pkg_name)
                     continue
                 else:
                     if download_info.get("isDeleted") == False:
@@ -299,15 +299,15 @@ class AssetSyncService:
                     else:
                         has_local = local_path.exists() or downloaded_path.exists()
                         self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'cloud_deleted', has_local)
-                        logger.debug("%s 已被云端删除", file_name)
+                        logger.debug("%s %s 已被云端删除", file_name, pkg_name)
                         continue
             else:
                 if download_info and download_info.get("isDeleted") == True:
-                    logger.debug("%s 已被云端删除", file_name)
+                    logger.debug("%s %s 增量包已被云端删除", file_name, pkg_name)
                     continue # 跳过已被云端删除的增量包
                 pkg_id = self.patch_to_base_map.get(pkg['id'])
                 if pkg_id is None:
-                    logger.debug("patch_to_base_map 中未找到包 %s 对应的全量包映射", file_name)
+                    logger.debug("patch_to_base_map 中未找到包 %s %s 对应的全量包映射", file_name, pkg_name)
                     continue
             
             if download_info is None:
@@ -315,7 +315,7 @@ class AssetSyncService:
             
             if download_info.get("_forbidden"):
                 self.callbacks.on_set_status(pkg_id, 'forbidden')
-                logger.debug("%s 已下线", file_name)
+                logger.debug("%s %s 已下线", file_name, pkg_name)
                 continue
             cloud_file_sha256 = download_info.get("sha256")
             if local_path.exists():
@@ -323,33 +323,33 @@ class AssetSyncService:
                     local_file_sha256 = calculate_file_sha256(local_path)
                     if local_file_sha256.lower() == cloud_file_sha256:
                         self.callbacks.on_set_status(pkg_id, 'ok')
-                        logger.info("%s 已最新", file_name)
+                        logger.info("%s %s 已最新", file_name, pkg_name)
                     else:
                         self.callbacks.on_set_status(pkg_id, 'download')
                         missing_packages.append(pkg)
-                        logger.info("%s hash 不匹配，需重新下载", file_name)
+                        logger.info("%s %s hash 不匹配，需重新下载", file_name, pkg_name)
                 else:
                     self.callbacks.on_set_status(pkg_id, 'ok')
-                    logger.info("%s 已最新", file_name)
+                    logger.info("%s %s 已最新", file_name, pkg_name)
             elif downloaded_path.exists():
                 if cloud_file_sha256:
                     local_file_sha256 = calculate_file_sha256(downloaded_path)
                     if local_file_sha256.lower() == cloud_file_sha256:
                         shutil.copy2(downloaded_path, local_path)
                         self.callbacks.on_set_status(pkg_id, 'ok')
-                        logger.info("%s 已最新", file_name)
+                        logger.info("%s %s 已最新", file_name, pkg_name)
                     else:
                         self.callbacks.on_set_status(pkg_id, 'download')
                         missing_packages.append(pkg)
-                        logger.info("%s hash 不匹配，需重新下载", file_name)
+                        logger.info("%s %s hash 不匹配，需重新下载", file_name, pkg_name)
                 else:
                     shutil.copy2(downloaded_path, local_path)
                     self.callbacks.on_set_status(pkg_id, 'ok')
-                    logger.info("%s 已最新", file_name)
+                    logger.info("%s %s 已最新", file_name, pkg_name)
             else:
                 self.callbacks.on_set_status(pkg_id, 'download')
                 missing_packages.append(pkg)
-                logger.info("%s 需要下载", file_name)
+                logger.info("%s %s 需要下载", file_name, pkg_name)
 
         for pkg in incompatible_packages:
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
@@ -357,7 +357,7 @@ class AssetSyncService:
             pkg_name = pkg['name']
             if "_patch_" not in file_name:
                 self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, 0, 'incompatible')
-            logger.info("%s 没有与当前版本兼容的资产", file_name)
+            logger.info("%s %s 没有与当前版本兼容的资产", file_name, pkg_name)
         
         # 检查需要删除的文件
         subscribed_file_names = set()
