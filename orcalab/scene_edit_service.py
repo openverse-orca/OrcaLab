@@ -805,6 +805,7 @@ class SceneEditService(SceneEditRequest):
             clean_keys = [key.clone() for key in property_keys]
             for clean_key in clean_keys:
                 clean_key.entity_id = 0
+            assert old_values is not None
             command = PropertyChangesCommand(clean_keys, old_values, values)
             UndoRequestBus().add_command(command)
 
