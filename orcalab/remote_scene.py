@@ -419,6 +419,7 @@ class RemoteScene(SceneEditNotification):
             )
 
         await self._fetch_entity_heirarchy(requests)
+        # await asyncio.sleep(0.5) # wait mesh load
         await self._apply_overrides(requests)
 
     async def delete_actor_batch(self, actor_paths: List[Path]) -> None:

@@ -97,6 +97,13 @@ class PropertyChangeCommand(BaseCommand):
     new_value: Any
 
 
+@dataclass
+class PropertyChangesCommand(BaseCommand):
+    property_keys: List[ActorPropertyKey]
+    old_values: List[Any]
+    new_values: List[Any]
+
+
 class DuplicateActorsCommand(BaseCommand):
     def __init__(self, source_paths: List[Path] = [], new_paths: List[Path] = []):
         self.source_paths = source_paths

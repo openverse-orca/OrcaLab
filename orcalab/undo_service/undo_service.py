@@ -17,6 +17,7 @@ from orcalab.undo_service.command import (
     DeleteActorCommand,
     MoveActorCommand,
     PropertyChangeCommand,
+    PropertyChangesCommand,
     RenameActorCommand,
     SelectionCommand,
     TransformCommand,
@@ -155,6 +156,10 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().set_property(
                     command.property_key, command.old_value, undo=False
                 )
+            case PropertyChangesCommand():
+                await SceneEditRequestBus().set_properties(
+                    command.property_keys, command.old_values, undo=False
+                )
             case DuplicateActorsCommand():
                 await SceneEditRequestBus().delete_actors(command.new_paths, undo=False)
             case _:
@@ -196,6 +201,10 @@ class UndoService(UndoRequest):
             case PropertyChangeCommand():
                 await SceneEditRequestBus().set_property(
                     command.property_key, command.new_value, undo=False
+                )
+            case PropertyChangesCommand():
+                await SceneEditRequestBus().set_properties(
+                    command.property_keys, command.new_values, undo=False
                 )
             case DuplicateActorsCommand():
                 await SceneEditRequestBus().duplicate_actors(

@@ -134,40 +134,50 @@ class ColorPropertyEdit(StyledWidget):
         b_val = new_color.blueF()
         a_val = new_color.alphaF()
 
-        if "r" in self._channels:
-            self._channels["r"].set_value(r_val)
-        if "g" in self._channels:
-            self._channels["g"].set_value(g_val)
-        if "b" in self._channels:
-            self._channels["b"].set_value(b_val)
-        if "a" in self._channels:
-            self._channels["a"].set_value(a_val)
-
-        self._commit_color_change(r_val, g_val, b_val, a_val)
-        self._update_preview_button(new_color)
-        self._update_value_label(new_color)
-
-    def _commit_color_change(
-        self, r_val: float, g_val: float, b_val: float, a_val: float
-    ):
-        asyncio.create_task(self._commit_color_change_async(r_val, g_val, b_val, a_val))
-
-    async def _commit_color_change_async(
-        self, r_val: float, g_val: float, b_val: float, a_val: float
-    ):
-        bus = SceneEditRequestBus()
-
         channels_in_order = [
             ("r", r_val),
             ("g", g_val),
             ("b", b_val),
             ("a", a_val),
         ]
-        last_idx = len(channels_in_order) - 1
-        for idx, (ch_name, ch_val) in enumerate(channels_in_order):
+
+        keys: list[ActorPropertyKey] = []
+        values: list[float] = []
+        old_values: list[float] = []
+        for ch_name, ch_val in channels_in_order:
             key = self._channel_keys.get(ch_name)
-            if key is None:
+            prop = self._channels.get(ch_name)
+            if key is None or prop is None:
                 continue
-            is_last = idx == last_idx
-            await bus.set_property(key, ch_val, undo=is_last, source="ui")
-            # TODO set_property_batch
+            old_values.append(prop.value())
+            prop.set_value(ch_val)
+            keys.append(key)
+            values.append(ch_val)
+
+        self._commit_color_change(keys, values, old_values)
+        self._update_preview_button(new_color)
+        self._update_value_label(new_color)
+
+    def _commit_color_change(
+        self,
+        keys: list[ActorPropertyKey],
+        values: list[float],
+        old_values: list[float],
+    ):
+        asyncio.create_task(self._commit_color_change_async(keys, values, old_values))
+
+    async def _commit_color_change_async(
+        self,
+        keys: list[ActorPropertyKey],
+        values: list[float],
+        old_values: list[float],
+    ):
+        if not keys:
+            return
+        await SceneEditRequestBus().set_properties(
+            property_keys=keys,
+            values=values,
+            undo=True,
+            old_values=old_values,
+            source="ui",
+        )

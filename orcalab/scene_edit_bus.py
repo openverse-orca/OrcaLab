@@ -111,6 +111,16 @@ class SceneEditRequest:
     ):
         pass
 
+    async def set_properties(
+        self,
+        property_keys: List[ActorPropertyKey],
+        values: List[Any],
+        undo: bool,
+        old_values: List[Any] | None = None,
+        source: str = "",
+    ):
+        pass
+
     async def start_change_property(
         self, property_key: ActorPropertyKey, old_value: Any, timeout: float
     ):

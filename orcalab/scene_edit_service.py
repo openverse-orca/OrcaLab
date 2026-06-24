@@ -36,6 +36,7 @@ from orcalab.undo_service.command import (
     DuplicateActorsCommand,
     MoveActorCommand,
     PropertyChangeCommand,
+    PropertyChangesCommand,
     RenameActorCommand,
     SelectionCommand,
     TransformCommand,
@@ -770,6 +771,41 @@ class SceneEditService(SceneEditRequest):
             clean_key = property_key.clone()
             clean_key.entity_id = 0
             command = PropertyChangeCommand(clean_key, old_value, value)
+            UndoRequestBus().add_command(command)
+
+    @override
+    async def set_properties(
+        self,
+        property_keys: List[ActorPropertyKey],
+        values: List[Any],
+        undo: bool = True,
+        old_values: List[Any] | None = None,
+        source: str = "",
+    ):
+        assert len(property_keys) == len(values), (
+            "property_keys and values must have the same length."
+        )
+
+        if len(property_keys) == 0:
+            return
+
+        bus = SceneEditNotificationBus()
+
+        if undo and old_values is None:
+            infos = await self.remote_scene.get_properties(property_keys, True)
+            old_values = [info.value for info in infos]
+
+        await self.remote_scene.set_properties(property_keys, values)
+        for property_key in property_keys:
+            self._post_process_dispatcher.on_property_set(property_key)
+
+        await bus.on_properties_changed(property_keys, values, source)
+
+        if undo:
+            clean_keys = [key.clone() for key in property_keys]
+            for clean_key in clean_keys:
+                clean_key.entity_id = 0
+            command = PropertyChangesCommand(clean_keys, old_values, values)
             UndoRequestBus().add_command(command)
 
     @override
