@@ -577,7 +577,7 @@ class AssetSyncService:
                     if total_images > 0 and (completed_images == 1 or completed_images % 5 == 0 or completed_images == total_images):
                         self.callbacks.on_metadata_sync('scanning', completed_images, total_images)
 
-            self.callbacks.on_metadata_sync('complete', updated_count, len(to_update_metadata))
+            self.callbacks.on_metadata_sync('complete', len(to_update_metadata), len(to_update_metadata))
             
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, ensure_ascii=False, indent=2)
