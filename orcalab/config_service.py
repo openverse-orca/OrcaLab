@@ -422,7 +422,7 @@ class ConfigService:
 
     def datalink_timeout(self) -> int:
         """获取 DataLink 请求超时时间"""
-        return self.config.get("datalink", {}).get("timeout", 60)
+        return self.config.get("datalink", {}).get("timeout", 10)
 
     def datalink_auth_server_url(self) -> str:
         """获取 DataLink 认证服务器地址"""
