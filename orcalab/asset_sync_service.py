@@ -312,10 +312,16 @@ class AssetSyncService:
                     if download_info.get("isDeleted") == False:
                         self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
                     else:
-                        has_local = local_path.exists() or downloaded_path.exists()
-                        self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'cloud_deleted', has_local)
-                        logger.debug("%s %s 已被云端删除", file_name, pkg_name)
-                        continue
+                        if download_info.get("_forbidden") == True:
+                            self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'forbidden')
+                            logger.debug("%s %s 已下线", file_name, pkg_name)
+                            continue
+                        else:
+                            # logger.debug("download_info: %s", download_info)
+                            has_local = local_path.exists() or downloaded_path.exists()
+                            self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'cloud_deleted', has_local)
+                            logger.debug("%s %s 已被云端删除", file_name, pkg_name)
+                            continue
             else:
                 if download_info and download_info.get("isDeleted") == True:
                     logger.debug("%s %s 增量包已被云端删除", file_name, pkg_name)
