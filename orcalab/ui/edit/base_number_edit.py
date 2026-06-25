@@ -196,23 +196,16 @@ class BaseNumberEdit(Generic[_T_num], QtWidgets.QLineEdit):
         if self._set_value_only(value) and self._real_time_type:
             self._notify_value_changed()
 
-    def _set_value_and_text(self, value: _T_num) -> bool:
-        if self._set_value_only(value):
-            text = self._value_to_text(value)
-            self.setText(text)
-            return True
-        return False
-
-    def _increase(self, emit_signal: bool):
+    def _increase(self, notify: bool):
         new_value = self.value() + self.step()
         if self._set_value_and_text(new_value):
-            if emit_signal:
+            if notify:
                 self._notify_value_changed()
 
-    def _decrease(self, emit_signal: bool):
+    def _decrease(self, notify: bool):
         new_value = self.value() - self.step()
         if self._set_value_and_text(new_value):
-            if emit_signal:
+            if notify:
                 self._notify_value_changed()
 
     def _on_drag(self, delta_x: float):
@@ -237,7 +230,22 @@ class BaseNumberEdit(Generic[_T_num], QtWidgets.QLineEdit):
         self._set_value_and_text(value)
 
     def _set_value_only(self, value: _T_num) -> bool:
+        """
+        Set the value of the edit without updating the text.
+        Return True if the value is changed, False otherwise.
+        """
         raise NotImplementedError()
+
+    def _set_value_and_text(self, value: _T_num) -> bool:
+        """
+        Set both the text and value of the edit to the value.
+        Return True if the value is changed, False otherwise.
+        """
+        if self._set_value_only(value):
+            text = self._value_to_text(value)
+            self.setText(text)
+            return True
+        return False
 
     def step(self) -> _T_num:
         raise NotImplementedError()
