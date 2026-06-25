@@ -159,7 +159,11 @@ def _run_cmd(cmd: List[str], timeout: float = 5.0) -> Optional[str]:
             cmd, stderr=subprocess.DEVNULL, timeout=timeout
         )
         return out.decode(errors="ignore").strip()
+    except subprocess.TimeoutExpired:
+        logger.warning("命令执行超时 (%.1fs): %s", timeout, " ".join(cmd))
+        return None
     except Exception:
+        logger.debug("命令执行失败: %s", " ".join(cmd), exc_info=True)
         return None
 
 
@@ -477,13 +481,16 @@ def check_gpu_drivers() -> GpuDriverCheckResult:
 def _detect_gpu_hardware_windows() -> List[GpuDeviceInfo]:
     devices: List[GpuDeviceInfo] = []
 
+    # PowerShell + WMI 在部分 Windows 机器上冷启动较慢（实测可达 5s+），
+    # 默认 5s 超时会导致检测失败返回空列表。此处放宽到 15s。
     out = _run_cmd([
-        "powershell", "-NoProfile", "-Command",
+        "powershell", "-Command",
         "Get-WmiObject Win32_VideoController | "
         "Select-Object Name, AdapterCompatibility, DriverVersion, AdapterRAM | "
         "ConvertTo-Json"
-    ])
+    ], timeout=15.0)
     if not out:
+        logger.warning("WMI 查询失败或超时，Windows GPU 检测返回空列表")
         return devices
 
     import json
