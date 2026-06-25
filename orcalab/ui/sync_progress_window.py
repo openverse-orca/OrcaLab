@@ -321,8 +321,8 @@ class SyncProgressWindow(QtWidgets.QDialog):
         self.offline_button.clicked.connect(self.on_offline_clicked)
         bottom_layout.addWidget(self.offline_button)
         
-        # 关闭按钮（初始禁用，成功后显示）
-        self.close_button = QtWidgets.QPushButton("关闭")
+        # 继续按钮（初始禁用，成功后显示）
+        self.close_button = QtWidgets.QPushButton("继续")
         self.close_button.setEnabled(False)
         self.close_button.clicked.connect(self.on_close_clicked)
         bottom_layout.addWidget(self.close_button)
@@ -530,9 +530,9 @@ class SyncProgressWindow(QtWidgets.QDialog):
     def update_countdown_button(self):
         """更新倒计时按钮文本"""
         if self.countdown_seconds > 0:
-            self.close_button.setText(f"关闭 ({self.countdown_seconds})")
+            self.close_button.setText(f"继续 ({self.countdown_seconds})")
         else:
-            self.close_button.setText("关闭")
+            self.close_button.setText("继续")
     
     def on_countdown_tick(self):
         """倒计时滴答"""
@@ -544,7 +544,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
             if self.countdown_timer:
                 self.countdown_timer.stop()
                 self.countdown_timer = None
-            self.close_button.setText("关闭")
+            self.close_button.setText("继续")
             self.accept()  # 自动关闭
     
     def on_exit_clicked(self):
