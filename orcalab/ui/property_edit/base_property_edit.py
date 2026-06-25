@@ -83,37 +83,18 @@ class BasePropertyEdit(Generic[_T], StyledWidget):
     def _do_set_value(self, value: _T, undo: bool):
         asyncio.create_task(self._do_set_value_async(value, undo))
 
-    def _on_start_drag(self):
-        SceneEditRequestBus().start_change_property(self.context.key)
-        self.in_dragging = True
+    def _create_label(self, label_width: int) -> QtWidgets.QLabel:
+        display_name = self.context.prop.display_name()
+        if not display_name:
+            display_name = self.context.prop.name()
 
-    def _on_end_drag(self):
-        async def warpper():
-            await self._do_set_value_async(self.context.prop.value(), undo=True)
-            SceneEditRequestBus().end_change_property(self.context.key)
-            self.in_dragging = False
+        if display_name.rfind(".") != -1:
+            display_name = display_name.split(".")[-1]
 
-        asyncio.create_task(warpper())
+        label = QtWidgets.QLabel(display_name)
+        label.setMinimumWidth(label_width)
+        label.setMaximumWidth(label_width * 2)
 
-    def set_value(self, value: _T):
-        pass
-
-    def _create_label(self, label_width: int, display_text: str | None = None) -> QtWidgets.QLabel:
-        if display_text is not None:
-            text = display_text
-        else:
-            text = self.context.prop.display_name()
-            if not text:
-                text = self.context.prop.name()
-        label = QtWidgets.QLabel(text)
-        if label_width > 0:
-            label.setMinimumWidth(label_width)
-            label.setMaximumWidth(label_width * 2)
-        else:
-            label.setSizePolicy(
-                QtWidgets.QSizePolicy.Policy.Preferred,
-                QtWidgets.QSizePolicy.Policy.Preferred,
-            )
         label.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
