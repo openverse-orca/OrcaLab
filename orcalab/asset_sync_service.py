@@ -467,59 +467,20 @@ class AssetSyncService:
                 del metadata[pak_id]
 
         to_update_metadata = set()
-        package_infos = [
-            {
-                "id": package['id'],
-                "name": package['name'],
-                "revisionKind": package.get('revisionKind')
-            }
-            for package in packages
+        package_ids = [package['id'] for package in packages]
+
+        for pkg_id in package_ids:
+            if pkg_id not in metadata:
+                to_update_metadata.add(pkg_id)
+
+        missing_pak_ids = [
+            to_missing_pak['id'] for to_missing_pak in to_missing
         ]
 
-        patch_names = {
-            p["name"] for p in package_infos if p["revisionKind"] == "patch"
-        }
-
-        for package_info in package_infos:
-            pkg_id = package_info["id"]
-            name = package_info["name"]
-            kind = package_info["revisionKind"]
-
-            if kind == "patch":
-                if pkg_id not in metadata:
-                    to_update_metadata.add(pkg_id)
-            else:
-                if name not in patch_names and pkg_id not in metadata:
-                    to_update_metadata.add(pkg_id)
-
-        package_ids = [package['id'] for package in package_infos]
-
-        missing_pak_infos = [
-            {
-                "id": to_missing_pak['id'],
-                "name": to_missing_pak['name'],
-                "revisionKind": to_missing_pak.get('revisionKind')
-            }
-            for to_missing_pak in to_missing
-        ]
-
-        missing_patch_names = {
-            p["name"] for p in missing_pak_infos if p["revisionKind"] == "patch"
-        }
-        for missing_pak_info in missing_pak_infos:
-            pkg_id = missing_pak_info["id"]
-            name = missing_pak_info["name"]
-            kind = missing_pak_info["revisionKind"]
-
-            if kind == "patch":
-                to_update_metadata.add(missing_pak_info['id'])
-                if missing_pak_info['id'] in metadata.keys():
-                    del metadata[missing_pak_info['id']]
-            else:
-                if name not in missing_patch_names:
-                    to_update_metadata.add(missing_pak_info['id'])
-                    if missing_pak_info['id'] in metadata.keys():
-                        del metadata[missing_pak_info['id']]
+        for missing_pak_id in missing_pak_ids:
+            to_update_metadata.add(missing_pak_id)
+            if missing_pak_id in metadata.keys():
+                del metadata[missing_pak_id]
 
         keys = list(metadata.keys())
         for key in keys:
