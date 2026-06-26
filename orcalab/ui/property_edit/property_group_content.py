@@ -238,6 +238,7 @@ def _render_struct_group(
     label_width: int,
     property_edits: List[BasePropertyEdit],
     layout: QtWidgets.QVBoxLayout,
+    color_property_edits: List[ColorPropertyEdit],
     indent_level: int = 0,
     collapsed: bool = True,
 ):
@@ -246,6 +247,7 @@ def _render_struct_group(
             color_edit = ColorPropertyEdit(
                 parent, struct_group, actor, actor_path, group, label_width
             )
+            color_property_edits.append(color_edit)
             row = QtWidgets.QWidget()
             row_layout = QtWidgets.QHBoxLayout(row)
             row_layout.setContentsMargins((indent_level + 1) * _indent_unit(), 0, 0, 0)
@@ -267,6 +269,7 @@ def _render_struct_group(
                 sg,
                 label_width,
                 property_edits,
+                color_property_edits,
                 indent_level=indent_level,
                 collapsed=collapsed,
             ),
@@ -323,6 +326,7 @@ def _create_struct_content(
     struct_group: StructPropertyGroup,
     label_width: int,
     property_edits: List[BasePropertyEdit],
+    color_property_edits: List[ColorPropertyEdit],
     indent_level: int = 0,
     collapsed: bool = True,
 ) -> QtWidgets.QWidget:
@@ -371,6 +375,7 @@ def _create_struct_content(
             label_width,
             property_edits,
             content_layout,
+            color_property_edits,
             indent_level=indent_level + 1,
             collapsed=collapsed,
         )
@@ -385,6 +390,7 @@ def create_property_group_content(
     group: ActorPropertyGroup,
     label_width: int,
     property_edits: List[BasePropertyEdit],
+    color_property_edits: List[ColorPropertyEdit],
     collapsed: bool = True,
 ) -> QtWidgets.QWidget:
     perf_log(
@@ -442,6 +448,7 @@ def create_property_group_content(
                 label_width,
                 property_edits,
                 content_layout,
+                color_property_edits,
                 collapsed=collapsed,
             )
         except Exception as e:

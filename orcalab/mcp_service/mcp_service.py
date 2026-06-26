@@ -31,6 +31,7 @@ from orcalab.ui.panel_bus import PanelRequestBus
 from orcalab.copilot.service import CopilotService
 from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
 from orcalab.entity_path import EntityPath, NameWithIndex
+from orcalab.actor_property import ActorEntities, ActorPropertyKey
 
 class OrcaLabMCPServer:
     def __init__(self, port):
@@ -2353,7 +2354,7 @@ class OrcaLabMCPServer:
                         if prop.name().lower() == property_name.lower():
                             key = ActorPropertyKey(
                                 actor_path=actor_path,
-                                entity_id=0,
+                                entity_id=group.entity_id,
                                 entity_path=group.entity_path,
                                 component_type_id=group.component_type_id,
                                 component_type_index=group.component_type_index,
@@ -2403,7 +2404,7 @@ class OrcaLabMCPServer:
                         if prop.name().lower() == property_name.lower():
                             key = ActorPropertyKey(
                                 actor_path=actor_path,
-                                entity_id=0,
+                                entity_id=group.entity_id,
                                 entity_path=group.entity_path,
                                 component_type_id=group.component_type_id,
                                 component_type_index=group.component_type_index,

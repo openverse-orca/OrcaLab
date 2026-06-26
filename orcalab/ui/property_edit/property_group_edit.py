@@ -18,6 +18,7 @@ from orcalab.scene_edit_bus import (
 )
 from orcalab.ui.collapsible.collapsible_section import CollapsibleSection
 from orcalab.ui.property_edit.base_property_edit import BasePropertyEdit
+from orcalab.ui.property_edit.color_property_edit import ColorPropertyEdit
 from orcalab.ui.property_edit.property_group_content import (
     create_property_group_content,
 )
@@ -49,6 +50,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         self._is_actor_root_entity = group.entity_path == root_entity_path
 
         self._property_edits: List[BasePropertyEdit] = []
+        self._color_property_edits: List[ColorPropertyEdit] = []
 
         with perf_timer(f"property_group_edit.init({group.name})", feature="PROPERTY"):
             self._section = CollapsibleSection(
@@ -75,6 +77,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
                 group=self._group,
                 label_width=self._label_width,
                 property_edits=self._property_edits,
+                color_property_edits=self._color_property_edits,
                 collapsed=False,
             )
             return content
@@ -132,6 +135,7 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
             if key.component_type_index != self._group.component_type_index:
                 continue
 
+            matched = False
             for edit in self._property_edits:
                 if edit.context.prop.name() == key.property_name:
                     if isinstance(value, PropertyData):
@@ -140,6 +144,18 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
                         edit.set_read_only(value.read_only)
                     else:
                         edit.set_value(value)
+                    matched = True
+                    break
+
+            if not matched:
+                last_seg = (
+                    key.property_name.rsplit(".", 1)[-1] if "." in key.property_name else key.property_name
+                )
+                for color_edit in self._color_property_edits:
+                    if last_seg in color_edit._channels:
+                        color_edit._channels[last_seg].set_value(value)
+                        color_edit.set_value_from_props()
+                        
 
     @override
     async def on_transforms_changed(
