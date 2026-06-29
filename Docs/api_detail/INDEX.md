@@ -119,7 +119,6 @@ Event Bus 采用**发布-订阅模式**，核心特点：
 - `SceneEditNotificationBus`：场景编辑通知（事件监听）
 - `MetadataServiceRequestBus`：元数据服务请求（本地查询）
 - `HttpServiceRequestBus`：HTTP 服务请求（远程同步）
-- `AssetServiceRequestBus`：资产服务请求（下载）
 
 ### 2.3 路径系统
 

@@ -60,6 +60,15 @@ sed -i "s/!define PRODUCT_VERSION \".*\"/!define PRODUCT_VERSION \"$VERSION\"/g"
 VI_VERSION=$(echo "$VERSION" | awk -F. '{if (NF==3) print $0".0"; else print $0}')
 sed -i "s/VIProductVersion \".*\"/VIProductVersion \"$VI_VERSION\"/g" "$NSI_FILE"
 
+# Convert .bat and .vbs to CRLF line endings
+# Windows cmd.exe requires CRLF for batch files; VBScript also works better with CRLF
+echo "Converting line endings to CRLF..."
+VBS_FILE="$SCRIPT_DIR/orcalab.vbs"
+cp "$VBS_FILE" "$VBS_FILE.bak"
+sed -i 's/\r$//;s/$/\r/' "$BAT_FILE"
+sed -i 's/\r$//;s/$/\r/' "$VBS_FILE"
+echo "  ✓ Line endings converted"
+
 # Build installer
 mkdir -p "$DIST_DIR"
 echo ""
@@ -68,6 +77,9 @@ makensis setup.nsi
 
 # Restore orcalab.bat
 mv "$BAT_FILE.bak" "$BAT_FILE"
+
+# Restore orcalab.vbs
+mv "$VBS_FILE.bak" "$VBS_FILE"
 
 # Restore setup.nsi
 mv "$NSI_FILE.bak" "$NSI_FILE"

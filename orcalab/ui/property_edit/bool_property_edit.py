@@ -1,7 +1,10 @@
-from typing import override
+import asyncio
+from typing_extensions import override
 from PySide6 import QtCore, QtWidgets, QtGui
 
+from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.ui.checkbox import CheckBox
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.property_edit.base_property_edit import (
     BasePropertyEdit,
     PropertyEditContext,
@@ -48,10 +51,17 @@ class BooleanPropertyEdit(BasePropertyEdit[bool]):
             return
 
         value = self._editor.checked()
+        old_value = self.context.prop.value()
         self.context.prop.set_value(value)
 
-        undo = not self.in_dragging
-        self._do_set_value(value, undo)
+        task = SceneEditRequestBus().set_property(
+            property_key=self.context.key,
+            value=value,
+            undo=True,
+            old_value=old_value,
+            source="ui",
+        )
+        asyncio.create_task(task)
 
     @override
     def set_value(self, value: bool):

@@ -1,5 +1,6 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 from orcalab.config_service import ConfigService
+from orcalab.ui.fonts.font_service import FontService
 
 
 class LaunchDialog(QtWidgets.QDialog):
@@ -13,90 +14,92 @@ class LaunchDialog(QtWidgets.QDialog):
         self.setWindowTitle("选择仿真程序")
         self.setModal(True)
         self.resize(500, 400)
-        
+
         self.config_service = ConfigService()
         self.selected_program = None
-        
+
+        self._fs = FontService()
         self._setup_ui()
         self._load_programs()
-        
-        # 设置样式
-        self.setStyleSheet("""
-            QWidget {
+
+        self._fs.bind_widget_stylesheet(self, self._build_stylesheet)
+    
+    def _build_stylesheet(self) -> str:
+        return f"""
+            QWidget {{
                 background-color: #181818;
                 color: #ffffff;
-            }
-            QDialog {
+            }}
+            QDialog {{
                 background-color: #2b2b2b;
                 color: #ffffff;
-            }
-            QLabel {
+            }}
+            QLabel {{
                 color: #ffffff;
-            }
-            QRadioButton {
+            }}
+            QRadioButton {{
                 color: #ffffff;
                 spacing: 8px;
-            }
-            QRadioButton::indicator {
+            }}
+            QRadioButton::indicator {{
                 width: 16px;
                 height: 16px;
                 border-radius: 8px;
                 border: 2px solid #555555;
                 background-color: #3c3c3c;
-            }
-            QRadioButton::indicator:checked {
+            }}
+            QRadioButton::indicator:checked {{
                 border-color: #0078d4;
                 background-color: #0078d4;
-            }
-            QRadioButton::indicator:checked::after {
+            }}
+            QRadioButton::indicator:checked::after {{
                 width: 8px;
                 height: 8px;
                 border-radius: 4px;
                 background-color: #ffffff;
                 margin: 2px;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 background-color: #4a4a4a;
                 border: 1px solid #555555;
                 border-radius: 4px;
                 padding: 8px 16px;
                 color: #ffffff;
-                font-weight: bold;
-            }
-            QPushButton:hover {
+                {self._fs.get_font_css("button")}
+            }}
+            QPushButton:hover {{
                 background-color: #5a5a5a;
                 border-color: #666666;
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background-color: #2a2a2a;
-            }
-            QPushButton:disabled {
+            }}
+            QPushButton:disabled {{
                 background-color: #333333;
                 color: #666666;
                 border-color: #444444;
-            }
-            QTextEdit {
+            }}
+            QTextEdit {{
                 background-color: #1e1e1e;
                 border: 1px solid #404040;
                 border-radius: 4px;
                 color: #ffffff;
-                font-family: 'Consolas', 'Monaco', monospace;
-                font-size: 12px;
+                {self._fs.get_font_css("monospace")}
                 padding: 8px;
-            }
-            QGroupBox {
+            }}
+            QGroupBox {{
                 border: 1px solid #404040;
                 border-radius: 4px;
                 margin-top: 8px;
                 padding-top: 8px;
-                font-weight: bold;
-            }
-            QGroupBox::title {
+                {self._fs.get_font_css("group_box_title")}
+            }}
+            QGroupBox::title {{
                 subcontrol-origin: margin;
                 left: 8px;
                 padding: 0 4px 0 4px;
-            }
-        """)
+            }}
+        """
     
     def _setup_ui(self):
         """设置UI布局"""
@@ -104,7 +107,10 @@ class LaunchDialog(QtWidgets.QDialog):
         
         # 标题
         title_label = QtWidgets.QLabel("选择要启动的仿真程序")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 16px;")
+        self._fs.bind_widget_stylesheet(
+            title_label,
+            lambda: f"{self._fs.get_font_css('dialog_title')} margin-bottom: 16px;",
+        )
         layout.addWidget(title_label)
         
         # 程序选择区域
@@ -197,7 +203,10 @@ class LaunchDialog(QtWidgets.QDialog):
         if not programs:
             # 如果没有配置程序，显示默认选项
             no_programs_label = QtWidgets.QLabel("未配置仿真程序")
-            no_programs_label.setStyleSheet("color: #888888; font-style: italic; padding: 16px;")
+            self._fs.bind_widget_stylesheet(
+                no_programs_label,
+                lambda: f"color: #888888; {self._fs.get_font_css('hint_text')} padding: 16px;",
+            )
             self.programs_layout.addWidget(no_programs_label)
             return
         
@@ -270,15 +279,17 @@ class LaunchDialog(QtWidgets.QDialog):
 
 if __name__ == "__main__":
     import sys
+    from pathlib import Path
     from orcalab.config_service import ConfigService
-    
-    # 初始化配置服务
+
     config_service = ConfigService()
-    config_service.init_config("/home/superfhwl/repo/OrcaLab")
-    
+    project_root = Path(__file__).resolve().parent.parent
+    workspace = Path.cwd()
+    config_service.init_config(project_root, workspace)
+
     app = QtWidgets.QApplication(sys.argv)
-    
+
     dialog = LaunchDialog()
     dialog.show()
-    
+
     sys.exit(app.exec())

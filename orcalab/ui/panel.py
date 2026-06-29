@@ -1,5 +1,6 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.icon_util import make_icon
 from orcalab.ui.panel_bus import PanelRequestBus
 from orcalab.ui.button import Button
@@ -37,7 +38,9 @@ class Panel(QtWidgets.QWidget):
         self.title_area_layout = QtWidgets.QHBoxLayout(title_area)
         self.title_area_layout.setContentsMargins(5, 0, 5, 0)
         self.title_area_layout.setSpacing(0)
-        self.title_area_layout.addWidget(QtWidgets.QLabel(self.panel_name), 0)
+        title_label = QtWidgets.QLabel(self.panel_name)
+        FontService().bind_widget_font(title_label, "panel_title")
+        self.title_area_layout.addWidget(title_label, 0)
         self.title_area_layout.addStretch(1)
         self.title_area_layout.addWidget(close_btn, 0)
 

@@ -4,7 +4,8 @@ import os
 import shutil
 import time
 import webbrowser
-from typing import List, Tuple, override
+from typing import List, Tuple
+from typing_extensions import override
 from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import Qt
 import logging
@@ -23,6 +24,7 @@ from orcalab.ui.asset_browser.thumbnail_render_service import ThumbnailRenderSer
 from orcalab.http_service.http_service import HttpService
 from orcalab.project_util import get_cache_folder
 from orcalab.config_service import ConfigService
+from orcalab.ui.fonts.font_service import FontService
 
 logger = logging.getLogger(__name__)
 class AssetBrowser(QtWidgets.QWidget):
@@ -55,113 +57,121 @@ class AssetBrowser(QtWidgets.QWidget):
 
         # 正向匹配搜索框
 
+        fs = FontService()
+
         include_label = QtWidgets.QLabel("包含:")
         include_label.setFixedWidth(40)
-        include_label.setStyleSheet("color: #ffffff; font-size: 11px;")
+        fs.bind_widget_stylesheet(
+            include_label,
+            lambda: f"color: #ffffff; {fs.get_font_css('small')}",
+        )
 
         self.include_search_box = QtWidgets.QLineEdit()
         self.include_search_box.setPlaceholderText("输入要包含的文本...")
-        self.include_search_box.setStyleSheet(
-            """
-            QLineEdit {
+        fs.bind_widget_stylesheet(
+            self.include_search_box,
+            lambda: f"""
+            QLineEdit {{
                 background-color: #3c3c3c;
                 color: #ffffff;
                 border: 1px solid #555555;
                 border-radius: 3px;
                 padding: 4px 8px;
-                font-size: 11px;
-            }
-            QLineEdit:focus {
+                {fs.get_font_css('small')}
+            }}
+            QLineEdit:focus {{
                 border-color: #0078d4;
-            }
-        """
+            }}
+        """,
         )
-
-        # 剔除匹配搜索框
 
         exclude_label = QtWidgets.QLabel("排除:")
         exclude_label.setFixedWidth(40)
-        exclude_label.setStyleSheet("color: #ffffff; font-size: 11px;")
+        fs.bind_widget_stylesheet(
+            exclude_label,
+            lambda: f"color: #ffffff; {fs.get_font_css('small')}",
+        )
 
         self.exclude_search_box = QtWidgets.QLineEdit()
         self.exclude_search_box.setPlaceholderText("输入要排除的文本...")
-        self.exclude_search_box.setStyleSheet(
-            """
-            QLineEdit {
+        fs.bind_widget_stylesheet(
+            self.exclude_search_box,
+            lambda: f"""
+            QLineEdit {{
                 background-color: #3c3c3c;
                 color: #ffffff;
                 border: 1px solid #555555;
                 border-radius: 3px;
                 padding: 4px 8px;
-                font-size: 11px;
-            }
-            QLineEdit:focus {
+                {fs.get_font_css('small')}
+            }}
+            QLineEdit:focus {{
                 border-color: #dc3545;
-            }
-        """
+            }}
+        """,
         )
 
         if self._can_render_thumbnail:
             self.create_panorama_apng_button = QtWidgets.QPushButton("渲染缩略图")
             self.create_panorama_apng_button.setToolTip("渲染资产缩略图")
-            self.create_panorama_apng_button.setStyleSheet(
-                """
-                QPushButton {
+            fs.bind_widget_stylesheet(
+                self.create_panorama_apng_button,
+                lambda: f"""
+                QPushButton {{
                     background-color: #007acc;
                     color: #ffffff;
                     border: none;
                     border-radius: 3px;
                     padding: 6px 12px;
-                    font-weight: bold;
-                    font-size: 12px;
-                }
-                QPushButton:hover {
+                    {fs.get_font_css('button')}
+                }}
+                QPushButton:hover {{
                     background-color: #005a9e;
-                }
-                QPushButton:pressed {
+                }}
+                QPushButton:pressed {{
                     background-color: #004578;
-                }
-                QPushButton:disabled {
+                }}
+                QPushButton:disabled {{
                     background-color: #555555;
                     color: #999999;
-                }
-            """
+                }}
+            """,
             )
 
         self.open_asset_store_button = QtWidgets.QPushButton("打开资产库")
         self.open_asset_store_button.setToolTip("在浏览器中打开资产库")
-        self.open_asset_store_button.setStyleSheet(
-            """
-            QPushButton {
+        fs.bind_widget_stylesheet(
+            self.open_asset_store_button,
+            lambda: f"""
+            QPushButton {{
                 background-color: #28a745;
                 color: #ffffff;
                 border: none;
                 border-radius: 3px;
                 padding: 6px 12px;
-                font-weight: bold;
-                font-size: 12px;
-            }
-            QPushButton:hover {
+                {fs.get_font_css('button')}
+            }}
+            QPushButton:hover {{
                 background-color: #218838;
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background-color: #1e7e34;
-            }
-        """
+            }}
+        """,
         )
 
-        # 状态标签
         self.status_label = QtWidgets.QLabel("0 assets")
-        self.status_label.setStyleSheet(
-            """
-            QLabel {
+        fs.bind_widget_stylesheet(
+            self.status_label,
+            lambda: f"""
+            QLabel {{
                 color: #888888;
-                font-size: 11px;
+                {fs.get_font_css('small')}
                 padding: 2px 8px;
                 background-color: #2b2b2b;
                 border-top: 1px solid #404040;
-            }
-        """
+            }}
+        """,
         )
 
         self._tree_view = AssetTreeView()

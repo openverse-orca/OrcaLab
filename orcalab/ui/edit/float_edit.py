@@ -1,4 +1,4 @@
-from typing import override
+from typing_extensions import override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.ui.edit.base_number_edit import BaseNumberEdit, BaseNumberEditState
@@ -28,7 +28,7 @@ class FloatEdit(BaseNumberEdit[float]):
 
     @override
     def _value_to_text(self, value: float) -> str:
-        return f"{value:.2f}"
+        return f"{value:.3f}"
 
     @override
     def value(self) -> float:
@@ -49,11 +49,6 @@ class FloatEdit(BaseNumberEdit[float]):
             return False
 
         self._value = clamped
-
-        if self._state != BaseNumberEditState.Typing:
-            text = self._value_to_text(self.value())
-            if self.text() != text:
-                self.setText(text)
         return True
 
     @override

@@ -28,7 +28,7 @@ class SceneLayoutConverter:
     match OrcaLab's expectations.
     """
 
-    def __init__(self, layout_version: str = "1.0"):
+    def __init__(self, layout_version: str = "3.0"):
         self._layout_version = layout_version
 
     def convert_file(
@@ -81,26 +81,20 @@ class SceneLayoutConverter:
         Convert a single scene dictionary to an OrcaLab layout dictionary.
         """
         registry: dict[str, set[str]] = defaultdict(set)
-        root_children: List[Dict[str, Any]] = []
+        actors: List[Dict[str, Any]] = []
 
         layout = scene.get("layout")
         if isinstance(layout, dict):
             converted = self._convert_entity(layout, parent_path="/", name_registry=registry)
             if converted:
-                root_children.append(converted)
+                actors.append(converted)
         else:
             logger.warning("Scene missing 'layout' block, generating empty layout for %s", scene)
 
-        root_layout = {
+        return {
             "version": self._layout_version,
-            "name": "root",
-            "path": "/",
-            "transform": self._identity_transform(),
-            "type": "GroupActor",
-            "children": root_children,
+            "actors": actors,
         }
-
-        return root_layout
 
     # --------------------------------------------------------------------- #
     # Internal helpers
@@ -230,39 +224,32 @@ class SceneLayoutConverter:
 
     def _build_transform(self, transform_data: Dict[str, Any] | None) -> Dict[str, Any]:
         if not isinstance(transform_data, dict):
-            position = np.zeros(3)
-            quaternion = np.array([1.0, 0.0, 0.0, 0.0])
+            position = [0.0, 0.0, 0.0]
+            rotation = [1.0, 0.0, 0.0, 0.0]
             scale = 1.0
         else:
-            position = np.array(transform_data.get("Translate", [0.0, 0.0, 0.0]), dtype=float)
-            rotation = np.array(transform_data.get("Rotate", [0.0, 0.0, 0.0]), dtype=float)
+            position = self._format_array(
+                np.array(transform_data.get("Translate", [0.0, 0.0, 0.0]), dtype=float)
+            )
+            euler = np.array(transform_data.get("Rotate", [0.0, 0.0, 0.0]), dtype=float)
+            rotation = self._format_array(self._euler_to_quaternion(euler))
             scale = float(transform_data.get("UniformScale", 1.0))
-            quaternion = self._euler_to_quaternion(rotation)
 
         return {
-            "position": self._format_array(position),
-            "rotation": self._format_array(quaternion),
+            "position": position,
+            "rotation": rotation,
             "scale": scale,
         }
 
     @staticmethod
-    def _identity_transform() -> Dict[str, Any]:
-        return {
-            "position": "[0,0,0]",
-            "rotation": "[1,0,0,0]",
-            "scale": 1.0,
-        }
+    def _format_array(values: Iterable[float]) -> List[float]:
+        return [SceneLayoutConverter._format_number(v) for v in values]
 
     @staticmethod
-    def _format_array(values: Iterable[float]) -> str:
-        formatted = ",".join(SceneLayoutConverter._format_number(v) for v in values)
-        return f"[{formatted}]"
-
-    @staticmethod
-    def _format_number(value: float) -> str:
+    def _format_number(value: float) -> float:
         if abs(value) < 1e-10:
             value = 0.0
-        return f"{value:.10g}"
+        return float(value)
 
     @staticmethod
     def _prefab_to_asset_path(prefab_path: str | None) -> str:

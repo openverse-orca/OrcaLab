@@ -6,11 +6,15 @@ from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
     ActorPropertyKey,
-    ActorPropertyType,
-    TreePropertyNode,
 )
+from orcalab.entity_info import EntityInfo, EntityRoot
+from orcalab.entity_path import EntityPath
 from orcalab.path import Path
 from orcalab.scene_edit_types import AddActorRequest
+from orcalab.selection_data import SelectionData
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class LocalScene:
@@ -19,8 +23,10 @@ class LocalScene:
         self.root_actor = GroupActor(name="root", parent=None)
         self._actors: Dict[Path, BaseActor] = {}
         self._actors[Path.root_path()] = self.root_actor
-        self._selection: List[Path] = []
-        self._active_actor: Path | None = None
+
+        self._selection: SelectionData = SelectionData()
+
+        self._entity_lookup_table: Dict[int, BaseActor] = {}
 
     def __contains__(self, path: Path) -> bool:
         return path in self._actors
@@ -39,12 +45,12 @@ class LocalScene:
         return self._actors.copy()
 
     @property
-    def selection(self) -> List[Path]:
+    def selected_actors(self) -> List[Path]:
         """返回当前选中Actor的路径列表，路径列表是有序的，按照路径字符串的字典序排序"""
-        return self._selection.copy()
+        return self._selection.selected_actors.copy()
 
-    @selection.setter
-    def selection(self, actors: List[Path]):
+    @selected_actors.setter
+    def selected_actors(self, actors: List[Path]):
         paths = []
         for actor in actors:
             actor, path = self.get_actor_and_path(actor)
@@ -52,25 +58,75 @@ class LocalScene:
 
         # 确保路径列表是有序的，按照路径字符串的字典序排序
         sorted_paths = sorted(paths)
-        self._selection = sorted_paths
+        self._selection.selected_actors = sorted_paths
 
     @property
-    def active_actor(self) -> Path | None:
-        """返回当前激活Actor的路径，如果没有激活Actor则返回None"""
-        return self._active_actor
+    def active_actor_path(self) -> Path | None:
+        return self._selection.active_actor_path
 
-    @active_actor.setter
-    def active_actor(self, actor_path: Path | None):
-        self._active_actor = actor_path
+    @property
+    def active_entity(self) -> EntityPath:
+        return self._selection.active_entity_path
+
+    def selection(self) -> SelectionData:
+        """只读接口，返回当前的SelectionData的拷贝"""
+        return self._selection.clone()
+
+    def set_selection(self, selection: SelectionData):
+        self._selection = selection.clone()
 
     def find_actor_by_path(self, path: Path) -> BaseActor | None:
         if path in self._actors:
             return self._actors[path]
         return None
 
-    def get_actor_path(self, actor) -> Path | None:
+    def get_entity_root(self, actor_path: Path) -> EntityRoot | None:
+        actor = self.find_actor_by_path(actor_path)
+        if isinstance(actor, AssetActor):
+            return actor.entity_root
+        return None
+
+    def set_entity_root(self, actor_path: Path, entity_root_info: EntityInfo):
+        actor = self.find_actor_by_path(actor_path)
+        if actor is None:
+            logger.error(f"Actor at path {actor_path} does not exist.")
+            return
+        entity_root = EntityRoot(entity_root_info)
+        entity_root.build_lookup_table()
+        actor.entity_root = entity_root
+
+        for entity_id in entity_root.entity_ids():
+            self._entity_lookup_table[entity_id] = actor
+
+    def find_actor_by_entity_id(self, entity_id: int) -> BaseActor | None:
+        return self._entity_lookup_table.get(entity_id, None)
+
+    def find_entity_path_by_id(self, entity_id: int) -> EntityPath | None:
+        actor = self.find_actor_by_entity_id(entity_id)
+        if actor is None:
+            return None
+
+        entity_root = actor.entity_root
+        entity_info = entity_root.find_entity_info(entity_id)
+        if entity_info is None:
+            return None
+
+        return entity_info.entity_path
+
+    def find_entity_id(self, actor_path: Path, entity_path: EntityPath) -> int:
+        actor = self.find_actor_by_path(actor_path)
+        if actor is None or actor.entity_root is None:
+            return 0
+
+        entity_info = actor.entity_root.find_entity_info_by_path(entity_path)
+        if entity_info is None:
+            return 0
+
+        return entity_info.entity_id
+
+    def get_actor_path(self, actor: BaseActor) -> Path | None:
         for path, a in self._actors.items():
-            if a == actor:
+            if a is actor:
                 return path
         return None
 
@@ -176,11 +232,6 @@ class LocalScene:
             if not isinstance(actor, BaseActor):
                 return False, "Invalid actor."
 
-            if request.actor_template is not None:
-                same_type = type(request.actor_template) is type(request.actor)
-                if not same_type:
-                    return False, "Actor template type does not match actor type."
-
             if parent_path not in actor_list:
                 return False, f"Parent {parent_path} does not exist during add."
 
@@ -203,13 +254,13 @@ class LocalScene:
         actor_path = parent_path / actor.name
         self._actors[actor_path] = actor
 
-    def add_actor1(self, request: AddActorRequest) -> str:
+    def add_actor1(self, request: AddActorRequest):
         actor = request.actor
         parent_path = request.parent_path
 
         ok, err = self.can_add_actor(actor, parent_path)
         if not ok:
-            return err
+            raise Exception(err)
 
         parent_actor, parent_path = self.normalize_actor(parent_path)
         assert isinstance(parent_actor, GroupActor)
@@ -220,16 +271,13 @@ class LocalScene:
 
         return ""
 
-    def add_actor_batch(self, requests: List[AddActorRequest]) -> str:
+    def add_actor_batch(self, requests: List[AddActorRequest]):
         ok, err = self.can_add_actors(requests)
         if not ok:
-            return err
+            raise Exception(err)
 
         for request in requests:
-            result = self.add_actor1(request)
-            if result != "":
-                return result
-        return ""
+            self.add_actor1(request)
 
     def can_duplicate_actors(
         self, actors: Sequence[BaseActor | Path]
@@ -264,7 +312,7 @@ class LocalScene:
         if actor_path == actor_path.root_path():
             return False, "Cannot rename pseudo root actor."
 
-        if Path.is_valid_name(new_name) == False:
+        if not Path.is_valid_name(new_name):
             return False, "Invalid name."
 
         actor_parent = actor.parent
@@ -274,7 +322,7 @@ class LocalScene:
         for sibling in actor_parent.children:
             if sibling != actor and sibling.name == new_name:
                 return False, "Name already exists."
-
+            
         return True, ""
 
     def rename_actor(self, actor: BaseActor | Path, new_name):
@@ -366,55 +414,26 @@ class LocalScene:
             if isinstance(node, GroupActor):
                 q.extend(node.children)
 
-    def _find_property_in_tree(
-        self,
-        node: TreePropertyNode,
-        full_prop_name: str,
-        prop_type: ActorPropertyType,
-    ) -> ActorProperty | None:
-        """在树节点中递归查找属性，使用完整属性名匹配"""
-        for prop in node.properties:
-            # 树形属性的完整名称格式: NodeName.PropertyName
-            expected_name = f"{node.name}.{prop.name()}"
-            if expected_name == full_prop_name and prop.value_type() == prop_type:
-                return prop
-        for child in node.children:
-            result = self._find_property_in_tree(child, full_prop_name, prop_type)
-            if result:
-                return result
-        return None
+    # def parse_property_key(
+    #     self, property_key: ActorPropertyKey
+    # ) -> Tuple[BaseActor, ActorPropertyGroup, ActorProperty]:
+    #     actor = self.find_actor_by_path(property_key.actor_path)
 
-    def parse_property_key(
-        self, property_key: ActorPropertyKey
-    ) -> Tuple[BaseActor, ActorPropertyGroup, ActorProperty]:
-        actor = self.find_actor_by_path(property_key.actor_path)
+    #     if actor is None:
+    #         raise Exception("Actor does not exist.")
 
-        if actor is None:
-            raise Exception("Actor does not exist.")
+    #     assert isinstance(actor, AssetActor), "Only asset actor has properties."
 
-        assert isinstance(actor, AssetActor), "Only asset actor has properties."
+    #     for group in actor.property_groups:
+    #         if group.prefix == property_key.group_prefix:
+    #             for prop in group.properties:
+    #                 if (
+    #                     prop.name() == property_key.property_name
+    #                     and prop.value_type() == property_key.property_type
+    #                 ):
+    #                     return actor, group, prop
 
-        for group in actor.property_groups:
-            if group.prefix == property_key.group_prefix:
-                # 先在 properties 中查找
-                for prop in group.properties:
-                    if (
-                        prop.name() == property_key.property_name
-                        and prop.value_type() == property_key.property_type
-                    ):
-                        return actor, group, prop
-
-                # 再在 tree_data 中查找（遍历所有节点匹配完整属性名）
-                for tree_node in group.tree_data:
-                    prop = self._find_property_in_tree(
-                        tree_node,
-                        property_key.property_name,
-                        property_key.property_type,
-                    )
-                    if prop:
-                        return actor, group, prop
-
-        raise Exception("Property not found.")
+    #     raise Exception("Property not found.")
 
     def update_visible_recursive(
         self, actor: BaseActor, paths_to_update: List, visible: bool

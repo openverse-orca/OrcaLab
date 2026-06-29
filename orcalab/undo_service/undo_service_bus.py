@@ -19,6 +19,9 @@ class UndoRequest:
     def add_command(self, command: BaseCommand) -> None:
         pass
 
+    def clear_history(self) -> None:
+        pass
+
 
 UndoRequestBus = create_event_bus(UndoRequest)
 

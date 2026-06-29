@@ -100,6 +100,7 @@ def _get_cpu_info() -> Dict[str, Optional[object]]:
         model = _run_cmd(
             [
                 "powershell",
+                "-NoProfile",
                 "-Command",
                 "(Get-WmiObject Win32_Processor).Name",
             ]

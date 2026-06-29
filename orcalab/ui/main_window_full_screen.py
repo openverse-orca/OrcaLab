@@ -1,6 +1,7 @@
 import asyncio
 import json
-from typing import List, override
+from typing import List
+from typing_extensions import override
 import logging
 from pathlib import Path as SystemPath
 from PySide6 import QtCore, QtWidgets
@@ -61,7 +62,7 @@ class MainWindowFullScreen(
 
     async def init(self):
         self.local_scene = LocalScene()
-        self.remote_scene = RemoteScene(self.config_service)
+        self.remote_scene = RemoteScene(self.config_service, self.local_scene)
         self.scene_edit_service = SceneEditService(self.local_scene, self.remote_scene)
         self.simulation_service = SimulationService()
 

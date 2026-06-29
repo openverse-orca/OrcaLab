@@ -14,41 +14,65 @@ import time
 
 from numpy import int64
 
+from orcalab.ui.fonts.font_service import FontService
+
 
 class AssetItemWidget(QtWidgets.QWidget):
     """资产包条目组件"""
-    
-    def __init__(self, asset_name: str, file_name: str, size: float, status: str, parent=None):
+    delete_local_clicked = QtCore.Signal(str)
+
+    def __init__(self, asset_name: str, file_name: str, size: float, status: str, has_local: bool = False, parent=None):
         super().__init__(parent)
         self.asset_name = asset_name
         self.file_name = file_name
         self._size = size
-        self.status = status  # 'download', 'delete', 'ok', 'downloading'
-        
+        self.status = status  # 'download', 'delete', 'ok', 'downloading', 'cloud_deleted'
+        self._has_local = has_local
         self.setup_ui()
     
     def setup_ui(self):
+        fs = FontService()
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(10, 5, 10, 5)
         
         # 状态图标
         self.status_label = QtWidgets.QLabel()
         self.status_label.setFixedWidth(30)
+        self._status_icon_color = ""
+        self._status_icon_char = ""
+        fs.bind_widget_stylesheet(
+            self.status_label,
+            lambda: f"color: {self._status_icon_color}; {FontService().get_font_css('sync_status')}" if self._status_icon_color else "",
+        )
         self.update_status_icon()
         layout.addWidget(self.status_label)
         
         # 资产包名称和文件名
         info_layout = QtWidgets.QVBoxLayout()
         self.name_label = QtWidgets.QLabel(self.asset_name)
-        self.name_label.setStyleSheet("font-weight: bold;")
+        fs.bind_widget_stylesheet(
+            self.name_label,
+            lambda: f"{FontService().get_font_css('group_title')}",
+        )
         self.file_label = QtWidgets.QLabel(self.file_name)
-        self.file_label.setStyleSheet("color: gray; font-size: 10px;")
+        fs.bind_widget_stylesheet(
+            self.file_label,
+            lambda: f"color: gray; {FontService().get_font_css('tiny')}",
+        )
         info_layout.addWidget(self.name_label)
         info_layout.addWidget(self.file_label)
         layout.addLayout(info_layout)
         
         layout.addStretch()
         
+        # 删除本地按钮（仅云端已删除且本地有文件时显示）
+        self.delete_local_button = QtWidgets.QPushButton("删除本地")
+        self.delete_local_button.setFixedWidth(70)
+        self.delete_local_button.setVisible(self._has_local)
+        self.delete_local_button.setStyleSheet("color: white; background-color: red;")
+        self.delete_local_button.clicked.connect(lambda: self.delete_local_clicked.emit(self.file_name))
+        layout.addWidget(self.delete_local_button)
+
         # 大小
         size_mb = self._size / (1024 * 1024)
         self.size_label = QtWidgets.QLabel(f"{size_mb:.2f} MB")
@@ -70,24 +94,39 @@ class AssetItemWidget(QtWidgets.QWidget):
         layout.addWidget(self.status_text)
     
     def update_status_icon(self):
-        """更新状态图标"""
         if self.status == 'ok':
-            self.status_label.setText("✓")
-            self.status_label.setStyleSheet("color: green; font-size: 20px;")
+            self._status_icon_color = "green"
+            self._status_icon_char = "✓"
         elif self.status == 'delete':
-            self.status_label.setText("✗")
-            self.status_label.setStyleSheet("color: red; font-size: 20px;")
+            self._status_icon_color = "red"
+            self._status_icon_char = "✗"
         elif self.status in ['download', 'downloading']:
-            self.status_label.setText("⬇")
-            self.status_label.setStyleSheet("color: blue; font-size: 20px;")
+            self._status_icon_color = "blue"
+            self._status_icon_char = "⬇"
         elif self.status == 'completed':
-            self.status_label.setText("✓")
-            self.status_label.setStyleSheet("color: green; font-size: 20px;")
+            self._status_icon_color = "green"
+            self._status_icon_char = "✓"
         elif self.status == 'failed':
-            self.status_label.setText("✗")
-            self.status_label.setStyleSheet("color: red; font-size: 20px;")
+            self._status_icon_color = "red"
+            self._status_icon_char = "✗"
+        elif self.status == 'forbidden':
+            self._status_icon_color = "orange"
+            self._status_icon_char = "🔒"
         elif self.status == 'incompatible':
-            self.status_label.setText("⚠️")
+            self._status_icon_color = ""
+            self._status_icon_char = "⚠️"
+        elif self.status == 'cloud_deleted':
+            self._status_icon_color = "orange"
+            self._status_icon_char = "✗"
+        else:
+            self._status_icon_color = ""
+            self._status_icon_char = ""
+        self.status_label.setText(self._status_icon_char)
+        self.status_label.setStyleSheet(
+            f"color: {self._status_icon_color}; {FontService().get_font_css('sync_status')}"
+            if self._status_icon_color
+            else FontService().get_font_css('sync_status')
+        )
     
     def update_status_text(self):
         """更新状态文本"""
@@ -109,9 +148,15 @@ class AssetItemWidget(QtWidgets.QWidget):
         elif self.status == 'failed':
             self.status_text.setText("下载失败")
             self.status_text.setStyleSheet("color: red;")
+        elif self.status == 'forbidden':
+            self.status_text.setText("已下线")
+            self.status_text.setStyleSheet("color: orange;")
         elif self.status == 'incompatible':
             self.status_text.setText("不兼容")
             self.status_text.setStyleSheet("color: orange;")
+        elif self.status == 'cloud_deleted':
+            self.status_text.setText("云端已删除")
+            self.status_text.setStyleSheet("color: red;")
         elif self.status == 'incomplete':
             self.status_text.setText("文件下载不完整")
             self.status_text.setStyleSheet("color: orange;")
@@ -136,6 +181,9 @@ class AssetItemWidget(QtWidgets.QWidget):
         self.update_status_icon()
         self.update_status_text()
         self.progress_bar.setVisible(status in ['download', 'downloading'])
+        self.delete_local_button.setVisible(status == 'cloud_deleted' and self._has_local)
+        if status == 'cloud_deleted':
+            self.setVisible(not self._has_local)
 
     def set_name_size(self, name: str, size: float):
         """更新资产包名字"""
@@ -150,9 +198,10 @@ class SyncProgressWindow(QtWidgets.QDialog):
     # 信号（用于线程安全的UI更新）
     sync_completed = QtCore.Signal()
     sync_failed = QtCore.Signal(str)
+    delete_local_file = QtCore.Signal(str)
     
     # 内部信号（线程安全）
-    _add_asset_signal = QtCore.Signal(str, str, str, int64, str)  # id, name, file, size, status
+    _add_asset_signal = QtCore.Signal(str, str, str, float, str, bool)  # id, name, file, size, status, has_local
     _set_status_signal = QtCore.Signal(str, str)  # asset_id, status
     _set_name_size_signal = QtCore.Signal(str, str, float)  # asset_id, name, size
     _set_progress_signal = QtCore.Signal(str, int64, float)  # asset_id, progress, speed
@@ -199,7 +248,10 @@ class SyncProgressWindow(QtWidgets.QDialog):
         
         # 标题
         title_label = QtWidgets.QLabel("正在同步资产包...")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        FontService().bind_widget_stylesheet(
+            title_label,
+            lambda: FontService().get_font_css("dialog_title"),
+        )
         layout.addWidget(title_label)
         
         # 统计信息
@@ -269,8 +321,8 @@ class SyncProgressWindow(QtWidgets.QDialog):
         self.offline_button.clicked.connect(self.on_offline_clicked)
         bottom_layout.addWidget(self.offline_button)
         
-        # 关闭按钮（初始禁用，成功后显示）
-        self.close_button = QtWidgets.QPushButton("关闭")
+        # 继续按钮（初始禁用，成功后显示）
+        self.close_button = QtWidgets.QPushButton("继续")
         self.close_button.setEnabled(False)
         self.close_button.clicked.connect(self.on_close_clicked)
         bottom_layout.addWidget(self.close_button)
@@ -280,20 +332,32 @@ class SyncProgressWindow(QtWidgets.QDialog):
         # 用户选择结果（用于区分退出还是离线启动）
         self.user_choice = None  # None: 未选择, 'exit': 退出, 'offline': 离线启动, 'close': 正常关闭
     
-    def add_asset(self, asset_id: str, asset_name: str, file_name: str, size: int64, status: str):
+    def add_asset(self, asset_id: str, asset_name: str, file_name: str, size: float, status: str, has_local: bool = False):
         """线程安全：添加资产包到列表"""
-        self._add_asset_signal.emit(asset_id, asset_name, file_name, size, status)
+        self._add_asset_signal.emit(asset_id, asset_name, file_name, size, status, has_local)
     
-    def _add_asset_impl(self, asset_id: str, asset_name: str, file_name: str, size: int64, status: str):
+    def _add_asset_impl(self, asset_id: str, asset_name: str, file_name: str, size: float, status: str, has_local: bool):
         """内部实现：添加资产包"""
-        widget = AssetItemWidget(asset_name, file_name, float(size), status)
+        widget = AssetItemWidget(asset_name, file_name, float(size), status, has_local=has_local)
+        widget.delete_local_clicked.connect(self._on_delete_local_clicked)
         self.asset_widgets[asset_id] = widget
         
-        # 插入到 stretch 之前
-        count = self.asset_list_layout.count()
-        self.asset_list_layout.insertWidget(count - 1, widget)
-        
+        if status == 'cloud_deleted':
+            self.asset_list_layout.insertWidget(0, widget)
+            widget.setVisible(has_local)
+        else:
+            count = self.asset_list_layout.count()
+            self.asset_list_layout.insertWidget(count - 1, widget)
+
         self.update_stats()
+
+    def _on_delete_local_clicked(self, file_name: str):
+        self.delete_local_file.emit(file_name)
+        for asset_id, widget in self.asset_widgets.items():
+            if widget.file_name == file_name:
+                widget.delete_local_button.setVisible(False)
+                self.update_stats()
+                break
     
     def update_stats(self):
         """更新统计信息"""
@@ -427,27 +491,38 @@ class SyncProgressWindow(QtWidgets.QDialog):
             self._set_message_impl(f"同步完成！用时 {elapsed:.1f} 秒")
             self.sync_completed.emit()
             
-            # 成功时显示关闭按钮并启动倒计时
             self.close_button.setVisible(True)
             self.close_button.setEnabled(True)
-            self.start_countdown(5)
+
+            has_delete_local = any(
+                w.status == 'cloud_deleted' and w._has_local
+                for w in self.asset_widgets.values()
+            )
+            if not has_delete_local:
+                self.start_countdown(5)
         else:
             error_msg = f"同步失败：{message}" if message else "同步失败"
             self._set_message_impl(error_msg)
             self.sync_failed.emit(message)
             
-            # 失败时隐藏关闭按钮，显示退出和离线启动按钮
             self.close_button.setVisible(False)
             self.exit_button.setVisible(True)
             self.offline_button.setVisible(True)
-    
+
+    def on_close_clicked(self):
+        """关闭按钮点击处理（同步成功后）"""
+        if self.countdown_timer:
+            self.countdown_timer.stop()
+            self.countdown_timer = None
+        self.user_choice = 'close'
+        self.accept()
+
     def start_countdown(self, seconds: int):
         """启动倒计时"""
         self.countdown_seconds = seconds
         self.close_button.setEnabled(True)
         self.update_countdown_button()
         
-        # 创建定时器
         self.countdown_timer = QtCore.QTimer(self)
         self.countdown_timer.timeout.connect(self.on_countdown_tick)
         self.countdown_timer.start(1000)  # 每秒触发一次
@@ -455,9 +530,9 @@ class SyncProgressWindow(QtWidgets.QDialog):
     def update_countdown_button(self):
         """更新倒计时按钮文本"""
         if self.countdown_seconds > 0:
-            self.close_button.setText(f"关闭 ({self.countdown_seconds})")
+            self.close_button.setText(f"继续 ({self.countdown_seconds})")
         else:
-            self.close_button.setText("关闭")
+            self.close_button.setText("继续")
     
     def on_countdown_tick(self):
         """倒计时滴答"""
@@ -466,23 +541,11 @@ class SyncProgressWindow(QtWidgets.QDialog):
         if self.countdown_seconds > 0:
             self.update_countdown_button()
         else:
-            # 倒计时结束
             if self.countdown_timer:
                 self.countdown_timer.stop()
                 self.countdown_timer = None
-            self.close_button.setText("关闭")
+            self.close_button.setText("继续")
             self.accept()  # 自动关闭
-    
-    def on_close_clicked(self):
-        """关闭按钮点击处理（同步成功后）"""
-        # 停止倒计时
-        if self.countdown_timer:
-            self.countdown_timer.stop()
-            self.countdown_timer = None
-        # 设置为正常关闭
-        self.user_choice = 'close'
-        # 立即关闭
-        self.accept()
     
     def on_exit_clicked(self):
         """退出按钮点击处理"""

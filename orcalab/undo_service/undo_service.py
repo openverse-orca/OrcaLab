@@ -1,21 +1,23 @@
 import asyncio
-from copy import deepcopy
-from typing import override, List
+from typing import Dict, List
+from typing_extensions import override
 import logging
 from orcalab.actor import BaseActor, GroupActor, AssetActor
+from orcalab.actor_property import PropertyOverride
 from orcalab.actor_util import clone_actor_basic
 from orcalab.application_util import get_local_scene
 from orcalab.path import Path
 
 from orcalab.scene_edit_types import AddActorRequest
 from orcalab.undo_service.command import (
-    ActiveActorCommand,
+    ActorReconstructInfo,
     BaseCommand,
     CommandGroup,
     AddActorCommand,
     DeleteActorCommand,
     MoveActorCommand,
     PropertyChangeCommand,
+    PropertyChangesCommand,
     RenameActorCommand,
     SelectionCommand,
     TransformCommand,
@@ -96,6 +98,11 @@ class UndoService(UndoRequest):
             await self._redo_command(command)
 
             self._in_undo_redo = False
+        
+    @override
+    def clear_history(self):
+        self.command_history = []
+        self.command_history_index = -1
 
     def _get_actor(self, actor_path: Path) -> BaseActor:
         local_scene = get_local_scene()
@@ -112,19 +119,13 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().set_selection(
                     command.old_selection, undo=False
                 )
-            case ActiveActorCommand():
-                await SceneEditRequestBus().set_active_actor(
-                    command.old_active_actor, undo=False
-                )
             case AddActorCommand():
                 paths: List[Path] = []
                 for request in command.requests:
                     paths.append(request.parent_path / request.actor.name)
                 await SceneEditRequestBus().delete_actors(paths, undo=False)
             case DeleteActorCommand():
-                await self.undo_delete_actors(
-                    command.actors, command.parent_paths, command.rows
-                )
+                await self.undo_delete_actors(command.actor_reconstruct_info)
             case RenameActorCommand():
                 actor = self._get_actor(command.new_path)
                 await SceneEditRequestBus().rename_actor(
@@ -155,6 +156,10 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().set_property(
                     command.property_key, command.old_value, undo=False
                 )
+            case PropertyChangesCommand():
+                await SceneEditRequestBus().set_properties(
+                    command.property_keys, command.old_values, undo=False
+                )
             case DuplicateActorsCommand():
                 await SceneEditRequestBus().delete_actors(command.new_paths, undo=False)
             case _:
@@ -169,18 +174,12 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().set_selection(
                     command.new_selection, undo=False
                 )
-            case ActiveActorCommand():
-                await SceneEditRequestBus().set_active_actor(
-                    command.new_active_actor, undo=False
-                )
             case AddActorCommand():
                 await SceneEditRequestBus().add_actors(command.requests, undo=False)
             case DeleteActorCommand():
                 actor_paths: List[Path] = []
-                for actor, parent_path, row in zip(
-                    command.actors, command.parent_paths, command.rows
-                ):
-                    actor_paths.append(parent_path / actor.name)
+                for info in command.actor_reconstruct_info:
+                    actor_paths.append(info.actor_path)
                 await SceneEditRequestBus().delete_actors(actor_paths, undo=False)
             case RenameActorCommand():
                 actor = self._get_actor(command.old_path)
@@ -203,6 +202,10 @@ class UndoService(UndoRequest):
                 await SceneEditRequestBus().set_property(
                     command.property_key, command.new_value, undo=False
                 )
+            case PropertyChangesCommand():
+                await SceneEditRequestBus().set_properties(
+                    command.property_keys, command.new_values, undo=False
+                )
             case DuplicateActorsCommand():
                 await SceneEditRequestBus().duplicate_actors(
                     command.source_paths, undo=False
@@ -211,27 +214,39 @@ class UndoService(UndoRequest):
                 raise Exception("Unknown command type.")
 
     async def undo_delete_actors(
-        self, actors: List[BaseActor], parent_paths: List[Path], rows: List[int]
+        self, actor_reconstruct_info: List[ActorReconstructInfo]
     ):
         request: List[AddActorRequest] = []
 
-        for actor, parent_path, row in zip(actors, parent_paths, rows):
-            self.undo_delete_actor(request, actor, parent_path, row)
+        for info in actor_reconstruct_info:
+            parent_path = info.actor_path.parent()
+            assert parent_path is not None
+            self.undo_delete_actor_recursive(
+                request,
+                info.actor,
+                parent_path,
+                info.position,
+                info.actor_overrides_dict,
+            )
 
         await SceneEditRequestBus().add_actors(request, undo=False)
 
-    def undo_delete_actor(
+    def undo_delete_actor_recursive(
         self,
         request: List[AddActorRequest],
         actor: BaseActor,
         parent_path: Path,
-        row: int,
+        position: int,
+        actor_overrides_dict: Dict[Path, List[PropertyOverride]],
     ):
-        """Recursively add actor and its children."""
         new_actor = clone_actor_basic(actor)
-        request.append(AddActorRequest(new_actor, parent_path, row, actor))
+        new_actor_path = parent_path / new_actor.name
+        overrides = actor_overrides_dict.get(new_actor_path, [])
+        request.append(AddActorRequest(new_actor, parent_path, position, overrides))
 
         if isinstance(actor, GroupActor):
             this_path = parent_path / new_actor.name
             for child in actor.children:
-                self.undo_delete_actor(request, child, this_path, -1)
+                self.undo_delete_actor_recursive(
+                    request, child, this_path, -1, actor_overrides_dict
+                )

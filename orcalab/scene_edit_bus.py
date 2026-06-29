@@ -1,27 +1,21 @@
 from typing import Any, Dict, List, Sequence
 
 from orcalab.actor import BaseActor, GroupActor
-from orcalab.actor_property import ActorPropertyKey
-from orcalab.math import Transform
+from orcalab.actor_property import ActorPropertyKey, PropertyData
+from orcalab.camera_data_png_result import CameraDataPNGResult
+from orcalab.entity_info import EntityInfo
+from orcalab.transform import Transform
 from orcalab.event_bus import create_event_bus
 from orcalab.path import Path
-from orcalab.protos.edit_service_wrapper import CameraDataPNGResult
 from orcalab.scene_edit_types import AddActorRequest
+from orcalab.selection_data import SelectionData
 
 
 class SceneEditRequest:
 
     async def set_selection(
         self,
-        selection: List[Path],
-        undo: bool = True,
-        source: str = "",
-    ) -> None:
-        pass
-
-    async def set_active_actor(
-        self,
-        actor: BaseActor | Path | None,
+        selection: SelectionData,
         undo: bool = True,
         source: str = "",
     ) -> None:
@@ -107,35 +101,32 @@ class SceneEditRequest:
     ):
         pass
 
-    # Property Editing
-    #
-    # --- Non-Drag Pattern:
-    #
-    # set_property(undo=True)
-    #
-    # --- Drag Pattern:
-    #
-    # start_change_property()
-    # set_property(undo=False)
-    # ...
-    # set_property(undo=False)
-    # set_property(undo=True)
-    # end_change_property()
-    #
-
     async def set_property(
         self,
         property_key: ActorPropertyKey,
         value: Any,
         undo: bool,
+        old_value: Any = None,
         source: str = "",
     ):
         pass
 
-    def start_change_property(self, property_key: ActorPropertyKey):
+    async def set_properties(
+        self,
+        property_keys: List[ActorPropertyKey],
+        values: List[Any],
+        undo: bool,
+        old_values: List[Any] | None = None,
+        source: str = "",
+    ):
         pass
 
-    def end_change_property(self, property_key: ActorPropertyKey):
+    async def start_change_property(
+        self, property_key: ActorPropertyKey, old_value: Any, timeout: float
+    ):
+        pass
+
+    async def end_change_property(self, property_key: ActorPropertyKey, new_value: Any):
         pass
 
     async def set_transform(
@@ -190,25 +181,9 @@ class SceneEditRequest:
     ):
         pass
 
-    async def set_selection_and_active_actor(
-        self,
-        selection: List[Path],
-        actor: BaseActor | Path | None,
-        undo: bool = True,
-        source: str = "",
-    ) -> None:
-        pass
-
-    async def set_highlight_entity(self, entity_id: int, highlight: bool) -> None:
-        """Highlight or unhighlight a single entity (joint/geom/site) in the viewport.
-        Args:
-            entity_id (int): The EntityId of the target entity (from TreePropertyNode.name).
-            highlight (bool): True to highlight, False to clear.
-        """
-        pass
-
     async def set_flycamera_transform(self, transform: Transform) -> None:
         pass
+
 
 SceneEditRequestBus = create_event_bus(SceneEditRequest)
 
@@ -217,8 +192,8 @@ class SceneEditNotification:
 
     async def on_selection_changed(
         self,
-        old_selection: List[Path],
-        new_selection: List[Path],
+        old_selection: SelectionData,
+        new_selection: SelectionData,
         source: str = "",
     ) -> None:
         pass
@@ -238,30 +213,6 @@ class SceneEditNotification:
         new_transforms: List[Transform],
         source: str,
     ) -> None:
-        pass
-
-    async def before_actor_added(
-        self,
-        actor: BaseActor,
-        parent_actor_path: Path,
-        source: str,
-    ):
-        pass
-
-    async def on_actor_added(
-        self,
-        actor: BaseActor,
-        parent_actor_path: Path,
-        source: str,
-    ):
-        pass
-
-    async def on_actor_added_failed(
-        self,
-        actor: BaseActor,
-        parent_actor_path: Path,
-        source: str,
-    ):
         pass
 
     async def before_actor_added_batch(self):
@@ -298,20 +249,11 @@ class SceneEditNotification:
     async def on_actor_reparented(self):
         pass
 
-    async def on_property_changed(
+    async def on_properties_changed(
         self,
-        property_key: ActorPropertyKey,
-        value: Any,
+        property_keys: List[ActorPropertyKey],
+        values: List[Any | PropertyData],
         source: str,
-    ):
-        pass
-
-    async def on_property_read_only_changed(
-        self,
-        actor_path: Path,
-        group_prefix: str,
-        property_name: str,
-        read_only: bool,
     ):
         pass
 
@@ -323,9 +265,9 @@ class SceneEditNotification:
         camera_name: str,
         png_path: str,
         index: int,
-        output: list[CameraDataPNGResult] = None,
+        output: list[CameraDataPNGResult],
     ) -> CameraDataPNGResult:
-        pass
+        return CameraDataPNGResult()
 
     async def get_actor_asset_aabb(self, actor_path: Path, output: List[float]):
         pass
@@ -338,6 +280,14 @@ class SceneEditNotification:
     async def on_actor_locked_changed(
         self, actor_path: Path, paths_to_update: List[Path], locked: bool, source: str
     ):
+        pass
+
+    async def on_entity_hierarchy_loaded(
+        self,
+        actor_path: Path,
+        entity_root: EntityInfo,
+        source: str = "",
+    ) -> None:
         pass
 
 

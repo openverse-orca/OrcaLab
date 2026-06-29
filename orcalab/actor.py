@@ -1,13 +1,14 @@
-from typing import List, override
+from typing import Dict, List, Optional, Union
+from typing_extensions import override
 
-from orcalab.actor_property import ActorPropertyGroup
+from orcalab.entity_info import EntityInfo, EntityRoot
+from orcalab.entity_path import EntityPath
 from orcalab.path import Path
-from orcalab.math import Transform
+from orcalab.transform import Transform
 
 import copy
 
-type ParentActor = GroupActor | None
-
+ParentActor = Union["GroupActor", None]
 
 class BaseActor:
     def __init__(self, name: str, parent: ParentActor):
@@ -21,6 +22,7 @@ class BaseActor:
         self._is_locked = False
         self._is_parent_visible = True
         self._is_parent_locked = False
+        self._entity_root: EntityRoot = EntityRoot(EntityInfo(0, ""))
 
     def to_dict(self) -> dict:
         return {
@@ -115,13 +117,13 @@ class BaseActor:
 
     @property
     def transform(self):
-        return copy.deepcopy(self._transform)
+        return self._transform.clone()
 
     @transform.setter
     def transform(self, value):
         if not isinstance(value, Transform):
             raise TypeError("transform must be an instance of Transform.")
-        self._transform = copy.deepcopy(value)
+        self._transform = value.clone()
 
         self._world_transform = None  # Invalidate world transform cache
 
@@ -149,6 +151,22 @@ class BaseActor:
 
         self._world_transform = value
 
+
+
+    @property
+    def entity_root(self) -> EntityRoot:
+        return self._entity_root
+
+    @entity_root.setter
+    def entity_root(self, value: EntityRoot):
+        assert isinstance(
+            value, EntityRoot
+        ), "entity_root must be an instance of EntityRoot."
+        self._entity_root = value
+
+    @property
+    def root_entity_id(self) -> int:
+        return self.entity_root.root_entity_info.entity_id
 
 class GroupActor(BaseActor):
     def __init__(self, name: str, parent: ParentActor = None):
@@ -194,7 +212,6 @@ class AssetActor(BaseActor):
     def __init__(self, name: str, asset_path: str, parent: GroupActor | None = None):
         super().__init__(name, parent)
         self._asset_path = asset_path
-        self.property_groups: List[ActorPropertyGroup] = []
 
     def __repr__(self):
         return f"AssetActor(name={self.name})"

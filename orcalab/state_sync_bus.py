@@ -46,6 +46,9 @@ class StateSyncRequest:
     async def set_runtime_grab(self, enabled: bool):
         pass
 
+    async def set_recursive_display(self, enabled: bool):
+        pass
+
 
 StateSyncRequestBus = create_event_bus(StateSyncRequest)
 

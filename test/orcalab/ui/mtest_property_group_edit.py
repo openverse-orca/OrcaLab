@@ -66,7 +66,7 @@ class TestWindow(TestMainWindow):
             prop.set_read_only(True)
             group.properties.append(prop)
 
-            actor.property_groups.append(group)
+            # actor.property_groups.append(group)
 
         e = ActorEditor(self)
         e.set_actor(actor)

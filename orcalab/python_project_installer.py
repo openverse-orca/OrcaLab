@@ -15,6 +15,7 @@ import requests
 import importlib.metadata
 
 from orcalab.config_service import ConfigService
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.project_util import project_id, calculate_file_sha256, get_cache_folder
 from orcalab.ui.viewport import Viewport
 
@@ -27,7 +28,7 @@ class InstallProgressDialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("OrcaLab 安装进度")
-        self.setMinimumSize(500, 300)
+        self.setFixedSize(500, 300)
         self.setModal(True)
         
         layout = QtWidgets.QVBoxLayout(self)
@@ -36,7 +37,10 @@ class InstallProgressDialog(QtWidgets.QDialog):
         
         # 当前操作标签
         self.status_label = QtWidgets.QLabel("准备安装...")
-        self.status_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        FontService().bind_widget_stylesheet(
+            self.status_label,
+            lambda: FontService().get_font_css("installer_status"),
+        )
         layout.addWidget(self.status_label)
         
         # 详细信息标签
@@ -68,15 +72,17 @@ class InstallProgressDialog(QtWidgets.QDialog):
         self.log_text = QtWidgets.QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setMaximumHeight(150)
-        self.log_text.setStyleSheet("""
-            QTextEdit {
+        FontService().bind_widget_stylesheet(
+            self.log_text,
+            lambda: f"""
+            QTextEdit {{
                 background-color: #f5f5f5;
                 border: 1px solid #cccccc;
                 border-radius: 3px;
-                font-family: monospace;
-                font-size: 10px;
-            }
-        """)
+                {FontService().get_font_css('installer_log')}
+            }}
+        """,
+        )
         layout.addWidget(self.log_text)
         
         layout.addStretch()
@@ -462,10 +468,10 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
     # Read config
     cfg = config or ConfigService()
     if not hasattr(cfg, "config"):
-        # If not initialized by caller, initialize with project root resolved from this file
         current_dir = os.path.dirname(__file__)
-        project_root = os.path.abspath(os.path.join(current_dir, os.pardir))
-        cfg.init_config(project_root)
+        project_root = Path(current_dir).parent.resolve()
+        workspace = Path.cwd()
+        cfg.init_config(project_root, workspace)
 
     # 检查是否需要安装或更新
     if not _is_installation_needed(cfg):
@@ -642,14 +648,11 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         progress_dialog.log(f"错误: {friendly_error}")
         QtWidgets.QMessageBox.critical(progress_dialog, "安装失败", friendly_error)
         progress_dialog.close()
-        import sys
         sys.exit(1)
         raise
     finally:
         progress_dialog.close()
     
-    # 包更新后直接退出程序
-    import sys
     sys.exit(0)
 
 
