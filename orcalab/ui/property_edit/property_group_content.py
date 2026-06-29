@@ -22,6 +22,7 @@ from orcalab.ui.property_edit.base_property_edit import (
 from orcalab.ui.property_edit.bool_property_edit import BooleanPropertyEdit
 from orcalab.ui.property_edit.combo_property_edit import ComboBoxPropertyEdit
 from orcalab.ui.property_edit.float_property_edit import FloatPropertyEdit
+from orcalab.ui.property_edit.float_slide_property_edit import FloatSlidePropertyEdit
 from orcalab.ui.property_edit.int_property_edit import IntegerPropertyEdit
 from orcalab.ui.property_edit.color_property_edit import ColorPropertyEdit
 from orcalab.ui.property_edit.string_property_edit import StringPropertyEdit
