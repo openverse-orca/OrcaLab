@@ -10,6 +10,8 @@ from orcalab.actor_property import (
 )
 from orcalab.path import Path
 from orcalab.scene_edit_bus import SceneEditRequestBus
+from orcalab.ui.property_edit.base_property_edit import BasePropertyEdit, PropertyEditContext
+from orcalab.ui.property_edit.float_slide_property_edit import FloatSlidePropertyEdit
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.styled_widget import StyledWidget
 
@@ -25,6 +27,7 @@ class ColorPropertyEdit(StyledWidget):
         actor_path: Path,
         group: ActorPropertyGroup,
         label_width: int,
+        property_edits: list[BasePropertyEdit],
     ):
         super().__init__(parent)
 
@@ -34,6 +37,7 @@ class ColorPropertyEdit(StyledWidget):
         self._struct_group = struct_group
 
         self._channels: dict[str, ActorProperty] = {}
+        self._channel_edits: dict[str, FloatSlidePropertyEdit] = {}
         for prop in struct_group.properties:
             last_seg = (
                 prop.name().rsplit(".", 1)[-1] if "." in prop.name() else prop.name()
@@ -41,9 +45,37 @@ class ColorPropertyEdit(StyledWidget):
             if last_seg in self.COLOR_CHANNEL_NAMES:
                 self._channels[last_seg] = prop
 
-        self._channel_keys: dict[str, ActorPropertyKey] = {}
-        for ch_name, prop in self._channels.items():
-            self._channel_keys[ch_name] = ActorPropertyKey(
+        self._build_ui(label_width, actor, actor_path, group, property_edits)
+
+    def _build_ui(
+        self,
+        label_width: int,
+        actor: BaseActor,
+        actor_path: Path,
+        group: ActorPropertyGroup,
+        property_edits: list[BasePropertyEdit],
+    ):
+        root_layout = QtWidgets.QHBoxLayout(self)
+        root_layout.setContentsMargins(0, 2, 4, 2)
+        root_layout.setSpacing(4)
+
+        self._preview_btn = QtWidgets.QPushButton()
+        self._preview_btn.setFixedSize(24, 24)
+        self._preview_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self._preview_btn.clicked.connect(self._on_color_button_clicked)
+        root_layout.addWidget(self._preview_btn)
+
+        channels_widget = QtWidgets.QWidget()
+        channels_layout = QtWidgets.QVBoxLayout(channels_widget)
+        channels_layout.setContentsMargins(0, 0, 0, 0)
+        channels_layout.setSpacing(0)
+
+        compact_label_width = FontService().indent_unit_px(14)
+        for ch_name in ("r", "g", "b", "a"):
+            prop = self._channels.get(ch_name)
+            if prop is None:
+                continue
+            key = ActorPropertyKey(
                 actor_path=actor_path,
                 entity_id=group.entity_id,
                 entity_path=group.entity_path,
@@ -52,70 +84,40 @@ class ColorPropertyEdit(StyledWidget):
                 property_name=prop.name(),
                 property_type=prop.value_type(),
             )
+            context = PropertyEditContext(
+                actor=actor, actor_path=actor_path, group=group, prop=prop, key=key
+            )
+            editor = FloatSlidePropertyEdit(
+                self, context, compact_label_width, min_value=0.0, max_value=1.0
+            )
+            editor.on_value_changed = self._update_preview_button
+            self._channel_edits[ch_name] = editor
+            property_edits.append(editor)
+            channels_layout.addWidget(editor)
 
-        self._build_ui(label_width)
-        self.set_value_from_props()
+        root_layout.addWidget(channels_widget, stretch=1)
 
-    def _build_ui(self, label_width: int):
-        root_layout = QtWidgets.QHBoxLayout(self)
-        root_layout.setContentsMargins(0, 2, 4, 2)
-        root_layout.setSpacing(6)
-
-        label = self._create_label(label_width)
-        root_layout.addWidget(label)
-
-        self._preview_btn = QtWidgets.QPushButton()
-        self._preview_btn.setFixedSize(24, 24)
-        self._preview_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        self._preview_btn.clicked.connect(self._on_color_button_clicked)
-        root_layout.addWidget(self._preview_btn)
-
-        self._value_label = QtWidgets.QLabel()
-        FontService().bind_widget_font(self._value_label, "property_edit")
-        root_layout.addWidget(self._value_label)
-
-        root_layout.addStretch()
-
-    def _create_label(self, label_width: int) -> QtWidgets.QLabel:
-        display_name = self._struct_group.display_name
-        label = QtWidgets.QLabel(display_name)
-        label.setMinimumWidth(label_width)
-        label.setMaximumWidth(label_width * 2)
-        label.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
-        FontService().bind_widget_font(label, "property_edit")
-        return label
+        self._update_preview_button()
 
     def _read_current_color(self) -> QtGui.QColor:
-        r = self._channels.get("r")
-        g = self._channels.get("g")
-        b = self._channels.get("b")
-        a = self._channels.get("a")
+        r_edit = self._channel_edits.get("r")
+        g_edit = self._channel_edits.get("g")
+        b_edit = self._channel_edits.get("b")
+        a_edit = self._channel_edits.get("a")
         return QtGui.QColor.fromRgbF(
-            r.value() if r else 0.0,
-            g.value() if g else 0.0,
-            b.value() if b else 0.0,
-            a.value() if a else 1.0,
+            r_edit.context.prop.value() if r_edit else 0.0,
+            g_edit.context.prop.value() if g_edit else 0.0,
+            b_edit.context.prop.value() if b_edit else 0.0,
+            a_edit.context.prop.value() if a_edit else 1.0,
         )
 
-    def _update_preview_button(self, color: QtGui.QColor):
-        hex_color = color.name()
+    def _update_preview_button(self):
+        hex_color = self._read_current_color().name()
         self._preview_btn.setStyleSheet(
             f"QPushButton {{ background-color: {hex_color}; "
             f"border: 1px solid #555; border-radius: 2px; }}"
         )
 
-    def _update_value_label(self, color: QtGui.QColor):
-        self._value_label.setText(
-            f"R:{color.redF():.2f} G:{color.greenF():.2f} "
-            f"B:{color.blueF():.2f} A:{color.alphaF():.2f}"
-        )
-
-    def set_value_from_props(self):
-        c = self._read_current_color()
-        self._update_preview_button(c)
-        self._update_value_label(c)
 
     def _on_color_button_clicked(self):
         current = self._read_current_color()
@@ -145,39 +147,32 @@ class ColorPropertyEdit(StyledWidget):
         values: list[float] = []
         old_values: list[float] = []
         for ch_name, ch_val in channels_in_order:
-            key = self._channel_keys.get(ch_name)
             prop = self._channels.get(ch_name)
-            if key is None or prop is None:
+            if prop is None:
                 continue
+            key = ActorPropertyKey(
+                actor_path=self._actor_path,
+                entity_id=self._group.entity_id,
+                entity_path=self._group.entity_path,
+                component_type_id=self._group.component_type_id,
+                component_type_index=self._group.component_type_index,
+                property_name=prop.name(),
+                property_type=prop.value_type(),
+            )
             old_values.append(prop.value())
-            prop.set_value(ch_val)
             keys.append(key)
             values.append(ch_val)
 
-        self._commit_color_change(keys, values, old_values)
-        self._update_preview_button(new_color)
-        self._update_value_label(new_color)
+        for ch_name, ch_val in channels_in_order:
+            edit = self._channel_edits.get(ch_name)
+            if edit is not None:
+                edit.set_value(ch_val)
 
-    def _commit_color_change(
-        self,
-        keys: list[ActorPropertyKey],
-        values: list[float],
-        old_values: list[float],
-    ):
-        asyncio.create_task(self._commit_color_change_async(keys, values, old_values))
-
-    async def _commit_color_change_async(
-        self,
-        keys: list[ActorPropertyKey],
-        values: list[float],
-        old_values: list[float],
-    ):
-        if not keys:
-            return
-        await SceneEditRequestBus().set_properties(
-            property_keys=keys,
-            values=values,
-            undo=True,
-            old_values=old_values,
-            source="ui",
+        asyncio.create_task(SceneEditRequestBus().set_properties(
+                property_keys=keys,
+                values=values,
+                undo=True,
+                old_values=old_values,
+                source="panel",
+            )
         )
