@@ -2,5 +2,5 @@
 pak_urls = [ "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/orcalab_pc.26.6.1.pak",]
 python_project_url = "https://orcalab-open.oss-cn-shanghai.aliyuncs.com/python-project_pc.26.6.1.tar.xz"
 version = "26.6.1"
-pak_urls_sha256 = [ "d99a76c3294795f57bf578462c452a43b756b16914f3e5f08b092cf7354ab0cf",]
-python_project_sha256 = "e842063d2281ffdddfd0fa6baa979de9bf91ce67afb125ad4ffe7b4efdce2d7e"
+pak_urls_sha256 = [ "702f5d8ef80310b4de424f4fce2eeb26b74838fe6375727b427e44d2a3879be0",]
+python_project_sha256 = "633e70bdf54b9abed2784500f3edafeaa65db3c12406ed239607edbc34014a28"
