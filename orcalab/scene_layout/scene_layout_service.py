@@ -72,6 +72,7 @@ class SceneLayoutService:
         self.current_layout_path: str | None = None
         self.flycamera_transform = Transform()
         self.cwd = os.getcwd()
+        self.layout_modified = False
 
     def _resolve_path(self, path: str | None) -> str | None:
         if not path:
@@ -222,6 +223,8 @@ class SceneLayoutService:
                 self._mark_layout_clean()
 
         self.layout_modified = False
+        self._infer_scene_and_layout_names()
+        ApplicationRequestBus().update_title()
         await self.save_flycamera_transform()
 
     async def _load_scene_layout(self, filename):
@@ -315,6 +318,14 @@ class SceneLayoutService:
         except Exception as e:
             errors.append(f"加载布局文件 {filename} 时出错: {e}")
             return
+
+    @property
+    def current_scene_name(self) -> str | None:
+        return self._current_scene_name
+
+    @property
+    def current_layout_name(self) -> str | None:
+        return self._current_layout_name
 
     def _infer_scene_and_layout_names(self):
         level_info = self.config_service.current_level_info()

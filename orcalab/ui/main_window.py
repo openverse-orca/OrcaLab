@@ -151,8 +151,6 @@ class MainWindow(
 
         self._viewport_widget = Viewport()
 
-        self._current_scene_name: str | None = None
-        self._current_layout_name: str | None = None
 
         logger.info("开始初始化 UI…")
         await self._init_ui()
@@ -1199,8 +1197,8 @@ class MainWindow(
     
     @override
     def update_title(self):
-        scene_part = self._current_scene_name or "Unknown Scene"
-        layout_part = self._current_layout_name or "Unsaved Layout"
+        scene_part = self.layout_service.current_scene_name or "Unknown Scene"
+        layout_part = self.layout_service.current_layout_name or "Unsaved Layout"
         if self.layout_service.layout_modified:
             layout_label = f"[* {layout_part}]"
         else:
