@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Callable
 from typing_extensions import override
 from PySide6 import QtCore, QtWidgets
 
@@ -40,7 +40,7 @@ class FloatSlidePropertyEdit(BasePropertyEdit[float]):
         slider.setTracking(True)
         slider.valueChanged.connect(self._on_slider_changed)
 
-        editor = FloatEdit()
+        editor = FloatEdit(is_limited=True, min_value=self._min_value, max_value=self._max_value)
         editor.set_value(context.prop.value())
         editor.on_value_changed = self._on_editor_value_changed
         editor.on_start_drag = self._on_start_drag
@@ -58,6 +58,7 @@ class FloatSlidePropertyEdit(BasePropertyEdit[float]):
         self._editor = editor
         self._block_events = False
         self.in_dragging = False
+        self.on_value_changed: Callable | None = None
 
     def _slider_to_value(self, slider_pos: int) -> float:
         ratio = slider_pos / self._slider_range
@@ -69,7 +70,7 @@ class FloatSlidePropertyEdit(BasePropertyEdit[float]):
         return int(round(ratio * self._slider_range))
 
     @override
-    def set_value(self, value: Any):
+    def set_value(self, value: float):
         self._block_events = True
 
         self.context.prop.set_value(value)
@@ -77,6 +78,9 @@ class FloatSlidePropertyEdit(BasePropertyEdit[float]):
         self._slider.setValue(self._value_to_slider(value))
 
         self._block_events = False
+
+        if self.on_value_changed is not None:
+            self.on_value_changed()
 
     @override
     def set_read_only(self, read_only: bool):
@@ -96,6 +100,9 @@ class FloatSlidePropertyEdit(BasePropertyEdit[float]):
 
         undo = not self.in_dragging
         self._do_set_value(value, undo)
+
+        if self.on_value_changed is not None:
+            self.on_value_changed()
 
     async def _on_editor_value_changed(self):
         if self._block_events:
@@ -117,6 +124,9 @@ class FloatSlidePropertyEdit(BasePropertyEdit[float]):
             old_value=old_value,
             source="ui",
         )
+
+        if self.on_value_changed is not None:
+            self.on_value_changed()
 
     async def _on_start_drag(self):
         old_value = self.context.prop.value()

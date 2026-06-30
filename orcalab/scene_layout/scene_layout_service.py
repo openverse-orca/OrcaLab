@@ -22,6 +22,27 @@ from orcalab.undo_service.undo_service_bus import UndoRequestBus
 
 logger = logging.getLogger(__name__)
 
+def _show_scrollable_warning(parent, title: str, message: str, detail: str):
+    dialog = QtWidgets.QDialog(parent)
+    dialog.setWindowTitle(title)
+    dialog.setMinimumSize(600, 400)
+
+    layout = QtWidgets.QVBoxLayout(dialog)
+
+    msg_label = QtWidgets.QLabel(message)
+    msg_label.setWordWrap(True)
+    layout.addWidget(msg_label)
+
+    text_edit = QtWidgets.QTextEdit()
+    text_edit.setReadOnly(True)
+    text_edit.setPlainText(detail)
+    layout.addWidget(text_edit)
+
+    button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Ok)
+    button_box.accepted.connect(dialog.accept)
+    layout.addWidget(button_box)
+
+    dialog.exec()
 
 class SceneLayoutDialog(QtWidgets.QDialog):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
@@ -263,9 +284,10 @@ class SceneLayoutService:
             )
 
         def show_warning_dialog():
-            QtWidgets.QMessageBox.warning(
+            _show_scrollable_warning(
                 self.main_window,
                 "场景布局加载警告",
+                f"加载场景布局时产生 {len(warnings)} 条警告：",
                 "\n".join(warnings),
             )
 

@@ -276,7 +276,7 @@ class AssetSyncService:
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
 
             download_info = self.download_info_cache[pkg['id']]
-            if "_patch_" not in file_name or (download_info and download_info["isDeleted"] == True):
+            if "_patch_" not in file_name:
                 continue
 
             base_name = file_name.split("_patch_")[0]
