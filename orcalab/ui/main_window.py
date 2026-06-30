@@ -267,6 +267,11 @@ class MainWindow(
         self.mcp_service._task = asyncio.create_task(self.mcp_service.run())
         logger.info("MCP 服务启动完成, 耗时: %.2f 秒", time.monotonic() - _mcp_start)
 
+        # 加载插件（在 MCP 服务启动后，插件可注册 MCP 工具）
+        _plugin_start = time.monotonic()
+        self._load_plugins()
+        logger.info("插件加载完成, 耗时: %.2f 秒", time.monotonic() - _plugin_start)
+
         # Reset camera's move & rotate sensitivity
         _sens_start = time.monotonic()
         await self.remote_scene.set_move_rotate_sensitivity(
@@ -293,6 +298,61 @@ class MainWindow(
             await send_abnormal_exit_report()
         except Exception:
             logger.exception("crash_reports 上传失败")
+
+    def _load_plugins(self):
+        """加载已启用的插件。"""
+        try:
+            from orcalab.plugin_system.plugin_context import PluginContext
+            from orcalab.plugin_system.plugin_manager import PluginManager
+
+            self._plugin_context = PluginContext(self)
+            self._plugin_manager = PluginManager(self._plugin_context)
+            self._plugin_manager.load_enabled()
+            loaded = self._plugin_manager.list_loaded()
+            if loaded:
+                logger.info("已加载插件: %s", ", ".join(loaded))
+            else:
+                logger.info("没有需要加载的已启用插件")
+
+            errors = self._plugin_manager.get_load_errors()
+            if errors:
+                err_summary = "\n".join(f"- {name}: {info.splitlines()[0]}" for name, info in errors.items())
+                logger.error("以下插件加载失败:\n%s", err_summary)
+                self._plugin_load_errors = errors
+        except Exception:
+            logger.exception("插件系统初始化失败")
+            self._plugin_manager = None
+
+    def _unload_plugins(self):
+        """卸载所有已加载的插件。"""
+        plugin_mgr = getattr(self, "_plugin_manager", None)
+        if plugin_mgr is not None:
+            try:
+                plugin_mgr.unload_all()
+            except Exception:
+                logger.exception("插件卸载失败")
+
+    def show_plugin_manager_dialog(self):
+        """打开插件管理对话框。"""
+        from orcalab.plugin_system.plugin_manager_dialog import PluginManagerDialog
+
+        plugin_mgr = getattr(self, "_plugin_manager", None)
+        if plugin_mgr is None:
+            QtWidgets.QMessageBox.warning(self, "插件管理", "插件系统未初始化")
+            return
+        dialog = PluginManagerDialog(plugin_mgr, parent=self)
+        dialog.exec()
+
+    def show_plugin_install_dialog(self):
+        """打开插件安装对话框。"""
+        from orcalab.plugin_system.plugin_install_dialog import PluginInstallDialog
+
+        plugin_mgr = getattr(self, "_plugin_manager", None)
+        if plugin_mgr is None:
+            QtWidgets.QMessageBox.warning(self, "安装插件", "插件系统未初始化")
+            return
+        dialog = PluginInstallDialog(plugin_mgr, parent=self)
+        dialog.exec()
 
     def stop_viewport_main_loop(self):
         """停止viewport主循环"""
@@ -619,6 +679,8 @@ class MainWindow(
         self.menu_run = self.menu_bar.addMenu("运行")
         self.menu_help = self.menu_bar.addMenu("帮助")
         self.menu_user = self.menu_bar.addMenu("用户")
+        self.menu_plugins = self.menu_bar.addMenu("插件")
+        connect(self.menu_plugins.aboutToShow, self.prepare_plugins_menu)
         connect(self.menu_user.aboutToShow, self.prepare_user_menu)
 
         self.action_create_layout = QtGui.QAction("新建布局…", self)
@@ -810,6 +872,25 @@ class MainWindow(
     def prepare_help_menu(self):
         self.menu_help.clear()
         self.menu_help.addAction(self.action_about)
+
+    def prepare_plugins_menu(self):
+        self.menu_plugins.clear()
+        action_install = self.menu_plugins.addAction("安装插件…")
+        connect(action_install.triggered, self.show_plugin_install_dialog)
+        action_manage = self.menu_plugins.addAction("管理插件…")
+        connect(action_manage.triggered, self.show_plugin_manager_dialog)
+
+        plugin_mgr = getattr(self, "_plugin_manager", None)
+        if plugin_mgr is not None:
+            menu_items = plugin_mgr.get_all_menu_items()
+            if menu_items:
+                self.menu_plugins.addSeparator()
+                for menu_title, item_text, callback in menu_items:
+                    if menu_title:
+                        act = self.menu_plugins.addAction(f"{menu_title} / {item_text}")
+                    else:
+                        act = self.menu_plugins.addAction(item_text)
+                    connect(act.triggered, callback)
 
     def prepare_user_menu(self):
         self.menu_user.clear()
@@ -1007,22 +1088,29 @@ class MainWindow(
             # 2. 停止仿真进程
             await self.stop_sim()
 
-            # 3. 断开总线连接
+            # 3. 卸载插件（在断开总线之前，插件 on_unload 可使用总线）
+            self._unload_plugins()
+
+            # 4. 断开总线连接
             self.disconnect_buses()
 
-            # 4. 清理远程场景（这会终止服务器进程）
+            # 5. 清理远程场景（这会终止服务器进程）
             if hasattr(self, 'remote_scene'):
                 logger.info("cleanup: 调用 remote_scene.destroy_grpc()…")
                 await self.remote_scene.destroy_grpc()
                 logger.info("cleanup: remote_scene.destroy_grpc() 完成")
 
-            # 6. 停止MCP服务
+            # 6. 停止URL服务器
+            if hasattr(self, 'url_server'):
+                await self.url_server.stop()
+
+            # 7. 停止MCP服务
             if hasattr(self, 'mcp_service'):
                 self.mcp_service.stop()
                 self.config_service.clear_mcp_status()
                 logger.info("cleanup: MCP服务已停止")
 
-            # 7. 强制垃圾回收
+            # 8. 强制垃圾回收
             import gc
             gc.collect()
 
