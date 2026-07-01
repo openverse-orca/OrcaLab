@@ -160,6 +160,14 @@ echo   ----------------------------------------
 echo   [INFO] Starting OrcaLab, please wait...
 echo.
 
+REM -- Launch detached with pythonw.exe so the launcher window can close --
+set "PYW_EXE=%ENV_PREFIX%\pythonw.exe"
+if exist "%PYW_EXE%" (
+    start "" "%PYW_EXE%" -m orcalab %*
+    exit /b 0
+)
+
+REM -- Fallback: pythonw.exe missing, run in foreground with error report --
 "%CONDA_EXE%" run --no-capture-output --prefix "%ENV_PREFIX%" python -m orcalab %*
 
 if %ERRORLEVEL% NEQ 0 (
