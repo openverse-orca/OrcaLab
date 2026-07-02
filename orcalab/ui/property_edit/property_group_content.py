@@ -85,6 +85,11 @@ def _create_property_edit(
                 return ComboBoxPropertyEdit(parent, context, label_width)
             return IntegerPropertyEdit(parent, context, label_width)
         case ActorPropertyType.FLOAT:
+            if prop.is_slide() == True:
+                if prop.has_range() == True:
+                    return FloatSlidePropertyEdit(parent, context, label_width, prop.range_min(), prop.range_max())
+                else:
+                    return FloatSlidePropertyEdit(parent, context, label_width)
             return FloatPropertyEdit(parent, context, label_width)
         case ActorPropertyType.STRING:
             return StringPropertyEdit(parent, context, label_width)

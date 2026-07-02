@@ -482,6 +482,10 @@ message Property {
     repeated string enum_values = 8;
     repeated string post_read_fields = 9;
     int32 post_read_delay_ms = 10;
+    bool has_range = 11;
+    float range_min = 12;
+    float range_max = 13;
+    bool is_slide = 14;
 }
 
 // Naming convention:
