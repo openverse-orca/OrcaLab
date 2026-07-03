@@ -48,6 +48,7 @@ from orcalab.ui.icon_util import make_icon, schedule_windows_taskbar_icon_refres
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.theme_service import ThemeService
 from orcalab.ui.tool_bar import ToolBar
+from orcalab.ui.xml_viewer_dialog import XmlViewerDialog
 from orcalab.ui.manipulator_bar import ManipulatorBar
 from orcalab.ui.terminal_widget import TerminalWidget
 from orcalab.ui.viewport import Viewport
@@ -342,6 +343,12 @@ class MainWindow(
             return
         dialog = PluginManagerDialog(plugin_mgr, parent=self)
         dialog.exec()
+
+    async def show_xml_viewer(self):
+        """打开 MuJoCo XML 查看器对话框（非阻塞）"""
+        dialog = XmlViewerDialog(self)
+        dialog.setModal(True)
+        dialog.show()
 
     def show_plugin_install_dialog(self):
         """打开插件安装对话框。"""
@@ -868,6 +875,8 @@ class MainWindow(
         action_stop = self.menu_run.addAction("停止模拟")
         action_stop.setEnabled(sim_state == SimulationState.Running)
         connect(action_stop.triggered, self.stop_sim)
+        action_xml_viewer = self.menu_run.addAction("查看XML")
+        connect(action_xml_viewer.triggered, self.show_xml_viewer)
 
     def prepare_help_menu(self):
         self.menu_help.clear()

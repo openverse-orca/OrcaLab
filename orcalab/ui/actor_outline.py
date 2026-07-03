@@ -23,6 +23,7 @@ from orcalab.ui.collapsible.collapsible_section import SectionHeader
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.rename_dialog import RenameDialog
 from orcalab.ui.icon_util import make_icon
+from orcalab.ui.xml_viewer_dialog import XmlViewerDialog, _is_robot_actor
 
 import logging
 
@@ -419,7 +420,20 @@ class ActorOutline(QtWidgets.QTreeView, SceneEditNotification):
         action_collapse.setEnabled(index.isValid())
         menu.addAction(action_collapse)
 
+        if (isinstance(self._current_actor, AssetActor) and _is_robot_actor(self._current_actor)):
+            menu.addSeparator()
+            action_view_xml = QtGui.QAction("查看 XML")
+            connect(action_view_xml.triggered, self._show_xml_viewer)
+            menu.addAction(action_view_xml)
+
         menu.exec(self.mapToGlobal(position))
+
+    def _show_xml_viewer(self):
+        dialog = XmlViewerDialog(self)
+        dialog.setModal(True)
+        dialog.show()
+        if self._current_actor_path is not None:
+            dialog.fetch_for_actor(self._current_actor_path)
 
     async def _add_group(self):
         parent_actor = self._current_actor
