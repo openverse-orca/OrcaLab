@@ -583,6 +583,7 @@ class EditServiceWrapper:
         prop.set_read_only(prop_msg.metadata.read_only)
         prop.set_editor_hint(prop_msg.editor_hint)
         prop.set_is_slide(prop_msg.is_slide)
+        prop.set_visible(prop_msg.visible)
         if prop_msg.has_range == True:
             prop.set_range_min_max(prop_msg.range_min, prop_msg.range_max)
         if prop_msg.enum_values:

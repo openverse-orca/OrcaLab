@@ -76,7 +76,8 @@ def _create_property_edit(
     context = PropertyEditContext(
         actor=actor, actor_path=actor_path, group=group, prop=prop, key=key
     )
-
+    if not prop.is_visible():
+        return StyledWidget(parent)
     match prop.value_type():
         case ActorPropertyType.BOOL:
             return BooleanPropertyEdit(parent, context, label_width)
@@ -305,6 +306,8 @@ def _create_horizontal_tuple_content(
     compact_label_width = fs.indent_unit_px(14)
 
     for prop in struct_group.properties:
+        if not prop.is_visible():
+            continue
         editor = _create_property_edit(
             parent, actor, actor_path, group, prop, compact_label_width
         )
@@ -348,6 +351,8 @@ def _create_struct_content(
     else:
         prop_indent = (indent_level + 1) * _indent_unit()
         for prop in struct_group.properties:
+            if not prop.is_visible():
+                continue
             editor = _create_property_edit(
                 parent, actor, actor_path, group, prop, label_width
             )
@@ -406,6 +411,8 @@ def create_property_group_content(
     for idx, node in enumerate(ordered_nodes):
         if isinstance(node, ActorProperty):
             prop = node
+            if not prop.is_visible():
+                continue
             try:
                 if prop.editor_hint() in ("container", "struct"):
                     editor = _create_property_edit(

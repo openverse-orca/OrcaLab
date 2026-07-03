@@ -792,7 +792,7 @@ class GetAssetsByTypePageResponse(_message.Message):
     def __init__(self, status_code: _Optional[_Union[StatusCode, str]] = ..., error_message: _Optional[str] = ..., page_index: _Optional[int] = ..., total_pages: _Optional[int] = ..., total_count: _Optional[int] = ..., assets: _Optional[_Iterable[_Union[AssetInfo, _Mapping]]] = ...) -> None: ...
 
 class Property(_message.Message):
-    __slots__ = ("type", "name", "display_name", "metadata", "value", "base_value", "editor_hint", "enum_values", "post_read_fields", "post_read_delay_ms", "has_range", "range_min", "range_max", "is_slide")
+    __slots__ = ("type", "name", "display_name", "metadata", "value", "base_value", "editor_hint", "enum_values", "post_read_fields", "post_read_delay_ms", "has_range", "range_min", "range_max", "is_slide", "visible")
     TYPE_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -807,6 +807,7 @@ class Property(_message.Message):
     RANGE_MIN_FIELD_NUMBER: _ClassVar[int]
     RANGE_MAX_FIELD_NUMBER: _ClassVar[int]
     IS_SLIDE_FIELD_NUMBER: _ClassVar[int]
+    VISIBLE_FIELD_NUMBER: _ClassVar[int]
     type: PropertyType
     name: str
     display_name: str
@@ -821,7 +822,8 @@ class Property(_message.Message):
     range_min: float
     range_max: float
     is_slide: bool
-    def __init__(self, type: _Optional[_Union[PropertyType, str]] = ..., name: _Optional[str] = ..., display_name: _Optional[str] = ..., metadata: _Optional[_Union[PropertyMetadata, _Mapping]] = ..., value: _Optional[_Union[PropertyValue, _Mapping]] = ..., base_value: _Optional[_Union[PropertyValue, _Mapping]] = ..., editor_hint: _Optional[str] = ..., enum_values: _Optional[_Iterable[str]] = ..., post_read_fields: _Optional[_Iterable[str]] = ..., post_read_delay_ms: _Optional[int] = ..., has_range: bool = ..., range_min: _Optional[float] = ..., range_max: _Optional[float] = ..., is_slide: bool = ...) -> None: ...
+    visible: bool
+    def __init__(self, type: _Optional[_Union[PropertyType, str]] = ..., name: _Optional[str] = ..., display_name: _Optional[str] = ..., metadata: _Optional[_Union[PropertyMetadata, _Mapping]] = ..., value: _Optional[_Union[PropertyValue, _Mapping]] = ..., base_value: _Optional[_Union[PropertyValue, _Mapping]] = ..., editor_hint: _Optional[str] = ..., enum_values: _Optional[_Iterable[str]] = ..., post_read_fields: _Optional[_Iterable[str]] = ..., post_read_delay_ms: _Optional[int] = ..., has_range: bool = ..., range_min: _Optional[float] = ..., range_max: _Optional[float] = ..., is_slide: bool = ..., visible: bool = ...) -> None: ...
 
 class PropertyGroup(_message.Message):
     __slots__ = ("name", "hint", "entity_id", "component_type_id", "component_type_index", "properties")
