@@ -1087,11 +1087,11 @@ class MainWindow(
         logger.info("cleanup: 清理主窗口资源开始")
         logger.debug("cleanup: 当前连接状态 - actor_outline_widget=%s", getattr(self, 'actor_outline_widget', None) is not None)
         try:
-            # 1. 首先停止viewport主循环，避免事件循环问题
-            await self.cleanup_viewport_resources()
+            # 1. 首先停止仿真
+            await self.stop_sim() # 恢复选中物体要用到事件循环
 
-            # 2. 停止仿真进程
-            await self.stop_sim()
+            # 2. 停止viewport主循环，避免事件循环问题
+            await self.cleanup_viewport_resources()
 
             # 3. 卸载插件（在断开总线之前，插件 on_unload 可使用总线）
             self._unload_plugins()
