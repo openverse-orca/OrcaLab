@@ -727,7 +727,12 @@ class MainWindow(
         self._selection_before_sim = self.local_scene.selection()
         await SceneEditRequestBus().set_selection(SelectionData(), undo=False)
         await self.manipulator_bar.set_translation()
-        await SimulationRequestBus().start_simulation()
+        started = await self.simulation_service.start_simulation()
+        if not started:
+            # 用户取消了启动对话框，恢复选择状态
+            if self._selection_before_sim:
+                await SceneEditRequestBus().set_selection(self._selection_before_sim, undo=False)
+            self._selection_before_sim = None
 
     async def stop_sim(self):
         await SimulationRequestBus().stop_simulation()
