@@ -45,6 +45,11 @@ class ActorProperty:
         self._sub_name: str = ""
         self._parent_struct_name: str = ""
         self._struct_display_name: str = ""
+        self._has_range = False
+        self._range_min = 0.0
+        self._range_max = 1.0
+        self._is_slide = False
+        self._visible = True
 
     def name(self) -> str:
         return self._name
@@ -153,6 +158,31 @@ class ActorProperty:
     def set_struct_display_name(self, name: str):
         self._struct_display_name = name
 
+    def has_range(self) -> bool:
+        return self._has_range
+    
+    def range_min(self) -> float:
+        return self._range_min
+    
+    def range_max(self) -> float:
+        return self._range_max
+
+    def set_range_min_max(self, range_min: float, range_max: float):
+        self._has_range = True
+        self._range_min = range_min
+        self._range_max = range_max
+
+    def is_slide(self) -> bool:
+        return self._is_slide
+    
+    def set_is_slide(self, is_slide: bool):
+        self._is_slide = is_slide
+
+    def is_visible(self) -> bool:
+        return self._visible
+
+    def set_visible(self, visible: bool):
+        self._visible = visible
 
 @dataclass
 class ActorPropertyGroup:

@@ -404,7 +404,6 @@ class ManipulatorBar(QtWidgets.QWidget, StateSyncNotification):
             self.recursive_button.bg_color = self.bg_color
         self.recursive_button.update()
         self.recursive_display_changed.emit(self._recursive)
-        await StateSyncRequestBus().set_recursive_display(self._recursive)
 
     @override
     def on_runtime_grab_changed(self, enabled: bool):

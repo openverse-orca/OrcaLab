@@ -125,6 +125,7 @@ class PropertyEditor(QtWidgets.QScrollArea, SceneEditNotification):
         if self._actor is None and self._entity is None:
             return
 
+        self._cancel_pending_render()
         self._actor = None
         self._entity = None
         self._actor_path = None
