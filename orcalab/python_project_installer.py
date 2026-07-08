@@ -399,9 +399,35 @@ def _download_pak_file(url: str, target_path: Path, cloud_file_sha256: str, prog
         return False
 
 
+def _get_pip_python_executable() -> str:
+    executable = Path(sys.executable)
+    if executable.name.lower() == "pythonw.exe":
+        console_python = executable.with_name("python.exe")
+        if console_python.exists():
+            return str(console_python)
+    return sys.executable
+
+
 def _pip_install_editable(package_root: Path) -> None:
-    # Use current python's pip to ensure same environment
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", str(package_root)])
+    # Use current environment's console Python so pip can report errors reliably.
+    python_executable = _get_pip_python_executable()
+    result = subprocess.run(
+        [python_executable, "-m", "pip", "install", "-e", str(package_root)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        errors="replace",
+    )
+    if result.returncode != 0:
+        output = (result.stdout or "").strip()
+        if output:
+            logger.error("pip install failed:\n%s", output)
+        raise RuntimeError(
+            f"pip install -e failed with exit code {result.returncode}\n"
+            f"python: {python_executable}\n"
+            f"package_root: {package_root}\n"
+            f"{output}"
+        )
 
 
 def _build_user_friendly_install_error(error: Exception) -> str:
