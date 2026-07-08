@@ -337,7 +337,7 @@ class SimulationService(SimulationRequest):
     # SimulationRequest 接口实现
 
     @override
-    async def start_simulation(self, program_name: str | None = None) -> None:
+    async def start_simulation(self, program_name: str | None = None) -> bool:
 
         # 只有全屏模式才允许通过命令行参数直接启动场景，否则一律弹出选择界面
         parser = create_argparser()
@@ -356,6 +356,7 @@ class SimulationService(SimulationRequest):
 
             if self._sim_state != SimulationState.Running:
                 exit(0)
+            return True
         elif program_name is not None:
             # MCP 等无 UI 调用：按 orca.config 里 external_programs.programs[].name 直接启动
             name = program_name.strip()
@@ -364,9 +365,15 @@ class SimulationService(SimulationRequest):
             elif name:
                 await self._on_external_program_selected_async(name)
             else:
-                await asyncWrap(self.show_launch_dialog)
+                result = await asyncWrap(self.show_launch_dialog)
+                if result != QtWidgets.QDialog.DialogCode.Accepted:
+                    return False
+            return True
         else:
-            await asyncWrap(self.show_launch_dialog)
+            result = await asyncWrap(self.show_launch_dialog)
+            if result != QtWidgets.QDialog.DialogCode.Accepted:
+                return False
+            return True
 
     @override
     async def stop_simulation(self) -> None:
