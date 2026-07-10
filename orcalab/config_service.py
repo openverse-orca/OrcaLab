@@ -356,6 +356,18 @@ class ConfigService:
 
         self.set_user_config("orcalab", update_func)
 
+    def raytracing_enabled(self) -> bool:
+        """是否启用引擎 Ray Tracing（写入工程 Registry/raytracing_settings.setreg）"""
+        return self.config.get("orcalab", {}).get("raytracing_enabled", True)
+
+    def set_raytracing_enabled(self, enabled: bool) -> None:
+        self.config.setdefault("orcalab", {})["raytracing_enabled"] = enabled
+
+        def update_func(config):
+            config.setdefault("orcalab", {})["raytracing_enabled"] = enabled
+
+        self.set_user_config("orcalab", update_func)
+
     def mcp_port(self) -> int:
         return self.config.get("mcp", {}).get("port", 8000)
 

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import time
 from typing_extensions import override
@@ -94,6 +95,8 @@ class Viewport(QtWidgets.QWidget):
         if not self._validate_project_path(project_path):
             raise RuntimeError(f"Invalid project path: {project_path}")
 
+        self._apply_raytracing_setting(config_service, project_path)
+
         self.command_line.append(f"--project-path={project_path}")
         self.command_line.append(f"--project-id={project_id}")
 
@@ -108,7 +111,7 @@ class Viewport(QtWidgets.QWidget):
     def warmup(self):
         if self._viewport is None:
             return
-        
+
         config_service = ConfigService()
         project_path = config_service.orca_project_folder()
 
@@ -117,6 +120,8 @@ class Viewport(QtWidgets.QWidget):
 
         if not self._validate_project_path(project_path):
             raise RuntimeError(f"Invalid project path: {project_path}")
+
+        self._apply_raytracing_setting(config_service, project_path)
 
         command_line = ["pseudo.exe"]
         command_line.append(f"--project-path={project_path}")
@@ -135,6 +140,38 @@ class Viewport(QtWidgets.QWidget):
             return False
 
         return True
+
+    @staticmethod
+    def _apply_raytracing_setting(config_service: ConfigService, project_path: str) -> None:
+        """将 orcalab 配置中的 raytracing_enabled 写入目标工程的
+        Registry/raytracing_settings.setreg，引擎启动时读取。"""
+        enabled = config_service.raytracing_enabled()
+        registry_dir = pathlib.Path(project_path) / "Registry"
+        registry_dir.mkdir(parents=True, exist_ok=True)
+        setreg_path = registry_dir / "raytracing_settings.setreg"
+
+        # 与 引擎 原生 setreg 保持一致的 JSONC 注释结构
+        content = (
+            "{\n"
+            "        \"Atom\": {\n"
+            "            \"RPI\": {\n"
+            "                \"Initialization\": {\n"
+            "                    \"RayTracingSystemDescriptor\": {\n"
+            "                        // Global Ray Tracing switch.\n"
+            "                        // Set to false to disable ray tracing on all RHI backends (DX12, Vulkan).\n"
+            "                        // Note: disabling ray tracing will also disable LiDAR sensors which depend on it.\n"
+            f"                        \"RayTracingEnabled\": {'true' if enabled else 'false'}\n"
+            "                    }\n"
+            "                }\n"
+            "            }\n"
+            "        }\n"
+            "}\n"
+        )
+        try:
+            setreg_path.write_text(content, encoding="utf-8")
+            logger.info("已写入 %s (RayTracingEnabled=%s)", setreg_path, enabled)
+        except OSError as e:
+            logger.warning("写入 raytracing_settings.setreg 失败: %s", e)
 
     def start_viewport_main_loop(self):
         self._viewport_running = True

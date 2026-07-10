@@ -57,3 +57,15 @@ def test_set_default_layout_file_handles_none(fresh_config_service):
     fresh_config_service.set_default_layout_file(None)
     assert fresh_config_service.default_layout_file() is None
 
+
+def test_raytracing_enabled_defaults_to_true(fresh_config_service):
+    assert fresh_config_service.raytracing_enabled() is True
+
+
+def test_set_raytracing_enabled_updates_in_memory(fresh_config_service, monkeypatch):
+    # set_raytracing_enabled 会调用 set_user_config 写用户配置文件，
+    # 测试环境中没有该路径，patch 为空操作以仅验证内存态更新
+    monkeypatch.setattr(fresh_config_service, "set_user_config", lambda *args, **kwargs: None)
+    fresh_config_service.set_raytracing_enabled(False)
+    assert fresh_config_service.raytracing_enabled() is False
+

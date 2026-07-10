@@ -260,6 +260,17 @@ class SettingsDialog(QtWidgets.QDialog):
             )
         )
 
+        self.raytracing_checkbox = CheckBox()
+        self.raytracing_checkbox.set_checked(config.raytracing_enabled())
+        content_layout.addWidget(
+            _vscode_style_setting_row(
+                "光线追踪 (Ray Tracing)",
+                "关闭后将禁用所有 RHI 后端的 Ray Tracing，同时会禁用依赖它的 LiDAR 传感器。需重启生效",
+                self.raytracing_checkbox,
+                self._setting_row_hover_bg,
+            )
+        )
+
         # —— 字体缩放 ——
         font_service = FontService()
         font_scale_widget = QtWidgets.QWidget()
@@ -454,6 +465,8 @@ class SettingsDialog(QtWidgets.QDialog):
         config.set_lock_fps(fps_value)
 
         config.set_vsync(self.vsync_checkbox.checked())
+
+        config.set_raytracing_enabled(self.raytracing_checkbox.checked())
 
         if self._remote_scene is not None:
             asyncio.create_task(
