@@ -52,6 +52,11 @@ class AssetTreeView(QtWidgets.QTreeWidget):
         root_item = QtWidgets.QTreeWidgetItem(self, ["/"])
         root_item.setData(0, QtCore.Qt.UserRole, "/")
         category_map["/"] = root_item
+
+        paks_item = QtWidgets.QTreeWidgetItem(root_item, ["paks"])
+        paks_item.setData(0, QtCore.Qt.UserRole, "/paks")
+        category_map["/paks"] = paks_item
+
         other_item = QtWidgets.QTreeWidgetItem(root_item, ["other"])
         other_item.setData(0, QtCore.Qt.UserRole, "/other")
         category_map["/other"] = other_item
@@ -61,6 +66,13 @@ class AssetTreeView(QtWidgets.QTreeWidget):
                 category_path = asset.metadata.get('categoryPath', '')
                 if isinstance(category_path, str) and category_path:
                     self._build_branch(category_path, category_map)
+
+            if asset.pak_name not in category_map:
+                paks_item = category_map.get("/paks")
+                if paks_item is not None:
+                    pak_item = QtWidgets.QTreeWidgetItem(paks_item, [asset.pak_name])
+                    pak_item.setData(0, QtCore.Qt.UserRole, asset.pak_name)
+                    category_map[asset.pak_name] = pak_item
         
         self.expandAll()
 

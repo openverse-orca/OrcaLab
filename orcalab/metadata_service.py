@@ -12,6 +12,7 @@ class MetadataService(MetadataServiceRequest):
         MetadataServiceRequestBus.connect(self)
         self._metadata: AssetMap = {}
         self._asset_map: AssetMap = {}
+        self._pak_id_to_name: dict[str, str] = {}
         cache_folder = get_cache_folder()
         self._metadata_path = cache_folder / "metadata.json"
         self.reload_metadata()
@@ -52,9 +53,17 @@ class MetadataService(MetadataServiceRequest):
     def update_asset_info(self, asset_path: str, asset_info: AssetMetadata) -> None:
         self._asset_map[asset_path] = asset_info
 
+    @override
+    def get_pak_name(self, pak_id: str) -> str:
+        return self._pak_id_to_name.get(pak_id, "")
+
     def _build_asset_map(self) -> AssetMap:
         for pak_metadata in self._metadata.values():
             children = pak_metadata.get('children') if isinstance(pak_metadata, dict) else None
+            id = pak_metadata.get("id")
+            name = pak_metadata.get("name")
+            if id and name:
+                self._pak_id_to_name[id] = name
             if not children:
                 continue
             for asset_metadata in children:

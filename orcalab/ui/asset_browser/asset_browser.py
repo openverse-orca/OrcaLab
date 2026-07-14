@@ -272,6 +272,9 @@ class AssetBrowser(QtWidgets.QWidget):
             if info.path in exclude_assets:
                 continue
             info.metadata = self._metadata_service.get_asset_info(asset)
+            parentPackageId = info.metadata.get('parentPackageId', "")
+            if parentPackageId != "":
+                info.pak_name = self._metadata_service.get_pak_name(parentPackageId)
 
             # 检查本地缓存，如果已下载则直接加载
             thumbnail_path = thumbnail_cache_path / (asset + "_panorama.apng")

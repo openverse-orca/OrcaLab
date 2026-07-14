@@ -5,5 +5,6 @@ class AssetInfo:
     def __init__(self):
         self.name: str = ""
         self.path: str = ""
+        self.pak_name: str = ""
         self.metadata: AssetMetadata | None = None
         self.apng_player: ApngPlayer | None = None  # ApngPlayer for APNG support
