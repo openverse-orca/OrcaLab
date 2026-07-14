@@ -433,7 +433,7 @@ class AssetSyncService:
 
     def get_image_picture(self, asset_id: str) -> Optional[str]:
         try:
-            get_asset_metadata_url = f"{self.base_url}/asset/{asset_id}/picture"
+            get_asset_metadata_url = f"{self.base_url}/asset/{asset_id}/picture/"
             _start = time.monotonic()
             response = requests.get(get_asset_metadata_url, headers=self.get_headers(), timeout=self.timeout)
             elapsed = time.monotonic() - _start
