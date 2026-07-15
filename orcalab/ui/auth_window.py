@@ -157,7 +157,7 @@ class AuthWindow(QtWidgets.QDialog):
             return
         self._browser_help_shown = True
         message = (
-            "等待浏览器认证已超过 30 秒，浏览器可能没有正常弹出，或认证页没有成功打开。\n\n"
+            "等待浏览器认证已超过 60 秒，浏览器可能没有正常弹出，或认证页没有成功打开。\n\n"
             "建议尝试：\n"
             "1. 检查默认浏览器是否可正常启动。\n"
             "2. 检查是否被弹窗拦截、远程桌面会话限制或系统安全策略阻止。\n"
