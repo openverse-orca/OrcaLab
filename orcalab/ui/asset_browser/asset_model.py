@@ -88,8 +88,8 @@ class AssetModel(ThumbnailModel):
 
         result: List[AssetInfo] = []
         for asset in input:
-            if asset.pak_name != "":
-                if self.category_filter == asset.pak_name:
+            if asset.pak_id != "":
+                if self.category_filter == asset.pak_id:
                     result.append(asset)
                     continue
             if asset.metadata is not None:
