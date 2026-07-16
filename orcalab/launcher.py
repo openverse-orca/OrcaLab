@@ -8,11 +8,11 @@ from datetime import datetime
 
 from orcalab.cli_options import (
     create_argparser,
-    preparse_ui_languages,
+    preparse_ui_language,
     resolve_and_validate_workspace,
 )
 from orcalab.config_service import ConfigService, read_user_ui_language
-from orcalab.i18n import resolve_language, set_language
+from orcalab.i18n import resolve_startup_language, set_language
 from orcalab.project_util import get_user_log_folder
 
 
@@ -129,12 +129,11 @@ def main():
 
             sys.exit(mcp_main(mcp_argv))
 
-        cli_language, initial_language = preparse_ui_languages(sys.argv[1:])
+        cli_language = preparse_ui_language(sys.argv[1:])
         set_language(
-            resolve_language(
+            resolve_startup_language(
                 cli_language,
                 read_user_ui_language(),
-                initial_language,
             )
         )
         parser = create_argparser()

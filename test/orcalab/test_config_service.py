@@ -88,25 +88,6 @@ def test_ensure_ui_language_detects_and_persists_first_language(
     assert persisted["orcalab"]["language"] == detected_language
 
 
-def test_installer_initial_language_is_saved_without_detecting_system(
-    fresh_config_service, monkeypatch, tmp_path
-):
-    user_config_path = tmp_path / "config.toml"
-    fresh_config_service.user_config_path = user_config_path.as_posix()
-
-    def fail_if_detected():
-        raise AssertionError("system language must not override the installer language")
-
-    monkeypatch.setattr(
-        config_service_module, "detect_system_language", fail_if_detected
-    )
-
-    assert fresh_config_service.ensure_ui_language("zh_CN") == "zh_CN"
-    with user_config_path.open("rb") as config_file:
-        persisted = tomllib.load(config_file)
-    assert persisted["orcalab"]["language"] == "zh_CN"
-
-
 def test_cli_language_is_temporary_while_first_system_language_is_saved(
     fresh_config_service, monkeypatch, tmp_path
 ):
@@ -139,7 +120,7 @@ def test_configured_ui_language_is_not_reinitialized(
         config_service_module, "detect_system_language", fail_if_detected
     )
 
-    assert fresh_config_service.ensure_ui_language("zh_CN") == "en_US"
+    assert fresh_config_service.ensure_ui_language() == "en_US"
     assert fresh_config_service.ui_language() == "en_US"
     assert not Path(fresh_config_service.user_config_path).exists()
 

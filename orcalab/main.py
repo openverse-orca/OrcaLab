@@ -18,13 +18,14 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="repla
 
 from orcalab.cli_options import (
     create_argparser,
-    preparse_ui_languages,
+    preparse_ui_language,
     resolve_and_validate_workspace,
 )
-from orcalab.config_service import ConfigService
+from orcalab.config_service import ConfigService, read_user_ui_language
 from orcalab.i18n import (
     install_qt_translation_hooks,
     resolve_language,
+    resolve_startup_language,
     set_language,
 )
 from orcalab.project_util import check_project_folder, copy_packages, sync_pak_urls
@@ -264,12 +265,16 @@ def main():
     _ensure_xcb_platform()
 
     _main_start = time.monotonic()
-    cli_language, initial_language = preparse_ui_languages(sys.argv[1:])
-    set_language(resolve_language(cli_language, initial_language))
+    cli_language = preparse_ui_language(sys.argv[1:])
+    set_language(
+        resolve_startup_language(
+            cli_language,
+            read_user_ui_language(),
+        )
+    )
     parser = create_argparser()
     args, unknown = parser.parse_known_args()
     cli_language = getattr(args, "lang", None)
-    initial_language = getattr(args, "initial_lang", None)
 
     console_level = logging.INFO
     if getattr(args, "log_level", logging.INFO):
@@ -299,7 +304,7 @@ def main():
     current_dir = pathlib.Path(__file__).parent.resolve()
     project_root = current_dir.parent  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root, workspace)
-    saved_language = config_service.ensure_ui_language(initial_language)
+    saved_language = config_service.ensure_ui_language()
     set_language(resolve_language(cli_language, saved_language))
 
     verbose = getattr(args, "verbose", False)

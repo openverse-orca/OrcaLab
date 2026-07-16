@@ -532,17 +532,13 @@ class ConfigService:
     def ui_language(self) -> str:
         return self.configured_ui_language() or normalize_language(None)
 
-    def ensure_ui_language(self, initial_language: str | None = None) -> str:
-        """Persist the initial language once and return the saved preference."""
+    def ensure_ui_language(self) -> str:
+        """Persist the detected system language once and return the preference."""
         configured_language = self.configured_ui_language()
         if configured_language is not None:
             return configured_language
 
-        language = (
-            normalize_language(initial_language)
-            if initial_language is not None and initial_language.strip()
-            else detect_system_language()
-        )
+        language = detect_system_language()
         self.set_ui_language(language)
         return language
 

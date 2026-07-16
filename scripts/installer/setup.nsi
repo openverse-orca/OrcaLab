@@ -10,28 +10,19 @@ SetCompressor /SOLID lzma
 !ifndef VI_PRODUCT_VERSION
 !define VI_PRODUCT_VERSION "${PRODUCT_VERSION}.0"
 !endif
-!ifndef INSTALLER_SUFFIX
-!define INSTALLER_SUFFIX ""
-!endif
 !ifndef INSTALLER_SOURCE_DIR
 !define INSTALLER_SOURCE_DIR "."
 !endif
 
-!ifdef ORCALAB_ENGLISH
-!include "strings_en.nsh"
-!else
-!include "strings_zh.nsh"
-!endif
-
 !define PRODUCT_NAME "OrcaLab"
-!define PRODUCT_PUBLISHER "${STR_PRODUCT_PUBLISHER}"
+!define PRODUCT_PUBLISHER "Songying Technology"
 !define PRODUCT_WEB_SITE "https://orca3d.cn"
 !define PRODUCT_DIR_REGKEY "Software\Microsoft\Windows\CurrentVersion\App Paths\orcalab.bat"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define APP_USER_MODEL_ID "OrcaLab.Songying.OrcaLab"
 
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}"
-OutFile "..\..\dist\OrcaLab-${PRODUCT_VERSION}-Setup${INSTALLER_SUFFIX}.exe"
+OutFile "..\..\dist\OrcaLab-${PRODUCT_VERSION}-Setup.exe"
 InstallDir "$LOCALAPPDATA\OrcaLab"
 InstallDirRegKey HKCU "${PRODUCT_DIR_REGKEY}" ""
 RequestExecutionLevel user
@@ -40,11 +31,12 @@ VIProductVersion "${VI_PRODUCT_VERSION}"
 VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
 VIAddVersionKey "CompanyName" "${PRODUCT_PUBLISHER}"
 VIAddVersionKey "LegalCopyright" "${PRODUCT_PUBLISHER}"
-VIAddVersionKey "FileDescription" "${STR_FILE_DESCRIPTION}"
+VIAddVersionKey "FileDescription" "OrcaLab Installer"
 VIAddVersionKey "FileVersion" "${PRODUCT_VERSION}"
 
 ; ── Interface ───────────────────────────────────────────
 !include "MUI2.nsh"
+!include "LogicLib.nsh"
 
 !define MUI_ABORTWARNING
 !define MUI_ICON "..\..\orcalab\assets\icons\orcalab_logo.ico"
@@ -59,19 +51,41 @@ VIAddVersionKey "FileVersion" "${PRODUCT_VERSION}"
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 
-!ifdef ORCALAB_ENGLISH
 !insertmacro MUI_LANGUAGE "English"
-!else
 !insertmacro MUI_LANGUAGE "SimpChinese"
-!endif
+!insertmacro MUI_LANGUAGE "TradChinese"
+
+!include "strings_en.nsh"
+!include "strings_zh.nsh"
+
+; Select English for non-Chinese Windows UI languages. All Chinese variants
+; use Chinese, with zh-CN/zh-SG using simplified and the rest traditional.
+!macro SelectSystemLanguage
+    System::Call 'kernel32::GetUserDefaultUILanguage() i .r9'
+    IntOp $8 $9 & 0x03FF
+    ${If} $8 != 0x04
+        StrCpy $LANGUAGE ${LANG_ENGLISH}
+    ${Else}
+        IntOp $7 $9 >> 10
+        ${If} $7 == 2
+        ${OrIf} $7 == 4
+        ${OrIf} $7 == 0
+            StrCpy $LANGUAGE ${LANG_SIMPCHINESE}
+        ${Else}
+            StrCpy $LANGUAGE ${LANG_TRADCHINESE}
+        ${EndIf}
+    ${EndIf}
+!macroend
 
 ; ── Detect existing installation ─────────────────────────
 Function .onInit
+    !insertmacro SelectSystemLanguage
+
     ReadRegStr $0 HKCU "${PRODUCT_UNINST_KEY}" "DisplayVersion"
     IfErrors no_previous_version
 
     MessageBox MB_YESNO|MB_ICONQUESTION \
-        "${STR_UPGRADE_PROMPT}" \
+        "$(STR_UPGRADE_PROMPT)" \
         IDYES upgrade_confirm
     Quit
 
@@ -113,7 +127,7 @@ Function SetShortcutAppId
 FunctionEnd
 
 ; ── Install Section ─────────────────────────────────────
-Section "${STR_SECTION_INSTALL}"
+Section "$(STR_SECTION_INSTALL)"
     SetOutPath "$INSTDIR"
 
     File "${INSTALLER_SOURCE_DIR}\orcalab.bat"
@@ -121,12 +135,12 @@ Section "${STR_SECTION_INSTALL}"
     File "..\..\orcalab\assets\icons\orcalab_logo.ico"
 
     ; Run conda environment setup during installation
-    DetailPrint "${STR_SETUP_ENV_DETAIL}"
+    DetailPrint "$(STR_SETUP_ENV_DETAIL)"
     FileOpen $0 "$TEMP\orcalab_setup_only" w
     FileClose $0
     ExecWait '"$INSTDIR\orcalab.bat"' $1
     ${If} $1 != 0
-        DetailPrint "${STR_SETUP_ENV_WARNING}"
+        DetailPrint "$(STR_SETUP_ENV_WARNING)"
     ${EndIf}
 
     ; Desktop shortcut (point to .vbs for invisible launch)
@@ -139,7 +153,7 @@ Section "${STR_SECTION_INSTALL}"
     CreateShortCut "$SMPROGRAMS\OrcaLab\OrcaLab.lnk" "$INSTDIR\orcalab.vbs" "" "$INSTDIR\orcalab_logo.ico"
     Push "$SMPROGRAMS\OrcaLab\OrcaLab.lnk"
     Call SetShortcutAppId
-    CreateShortCut "$SMPROGRAMS\OrcaLab\Uninstall.lnk" "$INSTDIR\uninst.exe"
+    CreateShortCut "$SMPROGRAMS\OrcaLab\$(STR_UNINSTALL).lnk" "$INSTDIR\uninst.exe"
 
     ; Registry for Add/Remove Programs
     WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayName" "${PRODUCT_NAME}"
@@ -156,6 +170,11 @@ Section "${STR_SECTION_INSTALL}"
 SectionEnd
 
 ; ── Uninstall Section ───────────────────────────────────
+Function un.onInit
+    !insertmacro SelectSystemLanguage
+FunctionEnd
+
+; NSIS requires this reserved section name to identify uninstaller code.
 Section "Uninstall"
     Delete "$INSTDIR\orcalab.bat"
     Delete "$INSTDIR\orcalab.vbs"

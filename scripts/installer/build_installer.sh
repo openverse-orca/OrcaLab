@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build Windows NSIS installer for OrcaLab
 # Prerequisites: sudo apt-get install nsis
-# The installer wraps orcalab.bat + icon, creates desktop shortcut.
+# The installer wraps orcalab.bat + icon, creates desktop shortcut, and selects
+# its UI language from the Windows system language at runtime.
 # No code signing required — .bat scripts bypass Device Guard.
 
 set -e
@@ -15,21 +16,10 @@ cd "$SCRIPT_DIR"
 echo "🔧 Building OrcaLab Windows Installer..."
 echo ""
 
-# Controls the NSIS installer UI and seeds the Python app's language only when
-# the user has no saved preference yet.
-LANGUAGE="zh_CN"
 PIP_SOURCE="test"
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --lang)
-            LANGUAGE="${2:-}"
-            shift 2
-            ;;
-        --lang=*)
-            LANGUAGE="${1#*=}"
-            shift
-            ;;
         --pip-source)
             PIP_SOURCE="${2:-}"
             shift 2
@@ -38,46 +28,22 @@ while [ $# -gt 0 ]; do
             PIP_SOURCE="${1#*=}"
             shift
             ;;
-        en|en_US|english)
-            LANGUAGE="en_US"
-            shift
-            ;;
-        zh|zh_CN|cn|chinese)
-            LANGUAGE="zh_CN"
-            shift
-            ;;
         test|prod)
             PIP_SOURCE="$1"
             shift
             ;;
         -h|--help)
-            echo "Usage: $0 [--lang zh_CN|en_US|all] [--pip-source test|prod]"
-            echo "  --lang all builds both zh_CN and en_US installers."
+            echo "Usage: $0 [--pip-source test|prod]"
             echo "Legacy usage still works: $0 test|prod"
             exit 0
             ;;
         *)
             echo "Error: unknown argument '$1'"
-            echo "Usage: $0 [--lang zh_CN|en_US|all] [--pip-source test|prod]"
+            echo "Usage: $0 [--pip-source test|prod]"
             exit 1
             ;;
     esac
 done
-
-case "$LANGUAGE" in
-    en|en_US|english)
-        LANGUAGE="en_US"
-        ;;
-    zh|zh_CN|cn|chinese)
-        LANGUAGE="zh_CN"
-        ;;
-    all)
-        ;;
-    *)
-        echo "Error: unsupported language '$LANGUAGE' (expected zh_CN, en_US, or all)"
-        exit 1
-        ;;
-esac
 
 case "$PIP_SOURCE" in
     test|prod)
@@ -88,15 +54,6 @@ case "$PIP_SOURCE" in
         ;;
 esac
 
-if [ "$LANGUAGE" = "all" ]; then
-    echo "Building both zh_CN and en_US installers..."
-    "$SCRIPT_DIR/build_installer.sh" --lang zh_CN --pip-source "$PIP_SOURCE"
-    "$SCRIPT_DIR/build_installer.sh" --lang en_US --pip-source "$PIP_SOURCE"
-    echo "✅ Both installers built successfully."
-    exit 0
-fi
-
-echo "Installer language: $LANGUAGE"
 echo "Pip source: $PIP_SOURCE"
 
 # Check makensis
@@ -137,7 +94,6 @@ cp "$SCRIPT_DIR/orcalab.vbs" "$VBS_FILE"
 
 # Inject version into staged orcalab.bat
 sed -i "s/__ORCALAB_VERSION__/$VERSION/g" "$BAT_FILE"
-sed -i "s/__INITIAL_UI_LANGUAGE__/$LANGUAGE/g" "$BAT_FILE"
 
 PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
 sed -i "s|__PIP_INDEX_URL__|$PIP_INDEX_URL|g" "$BAT_FILE"
@@ -170,15 +126,8 @@ NSIS_ARGS=(
     "-DVI_PRODUCT_VERSION=$VI_VERSION"
     "-DINSTALLER_SOURCE_DIR=$(basename "$BUILD_DIR")"
 )
-if [ "$LANGUAGE" = "en_US" ]; then
-    INSTALLER_SUFFIX="-en-US"
-    NSIS_ARGS+=("-DORCALAB_ENGLISH")
-else
-    INSTALLER_SUFFIX="-zh-CN"
-fi
-NSIS_ARGS+=("-DINSTALLER_SUFFIX=$INSTALLER_SUFFIX")
 makensis "${NSIS_ARGS[@]}" setup.nsi
 
 echo ""
-echo "✅ Installer built: $DIST_DIR/OrcaLab-$VERSION-Setup$INSTALLER_SUFFIX.exe"
-ls -lh "$DIST_DIR"/OrcaLab-"$VERSION"-Setup"$INSTALLER_SUFFIX".exe
+echo "✅ Installer built: $DIST_DIR/OrcaLab-$VERSION-Setup.exe"
+ls -lh "$DIST_DIR"/OrcaLab-"$VERSION"-Setup.exe

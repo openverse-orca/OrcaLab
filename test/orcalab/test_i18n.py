@@ -24,7 +24,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SOURCE_ROOT = _REPO_ROOT / "orcalab"
 _TRANSLATION_FILE = _SOURCE_ROOT / "translations" / "en_us.py"
 _HAN_RE = re.compile(r"[\u3400-\u9fff]")
-_NSIS_DEFINE_RE = re.compile(r'^!define\s+(?P<name>\w+)\s+"(?P<value>.*)"$')
+_NSIS_LANG_STRING_RE = re.compile(
+    r'^LangString\s+(?P<name>\w+)\s+\$\{LANG_(?P<language>\w+)\}\s+"(?P<value>.*)"$'
+)
 
 # Calls whose displayed string arguments are translated by install_qt_translation_hooks(),
 # or by a small OrcaLab wrapper which immediately delegates to a hooked Qt text API.
@@ -432,57 +434,104 @@ def test_config_values_displayed_by_launch_dialog_have_translations():
 def test_installer_language_resources_have_matching_english_strings():
     installer_dir = _REPO_ROOT / "scripts" / "installer"
 
-    def read_defines(filename: str) -> dict[str, str]:
-        result = {}
+    def read_lang_strings(filename: str) -> dict[str, dict[str, str]]:
+        result: dict[str, dict[str, str]] = {}
         for line in (installer_dir / filename).read_text(encoding="utf-8").splitlines():
-            match = _NSIS_DEFINE_RE.match(line.strip())
+            match = _NSIS_LANG_STRING_RE.match(line.strip())
             if match:
-                result[match.group("name")] = match.group("value")
+                result.setdefault(match.group("language"), {})[
+                    match.group("name")
+                ] = match.group("value")
         return result
 
-    chinese = read_defines("strings_zh.nsh")
-    english = read_defines("strings_en.nsh")
+    english = read_lang_strings("strings_en.nsh")["ENGLISH"]
+    chinese_resources = read_lang_strings("strings_zh.nsh")
+    simplified = chinese_resources["SIMPCHINESE"]
+    traditional = chinese_resources["TRADCHINESE"]
     issues = []
-    if chinese.keys() != english.keys():
-        issues.append(
-            "installer language keys differ: "
-            f"zh-only={sorted(chinese.keys() - english.keys())}, "
-            f"en-only={sorted(english.keys() - chinese.keys())}"
-        )
+    for language, translated in (
+        ("SIMPCHINESE", simplified),
+        ("TRADCHINESE", traditional),
+    ):
+        if translated.keys() != english.keys():
+            issues.append(
+                f"installer {language} keys differ: "
+                f"localized-only={sorted(translated.keys() - english.keys())}, "
+                f"en-only={sorted(english.keys() - translated.keys())}"
+            )
     for name, value in english.items():
         if _HAN_RE.search(value):
             issues.append(f"strings_en.nsh {name} still contains Chinese: {value!r}")
-        if chinese.get(name) == value:
-            issues.append(f"strings_en.nsh {name} is unchanged from Chinese")
+        if simplified.get(name) == value:
+            issues.append(f"strings_en.nsh {name} is unchanged from simplified Chinese")
+        if traditional.get(name) == value:
+            issues.append(f"strings_en.nsh {name} is unchanged from traditional Chinese")
 
     assert not issues, "Installer translation errors:\n" + "\n".join(issues)
 
 
-def test_windows_launcher_seeds_first_language_and_forwards_arguments():
+def test_windows_launcher_selects_its_language_and_forwards_arguments():
     installer_dir = _REPO_ROOT / "scripts" / "installer"
     batch_script = (installer_dir / "orcalab.bat").read_text(encoding="utf-8")
     build_script = (installer_dir / "build_installer.sh").read_text(encoding="utf-8")
     vbs_script = (installer_dir / "orcalab.vbs").read_text(encoding="utf-8")
 
-    assert 'set "INITIAL_UI_LANGUAGE=__INITIAL_UI_LANGUAGE__"' in batch_script
-    assert 's/__INITIAL_UI_LANGUAGE__/$LANGUAGE/g' in build_script
-    assert batch_script.count('--initial-lang "%INITIAL_UI_LANGUAGE%" %*') == 2
-    assert " -m orcalab --lang " not in batch_script
+    assert "INITIAL_UI_LANGUAGE" not in batch_script
+    assert "__INITIAL_UI_LANGUAGE__" not in build_script
+    assert "--initial-lang" not in batch_script
+    assert batch_script.count("-m orcalab %*") == 2
+    assert '"!LAUNCHER_ARG!"=="--lang"' in batch_script
+    assert '"!LAUNCHER_ARG:~0,7!"=="--lang="' in batch_script
+    assert "CurrentUICulture.TwoLetterISOLanguageName" in batch_script
+    assert 'if /i "%LAUNCHER_LANGUAGE%"=="zh_CN" chcp 65001' in batch_script
+    assert 'set "MSG_LAUNCHER_TITLE=OrcaLab 启动器"' in batch_script
+    assert 'set "MSG_LAUNCHER_TITLE=OrcaLab Launcher"' in batch_script
+    message_definitions = Counter(
+        re.findall(r'set "(?P<name>MSG_[A-Z_]+)=', batch_script)
+    )
+    message_references = set(
+        re.findall(r'[!%](?P<name>MSG_[A-Z_]+)[!%]', batch_script)
+    )
+    assert message_definitions
+    assert set(message_definitions.values()) == {2}
+    assert set(message_definitions) == message_references
     assert "WScript.Arguments" in vbs_script
     assert "WshShell.Run command" in vbs_script
+    assert "ResolveLauncherLanguage(WScript.Arguments, WshShell)" in vbs_script
+    assert vbs_script.isascii()
+    assert 'LCase(argument) = "--lang"' in vbs_script
+    assert 'Left(LCase(argument), 7) = "--lang="' in vbs_script
+    assert "CurrentUICulture.TwoLetterISOLanguageName" in vbs_script
+    assert "(GetLocale() And &H3FF) = 4" in vbs_script
+    assert "WshShell.Popup popupText" in vbs_script
 
 
-def test_windows_installers_use_explicit_locale_suffixes():
+def test_windows_installer_is_single_and_selects_system_language():
+    installer_dir = _REPO_ROOT / "scripts" / "installer"
     build_script = (
-        _REPO_ROOT / "scripts" / "installer" / "build_installer.sh"
+        installer_dir / "build_installer.sh"
     ).read_text(encoding="utf-8")
+    setup_script = (installer_dir / "setup.nsi").read_text(encoding="utf-8")
 
-    assert 'INSTALLER_SUFFIX="-zh-CN"' in build_script
-    assert 'INSTALLER_SUFFIX="-en-US"' in build_script
-    assert 'INSTALLER_SUFFIX="-en"' not in build_script
+    assert "[--lang" not in build_script
+    assert "INSTALLER_SUFFIX" not in build_script
+    assert "ORCALAB_ENGLISH" not in build_script
+    assert 'OutFile "..\\..\\dist\\OrcaLab-${PRODUCT_VERSION}-Setup.exe"' in setup_script
+    assert "INSTALLER_SUFFIX" not in setup_script
+    assert "ORCALAB_ENGLISH" not in setup_script
+    assert '!insertmacro MUI_LANGUAGE "English"' in setup_script
+    assert '!insertmacro MUI_LANGUAGE "SimpChinese"' in setup_script
+    assert '!insertmacro MUI_LANGUAGE "TradChinese"' in setup_script
+    assert "GetUserDefaultUILanguage" in setup_script
+    assert "IntOp $8 $9 & 0x03FF" in setup_script
+    assert 'StrCpy $LANGUAGE ${LANG_ENGLISH}' in setup_script
+    assert 'StrCpy $LANGUAGE ${LANG_SIMPCHINESE}' in setup_script
+    assert 'StrCpy $LANGUAGE ${LANG_TRADCHINESE}' in setup_script
+    assert "MUI_LANGDLL_DISPLAY" not in setup_script
+    assert 'Section "Uninstall"' in setup_script
 
 
-def test_windows_installer_all_language_option_builds_both_locales(tmp_path):
+def test_windows_installer_build_script_builds_one_package(tmp_path):
     project_root = tmp_path / "project"
     installer_dir = project_root / "scripts" / "installer"
     icon_dir = project_root / "orcalab" / "assets" / "icons"
@@ -530,10 +579,7 @@ def test_windows_installer_all_language_option_builds_both_locales(tmp_path):
                 / ".."
                 / ".."
                 / "dist"
-                / (
-                    f"OrcaLab-{defines['PRODUCT_VERSION']}-Setup"
-                    f"{defines['INSTALLER_SUFFIX']}.exe"
-                )
+                / f"OrcaLab-{defines['PRODUCT_VERSION']}-Setup.exe"
             )
             output.parent.mkdir(parents=True, exist_ok=True)
             output.touch()
@@ -549,8 +595,6 @@ def test_windows_installer_all_language_option_builds_both_locales(tmp_path):
     result = subprocess.run(
         [
             str(installer_dir / "build_installer.sh"),
-            "--lang",
-            "all",
             "--pip-source",
             "prod",
         ],
@@ -566,27 +610,32 @@ def test_windows_installer_all_language_option_builds_both_locales(tmp_path):
         json.loads(line)
         for line in makensis_log.read_text(encoding="utf-8").splitlines()
     ]
-    assert len(records) == 2
+    assert len(records) == 1
 
-    chinese, english = records
-    assert "-DINSTALLER_SUFFIX=-zh-CN" in chinese["args"]
-    assert "-DORCALAB_ENGLISH" not in chinese["args"]
-    assert "INITIAL_UI_LANGUAGE=zh_CN" in chinese["batch"]
-    assert "-DINSTALLER_SUFFIX=-en-US" in english["args"]
-    assert "-DORCALAB_ENGLISH" in english["args"]
-    assert "INITIAL_UI_LANGUAGE=en_US" in english["batch"]
-    assert all(
-        "--extra-index-url https://pypi.org/simple" in record["batch"]
-        for record in records
-    )
-    assert all("test.pypi.org" not in record["batch"] for record in records)
+    record = records[0]
+    assert not any(arg.startswith("-DINSTALLER_SUFFIX=") for arg in record["args"])
+    assert "-DORCALAB_ENGLISH" not in record["args"]
+    assert "INITIAL_UI_LANGUAGE" not in record["batch"]
+    assert "--initial-lang" not in record["batch"]
+    assert "--extra-index-url https://pypi.org/simple" in record["batch"]
+    assert "test.pypi.org" not in record["batch"]
 
     version = tomllib.loads(
         (project_root / "pyproject.toml").read_text(encoding="utf-8")
     )["project"]["version"]
-    assert (project_root / "dist" / f"OrcaLab-{version}-Setup-zh-CN.exe").is_file()
-    assert (project_root / "dist" / f"OrcaLab-{version}-Setup-en-US.exe").is_file()
+    assert (project_root / "dist" / f"OrcaLab-{version}-Setup.exe").is_file()
     assert not list(installer_dir.glob(".installer-build.*"))
+
+    rejected = subprocess.run(
+        [str(installer_dir / "build_installer.sh"), "--lang", "all"],
+        cwd=project_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert rejected.returncode != 0
+    assert "unknown argument '--lang'" in rejected.stdout
 
 
 def test_known_ui_text_producers_translate_before_returning_text():

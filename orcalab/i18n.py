@@ -33,6 +33,17 @@ def resolve_language(*candidates: str | None) -> str:
     return _DEFAULT_LANGUAGE
 
 
+def resolve_startup_language(
+    explicit_language: str | None,
+    saved_language: str | None,
+) -> str:
+    """Resolve startup UI language without detecting the system unnecessarily."""
+    for candidate in (explicit_language, saved_language):
+        if candidate is not None and candidate.strip():
+            return normalize_language(candidate)
+    return detect_system_language()
+
+
 def language_from_locale(locale_name: str | None) -> str:
     """Map a system locale to one of OrcaLab's supported UI languages."""
     value = (locale_name or "").strip()

@@ -9,20 +9,18 @@ _UI_LANGUAGE_CHOICES = ("zh_CN", "zh", "en_US", "en")
 
 
 def _preparse_option(argv: list[str], option_name: str) -> str | None:
+    value = None
     for index, arg in enumerate(argv):
         if arg == option_name and index + 1 < len(argv):
-            return argv[index + 1]
-        if arg.startswith(f"{option_name}="):
-            return arg.split("=", 1)[1]
-    return None
+            value = argv[index + 1]
+        elif arg.startswith(f"{option_name}="):
+            value = arg.split("=", 1)[1]
+    return value
 
 
-def preparse_ui_languages(argv: list[str]) -> tuple[str | None, str | None]:
-    """Return the explicit language and the installer's first-run hint."""
-    return (
-        _preparse_option(argv, "--lang"),
-        _preparse_option(argv, "--initial-lang"),
-    )
+def preparse_ui_language(argv: list[str]) -> str | None:
+    """Return the explicit language requested for this launch."""
+    return _preparse_option(argv, "--lang")
 
 
 def create_argparser():
@@ -62,6 +60,8 @@ def create_argparser():
             "临时设置本次启动的界面语言（zh_CN 或 en_US），不修改已保存设置。"
         ),
     )
+    # Compatibility only: older dual-language Windows launchers may still pass
+    # this option. It is accepted but deliberately ignored.
     parser.add_argument(
         "--initial-lang",
         choices=_UI_LANGUAGE_CHOICES,

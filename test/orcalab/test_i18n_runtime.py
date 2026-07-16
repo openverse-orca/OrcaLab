@@ -4,7 +4,7 @@ import pytest
 import requests
 
 import orcalab.i18n as i18n_module
-from orcalab.cli_options import create_argparser, preparse_ui_languages
+from orcalab.cli_options import create_argparser, preparse_ui_language
 from orcalab.gpu_driver_check import (
     DriverStatus,
     GpuDeviceInfo,
@@ -19,6 +19,7 @@ from orcalab.i18n import (
     language_from_locale,
     normalize_language,
     resolve_language,
+    resolve_startup_language,
     set_language,
     tr,
 )
@@ -129,22 +130,25 @@ def test_system_language_detection_fails_safe_to_english(monkeypatch):
 @pytest.mark.parametrize(
     ("argv", "expected"),
     [
-        (["--lang", "zh_CN"], ("zh_CN", None)),
-        (["--lang=en_US"], ("en_US", None)),
-        (["--initial-lang", "zh_CN"], (None, "zh_CN")),
+        (["--lang", "zh_CN"], "zh_CN"),
+        (["--lang=en_US"], "en_US"),
+        (["--lang", "zh_CN", "--lang=en_US"], "en_US"),
+        (["--initial-lang", "zh_CN"], None),
         (
             ["--initial-lang=en_US", "--lang", "zh_CN"],
-            ("zh_CN", "en_US"),
+            "zh_CN",
         ),
     ],
 )
-def test_language_options_are_preparsed(argv, expected):
-    assert preparse_ui_languages(argv) == expected
+def test_launch_language_option_is_preparsed(argv, expected):
+    assert preparse_ui_language(argv) == expected
 
 
-def test_initial_language_option_is_hidden_from_help():
+def test_legacy_initial_language_option_is_hidden_and_ignored():
+    args = create_argparser().parse_args(["--initial-lang", "zh_CN"])
     help_text = create_argparser().format_help()
 
+    assert args.lang is None
     assert "--lang" in help_text
     assert "--initial-lang" not in help_text
     assert "without changing the saved setting" in help_text
@@ -160,6 +164,31 @@ def test_initial_language_option_is_hidden_from_help():
 )
 def test_language_resolution_uses_the_first_available_source(candidates, expected):
     assert resolve_language(*candidates) == expected
+
+
+@pytest.mark.parametrize(
+    ("explicit", "saved", "detected", "expected", "detection_count"),
+    [
+        ("en_US", "zh_CN", "zh_CN", "en_US", 0),
+        (None, "zh_CN", "en_US", "zh_CN", 0),
+        (None, None, "zh_CN", "zh_CN", 1),
+        (None, None, "en_US", "en_US", 1),
+    ],
+)
+def test_startup_language_detects_system_only_without_higher_priority_source(
+    monkeypatch, explicit, saved, detected, expected, detection_count
+):
+    calls = 0
+
+    def detect():
+        nonlocal calls
+        calls += 1
+        return detected
+
+    monkeypatch.setattr(i18n_module, "detect_system_language", detect)
+
+    assert resolve_startup_language(explicit, saved) == expected
+    assert calls == detection_count
 
 
 def test_gpu_text_without_detected_hardware_is_english():
