@@ -1,0 +1,145 @@
+[fonts.body]
+size = 11
+
+[fonts.small]
+size = 10
+
+[fonts.tiny]
+size = 9
+
+[fonts.title]
+size = 14
+bold = true
+
+[fonts.subtitle]
+size = 12
+bold = true
+
+[fonts.button]
+size = 11
+bold = true
+
+[fonts.button_paint]
+size = 10
+
+[fonts.status_bar]
+size = 11
+bold = true
+
+[fonts.terminal]
+family = "Consolas, Monaco, Courier New, monospace"
+size = 11
+
+[fonts.terminal_status]
+size = 10
+
+[fonts.property_edit]
+size = 10
+
+[fonts.property_title]
+base = "body"
+bold = true
+
+[fonts.asset_browser_label]
+size = 10
+
+[fonts.asset_browser_title]
+size = 11
+bold = true
+
+[fonts.setting_title]
+size = 12
+weight = 600
+
+[fonts.setting_description]
+size = 11
+
+[fonts.setting_field]
+size = 11
+
+[fonts.dialog_title]
+size = 14
+bold = true
+
+[fonts.sync_status]
+size = 17
+
+[fonts.thumbnail_loading]
+size = 13
+bold = true
+
+[fonts.monospace]
+family = "Consolas, Monaco, monospace"
+size = 11
+
+[fonts.monospace_small]
+family = "Consolas, Monaco, Courier New, monospace"
+size = 10
+
+[fonts.group_title]
+size = 11
+bold = true
+
+[fonts.path_label]
+family = "Consolas, Monaco, monospace"
+size = 10
+
+[fonts.installer_status]
+size = 13
+bold = true
+
+[fonts.installer_log]
+family = "monospace"
+size = 10
+
+[fonts.copilot_input]
+family = "Consolas, Monaco, Courier New, monospace"
+size = 11
+
+[fonts.copilot_log]
+family = "Consolas, Monaco, Courier New, monospace"
+size = 10
+
+[fonts.loading_dialog]
+size = 10
+
+[fonts.hint_text]
+base = "body"
+italic = true
+
+[fonts.group_box_title]
+base = "body"
+bold = true
+
+[fonts.badge_text]
+base = "body"
+italic = true
+
+[fonts.entity_info]
+base = "body"
+italic = true
+
+[fonts.outline]
+size = 11
+
+[fonts.collapsible_header]
+size = 11
+
+[fonts.camera_group_title]
+base = "body"
+bold = true
+
+[fonts.camera_source]
+base = "body"
+italic = true
+
+[fonts.camera_selector]
+size = 11
+
+[fonts.panel_title]
+size = 11
+bold = true
+
+[fonts.tree_header]
+size = 11
+bold = true

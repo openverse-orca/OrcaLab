@@ -1,11 +1,12 @@
-from copy import deepcopy
-from typing import Any, List
+from dataclasses import dataclass
+from typing import Any, Dict, List
+
 from orcalab.actor import BaseActor, GroupActor
-from orcalab.actor_property import ActorPropertyKey
-from orcalab.math import Transform
+from orcalab.actor_property import ActorPropertyKey, PropertyOverride
+from orcalab.transform import Transform
 from orcalab.path import Path
 from orcalab.scene_edit_types import AddActorRequest
-
+from orcalab.selection_data import SelectionData
 
 # 不要存Actor对象，只存Path。
 # Actor可能被删除和创建，前后的Actor是不相等的。
@@ -13,9 +14,9 @@ from orcalab.scene_edit_types import AddActorRequest
 # 而是作为模板使用。
 
 
+@dataclass
 class BaseCommand:
-    def __init__(self):
-        raise NotImplementedError
+    pass
 
 
 class CommandGroup(BaseCommand):
@@ -27,21 +28,12 @@ class CommandGroup(BaseCommand):
 
 
 class SelectionCommand(BaseCommand):
-    def __init__(self, old_selection: list[Path], new_selection: list[Path]):
+    def __init__(self, old_selection: SelectionData, new_selection: SelectionData):
         self.old_selection = old_selection
         self.new_selection = new_selection
 
     def __repr__(self):
         return f"SelectionCommand(old_selection={self.old_selection}, new_selection={self.new_selection})"
-
-
-class ActiveActorCommand(BaseCommand):
-    def __init__(self, old_active_actor: Path | None, new_active_actor: Path | None):
-        self.old_active_actor = old_active_actor
-        self.new_active_actor = new_active_actor
-
-    def __repr__(self):
-        return f"ActiveActorCommand(old_active_actor={self.old_active_actor}, new_active_actor={self.new_active_actor})"
 
 
 class AddActorCommand(BaseCommand):
@@ -52,40 +44,33 @@ class AddActorCommand(BaseCommand):
         return f"AddActorCommand({len(self.requests)} requests)"
 
 
+@dataclass
+class ActorReconstructInfo:
+    actor: BaseActor
+    actor_path: Path
+    # 删除前在兄弟节点中的位置
+    position: int
+    # 包含actor和子Actor所有修改的属性
+    actor_overrides_dict: Dict[Path, List[PropertyOverride]]
+
+
+@dataclass
 class DeleteActorCommand(BaseCommand):
-    def __init__(self, actors: List[BaseActor], paths: List[Path], rows: List[int]):
-        self.actors = actors
-        self.parent_paths = paths
-        self.rows = rows
-
-    def __repr__(self):
-        return f"DeleteActorCommand(paths={self.parent_paths})"
+    actor_reconstruct_info: List[ActorReconstructInfo]
 
 
+@dataclass
 class RenameActorCommand(BaseCommand):
-    def __init__(self):
-        self.old_path: Path = Path()
-        self.new_path: Path = Path()
-
-    def __repr__(self):
-        return f"RenameActorCommand(old_path={self.old_path}, new_path={self.new_path})"
+    old_path: Path
+    new_path: Path
 
 
+@dataclass
 class MoveActorCommand(BaseCommand):
-    def __init__(
-        self,
-        actor_paths: List[Path],
-        old_rows: List[int],
-        new_parent_paths: List[Path],
-        new_rows: List[int],
-    ):
-        self.actor_paths = actor_paths
-        self.old_rows = old_rows
-        self.new_parent_paths = new_parent_paths
-        self.new_rows = new_rows
-
-    def __repr__(self):
-        return f"MoveActorCommand(actor_paths={self.actor_paths}, old_rows={self.old_rows}, new_parent_paths={self.new_parent_paths}, new_rows={self.new_rows})"
+    actor_paths: List[Path]
+    old_rows: List[int]
+    new_parent_paths: List[Path]
+    new_rows: List[int]
 
 
 class TransformCommand(BaseCommand):
@@ -105,14 +90,18 @@ class TransformCommand(BaseCommand):
         return f"TransformCommand(actor_paths={self.actor_paths})"
 
 
+@dataclass
 class PropertyChangeCommand(BaseCommand):
-    def __init__(self, property_key: ActorPropertyKey, old_value: Any, new_value: Any):
-        self.property_key = property_key
-        self.old_value = old_value
-        self.new_value = new_value
+    property_key: ActorPropertyKey
+    old_value: Any
+    new_value: Any
 
-    def __repr__(self):
-        return f"PropertyChangeCommand(property_key={self.property_key})"
+
+@dataclass
+class PropertyChangesCommand(BaseCommand):
+    property_keys: List[ActorPropertyKey]
+    old_values: List[Any]
+    new_values: List[Any]
 
 
 class DuplicateActorsCommand(BaseCommand):

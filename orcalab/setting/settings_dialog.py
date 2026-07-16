@@ -6,6 +6,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from orcalab.config_service import ConfigService
 from orcalab.remote_scene import RemoteScene
 from orcalab.ui.checkbox import CheckBox
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.text_label import TextLabel
 from orcalab.ui.theme_service import ThemeService
 from orcalab.ui.viewport import Viewport
@@ -58,7 +59,7 @@ def _sensitivity_line_edit(lo: float, hi: float, value: float) -> _SettingsNumer
     v.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
     edit.setValidator(v)
     edit.setText(f"{value:.1f}")
-    edit.setFixedWidth(96)
+    edit.setMinimumWidth(96)
     return edit
 
 
@@ -132,12 +133,19 @@ def _vscode_style_setting_row(
     layout.setContentsMargins(_SETTING_BLOCK_H_MARGIN, 5, _SETTING_BLOCK_H_MARGIN, 5)
     layout.setSpacing(4)
 
+    fs = FontService()
     title_label = TextLabel(title)
-    title_label.setStyleSheet("font-size: 13px; font-weight: 600;")
+    fs.bind_widget_stylesheet(
+        title_label,
+        lambda: fs.get_font_css('setting_title'),
+    )
 
     desc_label = TextLabel(description)
     if style_description:
-        desc_label.setStyleSheet("color: #888888; font-size: 12px;")
+        fs.bind_widget_stylesheet(
+            desc_label,
+            lambda: f"color: #888888; {fs.get_font_css('body')}",
+        )
 
     control_row = QtWidgets.QHBoxLayout()
     control_row.setContentsMargins(0, 8, 0, 0)
@@ -165,8 +173,18 @@ class SettingsDialog(QtWidgets.QDialog):
         self._apply_theme()
 
         root_layout = QtWidgets.QVBoxLayout(self)
-        root_layout.setSpacing(20)
-        root_layout.setContentsMargins(24, 24, 24, 20)
+        root_layout.setSpacing(0)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+
+        scroll_area = QtWidgets.QScrollArea(self)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_content = QtWidgets.QWidget()
+        scroll_content.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Minimum)
+        content_layout = QtWidgets.QVBoxLayout(scroll_content)
+        content_layout.setSpacing(20)
+        content_layout.setContentsMargins(24, 24, 24, 20)
 
         config = ConfigService()
 
@@ -181,7 +199,7 @@ class SettingsDialog(QtWidgets.QDialog):
         )
         self.move_value_edit._commit_normalize = _norm_move
         self.move_value_edit.editingFinished.connect(_norm_move)
-        root_layout.addWidget(
+        content_layout.addWidget(
             _vscode_style_setting_row(
                 "相机移动灵敏度",
                 "控制相机平移时的移动速度 (范围: 0.1-10)",
@@ -200,7 +218,7 @@ class SettingsDialog(QtWidgets.QDialog):
         )
         self.rotation_value_edit._commit_normalize = _norm_rot
         self.rotation_value_edit.editingFinished.connect(_norm_rot)
-        root_layout.addWidget(
+        content_layout.addWidget(
             _vscode_style_setting_row(
                 "相机旋转灵敏度",
                 "控制相机旋转时的旋转速度 (范围: 0.1-10)",
@@ -222,7 +240,7 @@ class SettingsDialog(QtWidgets.QDialog):
             default_idx = self.fps_combo.findData(0)
             if default_idx >= 0:
                 self.fps_combo.setCurrentIndex(default_idx)
-        root_layout.addWidget(
+        content_layout.addWidget(
             _vscode_style_setting_row(
                 "帧率限制",
                 "限制视口渲染帧率以降低 GPU 负载",
@@ -233,17 +251,60 @@ class SettingsDialog(QtWidgets.QDialog):
 
         self.vsync_checkbox = CheckBox()
         self.vsync_checkbox.set_checked(config.vsync_enabled())
-        root_layout.addWidget(
+        content_layout.addWidget(
             _vscode_style_setting_row(
                 "垂直同步 (VSync)",
-                "开启 VSync 可防止画面撕裂，并在混合 GPU 笔记本上避免卡死；关闭可提高帧率，但可能在部分机型上导致卡死，需重启生效",
+                "开启 VSync 可防止画面撕裂，关闭可提高帧率。需重启生效",
                 self.vsync_checkbox,
                 self._setting_row_hover_bg,
             )
         )
 
-        # —— 统计数据：紧挨相机区块下方，间隔由 root_layout.spacing() 控制 ——
+        # —— 字体缩放 ——
+        font_service = FontService()
+        font_scale_widget = QtWidgets.QWidget()
+        font_scale_layout = QtWidgets.QHBoxLayout(font_scale_widget)
+        font_scale_layout.setContentsMargins(0, 0, 0, 0)
+        font_scale_layout.setSpacing(4)
+
+        self._font_scale_label = QtWidgets.QLabel(f"{font_service.get_scale_percent()}%")
+        self._font_scale_label.setMinimumWidth(48)
+        self._font_scale_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        font_scale_down_btn = QtWidgets.QPushButton("-")
+        font_scale_down_btn.setMinimumSize(28, 28)
+        font_scale_down_btn.clicked.connect(self._on_font_scale_down)
+
+        font_scale_up_btn = QtWidgets.QPushButton("+")
+        font_scale_up_btn.setMinimumSize(28, 28)
+        font_scale_up_btn.clicked.connect(self._on_font_scale_up)
+
+        font_scale_reset_btn = QtWidgets.QPushButton("重置")
+        font_scale_reset_btn.setMinimumHeight(28)
+        font_scale_reset_btn.clicked.connect(self._on_font_scale_reset)
+
+        font_scale_layout.addWidget(font_scale_down_btn)
+        font_scale_layout.addWidget(self._font_scale_label)
+        font_scale_layout.addWidget(font_scale_up_btn)
+        font_scale_layout.addWidget(font_scale_reset_btn)
+        font_scale_layout.addStretch()
+
+        content_layout.addWidget(
+            _vscode_style_setting_row(
+                "界面字体缩放",
+                "调整全局字体大小百分比，按 10% 步进，范围 50%-200%",
+                font_scale_widget,
+                self._setting_row_hover_bg,
+            )
+        )
+
+        # —— 统计数据：紧挨相机区块下方，间隔由 content_layout.spacing() 控制 ——
         stats_desc = TextLabel("发送用户环境统计数据可以帮助改进OrcaLab。")
+        fs = FontService()
+        fs.bind_widget_stylesheet(
+            stats_desc,
+            lambda: fs.get_font_css('body'),
+        )
         stats_checkbox = CheckBox()
         stats_row = QtWidgets.QHBoxLayout()
         stats_row.setContentsMargins(
@@ -257,25 +318,14 @@ class SettingsDialog(QtWidgets.QDialog):
         send_statistics = config.send_statistics()
         self.checkbox.set_checked(send_statistics == "true")
 
-        root_layout.addLayout(stats_row)
+        content_layout.addLayout(stats_row)
 
-        # self.checkbox = CheckBox()
-        # self.checkbox.set_checked(config.send_statistics() == "true")
-        # root_layout.addWidget(
-        #     _vscode_style_setting_row(
-        #         "统计数据",
-        #         "发送用户环境统计数据可以帮助改进OrcaLab。",
-        #         self.checkbox,
-        #         self._setting_row_hover_bg,
-        #         style_description=False,
-        #     )
-        # )
-
-        root_layout.addStretch()
+        scroll_area.setWidget(scroll_content)
+        root_layout.addWidget(scroll_area)
 
         button_layout = QtWidgets.QHBoxLayout()
         button_layout.setContentsMargins(
-            _SETTING_BLOCK_H_MARGIN, 0, _SETTING_BLOCK_H_MARGIN, 0
+            _SETTING_BLOCK_H_MARGIN, 8, _SETTING_BLOCK_H_MARGIN, 8
         )
         button_layout.addStretch()
 
@@ -295,10 +345,17 @@ class SettingsDialog(QtWidgets.QDialog):
 
         root_layout.addLayout(button_layout)
 
+        self.setMinimumSize(480, 400)
         self.resize(1024, 720)
 
     def _apply_theme(self):
         theme = ThemeService()
+        self._theme = theme
+        fs = FontService()
+        fs.bind_widget_stylesheet(self, self._build_stylesheet)
+
+    def _build_stylesheet(self) -> str:
+        theme = self._theme
         bg_color = theme.get_color_hex("bg")
         text_color = theme.get_color_hex("text")
         split_line_color = theme.get_color_hex("split_line")
@@ -307,11 +364,15 @@ class SettingsDialog(QtWidgets.QDialog):
         button_bg_pressed = theme.get_color_hex("button_bg_pressed")
         field_focus_border = theme.get_color_hex("button_bg_selected")
 
-        self.setStyleSheet(
-            f"""
+        fs = FontService()
+        return f"""
             QDialog {{
                 background-color: {bg_color};
                 color: {text_color};
+            }}
+            QScrollArea {{
+                background-color: transparent;
+                border: none;
             }}
             QLineEdit#OrcaSettingsNumericField {{
                 border: 1px solid {split_line_color};
@@ -319,7 +380,7 @@ class SettingsDialog(QtWidgets.QDialog):
                 padding: 3px 6px;
                 background-color: {button_bg};
                 color: {text_color};
-                font-size: 12px;
+                {fs.get_font_css('body')}
             }}
             QLineEdit#OrcaSettingsNumericField:focus {{
                 border: 1px solid {field_focus_border};
@@ -333,7 +394,7 @@ class SettingsDialog(QtWidgets.QDialog):
                 border-radius: 4px;
                 padding: 8px 20px;
                 color: {text_color};
-                font-size: 13px;
+                {fs.get_font_css('setting_title')}
                 min-width: 80px;
             }}
             QPushButton:hover {{
@@ -353,7 +414,7 @@ class SettingsDialog(QtWidgets.QDialog):
                 padding: 3px 6px;
                 background-color: {button_bg};
                 color: {text_color};
-                font-size: 12px;
+                {fs.get_font_css('body')}
                 min-width: 96px;
             }}
             QComboBox#OrcaSettingsFpsCombo:hover {{
@@ -369,10 +430,9 @@ class SettingsDialog(QtWidgets.QDialog):
                 color: {text_color};
                 selection-background-color: {button_bg_hover};
                 selection-color: {text_color};
-                font-size: 12px;
+                {fs.get_font_css('body')}
             }}
         """
-        )
 
     def accept(self):
         config = ConfigService()
@@ -405,3 +465,18 @@ class SettingsDialog(QtWidgets.QDialog):
             viewport.set_target_fps(fps_value)
 
         super().accept()
+
+    def _on_font_scale_up(self):
+        font_service = FontService()
+        font_service.increase_scale()
+        self._font_scale_label.setText(f"{font_service.get_scale_percent()}%")
+
+    def _on_font_scale_down(self):
+        font_service = FontService()
+        font_service.decrease_scale()
+        self._font_scale_label.setText(f"{font_service.get_scale_percent()}%")
+
+    def _on_font_scale_reset(self):
+        font_service = FontService()
+        font_service.reset_scale()
+        self._font_scale_label.setText(f"{font_service.get_scale_percent()}%")

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="591" height="591">
+<path d="M-75 75 L250 75" stroke="#CCCCCC" stroke-width="48" transform="translate(295,295)"/>
+<path d="M-75 75 L-75 -250" stroke="#CCCCCC" stroke-width="48" transform="translate(295,295)"/>
+<path d="M-75 75 L-200 200" stroke="#CCCCCC" stroke-width="48" transform="translate(295,295)"/>
+</svg>

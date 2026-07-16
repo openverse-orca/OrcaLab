@@ -10,13 +10,14 @@ from fastmcp.utilities.types import Image
 from orcalab.config_service import ConfigService
 from orcalab.remote_scene import RemoteScene
 from scipy.spatial.transform import Rotation
-from orcalab.math import Transform
+from orcalab.transform import Transform
 from orcalab.metadata_service_bus import MetadataServiceRequestBus
 from orcalab.scene_edit_bus import SceneEditNotificationBus, SceneEditRequestBus
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.path import Path
 from typing import List, Dict
 
+from orcalab.selection_data import SelectionData
 from orcalab.simulation.simulation_bus import SimulationRequestBus, SimulationState
 from orcalab.ui.camera.camera_brief import CameraBrief
 from orcalab.ui.camera.camera_bus import CameraRequestBus
@@ -24,12 +25,13 @@ from orcalab.application_util import get_remote_scene
 from orcalab.application_bus import ApplicationRequestBus
 from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.undo_service.undo_service_bus import UndoRequestBus
-from orcalab.actor_property import ActorPropertyKey, ActorPropertyType
-from orcalab.asset_service_bus import AssetServiceRequestBus
 from orcalab.http_service.http_bus import HttpServiceRequestBus
+from orcalab.project_util import get_cache_folder
 from orcalab.ui.panel_bus import PanelRequestBus
 from orcalab.copilot.service import CopilotService
 from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
+from orcalab.entity_path import EntityPath, NameWithIndex
+from orcalab.actor_property import ActorEntities, ActorPropertyKey
 
 class OrcaLabMCPServer:
     def __init__(self, port):
@@ -42,7 +44,6 @@ class OrcaLabMCPServer:
         self.simulation_bus = SimulationRequestBus()
         self.undo_bus = UndoRequestBus()
         self.camera_bus = CameraRequestBus()
-        self.asset_service_bus = AssetServiceRequestBus()
         self.http_service_bus = HttpServiceRequestBus()
         self.panel_bus = PanelRequestBus()
         self.copilot_service = CopilotService()
@@ -78,45 +79,6 @@ class OrcaLabMCPServer:
         if not base.lower().endswith(".json"):
             base += ".json"
         return base
-
-    @staticmethod
-    def _actor_to_layout_dict(local_scene, actor: AssetActor | GroupActor) -> dict:
-        def _to_list(v):
-            return v.tolist() if hasattr(v, "tolist") else v
-
-        def _compact_array(arr):
-            return "[" + ",".join(str(x) for x in arr) + "]"
-
-        actor_path = local_scene.get_actor_path(actor)
-        path_str = actor_path._p if actor_path is not None else "/"
-        data = {
-            "name": actor.name,
-            "path": path_str,
-            "transform": {
-                "position": _compact_array(_to_list(actor.transform.position)),
-                "rotation": _compact_array(_to_list(actor.transform.rotation)),
-                "scale": actor.transform.scale,
-            },
-            "is_visible": actor.is_visible,
-            "is_parent_visible": actor.is_parent_visible,
-            "is_locked": actor.is_locked,
-            "is_parent_locked": actor.is_parent_locked,
-        }
-
-        if actor.name == "root":
-            data = {"version": "1.0", **data}
-
-        if isinstance(actor, AssetActor):
-            data["type"] = "AssetActor"
-            data["asset_path"] = getattr(actor, "_asset_path", getattr(actor, "asset_path", ""))
-            data["modified_properties"] = SceneLayoutHelper.collect_modified_properties(actor)
-        elif isinstance(actor, GroupActor):
-            data["type"] = "GroupActor"
-            data["children"] = [
-                OrcaLabMCPServer._actor_to_layout_dict(local_scene, child) for child in actor.children
-            ]
-
-        return data
 
     def get_asset_map(self, project_name: str=None, category: str=None) -> str:
         '''
@@ -170,10 +132,13 @@ class OrcaLabMCPServer:
         Returns:
             指定资产元数据信息
         '''
+        if not asset_path or not asset_path.strip():
+            return json.dumps({"code": 400, "message": "asset_path 不能为空"}, ensure_ascii=False)
         output = []
         self.metadata_service_bus.get_asset_info(asset_path, output)
-        asset_info = output[0]
-        return json.dumps(asset_info, ensure_ascii=False)
+        if not output or output[0] is None:
+            return json.dumps({"code": 404, "message": f"资产路径不存在: {asset_path}"}, ensure_ascii=False)
+        return json.dumps(output[0], ensure_ascii=False)
 
     @staticmethod
     def _find_first_package_match_by_asset_name(
@@ -281,6 +246,1105 @@ class OrcaLabMCPServer:
         except Exception as e:
             return json.dumps(
                 {"success": False, "message": f"订阅资产包失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def unsubscribe_asset_package_by_asset_name(self, asset_name: str) -> str:
+        '''
+        根据资产名称在元数据中搜索，并取消订阅第一个匹配项所属的资产包。
+        Args:
+            asset_name: 资产显示名或路径片段（不区分大小写，匹配 name 或 assetPath 子串）。
+        Returns:
+            操作结果的 json 字符串，含 success、所选资产包 id、匹配条目及取消订阅接口返回。
+        '''
+        try:
+            name = asset_name.strip()
+            if not name:
+                return json.dumps(
+                    {"success": False, "message": "asset_name 不能为空"},
+                    ensure_ascii=False,
+                )
+
+            meta_out: list[str] = []
+            await self.http_service_bus.get_all_metadata(meta_out)
+            if not meta_out:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": "无法获取远程元数据（请确认已登录 DataLink 且网络正常）",
+                    },
+                    ensure_ascii=False,
+                )
+
+            metadata_list = json.loads(meta_out[0])
+            if not isinstance(metadata_list, list):
+                return json.dumps(
+                    {"success": False, "message": "元数据格式异常：非列表"},
+                    ensure_ascii=False,
+                )
+
+            matched, package_id = self._find_first_package_match_by_asset_name(metadata_list, name)
+            if not matched or not package_id:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": f"未找到名称或路径包含「{name}」的资产",
+                    },
+                    ensure_ascii=False,
+                )
+
+            unsub_out: list[str] = []
+            await self.http_service_bus.post_asset_unsubscribe(package_id, unsub_out)
+            if not unsub_out:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "package_id": package_id,
+                        "matched_asset": {
+                            "id": matched.get("id"),
+                            "name": matched.get("name"),
+                            "assetPath": matched.get("assetPath"),
+                            "parentPackageId": matched.get("parentPackageId"),
+                        },
+                        "message": "取消订阅请求未执行（请确认已登录 DataLink 且在线）",
+                    },
+                    ensure_ascii=False,
+                )
+            unsub_result = json.loads(unsub_out[0])
+
+            merged = {
+                "success": bool(unsub_result.get("success")),
+                "package_id": package_id,
+                "matched_asset": {
+                    "id": matched.get("id"),
+                    "name": matched.get("name"),
+                    "assetPath": matched.get("assetPath"),
+                    "parentPackageId": matched.get("parentPackageId"),
+                },
+                "unsubscribe": unsub_result,
+            }
+            if merged["success"]:
+                merged["message"] = f"已取消订阅资产包 {package_id}（匹配资产: {matched.get('name', '')}）"
+            else:
+                merged["message"] = unsub_result.get("body") or unsub_result.get("message") or "取消订阅请求失败"
+            return json.dumps(merged, ensure_ascii=False)
+        except json.JSONDecodeError as e:
+            return json.dumps(
+                {"success": False, "message": f"解析元数据或取消订阅结果失败: {e}"},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"取消订阅资产包失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def get_subscription_status_by_asset_name(self, asset_name: str) -> str:
+        '''
+        根据资产名称在元数据中搜索，并查询第一个匹配项所属资产包的订阅状态。
+        Args:
+            asset_name: 资产显示名或路径片段（不区分大小写，匹配 name 或 assetPath 子串）。
+        Returns:
+            操作结果的 json 字符串，含 success、所选资产包 id、匹配条目及订阅状态。
+        '''
+        try:
+            name = asset_name.strip()
+            if not name:
+                return json.dumps(
+                    {"success": False, "message": "asset_name 不能为空"},
+                    ensure_ascii=False,
+                )
+
+            meta_out: list[str] = []
+            await self.http_service_bus.get_all_metadata(meta_out)
+            if not meta_out:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": "无法获取远程元数据（请确认已登录 DataLink 且网络正常）",
+                    },
+                    ensure_ascii=False,
+                )
+
+            metadata_list = json.loads(meta_out[0])
+            if not isinstance(metadata_list, list):
+                return json.dumps(
+                    {"success": False, "message": "元数据格式异常：非列表"},
+                    ensure_ascii=False,
+                )
+
+            matched, package_id = self._find_first_package_match_by_asset_name(metadata_list, name)
+            if not matched or not package_id:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": f"未找到名称或路径包含「{name}」的资产",
+                    },
+                    ensure_ascii=False,
+                )
+
+            status_out: list[str] = []
+            await self.http_service_bus.get_asset_subscription_status(package_id, status_out)
+            if not status_out:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "package_id": package_id,
+                        "matched_asset": {
+                            "id": matched.get("id"),
+                            "name": matched.get("name"),
+                            "assetPath": matched.get("assetPath"),
+                            "parentPackageId": matched.get("parentPackageId"),
+                        },
+                        "message": "查询订阅状态请求未执行（请确认已登录 DataLink 且在线）",
+                    },
+                    ensure_ascii=False,
+                )
+            status_result = json.loads(status_out[0])
+
+            merged = {
+                "success": bool(status_result.get("success")),
+                "package_id": package_id,
+                "matched_asset": {
+                    "id": matched.get("id"),
+                    "name": matched.get("name"),
+                    "assetPath": matched.get("assetPath"),
+                    "parentPackageId": matched.get("parentPackageId"),
+                },
+                "subscription_status": status_result,
+            }
+            if merged["success"]:
+                merged["message"] = f"成功获取资产包订阅状态（匹配资产: {matched.get('name', '')}）"
+            else:
+                merged["message"] = status_result.get("body") or status_result.get("message") or "查询订阅状态失败"
+            return json.dumps(merged, ensure_ascii=False)
+        except json.JSONDecodeError as e:
+            return json.dumps(
+                {"success": False, "message": f"解析元数据或订阅状态结果失败: {e}"},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"查询资产包订阅状态失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def get_my_metadata(self) -> str:
+        '''
+        获取我的资产列表（包含自己上传的资产和订阅的资产包）
+        对应后端接口 GET /api/mymeta/
+        Returns:
+            资产列表的 json 字符串格式
+            {
+                "code": 200,
+                "data": [
+                    {
+                        "id": "4c5e6a29-8b3f-4d72-a0c5-9e1b8d7f2a34",
+                        "name": "Gryphon_Beast",
+                        "category": "scene",
+                        "type": "asset_package",
+                        "parentPackageId": null,
+                        "description": "",
+                        "categoryPath": "/scene",
+                        "size": 37082768,
+                        "imgUrl": "",
+                        "version": "2025.11.01",
+                        "status": "draft",
+                        "author": "linliwan",
+                        "assetPath": null,
+                        "projectName": "default_project",
+                        "isSubscribed": false,
+                        "isMyCreation": true
+                    }
+                ]
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.get_my_metadata(output)
+            if not output:
+                return json.dumps(
+                    {"code": 500, "message": "无法获取我的资产列表（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"code": 500, "message": f"获取我的资产列表失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def get_asset_detail(self, asset_id: str) -> str:
+        '''
+        根据资产ID获取单个资产详情（含预览图列表、元数据信息等）
+        对应后端接口 GET /api/asset/<id>/
+        Args:
+            asset_id: 资产的ID
+        Returns:
+            资产详情的json字符串格式
+            {
+                "code": 200,
+                "data": {
+                    "id": "...",
+                    "name": "...",
+                    "category": "...",
+                    "type": "asset",
+                    "parentPackageId": "...",
+                    "description": "...",
+                    "categoryPath": "...",
+                    "pictures": [...],
+                    "isCanEdit": true,
+                    ...
+                }
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.get_asset_detail(asset_id, output)
+            if not output:
+                return json.dumps(
+                    {"code": 500, "message": "无法获取资产详情（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"code": 500, "message": f"获取资产详情失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def search_assets(self, search_type: str, query: str = "", image_path: str = "") -> str:
+        '''
+        资产全文检索（支持文字和图片搜索）
+        对应后端接口 POST /api/search/
+        Args:
+            search_type: 搜索类型，"text" 表示文字搜索，"image" 表示图片搜索
+            query: 搜索关键词，如"桌子"（search_type 为 text 时必填）
+            image_path: 图片文件路径（search_type 为 image 时必填）
+        Returns:
+            搜索结果的json字符串格式
+            {
+                "code": 200,
+                "data": {
+                    "status": "success",
+                    "searchType": "text",
+                    "query": "kitchen",
+                    "totalResults": 10,
+                    "results": [...]
+                }
+            }
+        '''
+        try:
+            search_data = {
+                "search_type": search_type,
+            }
+            if search_type == "text":
+                if not query:
+                    return json.dumps(
+                        {"code": 400, "message": "文字搜索时需要提供 query"},
+                        ensure_ascii=False,
+                    )
+                search_data["query"] = query
+            elif search_type == "image":
+                if not image_path:
+                    return json.dumps(
+                        {"code": 400, "message": "图片搜索时需要提供 image_path"},
+                        ensure_ascii=False,
+                    )
+                search_data["image_path"] = image_path
+            else:
+                return json.dumps(
+                    {"code": 400, "message": f"不支持的搜索类型: {search_type}，仅支持 text 或 image"},
+                    ensure_ascii=False,
+                )
+            output: list[str] = []
+            await self.http_service_bus.search_assets(search_data, output)
+            if not output:
+                return json.dumps(
+                    {"code": 500, "message": "搜索失败（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"code": 500, "message": f"搜索失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def get_asset_json_by_name(self, asset_name: str) -> str:
+        '''
+        通过资产名称匹配获取资产对应的metadata JSON 文件内容
+        优先通过当前场景中的 Actor 名称查找资产路径，再获取资产 ID 和 JSON 文件。
+        如果场景中未找到，则回退到名称前缀匹配方式。
+
+        Args:
+            asset_name: 资产名称，如 "黄色越野车"（场景中 Actor 的名称）
+        Returns:
+            JSON 文件内容的 json 字符串格式，或错误信息。
+        '''
+        try:
+            name = asset_name.strip()
+            if not name:
+                return json.dumps(
+                    {"success": False, "message": "asset_name 不能为空"},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+
+            # 先获取资产映射（无论哪种方式都需要）
+            output = []
+            self.metadata_service_bus.get_asset_map(output)
+            asset_map = output[0] if output else {}
+
+            if not asset_map:
+                return json.dumps(
+                    {"success": False, "message": "本地资产映射为空，请先同步资产"},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+
+            asset_id = None
+            matched_info = {}
+
+            # === 方式一：通过当前场景中的 Actor 查找 ===
+            actors: List[Dict[Path, BaseActor]] = []
+            self.scene_edit_bus.get_all_actors(actors)
+            if actors and actors[0] is not None:
+                scene_actors: Dict[Path, BaseActor] = actors[0]
+                for _, actor in scene_actors.items():
+                    if isinstance(actor, AssetActor) and actor.name == name:
+                        actor_asset_path = (actor.asset_path or "").lower()
+                        # 在资产映射中查找匹配的 asset_path
+                        for map_key, meta in asset_map.items():
+                            map_path = map_key.lower()
+                            if map_path == actor_asset_path or map_path == actor_asset_path.removesuffix(".spawnable"):
+                                asset_id = meta.get("id", "")
+                                matched_info = {
+                                    "id": asset_id,
+                                    "name": meta.get("name"),
+                                    "assetPath": map_key,
+                                    "version": meta.get("version"),
+                                }
+                                break
+                        if asset_id:
+                            break
+
+            # === 方式二：回退到名称前缀匹配 ===
+            if not asset_id:
+                import re
+                base_name = re.sub(r'_\d+$', '', name, count=1)
+                needle = base_name.strip().lower()
+
+                candidates = []
+                for _, asset_metadata in asset_map.items():
+                    asset_name_val = (asset_metadata.get("name") or "").lower()
+                    if asset_name_val.startswith(needle):
+                        candidates.append(asset_metadata)
+
+                if not candidates:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "message": f"未找到名称以「{base_name}」开头的资产（共扫描 {len(asset_map)} 条记录）",
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+
+                def _parse_version(v: str):
+                    try:
+                        parts = v.split(".")
+                        return tuple(int(p) for p in parts)
+                    except (ValueError, TypeError):
+                        return (0, 0, 0)
+
+                candidates.sort(
+                    key=lambda m: _parse_version(m.get("version", "")),
+                    reverse=True,
+                )
+                best = candidates[0]
+                asset_id = best.get("id", "")
+                if not asset_id:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "message": f"匹配到资产「{best.get('name')}」但缺少 id 字段",
+                            "matched_asset": best,
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                matched_info = {
+                    "id": asset_id,
+                    "name": best.get("name"),
+                    "assetPath": best.get("assetPath"),
+                    "version": best.get("version"),
+                }
+
+            # 从缓存目录中查找 JSON 文件
+            cache_folder = get_cache_folder()
+            json_path = cache_folder / f"{asset_id}.json"
+            if not json_path.exists():
+                return json.dumps(
+                    {
+                        "success": False,
+                        "message": f"JSON 文件不存在: {json_path}",
+                        "matched_asset": matched_info,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+
+            with open(json_path, "r", encoding="utf-8") as f:
+                json_content = json.load(f)
+
+            return json.dumps(
+                {
+                    "success": True,
+                    "matched_asset": matched_info,
+                    "json_file": str(json_path),
+                    "data": json_content,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"获取资产 JSON 失败: {e}"},
+                ensure_ascii=False,
+                indent=2,
+            )
+
+    async def post_generate_task(self, type: str, text: str = "", time_period: str = "", image_path: str = "") -> str:
+        '''
+        创建生成资产任务（支持文本和图片）
+        对应后端接口 POST /api/generate/
+        Args:
+            type: 生成类型，"text" 表示文本生成，"image" 表示图片生成
+            text: 文本描述，如"键盘"（type 为 text 时必填）
+            time_period: 时间周期，如"2026-04-01"
+            image_path: 图片文件路径（type 为 image 时必填）
+        Returns:
+            生成任务的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "status": "queued",
+                    "taskId": "...",
+                    "queuePosition": 3,
+                    "message": "任务已加入队列，当前队列位置：3"
+                }
+            }
+        '''
+        try:
+            task_data = {
+                "type": type,
+                "timePeriod": time_period,
+            }
+            if type == "text":
+                task_data["text"] = text
+            elif type == "image":
+                if not image_path:
+                    return json.dumps(
+                        {"success": False, "message": "图片生成时需要提供 image_path"},
+                        ensure_ascii=False,
+                    )
+                task_data["image_path"] = image_path
+            output: list[str] = []
+            await self.http_service_bus.post_generate_task(task_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法创建生成任务（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"创建生成任务失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def get_generate_task_status(self, task_id: str) -> str:
+        '''
+        查询生成任务状态和队列位置
+        对应后端接口 GET /api/generate/status/<task_id>/
+        Args:
+            task_id: 任务ID
+        Returns:
+            任务状态的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "taskId": "...",
+                    "status": "pending",
+                    "queuePosition": 2,
+                    "result": null,
+                    "error": null
+                }
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.get_generate_task_status(task_id, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法查询生成任务状态（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"查询生成任务状态失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def get_user_generate_tasks(self) -> str:
+        '''
+        查询用户最近的生成任务（用于页面刷新后恢复）
+        对应后端接口 GET /api/generate/user_tasks/
+        Args:
+            无需传递参数
+        Returns:
+            用户最近生成任务的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "tasks": [
+                        {
+                            "taskId": "...",
+                            "status": "pending",
+                            "queuePosition": 2
+                        }
+                    ],
+                    "count": 1
+                }
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.get_user_generate_tasks(output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法查询用户生成任务（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"查询用户生成任务失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def post_upload_generate_usdz(
+        self,
+        file_url: str,
+        preview_url: str = "",
+        name: str = "",
+        project_name: str = "",
+        version: str = "",
+        time_period: str = "",
+        file_type: str = "generate_usdz",
+        upload_type: str = "private",
+        roles: str = '["admin"]',
+        separate_mesh: str = "false",
+        generate_lod: str = "false",
+        smooth_mesh: str = "false",
+        smooth_ratio: str = "2",
+        generate_global_config: str = "false",
+        use_hub_cli: str = "true",
+        size: str = "1",
+        usdz_split_mesh: str = "false",
+        merge_threshold: str = "0.01",
+        merge_iterations: str = "1",
+        max_split_mesh_number: str = "100",
+    ) -> str:
+        '''
+        根据 file_url 上传生成完成的 USDZ 资产，异步转为 AssetZip/PAK
+        对应后端接口 POST /api/upload/generate_usdz/
+        Args:
+            file_url: 生成任务完成后返回的文件URL（必填）
+            preview_url: 预览图URL
+            name: 资产名称
+            project_name: 项目名称
+            version: 版本号
+            time_period: 时间周期
+            file_type: 文件类型，默认 "generate_usdz"
+            upload_type: 上传类型，默认 "private"
+            roles: 可见角色列表，默认 '["admin"]'
+            separate_mesh: 是否分离网格，默认 "false"
+            generate_lod: 是否生成LOD，默认 "false"
+            smooth_mesh: 是否平滑网格，默认 "false"
+            smooth_ratio: 平滑比率，默认 "2"
+            generate_global_config: 是否生成全局配置，默认 "false"
+            use_hub_cli: 是否使用 hub cli，默认 "true"
+            size: 大小，默认 "1"
+            usdz_split_mesh: 是否拆分USDZ网格，默认 "false"
+            merge_threshold: 合并阈值，默认 "0.01"
+            merge_iterations: 合并迭代次数，默认 "1"
+            max_split_mesh_number: 最大拆分网格数，默认 "100"
+        Returns:
+            上传结果的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "status": "success",
+                    "message": "USDZ文件上传成功，开始处理流程",
+                    "taskChainId": "...",
+                    "fileType": "generate_usdz",
+                    ...
+                }
+            }
+        '''
+        try:
+            task_data = {
+                "file_url": file_url,
+                "file_type": file_type,
+                "upload_type": upload_type,
+                "roles": roles,
+                "project_name": project_name or None,
+                "name": name or None,
+                "version": version or None,
+                "timePeriod": time_period or None,
+                "preview_url": preview_url or None,
+                "separate_mesh": separate_mesh,
+                "generate_lod": generate_lod,
+                "smooth_mesh": smooth_mesh,
+                "smooth_ratio": smooth_ratio,
+                "generate_global_config": generate_global_config,
+                "use_hub_cli": use_hub_cli,
+                "size": size,
+                "usdz_split_mesh": usdz_split_mesh,
+                "merge_threshold": merge_threshold,
+                "merge_iterations": merge_iterations,
+                "max_split_mesh_number": max_split_mesh_number,
+            }
+            output: list[str] = []
+            await self.http_service_bus.post_upload_generate_usdz(task_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法上传生成资产（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"上传生成资产失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def post_cancel_asset_zip(self, task_id: str) -> str:
+        '''
+        取消资产压缩包上传（OSS删除）
+        对应后端接口 POST /api/cancel_asset_zip/<task_id>/
+        Args:
+            task_id: 任务ID
+        Returns:
+            取消结果的json字符串格式
+            {
+                "code": 200,
+                "data": {
+                    "status": "success",
+                    "message": "资产上传已取消，相关文件已删除"
+                }
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.post_cancel_asset_zip(task_id, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法取消资产上传（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"取消资产上传失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def post_check_asset_version(self, time_period: str, project_name: str, name: str, author: str = "") -> str:
+        '''
+        检测资产版本并返回下一个版本号
+        对应后端接口 POST /api/check-asset-version/
+        Args:
+            time_period: 时间段开始日期（格式：YYYY-MM-DD）
+            project_name: 项目名
+            name: 资产名，即 zip 压缩包的名字（如 remy.zip 则 name=remy）
+            author: 作者（可选，默认使用当前用户）
+        Returns:
+            检测结果的json字符串格式
+            {
+                "isDuplicate": false,
+                "version": "2026.01.20",
+                "message": "未检测到全量资产包，使用初始版本号（全量发布）",
+                "revisionKind": "full",
+                "baseVersionId": null
+            }
+            版本号规则：
+            - 如果没有重复：使用时间段对应的初始版本号（如 2025.09.01）
+            - 如果检测到重复：自动递增小版本号（如 2025.09.02, 2025.09.03...）
+        '''
+        try:
+            version_data = {
+                "timePeriod": time_period,
+                "project_name": project_name,
+                "name": name,
+            }
+            if author:
+                version_data["author"] = author
+
+            output: list[str] = []
+            await self.http_service_bus.post_check_asset_version(version_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法检测资产版本（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"检测资产版本失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def post_upload_asset_zip(
+        self,
+        local_path: str,
+        name: str,
+        version: str,
+        project_name: str,
+        time_period: str,
+        upload_type: str = "private",
+        revision_kind: str = "full",
+    ) -> str:
+        '''
+        上传资产压缩包并转换为PAK文件
+        对应后端接口 POST /api/upload/asset_zip/
+        Args:
+            local_path: 资产压缩包路径（如 smb://192.168.110.53/share/RemyLevel_ysb.zip）
+            name: 资产名，即 zip 压缩包的名字（如 RemyLevel_ysb.zip 则 name=RemyLevel_ysb）
+            version: 版本号（如 2026.04.01）
+            project_name: 项目名
+            time_period: 时间段开始日期（格式：YYYY-MM-DD）
+            upload_type: 上传类型，默认 "private"
+            revision_kind: 发布类型，默认 "full"
+        Returns:
+            上传结果的json字符串格式
+            {
+                "code": 200,
+                "data": {
+                    "status": "success",
+                    "taskId": "...",
+                    "uniqueId": "...",
+                    "message": "任务已提交，Worker正在处理"
+                }
+            }
+        '''
+        try:
+            upload_data = {
+                "local_path": local_path,
+                "name": name,
+                "version": version,
+                "project_name": project_name,
+                "upload_type": upload_type,
+                "timePeriod": time_period,
+                "revision_kind": revision_kind,
+            }
+            output: list[str] = []
+            await self.http_service_bus.post_upload_asset_zip(upload_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法上传资产压缩包（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"上传资产压缩包失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def post_upload_usdz(
+        self,
+        local_path: str,
+        name: str,
+        version: str,
+        project_name: str,
+        time_period: str,
+        upload_type: str = "private",
+        revision_kind: str = "full",
+        roles: str = '["admin"]',
+        size: str = "1",
+        usdz_split_mesh: str = "false",
+        merge_threshold: str = "0.01",
+        merge_iterations: str = "1",
+        max_split_mesh_number: str = "100",
+        separate_mesh: str = "false",
+        generate_lod: str = "false",
+        smooth_mesh: str = "false",
+        smooth_ratio: str = "2",
+        generate_global_config: str = "false",
+        use_hub_cli: str = "true",
+    ) -> str:
+        '''
+        上传 USDZ（仅管理员；公网 usdz_file 或私网 local_path 指向 .zip），异步处理 usdz_to_xml_zip → xml_zip_to_asset_zip → asset_zip_to_pak
+        对应后端接口 POST /api/upload/usdz/
+        Args:
+            local_path: 资产压缩包路径（如 smb://192.168.110.53/share/bar_stool_usdz.zip）
+            name: 资产名
+            version: 版本号（如 2026.04.01）
+            project_name: 项目名
+            time_period: 时间段开始日期（格式：YYYY-MM-DD）
+            upload_type: 上传类型，默认 "private"
+            revision_kind: 发布类型，默认 "full"
+            roles: 可见角色列表，默认 '["admin"]'
+            size: 大小，默认 "1"
+            usdz_split_mesh: 是否拆分USDZ网格，默认 "false"
+            merge_threshold: 合并阈值，默认 "0.01"
+            merge_iterations: 合并迭代次数，默认 "1"
+            max_split_mesh_number: 最大拆分网格数，默认 "100"
+            separate_mesh: 是否分离网格，默认 "false"
+            generate_lod: 是否生成LOD，默认 "false"
+            smooth_mesh: 是否平滑网格，默认 "false"
+            smooth_ratio: 平滑比率，默认 "2"
+            generate_global_config: 是否生成全局配置，默认 "false"
+            use_hub_cli: 是否使用 hub cli，默认 "true"
+        Returns:
+            上传结果的json字符串格式
+            {
+                "code": 200,
+                "data": {
+                    "status": "success",
+                    "taskChainId": "...",
+                    "fileType": "usdz",
+                    ...
+                }
+            }
+        '''
+        try:
+            upload_data = {
+                "local_path": local_path,
+                "name": name,
+                "version": version,
+                "project_name": project_name,
+                "upload_type": upload_type,
+                "timePeriod": time_period,
+                "revision_kind": revision_kind,
+                "roles": roles,
+                "size": size,
+                "usdz_split_mesh": usdz_split_mesh,
+                "merge_threshold": merge_threshold,
+                "merge_iterations": merge_iterations,
+                "max_split_mesh_number": max_split_mesh_number,
+                "separate_mesh": separate_mesh,
+                "generate_lod": generate_lod,
+                "smooth_mesh": smooth_mesh,
+                "smooth_ratio": smooth_ratio,
+                "generate_global_config": generate_global_config,
+                "use_hub_cli": use_hub_cli,
+                "file_type": "usdz",
+            }
+            output: list[str] = []
+            await self.http_service_bus.post_upload_usdz(upload_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法上传USDZ（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"上传USDZ失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def post_upload_xml(
+        self,
+        local_path: str,
+        name: str,
+        version: str,
+        project_name: str,
+        time_period: str,
+        upload_type: str = "private",
+        revision_kind: str = "full",
+        roles: str = '["admin"]',
+        separate_mesh: str = "false",
+        generate_lod: str = "false",
+        smooth_mesh: str = "false",
+        smooth_ratio: str = "2",
+        generate_global_config: str = "false",
+        use_hub_cli: str = "true",
+    ) -> str:
+        '''
+        上传 XML（仅管理员；公网 xml_file 或私网 local_path 指向 .zip），异步处理 xml_zip_to_asset_zip → asset_zip_to_pak
+        对应后端接口 POST /api/upload/xml/
+        Args:
+            local_path: 资产压缩包路径（如 smb://192.168.110.53/share/realman_xml.zip）
+            name: 资产名
+            version: 版本号（如 2026.01.20）
+            project_name: 项目名
+            time_period: 时间段开始日期（格式：YYYY-MM-DD）
+            upload_type: 上传类型，默认 "private"
+            revision_kind: 发布类型，默认 "full"
+            roles: 可见角色列表，默认 '["admin"]'
+            separate_mesh: 是否分离网格，默认 "false"
+            generate_lod: 是否生成LOD，默认 "false"
+            smooth_mesh: 是否平滑网格，默认 "false"
+            smooth_ratio: 平滑比率，默认 "2"
+            generate_global_config: 是否生成全局配置，默认 "false"
+            use_hub_cli: 是否使用 hub cli，默认 "true"
+        Returns:
+            上传结果的json字符串格式
+            {
+                "code": 200,
+                "data": {
+                    "status": "success",
+                    "taskChainId": "...",
+                    "fileType": "xml",
+                    ...
+                }
+            }
+        '''
+        try:
+            upload_data = {
+                "local_path": local_path,
+                "name": name,
+                "version": version,
+                "project_name": project_name,
+                "upload_type": upload_type,
+                "timePeriod": time_period,
+                "revision_kind": revision_kind,
+                "roles": roles,
+                "separate_mesh": separate_mesh,
+                "generate_lod": generate_lod,
+                "smooth_mesh": smooth_mesh,
+                "smooth_ratio": smooth_ratio,
+                "generate_global_config": generate_global_config,
+                "use_hub_cli": use_hub_cli,
+                "file_type": "xml",
+            }
+            output: list[str] = []
+            await self.http_service_bus.post_upload_xml(upload_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法上传XML（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"上传XML失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def get_task_chain_progress(self, task_chain_id: str) -> str:
+        '''
+        查询任务链整体进度
+        对应后端接口 GET /api/task_chain_progress/<task_chain_id>/
+        Args:
+            task_chain_id: 任务链ID
+        Returns:
+            任务链进度的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "progress": 50,
+                    "message": "...",
+                    "steps": [...],
+                    "currentStep": "...",
+                    ...
+                }
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.get_task_chain_progress(task_chain_id, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法查询任务链进度（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"查询任务链进度失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def post_save_asset_draft(self, task_id: str, name: str = "", description: str = "", category_path: str = "") -> str:
+        '''
+        保存资产草稿，用于后续编辑和发布
+        对应后端接口 POST /api/save_asset_draft/<task_id>/
+        Args:
+            task_id: 任务ID
+            name: 资产名称
+            description: 资产描述（可选）
+            category_path: 分类路径（可选）
+        Returns:
+            保存结果的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "status": "success",
+                    "message": "资产草稿已保存",
+                    "assetId": "..."
+                }
+            }
+        '''
+        try:
+            draft_data = {
+                "name": name or None,
+                "description": description or None,
+                "category_path": category_path or None,
+            }
+            output: list[str] = []
+            await self.http_service_bus.post_save_asset_draft(task_id, draft_data, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法保存资产草稿（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"保存资产草稿失败: {e}"},
+                ensure_ascii=False,
+            )
+
+    async def delete_asset(self, asset_id: str) -> str:
+        '''
+        删除指定资产（支持级联删除）
+        权限说明：只能删除自己的资产（author 为当前用户）
+        对应后端接口 DELETE /api/delete/<id>/
+        Args:
+            asset_id: 资产ID
+        Returns:
+            删除结果的json字符串格式
+            {
+                "success": true,
+                "body": {
+                    "status": "success",
+                    "message": "资产包 xxx（ID：...）及其下 N 个子资产已删除",
+                    "assetId": "...",
+                    "assetName": "...",
+                    "deletedCount": 12,
+                    "childAssetsCount": 11
+                }
+            }
+        '''
+        try:
+            output: list[str] = []
+            await self.http_service_bus.delete_asset(asset_id, output)
+            if not output:
+                return json.dumps(
+                    {"success": False, "message": "无法删除资产（请确认已登录 DataLink 且网络正常）"},
+                    ensure_ascii=False,
+                )
+            return output[0]
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"删除资产失败: {e}"},
                 ensure_ascii=False,
             )
 
@@ -767,7 +1831,7 @@ class OrcaLabMCPServer:
         try:
             paths = [Path(p) for p in actor_paths]
             active = Path(active_actor) if active_actor else (paths[0] if paths else None)
-            await self.scene_edit_bus.set_selection_and_active_actor(paths, active, undo=True, source="mcp")
+            await self.scene_edit_bus.set_selection(SelectionData(paths, active), undo=True, source="mcp")
             return json.dumps({"success": True, "message": f"成功设置选择，共选中 {len(paths)} 个Actor"}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"success": False, "message": f"设置选择与激活Actor失败: {e}"}, ensure_ascii=False)
@@ -781,7 +1845,7 @@ class OrcaLabMCPServer:
             清空选择的结果的json字符串格式
         '''
         try:
-            await self.scene_edit_bus.set_selection_and_active_actor([],None, undo=True, source="mcp")
+            await self.scene_edit_bus.set_selection(SelectionData(), undo=True, source="mcp")
             return json.dumps({"success": True, "message": "成功清空选择"}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"success": False, "message": f"清空选择失败: {e}"}, ensure_ascii=False)
@@ -1079,10 +2143,8 @@ class OrcaLabMCPServer:
                 return json.dumps({"success": False, "message": "获取本地场景失败"}, ensure_ascii=False)
 
             local_scene = local_scene_out[0]
-            root = local_scene.root_actor
-            scene_layout_dict = self._actor_to_layout_dict(local_scene, root)
-            with open(save_path, "w", encoding="utf-8") as f:
-                json.dump(scene_layout_dict, f, ensure_ascii=False, indent=4)
+            helper = SceneLayoutHelper(local_scene)
+            helper.save_scene_layout(save_path)
 
             return json.dumps(
                 {
@@ -1141,16 +2203,297 @@ class OrcaLabMCPServer:
         except Exception as e:
             return json.dumps({"success": False, "message": f"加载布局失败: {e}"}, ensure_ascii=False)
 
+    @staticmethod
+    def _parse_entity_path(entity_path_str: str) -> EntityPath:
+        if not entity_path_str or not entity_path_str.strip():
+            return EntityPath()
+        segments = []
+        for seg in entity_path_str.strip("/").split("/"):
+            seg = seg.strip()
+            if not seg:
+                continue
+            if ":" in seg:
+                name, index_str = seg.rsplit(":", 1)
+                try:
+                    index = int(index_str)
+                except ValueError:
+                    index = 0
+            else:
+                name = seg
+                index = 0
+            segments.append(NameWithIndex(name, index))
+        return EntityPath(segments)
+
+    @staticmethod
+    def _entity_info_to_dict(entity_info) -> dict:
+        return {
+            "entity_id": entity_info.entity_id,
+            "name": entity_info.name,
+            "entity_path": entity_info.entity_path.string(),
+            "children": [
+                OrcaLabMCPServer._entity_info_to_dict(child)
+                for child in entity_info.children
+            ],
+        }
+
+    @staticmethod
+    def _find_entity_id_in_tree(entity_info, target_entity_path_str: str) -> int:
+        if entity_info.entity_path.string() == target_entity_path_str:
+            return entity_info.entity_id
+        for child in entity_info.children:
+            result = OrcaLabMCPServer._find_entity_id_in_tree(child, target_entity_path_str)
+            if result != 0:
+                return result
+        return 0
+
+    @staticmethod
+    def _split_combined_path(asset_path: str) -> tuple[Path, str | None]:
+        parts = asset_path.strip("/").split("/", 1)
+        actor_path = Path(f"/{parts[0]}")
+        entity_name = parts[1] if len(parts) > 1 else None
+        return actor_path, entity_name
+
+    @staticmethod
+    def _find_entity_by_name_in_tree(entity_info, target_name: str) -> tuple[int, str] | None:
+        if entity_info.name == target_name:
+            return entity_info.entity_id, entity_info.entity_path.string()
+        for child in entity_info.children:
+            result = OrcaLabMCPServer._find_entity_by_name_in_tree(child, target_name)
+            if result is not None:
+                return result
+        return None
+
+    async def get_actor_properties(self, asset_path: str) -> str:
+        '''
+        获取Actor或指定Entity的所有属性组及其属性值
+        Args:
+            asset_path: Actor在场景中的路径，如 "/actor_name"（Actor级）或 "/actor_name/Entity名"（Entity级）
+        Returns:
+            包含所有属性组和属性的json字符串格式，每个属性包含名称、类型和值
+        '''
+        try:
+            actor_path, entity_name = self._split_combined_path(asset_path)
+            remote_scene = get_remote_scene()
+
+            if entity_name is None:
+                # Actor 级别
+                groups = await remote_scene.get_actor_property_groups(actor_path)
+                result = []
+                for group in groups:
+                    group_dict = {
+                        "properties": [
+                            {
+                                "name": prop.name(),
+                                "type": prop.value_type().name,
+                                "value": prop.value(),
+                            }
+                            for prop in group.properties
+                        ]
+                    }
+                    result.append(group_dict)
+                return json.dumps(result, ensure_ascii=False)
+            else:
+                # Entity 级别 — 按 entity 名在层级树中查找
+                infos = await remote_scene._service.get_entity_hierarchy_batch([actor_path])
+                if not infos or infos[0] is None:
+                    return json.dumps(
+                        {"error": f"未找到Actor '{actor_path}' 的Entity层级结构"},
+                        ensure_ascii=False,
+                    )
+
+                found = self._find_entity_by_name_in_tree(infos[0], entity_name)
+                if found is None:
+                    return json.dumps(
+                        {"error": f"未找到名为 '{entity_name}' 的Entity"},
+                        ensure_ascii=False,
+                    )
+
+                entity_id, _ = found
+                actor_entities = ActorEntities(actor_path, [entity_id])
+                groups_list = await remote_scene.get_entity_property_groups(actor_entities)
+                if not groups_list or not groups_list[0]:
+                    return json.dumps([], ensure_ascii=False)
+
+                groups = groups_list[0]
+                result = []
+                for group in groups:
+                    group_dict = {
+                        "properties": [
+                            {
+                                "name": prop.name(),
+                                "type": prop.value_type().name,
+                                "value": prop.value(),
+                            }
+                            for prop in group.properties
+                        ]
+                    }
+                    result.append(group_dict)
+                return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+    async def set_actor_properties(self, asset_path: str, property_name: str, property_value: object) -> str:
+        '''
+        设置Actor或指定Entity的属性值
+        Args:
+            asset_path: Actor在场景中的路径，如 "/actor_name"（Actor级）或 "/actor_name/Entity名"（Entity级）
+            property_name: 属性名称
+            property_value: 属性值（根据属性类型传入对应类型：bool/整数/浮点数/字符串）
+        Returns:
+            操作结果的json字符串格式
+        '''
+        try:
+            actor_path, entity_name = self._split_combined_path(asset_path)
+            remote_scene = get_remote_scene()
+
+            if entity_name is None:
+                # Actor 级别
+                groups = await remote_scene.get_actor_property_groups(actor_path)
+                for group in groups:
+                    for prop in group.properties:
+                        if prop.name().lower() == property_name.lower():
+                            key = ActorPropertyKey(
+                                actor_path=actor_path,
+                                entity_id=group.entity_id,
+                                entity_path=group.entity_path,
+                                component_type_id=group.component_type_id,
+                                component_type_index=group.component_type_index,
+                                property_name=prop.name(),
+                                property_type=prop.value_type(),
+                            )
+                            await SceneEditRequestBus().set_property(
+                                key, property_value, undo=False, source="mcp"
+                            )
+            else:
+                # Entity 级别 — 按 entity 名在层级树中查找
+                infos = await remote_scene._service.get_entity_hierarchy_batch([actor_path])
+                if not infos or infos[0] is None:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "message": f"未找到Actor '{actor_path}' 的Entity层级结构",
+                        },
+                        ensure_ascii=False,
+                    )
+
+                found = self._find_entity_by_name_in_tree(infos[0], entity_name)
+                if found is None:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "message": f"未找到名为 '{entity_name}' 的Entity",
+                        },
+                        ensure_ascii=False,
+                    )
+
+                entity_id, _ = found
+                actor_entities = ActorEntities(actor_path, [entity_id])
+                groups_list = await remote_scene.get_entity_property_groups(actor_entities)
+                if not groups_list or not groups_list[0]:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "message": f"未找到Entity '{entity_name}' 的属性组",
+                        },
+                        ensure_ascii=False,
+                    )
+
+                groups = groups_list[0]
+                for group in groups:
+                    for prop in group.properties:
+                        if prop.name().lower() == property_name.lower():
+                            key = ActorPropertyKey(
+                                actor_path=actor_path,
+                                entity_id=group.entity_id,
+                                entity_path=group.entity_path,
+                                component_type_id=group.component_type_id,
+                                component_type_index=group.component_type_index,
+                                property_name=prop.name(),
+                                property_type=prop.value_type(),
+                            )
+                            await SceneEditRequestBus().set_property(
+                                key, property_value, undo=False, source="mcp"
+                            )
+
+            return json.dumps(
+                {"success": True, "message": f"成功设置属性 '{property_name}'"},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps(
+                {"success": False, "message": f"设置属性失败: {e}"},
+                ensure_ascii=False,
+            )
+        
+    async def get_entity_hierarchy(self, asset_path: str) -> str:
+        '''
+        获取Actor的Entity层级结构树
+        Args:
+            asset_path: Actor在场景中的路径
+        Returns:
+            Entity层级结构的json字符串格式，包含entity_id、name、entity_path和children
+        '''
+        try:
+            remote_scene = get_remote_scene()
+            # 优先从远程服务获取 Entity 层级结构
+            infos = await remote_scene._service.get_entity_hierarchy_batch(
+                [Path(asset_path)]
+            )
+            if infos and infos[0] is not None:
+                return json.dumps(self._entity_info_to_dict(infos[0]), ensure_ascii=False)
+
+            # 如果远程获取失败，尝试从本地场景获取
+            actors: List[Dict[Path, BaseActor]] = []
+            self.scene_edit_bus.get_all_actors(actors)
+            if len(actors) > 0 and actors[0] is not None:
+                actors_dict: Dict[Path, BaseActor] = actors[0]
+                path = Path(asset_path)
+                if path in actors_dict:
+                    actor = actors_dict[path]
+                    if isinstance(actor, AssetActor) and actor.entity_root is not None:
+                        print(actor.entity_root.root_entity_info)
+                        return json.dumps(
+                            # self._entity_info_to_dict(actor.entity_root.root_entity_info),
+                            ensure_ascii=False,
+                        )
+
+            return json.dumps(
+                {"error": f"未找到Actor '{asset_path}' 的Entity层级结构"},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+
     def add_tools(self):
         # 资产元数据类
         self.mcp.tool(self.get_asset_map)
         self.mcp.tool(self.get_asset_info)
         self.mcp.tool(self.subscribe_asset_package_by_asset_name)
+        self.mcp.tool(self.unsubscribe_asset_package_by_asset_name)
+        self.mcp.tool(self.get_subscription_status_by_asset_name)
+        self.mcp.tool(self.get_my_metadata)
+        self.mcp.tool(self.get_asset_detail)
+        self.mcp.tool(self.search_assets)
+        self.mcp.tool(self.get_asset_json_by_name)
+        self.mcp.tool(self.post_generate_task)
+        self.mcp.tool(self.get_generate_task_status)
+        self.mcp.tool(self.get_user_generate_tasks)
+        self.mcp.tool(self.post_upload_generate_usdz)
+        self.mcp.tool(self.post_cancel_asset_zip)
+        self.mcp.tool(self.post_check_asset_version)
+        self.mcp.tool(self.post_upload_asset_zip)
+        self.mcp.tool(self.post_upload_usdz)
+        self.mcp.tool(self.post_upload_xml)
+        self.mcp.tool(self.get_task_chain_progress)
+        self.mcp.tool(self.post_save_asset_draft)
+        self.mcp.tool(self.delete_asset)
 
         # Actor 查询类
         self.mcp.tool(self.get_all_actors)
         self.mcp.tool(self.get_actor_transform)
         self.mcp.tool(self.get_selection)
+        self.mcp.tool(self.get_actor_properties)
+        self.mcp.tool(self.get_entity_hierarchy)
 
         # Actor 编辑类
         self.mcp.tool(self.set_actor_transform)
@@ -1159,7 +2502,8 @@ class OrcaLabMCPServer:
         self.mcp.tool(self.rename_actor)
         self.mcp.tool(self.reparent_actor)
         self.mcp.tool(self.duplicate_actors)
-        
+        self.mcp.tool(self.set_actor_properties)
+
         # 选择操作类
         self.mcp.tool(self.set_selection_and_active_actor)
         self.mcp.tool(self.clear_selection)
@@ -1198,7 +2542,7 @@ class OrcaLabMCPServer:
 
     async def run(self):
         self.config_service.mark_mcp_ready()
-        await self.mcp.run_async(transport="http", port=self.port)
+        await self.mcp.run_async(transport="http", port=self.port, show_banner=False)
 
     def stop(self):
         if self._task and not self._task.done():

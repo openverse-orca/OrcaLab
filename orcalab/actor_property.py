@@ -1,6 +1,8 @@
 from enum import Enum
-from typing import List
+from dataclasses import dataclass, field
+from typing import Any, List
 
+from orcalab.entity_path import EntityPath
 from orcalab.path import Path
 
 
@@ -10,7 +12,8 @@ class ActorPropertyType(Enum):
     INTEGER = 2
     FLOAT = 3
     STRING = 4
-    TREE = 5
+    ENUM = 5
+    ASSET = 6
 
 
 class ValueWrapper:
@@ -22,15 +25,26 @@ class ValueWrapper:
 
 class ActorProperty:
     def __init__(
-        self, name: str, display_name: str | None, type: ActorPropertyType, value
+        self,
+        name: str,
+        display_name: str | None,
+        type: ActorPropertyType,
+        value: Any,
+        original_value: Any,
     ):
         self._name = name
         self._display_name: str = display_name if display_name is not None else name
         self._type = type
         self._value = ValueWrapper(value)
-        self._original_value = ValueWrapper(value)
+        self._base_value = ValueWrapper(value)
         self._read_only = False
         self._editor_hint = ""
+        self._enum_values: List[str] = []
+        self._post_read_fields: List[str] = []
+        self._post_read_delay_ms: int = 0
+        self._sub_name: str = ""
+        self._parent_struct_name: str = ""
+        self._struct_display_name: str = ""
 
     def name(self) -> str:
         return self._name
@@ -47,17 +61,17 @@ class ActorProperty:
     def set_value(self, value):
         self._set_value(self._value, value)
 
-    def original_value(self):
-        return self._original_value.value
+    def base_value(self):
+        return self._base_value.value
 
-    def set_original_value(self, value):
-        self._set_value(self._original_value, value)
+    def set_base_value(self, value):
+        self._set_value(self._base_value, value)
 
     def is_modified(self) -> bool:
         if self._type == ActorPropertyType.FLOAT:
-            return abs(self.value() - self.original_value()) > 1e-6
+            return abs(self.value() - self.base_value()) > 1e-6
 
-        return self.value() != self.original_value()
+        return self.value() != self.base_value()
 
     def _set_value(self, target, value):
         match self._type:
@@ -80,9 +94,14 @@ class ActorProperty:
                 if not isinstance(value, str):
                     raise ValueError("Value must be a string")
                 target.value = value
-            case ActorPropertyType.TREE:
-                # TREE 类型没有直接值，数据在 group.tree_data 中
-                pass
+            case ActorPropertyType.ENUM:
+                if not isinstance(value, str):
+                    raise ValueError("Value must be a string for enum")
+                target.value = value
+            case ActorPropertyType.ASSET:
+                if not isinstance(value, str):
+                    raise ValueError("Value must be a string for asset")
+                target.value = value
             case _:
                 raise NotImplementedError("Unsupported property type")
 
@@ -98,64 +117,115 @@ class ActorProperty:
     def set_editor_hint(self, hint: str):
         self._editor_hint = hint
 
-    def create_alias(self, new_name: str) -> "ActorProperty":
-        """创建共享值引用的别名属性，修改别名时原属性也会更新"""
-        alias = object.__new__(ActorProperty)
-        alias._name = new_name
-        alias._display_name = self._display_name
-        alias._type = self._type
-        alias._value = self._value  # 共享引用
-        alias._original_value = self._original_value  # 共享引用
-        alias._read_only = self._read_only
-        alias._editor_hint = self._editor_hint
-        return alias
+    def enum_values(self) -> List[str]:
+        return self._enum_values
+
+    def set_enum_values(self, values: List[str]):
+        self._enum_values = values
+
+    def post_read_fields(self) -> List[str]:
+        return self._post_read_fields
+
+    def set_post_read_fields(self, fields: List[str]):
+        self._post_read_fields = fields
+
+    def post_read_delay_ms(self) -> int:
+        return self._post_read_delay_ms
+
+    def set_post_read_delay_ms(self, delay_ms: int):
+        self._post_read_delay_ms = delay_ms
+
+    def sub_name(self) -> str:
+        return self._sub_name
+
+    def set_sub_name(self, sub_name: str):
+        self._sub_name = sub_name
+
+    def parent_struct_name(self) -> str:
+        return self._parent_struct_name
+
+    def set_parent_struct_name(self, name: str):
+        self._parent_struct_name = name
+
+    def struct_display_name(self) -> str:
+        return self._struct_display_name
+
+    def set_struct_display_name(self, name: str):
+        self._struct_display_name = name
 
 
-class TreePropertyNode:
-    """树形属性节点"""
-
-    def __init__(self, name: str, display_name: str | None = None):
-        self.name = name
-        self.display_name = display_name if display_name else name
-        self.properties: List[ActorProperty] = []
-        self.children: List["TreePropertyNode"] = []
-
-
+@dataclass
 class ActorPropertyGroup:
-    def __init__(self, prefix: str, name: str, hint: str):
-        self.prefix = prefix
-        self.name = name
-        self.display_name = name
-        self.hint = hint
-        self.properties: List[ActorProperty] = []
-        self.tree_data: List[TreePropertyNode] = []
+    name: str
+    hint: str
+    entity_id: int
+    entity_path: EntityPath
+    component_type_id: str
+    component_type_index: int
+    properties: List[ActorProperty]
+
+    def set_value(self, name: str, value: Any):
+        for prop in self.properties:
+            if prop.name() == name:
+                prop.set_value(value)
+                return
 
 
+@dataclass
 class ActorPropertyKey:
-    def __init__(
-        self,
-        actor_path: Path,
-        group_prefix: str,
-        property_name: str,
-        property_type: ActorPropertyType,
-    ):
-        self.actor_path = actor_path
-        self.group_prefix = group_prefix
-        self.property_name = property_name
-        self.property_type = property_type
+    actor_path: Path
+    entity_id: int
+    entity_path: EntityPath
+    component_type_id: str
+    component_type_index: int
+    property_name: str
+    property_type: ActorPropertyType
 
-    def __eq__(self, other):
-        if not isinstance(other, ActorPropertyKey):
-            return NotImplemented
-
-        return (
-            self.actor_path == other.actor_path
-            and self.group_prefix == other.group_prefix
-            and self.property_name == other.property_name
-            and self.property_type == other.property_type
+    def clone(self) -> "ActorPropertyKey":
+        return ActorPropertyKey(
+            actor_path=self.actor_path,
+            entity_id=self.entity_id,
+            entity_path=self.entity_path,
+            component_type_id=self.component_type_id,
+            component_type_index=self.component_type_index,
+            property_name=self.property_name,
+            property_type=self.property_type,
         )
 
-    def __hash__(self):
-        return hash(
-            (self.actor_path, self.group_prefix, self.property_name, self.property_type)
-        )
+
+@dataclass
+class PropertyOverride:
+    entity_id: int
+    entity_path: EntityPath
+    component_type_id: str
+    component_type_index: int
+    property_name: str
+    property_type: ActorPropertyType
+    value: Any
+
+
+@dataclass
+class StructPropertyGroup:
+    """结构体属性组（树形结构）"""
+
+    name: str
+    display_name: str
+    properties: List[ActorProperty]
+    children: List["StructPropertyGroup"]
+    layout: str = "vertical"
+
+
+@dataclass
+class ActorEntities:
+    actor_path: Path
+    entity_ids: List[int]
+
+
+@dataclass
+class PropertyGetInfo:
+    read_only: bool
+    value: Any
+    base_value: Any
+
+
+PropertyData = PropertyGetInfo

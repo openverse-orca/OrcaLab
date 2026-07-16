@@ -1,5 +1,6 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.theme_service import ThemeService
 
 
@@ -30,7 +31,8 @@ class Button(QtWidgets.QWidget):
         self.text_hover_color = theme.get_color("button_text_hover")
         self.text_pressed_color = theme.get_color("button_text_pressed")
         self.icon_size = 24
-        self.font_size = 10
+        self.font_size = FontService().get_font_size("button_paint")
+        self._fs_cb_id = FontService().on_scale_changed(self._on_font_scale_changed)
         self.padding_left = 8
         self.padding_right = 8
         self.padding_top = 4
@@ -119,6 +121,10 @@ class Button(QtWidgets.QWidget):
             painter.setPen(self.text_color)
 
         painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, self._text)
+
+    def _on_font_scale_changed(self):
+        self.font_size = FontService().get_font_size("button_paint")
+        self.update()
 
     def sizeHint(self):
         w = self.padding_left + self.padding_right

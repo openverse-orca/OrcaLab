@@ -304,50 +304,6 @@ if output:
 
 ---
 
-## 资产服务 Event Bus
-
-### AssetServiceRequestBus
-
-资产服务请求总线，用于下载资产。
-
-**接口**: `AssetServiceRequest`
-
-**主要操作**:
-- `download_asset_to_file()`: 下载资产到文件
-- `download_asset_to_cache()`: 下载资产到缓存
-
-**使用示例**:
-```python
-from orcalab.asset_service_bus import AssetServiceRequestBus
-
-# 下载资产到缓存
-url = "https://simassets.orca3d.cn/api/assets/123/download"
-await AssetServiceRequestBus().download_asset_to_cache(url)
-```
-
-### AssetServiceNotificationBus
-
-资产服务通知总线，用于监听资产下载事件。
-
-**接口**: `AssetServiceNotification`
-
-**主要事件**:
-- `on_asset_downloaded`: 资产下载完成
-
-**使用示例**:
-```python
-from orcalab.asset_service_bus import AssetServiceNotificationBus
-
-class MyListener(AssetServiceNotification):
-    async def on_asset_downloaded(self, file: str) -> None:
-        print(f"资产已下载到: {file}")
-
-listener = MyListener()
-AssetServiceNotificationBus().connect(listener)
-```
-
----
-
 ## 应用 Event Bus
 
 ### ApplicationRequestBus
@@ -396,7 +352,7 @@ from orcalab.scene_edit_bus import (
 )
 from orcalab.actor import AssetActor
 from orcalab.path import Path
-from orcalab.math import Transform
+from orcalab.transform import Transform
 
 # 1. 创建监听器
 class MySceneListener(SceneEditNotification):
@@ -535,6 +491,5 @@ class MyService:
 - `SceneEditRequest` / `SceneEditNotification`: 场景编辑
 - `MetadataServiceRequest`: 元数据服务
 - `HttpServiceRequest`: HTTP 服务
-- `AssetServiceRequest` / `AssetServiceNotification`: 资产服务
 - `ApplicationRequest`: 应用服务
 

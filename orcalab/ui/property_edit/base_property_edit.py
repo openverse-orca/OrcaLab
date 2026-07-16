@@ -1,39 +1,30 @@
 import asyncio
+from dataclasses import dataclass
+from typing import TypeVar, Generic
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from orcalab.actor import AssetActor
+from orcalab.actor import BaseActor
 from orcalab.actor_property import (
     ActorProperty,
     ActorPropertyGroup,
     ActorPropertyKey,
 )
 from orcalab.path import Path
-from orcalab.scene_edit_bus import (
-    SceneEditRequestBus,
-)
+from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.ui.styled_widget import StyledWidget
 from orcalab.ui.theme_service import ThemeService
+from orcalab.ui.fonts.font_service import FontService
+
+_T = TypeVar("_T")
 
 
+@dataclass
 class PropertyEditContext:
-    def __init__(
-        self,
-        actor: AssetActor,
-        actor_path: Path,
-        group: ActorPropertyGroup,
-        prop: ActorProperty,
-    ):
-        self.actor = actor
-        self.actor_path = actor_path
-        self.group = group
-        self.prop = prop
-
-        self.key = ActorPropertyKey(
-            self.actor_path,
-            self.group.prefix,
-            prop.name(),
-            prop.value_type(),
-        )
+    actor: BaseActor
+    actor_path: Path
+    group: ActorPropertyGroup
+    prop: ActorProperty
+    key: ActorPropertyKey
 
 
 def get_property_edit_style_sheet() -> str:
@@ -49,13 +40,13 @@ def get_property_edit_style_sheet() -> str:
             background-color: {bg_color};
             border-radius: 2px;
             border-bottom: 1px solid {bg_color};
-            padding: 4px 8px;
+            padding: 2px 8px;
         }}
         QLineEdit[readOnly="true"] {{
             background-color: {property_group_bg_color};
             border-radius: 2px;
             border: 1px solid {bg_color};
-            padding: 4px 8px;
+            padding: 2px 8px;
         }}
         QLineEdit[readOnly="false"]:hover {{
             background-color: {bg_hover_color};
@@ -68,21 +59,20 @@ def get_property_edit_style_sheet() -> str:
             background-color: {bg_focus_color};
             border-radius: 2px;
             border-bottom: 1px solid {bg_focus_color};
-            padding: 4px 8px;
+            padding: 2px 8px;
         }}
         """
     return base_style
 
 
-class BasePropertyEdit[T](StyledWidget):
+class BasePropertyEdit(Generic[_T], StyledWidget):
     def __init__(self, parent: QtWidgets.QWidget | None, context: PropertyEditContext):
         super().__init__(parent)
 
         self.context = context
-        self.in_dragging = False
         self.base_style = get_property_edit_style_sheet()
 
-    async def _do_set_value_async(self, value: T, undo: bool):
+    async def _do_set_value_async(self, value: _T, undo: bool):
         await SceneEditRequestBus().set_property(
             self.context.key,
             value=value,
@@ -90,35 +80,34 @@ class BasePropertyEdit[T](StyledWidget):
             source="ui",
         )
 
-    def _do_set_value(self, value: T, undo: bool):
+    def _do_set_value(self, value: _T, undo: bool):
         asyncio.create_task(self._do_set_value_async(value, undo))
-
-    def _on_start_drag(self):
-        SceneEditRequestBus().start_change_property(self.context.key)
-        self.in_dragging = True
-
-    def _on_end_drag(self):
-        async def warpper():
-            # We must await here to ensure the property change is commited.
-            await self._do_set_value_async(self.context.prop.value(), undo=True)
-            SceneEditRequestBus().end_change_property(self.context.key)
-            self.in_dragging = False
-
-        asyncio.create_task(warpper())
-
-    def set_value(self, value: T):
-        pass
 
     def _create_label(self, label_width: int) -> QtWidgets.QLabel:
         display_name = self.context.prop.display_name()
         if not display_name:
             display_name = self.context.prop.name()
+
+        if display_name.rfind(".") != -1:
+            display_name = display_name.split(".")[-1]
+
         label = QtWidgets.QLabel(display_name)
-        label.setFixedWidth(label_width)
+        label.setMinimumWidth(label_width)
+        label.setMaximumWidth(label_width * 2)
+
         label.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
+        FontService().bind_widget_font(label, "property_edit")
         return label
-    
+
+    def set_value(self, value: _T):
+        raise NotImplementedError()
+
+    def set_base_value(self, value: _T):
+        self.context.prop.set_base_value(value)
+        # TODO: update UI
+
     def set_read_only(self, read_only: bool):
-        pass
+        """Set UI read only"""
+        raise NotImplementedError()

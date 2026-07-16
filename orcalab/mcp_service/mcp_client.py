@@ -31,7 +31,7 @@ def _serialize_content_block(block) -> dict:
 def _print_tool_result(result) -> int:
     payload = {
         "isError": result.isError,
-        "structuredContent": result.structuredContent,
+        # "structuredContent": result.structuredContent,
         "content": [_serialize_content_block(c) for c in result.content],
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))

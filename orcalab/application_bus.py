@@ -1,7 +1,7 @@
 from orcalab.event_bus import create_event_bus
 from typing import Any, List, TYPE_CHECKING
 
-from orcalab.math import Transform
+from orcalab.transform import Transform
 from orcalab.actor import AssetActor
 
 if TYPE_CHECKING:
@@ -27,6 +27,9 @@ class ApplicationRequest:
         pass
 
     def get_widget(self, name: str, output: List[Any]):
+        pass
+
+    def update_title(self):
         pass
 
 

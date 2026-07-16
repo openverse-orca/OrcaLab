@@ -37,6 +37,9 @@ class ThemeService:
 
         self.set_color("brand", "#F02C6D")
 
+        self.set_color("surface", "#323232")
+        self.set_color("border", "#444444")
+
         self.set_color("property_group_bg", "#676767")
         self.set_color("property_edit_bg", "#8F8E8E")
         self.set_color("property_edit_bg_hover", "#9D9D9D")

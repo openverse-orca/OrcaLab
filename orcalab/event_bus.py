@@ -1,8 +1,10 @@
 import inspect
-from typing import List, Type
+from typing import List, Type, TypeVar, Generic
+
+_T = TypeVar("_T")
 
 
-class EventBusProxy[T]:
+class EventBusProxy(Generic[_T]):
     """
     For type hinting only.
     """
@@ -10,19 +12,19 @@ class EventBusProxy[T]:
     def __init__(self):
         raise NotImplementedError("Use create_event_bus to create an EventBus")
 
-    def connect(self, handler: T):
+    def connect(self, handler: _T):
         pass
 
-    def disconnect(self, handler: T):
+    def disconnect(self, handler: _T):
         pass
 
-    def __call__(self) -> T:
+    def __call__(self) -> _T:
         pass
 
 
 # EventBus设计上允许多个Handler，接口的返回值会被忽略，返回None。
 # 解决方法是把一个list作为参数传入， 结果收集到list里。
-def create_event_bus[T](interface: Type[T]) -> EventBusProxy[T]:
+def create_event_bus(interface: Type[_T]) -> EventBusProxy[_T]:
     if not inspect.isclass(interface):
         raise TypeError("interface must be a class")
 
@@ -96,11 +98,11 @@ def create_event_bus[T](interface: Type[T]) -> EventBusProxy[T]:
             # print(f"Disconnected handler {handler}, total {len(self.handlers)}")
 
         @classmethod
-        def connect(cls, handler: T):
+        def connect(cls, handler: _T):
             _EventBusProxy()._connect(handler)
 
         @classmethod
-        def disconnect(cls, handler: T):
+        def disconnect(cls, handler: _T):
             _EventBusProxy()._disconnect(handler)
 
     return _EventBusProxy

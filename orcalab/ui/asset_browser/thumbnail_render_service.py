@@ -12,9 +12,9 @@ from orcalab.scene_edit_bus import SceneEditNotificationBus, SceneEditRequestBus
 from orcalab.ui.asset_browser.thumbnail_render_bus import ThumbnailRenderRequest, ThumbnailRenderRequestBus, ThumbnailRenderNotification, ThumbnailRenderNotificationBus
 from orcalab.application_bus import ApplicationRequestBus
 from orcalab.path import Path
-from typing import override
+from typing_extensions import override
 import numpy as np
-from orcalab.math import Transform
+from orcalab.transform import Transform
 import os
 from orcalab.ui.image_utils import ImageProcessor
 
@@ -53,7 +53,13 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
         actor = actor_out[0]
 
         aabb = []
-        await SceneEditNotificationBus().get_actor_asset_aabb(Path(f"/{actor.name}"), output=aabb)
+        await asyncio.sleep(0.1)
+        try:
+            await SceneEditNotificationBus().get_actor_asset_aabb(Path(f"/{actor.name}"), output=aabb)
+        except Exception:
+            logger.error(f"failed to get {asset_path} aabb: actor asset bounds not ready")
+            await SceneEditRequestBus().delete_actor(actor, undo=False, source="create_panorama_apng")
+            return
         if not aabb:
             logger.error(f"failed to get {asset_path} aabb")
             return 
@@ -161,6 +167,7 @@ class ThumbnailRenderService(ThumbnailRenderRequest):
 
     # 对actor进行缩放
     def _get_actor_position_scale(self, aabb: list[float]):
+
         max_dim = max(aabb[3]-aabb[0], aabb[4]-aabb[1], aabb[5]-aabb[2])
         scale = 1 / max_dim
         new_aabb = [scale * value for value in aabb]

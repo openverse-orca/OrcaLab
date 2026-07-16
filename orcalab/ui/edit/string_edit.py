@@ -111,3 +111,8 @@ class StringEdit(QtWidgets.QLineEdit):
             return False
         self._value = value
         return True
+    
+    def paintEvent(self, event):
+        if self._state != StringEditState.Typing:
+            self.setCursorPosition(0)
+        super().paintEvent(event)

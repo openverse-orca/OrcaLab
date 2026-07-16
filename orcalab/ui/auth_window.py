@@ -8,6 +8,8 @@ from PySide6 import QtWidgets, QtCore, QtGui
 import threading
 from typing import Optional, Callable
 
+from orcalab.ui.fonts.font_service import FontService
+
 
 class AuthWindow(QtWidgets.QDialog):
     """认证等待窗口"""
@@ -40,10 +42,7 @@ class AuthWindow(QtWidgets.QDialog):
         
         # 标题
         title_label = QtWidgets.QLabel("DataLink 用户认证")
-        title_font = QtGui.QFont()
-        title_font.setPointSize(16)
-        title_font.setBold(True)
-        title_label.setFont(title_font)
+        FontService().bind_widget_font(title_label, "dialog_title")
         title_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title_label)
         

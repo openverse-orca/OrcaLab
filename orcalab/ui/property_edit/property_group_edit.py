@@ -1,69 +1,27 @@
-from typing import Any, List, override
-from PySide6 import QtCore, QtWidgets, QtGui
+from typing import Any, List
+from typing_extensions import override
+from PySide6 import QtWidgets
 
-from orcalab.actor import AssetActor
+from orcalab.actor import BaseActor
 from orcalab.actor_property import (
-    ActorProperty,
-    ActorPropertyGroup,
     ActorPropertyKey,
-    ActorPropertyType,
+    ActorPropertyGroup,
+    PropertyData,
 )
 from orcalab.application_util import get_local_scene
+from orcalab.transform import Transform, as_euler
 from orcalab.path import Path
+from orcalab.perf_log import perf_timer
 from orcalab.scene_edit_bus import (
     SceneEditNotification,
     SceneEditNotificationBus,
 )
-from orcalab.ui.icon import Icon
-from orcalab.ui.icon_util import make_color_svg
-from orcalab.ui.property_edit.base_property_edit import (
-    BasePropertyEdit,
-    PropertyEditContext,
+from orcalab.ui.collapsible.collapsible_section import CollapsibleSection
+from orcalab.ui.property_edit.base_property_edit import BasePropertyEdit
+from orcalab.ui.property_edit.property_group_content import (
+    create_property_group_content,
 )
-from orcalab.ui.property_edit.bool_property_edit import BooleanPropertyEdit
-from orcalab.ui.property_edit.float_property_edit import FloatPropertyEdit
-from orcalab.ui.property_edit.int_property_edit import IntegerPropertyEdit
-from orcalab.ui.property_edit.string_property_edit import StringPropertyEdit
-from orcalab.ui.property_edit.tree_property_edit import TreePropertyEdit
-
 from orcalab.ui.styled_widget import StyledWidget
-from orcalab.ui.text_label import TextLabel
-from orcalab.ui.theme_service import ThemeService
-
-
-class PropertyGroupEditTitle(QtWidgets.QWidget):
-
-    toggle_collapse = QtCore.Signal()
-
-    def __init__(self, parent, name: str, hint: str):
-        super().__init__(parent)
-        root_layout = QtWidgets.QHBoxLayout(self)
-        root_layout.setContentsMargins(4, 4, 4, 4)
-        root_layout.setSpacing(0)
-
-        self.l_indicator = Icon()
-        self.l_indicator.set_icon_size(20)
-
-        l_name = QtWidgets.QLabel(name)
-        l_hint = TextLabel(hint)
-        l_hint.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Fixed
-        )
-        l_hint.text_color = QtGui.QColor("gray")
-        font = l_hint.font()
-        font.setPointSize(12)
-        l_hint.setFont(font)
-        l_hint.elide_mode = QtCore.Qt.TextElideMode.ElideLeft
-
-        root_layout.addWidget(self.l_indicator)
-        root_layout.addWidget(l_name)
-        root_layout.addSpacing(10)
-        root_layout.addStretch()
-        root_layout.addWidget(l_hint)
-
-    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
-        if event.button() == QtCore.Qt.MouseButton.LeftButton:
-            self.toggle_collapse.emit()
 
 
 class PropertyGroupEdit(StyledWidget, SceneEditNotification):
@@ -71,14 +29,12 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
     def __init__(
         self,
         parent: QtWidgets.QWidget | None,
-        actor: AssetActor,
+        actor: BaseActor,
         group: ActorPropertyGroup,
         label_width: int,
+        collapsed: bool = False,
     ):
         super().__init__(parent)
-        root_layout = QtWidgets.QVBoxLayout(self)
-        root_layout.setContentsMargins(4, 4, 4, 4)
-        root_layout.setSpacing(0)
 
         self._actor = actor
         self._group = group
@@ -89,46 +45,39 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
         assert actor_path is not None
         self._actor_path = actor_path
 
+        root_entity_path = self._actor.entity_root.root_entity_info.entity_path
+        self._is_actor_root_entity = group.entity_path == root_entity_path
+
         self._property_edits: List[BasePropertyEdit] = []
 
-        title_area = PropertyGroupEditTitle(self, group.name, group.hint)
-        title_area.setFixedHeight(24)
-        title_area.toggle_collapse.connect(self.toggle_collapse)
+        with perf_timer(f"property_group_edit.init({group.name})", feature="PROPERTY"):
+            self._section = CollapsibleSection(
+                parent=self,
+                title=group.name,
+                badge=group.hint,
+                collapsed=collapsed,
+                content_factory=lambda: self._create_content(),
+            )
 
-        content_area = QtWidgets.QWidget()
-        root_layout.addWidget(title_area)
-        root_layout.addWidget(content_area)
+            layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            layout.addWidget(self._section)
 
-        content_layout = QtWidgets.QVBoxLayout(content_area)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(4)
-
-        for prop in group.properties:
-            editor = self._create_property_edit(prop, label_width)
-            if prop.is_read_only():
-                editor.set_read_only(True)
-            self._property_edits.append(editor)
-            content_layout.addWidget(editor)
-
-        self._title_area = title_area
-        self._content_area = content_area
-
-        theme = ThemeService()
-        bg_color = theme.get_color_hex("property_group_bg")
-        text_color = theme.get_color("text")
-        self.setStyleSheet(
-            f"""
-            QWidget {{
-                background-color: {bg_color};
-                border-radius: 4px;
-            }}
-            """
-        )
-
-        self._expand_icon = make_color_svg(":/icons/chevron_down.svg", text_color)
-        self._collapse_icon = make_color_svg(":/icons/chevron_right.svg", text_color)
-
-        self._title_area.l_indicator.set_pixmap(self._expand_icon)
+    def _create_content(self) -> QtWidgets.QWidget:
+        with perf_timer(
+            f"PropertyGroupEdit._create_content({self._group.name})", feature="PROPERTY"
+        ):
+            content = create_property_group_content(
+                parent=self,
+                actor=self._actor,
+                actor_path=self._actor_path,
+                group=self._group,
+                label_width=self._label_width,
+                property_edits=self._property_edits,
+                collapsed=False,
+            )
+            return content
 
     def connect_buses(self):
         SceneEditNotificationBus.connect(self)
@@ -136,47 +85,19 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
     def disconnect_buses(self):
         SceneEditNotificationBus.disconnect(self)
 
-    def _create_property_edit(
-        self, prop: ActorProperty, label_width: int
-    ) -> BasePropertyEdit:
-        context = PropertyEditContext(
-            actor=self._actor,
-            actor_path=self._actor_path,
-            group=self._group,
-            prop=prop,
-        )
-
-        match prop.value_type():
-            case ActorPropertyType.BOOL:
-                return BooleanPropertyEdit(self, context, label_width)
-            case ActorPropertyType.INTEGER:
-                return IntegerPropertyEdit(self, context, label_width)
-            case ActorPropertyType.FLOAT:
-                return FloatPropertyEdit(self, context, label_width)
-            case ActorPropertyType.STRING:
-                return StringPropertyEdit(self, context, label_width)
-            case ActorPropertyType.TREE:
-                if self._group.name == "Geom":
-                    from orcalab.ui.property_edit.geom_tree_property_edit import GeomTreePropertyEdit
-                    return GeomTreePropertyEdit(self, context, label_width)
-                if self._group.name == "Site":
-                    from orcalab.ui.property_edit.site_tree_property_edit import SiteTreePropertyEdit
-                    return SiteTreePropertyEdit(self, context, label_width)
-                return TreePropertyEdit(self, context, label_width)
-            case _:
-                raise NotImplementedError("Unsupported property type")
-
     #
     # SceneEditNotificationBus overrides
     #
 
     def _compute_new_path(self, renamed_path: Path, new_name: str) -> Path | None:
-        """如果重命名操作影响了当前 actor 路径，返回更新后的路径，否则返回 None。"""
-        new_renamed = renamed_path.parent() / new_name
+        parent = renamed_path.parent()
+        if parent is None:
+            return None
+        new_renamed = parent / new_name
         if self._actor_path == renamed_path:
             return new_renamed
         if self._actor_path.is_descendant_of(renamed_path):
-            suffix = self._actor_path.string()[len(renamed_path.string()):]
+            suffix = self._actor_path.string()[len(renamed_path.string()) :]
             return Path(new_renamed.string() + suffix)
         return None
 
@@ -192,63 +113,82 @@ class PropertyGroupEdit(StyledWidget, SceneEditNotification):
             edit.context.key.actor_path = new_path
 
     @override
-    async def on_property_changed(
+    async def on_properties_changed(
         self,
-        property_key: ActorPropertyKey,
-        value: Any,
+        property_keys: list[ActorPropertyKey],
+        values: list[Any | PropertyData],
         source: str,
     ):
-        if property_key.actor_path != self._actor_path:
-            return
-
-        if property_key.group_prefix != self._group.prefix:
-            return
-
-        # 始终刷新树形属性中的子值（如关节名按钮），不受 source 影响
-        for edit in self._property_edits:
-            if hasattr(edit, 'set_child_value'):
-                edit.set_child_value(property_key.property_name, value)
-
         if source == "ui":
             return
 
-        for edit in self._property_edits:
-            if edit.context.prop.name() == property_key.property_name:
-                edit.set_value(value)
-                return
+        for key, value in zip(property_keys, values):
+            if key.actor_path != self._actor_path:
+                continue
+            if key.entity_path != self._group.entity_path:
+                continue
+            if key.component_type_id != self._group.component_type_id:
+                continue
+            if key.component_type_index != self._group.component_type_index:
+                continue
+
+            for edit in self._property_edits:
+                if edit.context.prop.name() == key.property_name:
+                    if isinstance(value, PropertyData):
+                        edit.set_value(value.value)
+                        edit.set_base_value(value.base_value)
+                        edit.set_read_only(value.read_only)
+                    else:
+                        edit.set_value(value)
+                    break
+                        
 
     @override
-    async def on_property_read_only_changed(
+    async def on_transforms_changed(
         self,
-        actor_path,
-        group_prefix: str,
-        property_name: str,
-        read_only: bool,
-    ):
-        if actor_path != self._actor_path:
+        actor_paths: List[Path],
+        old_transforms: List[Transform],
+        new_transforms: List[Transform],
+        source: str,
+    ) -> None:
+        if source == "ui":
             return
 
-        if group_prefix != self._group.prefix:
+        if self._group.component_type_id != "{22B10178-39B6-4C12-BB37-77DB45FDD3B6}":
             return
 
+        if not self._is_actor_root_entity:
+            return
+
+        for actor_path, new_transform in zip(actor_paths, new_transforms):
+            if actor_path != self._actor_path:
+                continue
+
+            self._set_named_property_value("translate.x", new_transform.position[0])
+            self._set_named_property_value("translate.y", new_transform.position[1])
+            self._set_named_property_value("translate.z", new_transform.position[2])
+            angles = as_euler(new_transform.rotation, "xyz", degrees=True)
+            self._set_named_property_value("rotate.x", angles[0])
+            self._set_named_property_value("rotate.y", angles[1])
+            self._set_named_property_value("rotate.z", angles[2])
+            self._set_named_property_value("uniformScale", new_transform.scale)
+
+    def _set_named_property_value(self, name: str, value: Any):
         for edit in self._property_edits:
-            if edit.context.prop.name() == property_name:
-                edit.set_read_only(read_only)
-                return
-            # 处理树形属性的子属性
-            if hasattr(edit, 'set_child_read_only'):
-                edit.set_child_read_only(property_name, read_only)
+            if edit.context.prop.name() == name:
+                edit.set_value(value)
 
     def expand(self):
-        self._content_area.show()
-        self._title_area.l_indicator.set_pixmap(self._expand_icon)
+        self._section.expand()
 
     def collapse(self):
-        self._content_area.hide()
-        self._title_area.l_indicator.set_pixmap(self._collapse_icon)
+        self._section.collapse()
 
     def toggle_collapse(self):
-        if self._content_area.isVisible():
-            self.collapse()
-        else:
-            self.expand()
+        self._section.toggle_collapse()
+
+    def set_read_only(self, read_only: bool):
+        for prop in self._group.properties:
+            prop.set_read_only(read_only)
+        for edit in self._property_edits:
+            edit.set_read_only(read_only)

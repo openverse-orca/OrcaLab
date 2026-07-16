@@ -4,12 +4,14 @@ import logging
 from collections import defaultdict
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from typing import Any, List, Optional, override
+from typing import Any, List, Optional
+from typing_extensions import override
 
 from orcalab.path import Path
 from orcalab.scene_edit_bus import SceneEditNotification, SceneEditNotificationBus
 from orcalab.ui.camera.camera_brief import CameraBrief
 from orcalab.ui.camera.camera_brief_model import CameraBriefModel
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.camera.camera_bus import (
     CameraNotification,
     CameraNotificationBus,
@@ -53,8 +55,7 @@ class _CameraSelectorDelegate(QtWidgets.QStyledItemDelegate):
                 QtWidgets.QStyle.StateFlag.State_Selected
                 | QtWidgets.QStyle.StateFlag.State_HasFocus
             )
-            font = painter.font()
-            font.setBold(True)
+            font = FontService().apply_font_modifiers("camera_group_title", painter.font())
             painter.save()
             painter.setFont(font)
             super().paint(painter, option_copy, index)
@@ -72,8 +73,7 @@ class _CameraSelectorDelegate(QtWidgets.QStyledItemDelegate):
         rect: QtCore.QRect = option.rect
         rect.setRight(rect.right() - 5)
 
-        font = painter.font()
-        font.setItalic(True)
+        font = FontService().apply_font_modifiers("camera_source", painter.font())
 
         align = (
             QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight
@@ -97,6 +97,9 @@ class CameraSelector(QtWidgets.QTreeView, CameraNotification, SceneEditNotificat
         self._model = QtGui.QStandardItemModel()
         self.setModel(self._model)
         self.setItemDelegate(_CameraSelectorDelegate(self))
+
+        self._fs = FontService()
+        self._fs.bind_widget_font(self, "camera_selector")
 
         self.selectionModel().selectionChanged.connect(self._on_selection_changed)
 

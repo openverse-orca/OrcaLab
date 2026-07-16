@@ -1,5 +1,6 @@
 import pathlib
-from typing import List, override
+from typing import List
+from typing_extensions import override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.ui.panel import Panel

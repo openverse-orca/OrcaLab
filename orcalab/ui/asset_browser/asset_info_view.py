@@ -1,6 +1,7 @@
 from PySide6 import QtCore, QtWidgets
 
 from orcalab.ui.asset_browser.asset_info import AssetInfo
+from orcalab.ui.fonts.font_service import FontService
 
 
 class AssetInfoView(QtWidgets.QWidget):
@@ -35,42 +36,48 @@ class AssetInfoView(QtWidgets.QWidget):
         main_layout.addWidget(scroll_area)
 
     def _create_info_group(self, title: str, widget: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
+        fs = FontService()
         group = QtWidgets.QGroupBox(title)
-        group.setStyleSheet("""
-            QGroupBox {
-                font-size: 12px;
-                font-weight: bold;
+        fs.bind_widget_stylesheet(
+            group,
+            lambda: f"""
+            QGroupBox {{
+                {fs.get_font_css('group_title')}
                 color: #ffffff;
                 border: 1px solid #555555;
                 border-radius: 4px;
                 margin-top: 8px;
                 padding-top: 8px;
-            }
-            QGroupBox::title {
+            }}
+            QGroupBox::title {{
                 subcontrol-origin: margin;
                 left: 8px;
                 padding: 0 4px;
-            }
-        """)
+            }}
+        """,
+        )
         layout = QtWidgets.QVBoxLayout(group)
         layout.setContentsMargins(8, 12, 8, 8)
         layout.addWidget(widget)
         return group
 
     def _create_path_widget(self) -> QtWidgets.QLabel:
+        fs = FontService()
         self._path_label = QtWidgets.QLabel()
         self._path_label.setWordWrap(True)
         self._path_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
-        self._path_label.setStyleSheet("""
-            QLabel {
+        fs.bind_widget_stylesheet(
+            self._path_label,
+            lambda: f"""
+            QLabel {{
                 color: #a0c8ff;
-                font-size: 11px;
+                {fs.get_font_css('path_label')}
                 padding: 4px;
                 background-color: #2a2a2a;
                 border-radius: 3px;
-                font-family: 'Consolas', 'Monaco', monospace;
-            }
-        """)
+            }}
+        """,
+        )
         return self._path_label
 
     def set_asset_info(self, asset_info: AssetInfo | None):

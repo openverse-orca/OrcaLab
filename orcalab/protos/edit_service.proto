@@ -13,9 +13,9 @@ enum Space {
 }
 
 message Transform {
-    repeated double pos = 1;        // 位置 (3 elements)
-    repeated double quat = 2;       // 旋转四元数 (4 elements)
-    double scale = 3;               // 等比缩放 (1 elements)
+    repeated double pos = 1;
+    repeated double quat = 2;
+    double scale = 3;
 }
 
 
@@ -30,8 +30,8 @@ message AlohaResponse {
 
 
 message AddGroupRequest {
-    string actor_name = 2;          // Actor Entity 的名字
-    string parent_actor_path = 3;   // Parent Actor 的路径
+    string actor_name = 2;
+    string parent_actor_path = 3;
     Transform transform = 4;
     Space space = 5;
 }
@@ -59,7 +59,6 @@ message AddActorBatchResponse {
 }
 
 
-
 message DeleteActorBatchRequest {
     repeated string actor_paths = 1;
 }
@@ -68,7 +67,6 @@ message DeleteActorBatchResponse {
     string error_message = 2;
     repeated string errors = 3;
 }
-
 
 
 message SetActorTransformRequest {
@@ -81,7 +79,6 @@ message SetActorTransformResponse {
     string error_message = 2;
 }
 
-// In local space.
 message SetActorTransformBatchRequest {
     repeated string actor_paths = 1;
     repeated Transform transforms = 2;
@@ -120,24 +117,6 @@ message GetPendingActorTransformBatchResponse {
     repeated Transform transforms = 3;
 }
 
-message GetSyncFromMujocoToSceneRequest {
-}
-message GetSyncFromMujocoToSceneResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-    bool value = 3;
-}
-
-
-message SetSyncFromMujocoToSceneRequest {
-    bool value = 1;
-}
-message SetSyncFromMujocoToSceneResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-    bool value = 3;
-}
-
 message ClearSceneRequest {
 }
 message ClearSceneResponse {
@@ -153,14 +132,6 @@ message GetActorAssetsResponse {
     repeated string actor_asset_names = 3;
 }
 
-message GetPendingSelectionChangeRequest {
-}
-message GetPendingSelectionChangeResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-    repeated string actor_paths = 3;
-}
-
 message GetPendingAddItemRequest {
 }
 message GetPendingAddItemResponse {
@@ -170,13 +141,30 @@ message GetPendingAddItemResponse {
     string actor_name = 4;
 }
 
+
+
+message SelectionData {
+    repeated string selected_actor_paths = 1;
+    string active_actor_path = 2;
+    uint64 active_entity_id = 3;
+}
+
+message GetPendingSelectionChangeRequest {
+}
+message GetPendingSelectionChangeResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    SelectionData selection = 3;
+}
+
 message SetSelectionRequest {
-    repeated string actor_paths = 1;
+    SelectionData selection = 1;
 }
 message SetSelectionResponse {
     StatusCode status_code = 1;
     string error_message = 2;
 }
+
 
 
 message SaveStateRequest {
@@ -249,22 +237,6 @@ message GetCacheFolderResponse {
 }
 
 
-message LoadPackageRequest {
-    string file_path = 1;
-}
-message LoadPackageResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-}
-
-message ChangeSimStateRequest {
-    bool sim_process_running = 1;
-}
-message ChangeSimStateResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-}
-
 message ChangeManipulatorTypeRequest {
     int32 manipulator_type = 1;
 }
@@ -284,6 +256,45 @@ message GetCameraPNGResponse {
     string error_message = 2;
 }
 
+message LoadPackageRequest {
+    string file_path = 1;
+}
+message LoadPackageResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+message ChangeSimStateRequest {
+    bool sim_process_running = 1;
+}
+message ChangeSimStateResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+message GetSyncFromMujocoToSceneRequest {
+}
+message GetSyncFromMujocoToSceneResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    bool value = 3;
+}
+
+message SetSyncFromMujocoToSceneRequest {
+    bool value = 1;
+}
+message SetSyncFromMujocoToSceneResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
+message PublishSceneRequest {
+}
+message PublishSceneResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+}
+
 message GetActorAssetAabbRequest {
     string actor_path = 1;
 }
@@ -293,6 +304,16 @@ message GetActorAssetAabbResponse {
     string error_message = 2;
     repeated float min = 3;
     repeated float max = 4;
+}
+
+message FindNonOverlappingPositionRequest {
+    string actor_path = 1;
+}
+
+message FindNonOverlappingPositionResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    repeated float position = 3;
 }
 
 message QueueMouseEventRequest {
@@ -401,78 +422,115 @@ enum PropertyType {
     Int = 2;
     Float = 3;
     String = 4;
-    Tree = 5;
+    ENUM = 5;
+    ASSET = 6;
 }
 
 message PropertyValue {
     oneof value_oneof {
-        bool value_bool = 3;
-        int32 value_int = 4;
-        float value_float = 5;
-        string value_string = 6;
+        bool value_bool = 1;
+        int32 value_int = 2;
+        float value_float = 3;
+        string value_string = 4;
+        string value_asset = 5;
     }
 }
 
-message PropertyValueList {
-    repeated PropertyValue items = 1;
+message PropertyMetadata{
+    bool read_only = 1;
+}
+
+message PropertyGetInfo {
+    PropertyMetadata metadata = 1;
+    PropertyValue value = 2;
+    PropertyValue base_value = 3;
+}
+
+message PropertySetInfo {
+    // PropertyMetadata metadata = 1;
+    PropertyValue value = 2;
+}
+
+message AssetInfo {
+    string asset_id = 1;
+    string relative_path = 2;
+}
+
+message GetAssetsByTypePageRequest {
+    string asset_type_uuid = 1;
+    int32 page_index = 2;
+    int32 page_size = 3;
+}
+
+message GetAssetsByTypePageResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    int32 page_index = 3;
+    int32 total_pages = 4;
+    int32 total_count = 5;
+    repeated AssetInfo assets = 6;
 }
 
 message Property {
     PropertyType type = 1;
     string name = 2;
     string display_name = 3;
-    bool read_only = 4;
-    string editor_hint = 5;
+    PropertyMetadata metadata = 4;
+    PropertyValue value = 5;
+    PropertyValue base_value = 6;
+    string editor_hint = 7;
+    repeated string enum_values = 8;
+    repeated string post_read_fields = 9;
+    int32 post_read_delay_ms = 10;
 }
 
-message TreePropertyNode {
-    string name = 1;
-    string display_name = 2;
-    repeated Property properties = 3;
-    repeated TreePropertyNode children = 4;
-}
+// Naming convention:
+// 1D array: type + "s"
+// 2D array: 1D array + "List"
+// 3D array: 2D array + "Array"
 
 message PropertyGroup {
-    string prefix = 1;
-    string name = 2;
-    string display_name = 3;
-    string hint = 4;
-    repeated Property properties = 5;
-    repeated TreePropertyNode tree_data = 6;
+    string name = 1;
+    string hint = 2;
+    uint64 entity_id = 3;
+    string component_type_id = 4;
+    uint64 component_type_index = 5;
+    repeated Property properties = 6;
+}
+
+message PropertyGroups {
+    repeated PropertyGroup elements = 1;
+}
+
+message PropertyGroupsList{
+    repeated PropertyGroups elements = 1;
+}
+
+message PropertyGroupsListArray {
+    repeated PropertyGroupsList elements = 1;
 }
 
 message PropertyKey {
     string actor_path = 1;
-    string group_prefix = 2;
-    string property_name = 3;
-    PropertyType property_type = 4;
-}
-
-message PropertyKeyList {
-    repeated PropertyKey items = 1;
-}
-
-message GetPropertyGroupsRequest {
-    string actor_path = 1;
-}
-message GetPropertyGroupsResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
-    repeated PropertyGroup property_groups = 3;
+    uint64 entity_id = 2;
+    string component_type_id = 3;
+    uint64 component_type_index = 4;
+    string field_path = 5;
+    PropertyType property_type = 6;
 }
 
 message GetPropertiesRequest {
-    PropertyKeyList keys = 1;
+    repeated PropertyKey keys = 1;
 }
 message GetPropertiesResponse {
     StatusCode status_code = 1;
     string error_message = 2;
-    PropertyValueList values = 3;
+    repeated PropertyGetInfo infos = 3;
 }
 
 message SetPropertiesRequest {
-    PropertyKeyList keys = 1;
-    PropertyValueList values = 2;
+    repeated PropertyKey keys = 1;
+    repeated PropertySetInfo infos = 2;
 }
 message SetPropertiesResponse {
     StatusCode status_code = 1;
@@ -480,34 +538,109 @@ message SetPropertiesResponse {
 }
 
 
-message PropertyGroupList {
-    repeated PropertyGroup elements = 1;
+message PropertyOverride {
+    uint64 entity_id = 1;
+    string component_type_id = 2;
+    uint64 component_type_index = 3;
+    string field_path = 4;
+    PropertyType property_type = 5;
+    PropertyValue value = 6;
 }
-message GetPropertyGroupsBatchRequest {
+message PropertyOverrides{
+    repeated PropertyOverride elements = 1;
+}
+message PropertyOverridesList {
+    repeated PropertyOverrides elements = 1;
+}
+message PropertyOverridesListArray {
+    repeated PropertyOverridesList elements = 1;
+}
+message ActorPaths{
+    repeated string elements = 1; 
+}
+message ActorPathsList{
+    repeated ActorPaths elements = 1; 
+}
+message GetActorOverridesBatchRequest {
+    ActorPathsList actor_paths_list = 1;
+}
+message GetActorOverridesBatchResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    PropertyOverridesListArray overrides_list_array = 3;
+}
+
+// Entity hierarchy messages
+
+message EntityInfoMessage {
+    uint64 entity_id = 1;
+    string name = 2;
+    string entity_path = 3;
+    repeated EntityInfoMessage children = 4;
+}
+
+message GetEntityHierarchyBatchRequest {
     repeated string actor_paths = 1;
 }
-message GetPropertyGroupsBatchResponse {
+message GetEntityHierarchyBatchResponse {
     StatusCode status_code = 1;
     string error_message = 2;
-    repeated PropertyGroupList property_group_lists = 3;
+    repeated EntityInfoMessage root_entities = 3;
+    repeated string errors = 4;
 }
 
-
-message PublishSceneRequest {
+message ActorEntities {
+    string actor_path = 1;
+    repeated uint64 entity_ids = 2;
 }
-message PublishSceneResponse {
+message GetEntityPropertyGroupsBatchRequest {
+    repeated ActorEntities actor_entities_list = 1;
+}
+message GetEntityPropertyGroupsBatchResponse {
     StatusCode status_code = 1;
     string error_message = 2;
+    PropertyGroupsListArray property_groups_list_array = 3;
 }
 
-message SetHighlightJointRequest {
+message GetActorPropertyGroupsBatchRequest {
+    repeated string actor_paths = 1;
+}
+message GetActorPropertyGroupsBatchResponse {
+    StatusCode status_code = 1;
+    string error_message = 2;
+    PropertyGroupsList property_groups_list = 3;
+}
+
+// Property Registry messages
+
+message FieldValue {
+    string field_path = 1;
+    PropertyType type = 2;
+    PropertyValue value = 3;
+    bool read_only = 4;
+    string display_name = 5;
+    repeated string enum_values = 6;
+}
+
+message ComponentFieldValues {
+    string component_type = 1;
+    string component_display_name = 2;
+    repeated FieldValue fields = 3;
+}
+
+message EntityFieldValues {
     uint64 entity_id = 1;
-    bool highlight = 2;
+    repeated ComponentFieldValues components = 2;
 }
-message SetHighlightJointResponse {
-    StatusCode status_code = 1;
-    string error_message = 2;
+
+message EntityFieldWrite {
+    uint64 entity_id = 1;
+    string component_type = 2;
+    string field_path = 3;
+    PropertyValue value = 4;
 }
+
+
 
 message CustomCommandRequest {
     string command = 1;
@@ -555,9 +688,6 @@ service GrpcService {
     rpc GetPendingActorTransformBatch(GetPendingActorTransformBatchRequest) returns (GetPendingActorTransformBatchResponse);
     rpc SetActorTransformBatch(SetActorTransformBatchRequest) returns (SetActorTransformBatchResponse);
 
-    rpc GetSyncFromMujocoToScene(GetSyncFromMujocoToSceneRequest) returns (GetSyncFromMujocoToSceneResponse);
-    rpc SetSyncFromMujocoToScene(SetSyncFromMujocoToSceneRequest) returns (SetSyncFromMujocoToSceneResponse);
-
     rpc ClearScene(ClearSceneRequest) returns (ClearSceneResponse);
     rpc GetActorAssets(GetActorAssetsRequest) returns (GetActorAssetsResponse);
 
@@ -577,10 +707,14 @@ service GrpcService {
     rpc GetCacheFolder(GetCacheFolderRequest) returns (GetCacheFolderResponse);
     rpc LoadPackage(LoadPackageRequest) returns (LoadPackageResponse);
     rpc ChangeSimState(ChangeSimStateRequest) returns (ChangeSimStateResponse);
+    rpc GetSyncFromMujocoToScene(GetSyncFromMujocoToSceneRequest) returns (GetSyncFromMujocoToSceneResponse);
+    rpc SetSyncFromMujocoToScene(SetSyncFromMujocoToSceneRequest) returns (SetSyncFromMujocoToSceneResponse);
+    rpc PublishScene(PublishSceneRequest) returns (PublishSceneResponse);
     rpc ChangeManipulatorType(ChangeManipulatorTypeRequest) returns (ChangeManipulatorTypeResponse);
 
     rpc GetCameraPNG(GetCameraPNGRequest) returns (GetCameraPNGResponse);
     rpc GetActorAssetAabb(GetActorAssetAabbRequest) returns (GetActorAssetAabbResponse);
+    rpc FindNonOverlappingPosition(FindNonOverlappingPositionRequest) returns (FindNonOverlappingPositionResponse);
 
     rpc QueueMouseEvent(QueueMouseEventRequest) returns (QueueMouseEventResponse);
     rpc QueueMouseWheelEvent(QueueMouseWheelEventRequest) returns (QueueMouseWheelEventResponse);
@@ -594,13 +728,6 @@ service GrpcService {
     rpc GetViewportCameraTransform(GetViewportCameraTransformRequest) returns (GetViewportCameraTransformResponse);
     rpc GetCameraDataPNG(GetCameraDataPNGRequest) returns (GetCameraDataPNGResponse);
 
-    rpc GetPropertyGroups(GetPropertyGroupsRequest) returns (GetPropertyGroupsResponse);
-    rpc GetPropertyGroupsBatch(GetPropertyGroupsBatchRequest) returns (GetPropertyGroupsBatchResponse);
-    rpc GetProperties(GetPropertiesRequest) returns (GetPropertiesResponse);
-    rpc SetProperties(SetPropertiesRequest) returns (SetPropertiesResponse);
-
-
-    rpc SetHighlightJoint(SetHighlightJointRequest) returns (SetHighlightJointResponse);
     rpc CustomCommand(CustomCommandRequest) returns (CustomCommandResponse);
 
     rpc SetVisibility(SetVisibilityRequest) returns (SetVisibilityResponse);
@@ -608,6 +735,14 @@ service GrpcService {
 
     rpc SetMoveRotateSensitivity(SetMoveRotateSensitivityRequest) returns (SetMoveRotateSensitivityResponse);
 
-    rpc PublishScene(PublishSceneRequest) returns (PublishSceneResponse);
+    // Entity hierarchy related RPCs
+    rpc GetEntityHierarchyBatch(GetEntityHierarchyBatchRequest) returns (GetEntityHierarchyBatchResponse);
+    rpc GetEntityPropertyGroupsBatch(GetEntityPropertyGroupsBatchRequest) returns (GetEntityPropertyGroupsBatchResponse);
+    rpc GetActorPropertyGroupsBatch(GetActorPropertyGroupsBatchRequest) returns (GetActorPropertyGroupsBatchResponse);
+    rpc GetProperties(GetPropertiesRequest) returns (GetPropertiesResponse);
+    rpc SetProperties(SetPropertiesRequest) returns (SetPropertiesResponse);
+    rpc GetActorOverridesBatch(GetActorOverridesBatchRequest) returns (GetActorOverridesBatchResponse);
 
+    // Property Registry RPCs
+    rpc GetAssetsByTypePage(GetAssetsByTypePageRequest) returns (GetAssetsByTypePageResponse);
 }

@@ -1,8 +1,7 @@
 [orcalab]
-version = "26.5.1"
+version = "26.6.3"
 edit_port = 50151
 sim_port = 50051
-url_service_port = 50651
 init_paks = true
 levels = [ "orcalab_day", "orcalab_night", "previewthumbnail_orcalab",]
 level = "orcalab_day"
@@ -29,7 +28,7 @@ base_url = "https://simassets.orca3d.cn/api"
 web_server_url = "https://simassets.orca3d.cn/"
 auth_server_url = "https://datalink.orca3d.cn:8081"
 enable_sync = true
-timeout = 60
+timeout = 10
 
 [external_programs]
 default = "run_sim_loop"

@@ -1,6 +1,5 @@
 import asyncio
 from typing import List
-from copy import deepcopy
 import uuid
 import numpy as np
 from scipy.spatial.transform import Rotation
@@ -9,10 +8,11 @@ from PySide6.QtCore import Qt
 from orcalab.actor import BaseActor, AssetActor, GroupActor
 from orcalab.path import Path
 from orcalab.copilot import CopilotService
-from orcalab.math import Transform
+from orcalab.transform import Transform
 import orca_gym.utils.rotations as rotations
 from orcalab.metadata_service_bus import MetadataServiceRequestBus, MetadataServiceRequest
 from orcalab.scene_edit_bus import SceneEditRequestBus
+from orcalab.ui.fonts.font_service import FontService
 
 class CopilotPanel(QtWidgets.QWidget):
     """Copilot panel for asset search and actor creation"""
@@ -42,20 +42,23 @@ class CopilotPanel(QtWidgets.QWidget):
         self.input_field.setMaximumHeight(80)  # Limit height but allow multiple lines
         self.input_field.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.input_field.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.input_field.setStyleSheet("""
-            QTextEdit {
+        self._fs = FontService()
+        self._fs.bind_widget_stylesheet(
+            self.input_field,
+            lambda: f"""
+            QTextEdit {{
                 background-color: #3c3c3c;
                 color: #ffffff;
                 border: 1px solid #555555;
                 border-radius: 3px;
                 padding: 6px;
-                font-size: 12px;
-                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            }
-            QTextEdit:focus {
+                {self._fs.get_font_css('copilot_input')}
+            }}
+            QTextEdit:focus {{
                 border-color: #007acc;
-            }
-        """)
+            }}
+        """,
+        )
         input_layout.addWidget(self.input_field)
         
         # Button layout
@@ -64,27 +67,29 @@ class CopilotPanel(QtWidgets.QWidget):
         # Submit button
         self.submit_button = QtWidgets.QPushButton("发送")
         self.submit_button.setFixedWidth(80)
-        self.submit_button.setStyleSheet("""
-            QPushButton {
+        self._fs.bind_widget_stylesheet(
+            self.submit_button,
+            lambda: f"""
+            QPushButton {{
                 background-color: #007acc;
                 color: #ffffff;
                 border: none;
                 border-radius: 3px;
                 padding: 6px 12px;
-                font-weight: bold;
-                font-size: 12px;
-            }
-            QPushButton:hover {
+                {self._fs.get_font_css('button')}
+            }}
+            QPushButton:hover {{
                 background-color: #005a9e;
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background-color: #004578;
-            }
-            QPushButton:disabled {
+            }}
+            QPushButton:disabled {{
                 background-color: #555555;
                 color: #999999;
-            }
-        """)
+            }}
+        """,
+        )
         button_layout.addWidget(self.submit_button)
         
         button_layout.addStretch()  # Push buttons to the left
@@ -108,17 +113,19 @@ class CopilotPanel(QtWidgets.QWidget):
         # Scrollable text area for logs
         self.log_text = QtWidgets.QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setStyleSheet("""
-            QTextEdit {
+        self._fs.bind_widget_stylesheet(
+            self.log_text,
+            lambda: f"""
+            QTextEdit {{
                 background-color: #2b2b2b;
                 color: #ffffff;
                 border: 1px solid #555555;
                 border-radius: 3px;
                 padding: 6px;
-                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-                font-size: 11px;
-            }
-        """)
+                {self._fs.get_font_css('copilot_log')}
+            }}
+        """,
+        )
         layout.addWidget(self.log_text)
         
         # Connect signals

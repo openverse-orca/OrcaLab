@@ -1,4 +1,4 @@
-from typing import override
+from typing_extensions import override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.ui.edit.base_number_edit import BaseNumberEdit

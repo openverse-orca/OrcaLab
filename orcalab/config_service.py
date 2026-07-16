@@ -1,5 +1,4 @@
 import os
-import tomllib
 import sys
 import pathlib
 import importlib.metadata
@@ -7,6 +6,11 @@ import logging
 import tomli_w
 import json
 import time
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from orcalab.project_util import get_project_dir
 
@@ -74,8 +78,6 @@ class ConfigService:
         except importlib.metadata.PackageNotFoundError:
             # 如果包未安装，尝试从 pyproject.toml 读取
             try:
-                import tomllib
-
                 pyproject_path = os.path.join(
                     os.path.dirname(__file__), "..", "pyproject.toml"
                 )
@@ -211,9 +213,6 @@ class ConfigService:
     def sim_port(self) -> int:
         return self.config["orcalab"]["sim_port"]
 
-    def url_service_port(self) -> int:
-        return self.config["orcalab"].get("url_service_port", 50651)
-
     def executable(self) -> str:
         # return self.config["orcalab"]["executable"]
         return "pseudo.exe"
@@ -284,6 +283,12 @@ class ConfigService:
         self.merge_levels([level_data])
 
         self.config.setdefault("orcalab", {})["level"] = level_data
+
+    def set_verbose(self, verbose: bool):
+        self._verbose = verbose
+
+    def is_verbose(self) -> bool:
+        return getattr(self, '_verbose', False)
 
     def _normalize_level_item(self, item):
         if isinstance(item, str):
@@ -417,7 +422,7 @@ class ConfigService:
 
     def datalink_timeout(self) -> int:
         """获取 DataLink 请求超时时间"""
-        return self.config.get("datalink", {}).get("timeout", 60)
+        return self.config.get("datalink", {}).get("timeout", 10)
 
     def datalink_auth_server_url(self) -> str:
         """获取 DataLink 认证服务器地址"""
@@ -485,6 +490,17 @@ class ConfigService:
 
         def update_func(config):
             config.setdefault("orcalab", {})["camera_rotation_sensitivity"] = value
+
+        self.set_user_config("orcalab", update_func)
+
+    def font_scale_percent(self) -> int:
+        return int(self.config.get("orcalab", {}).get("font_scale_percent", 100))
+
+    def set_font_scale_percent(self, value: int) -> None:
+        self.config.setdefault("orcalab", {})["font_scale_percent"] = value
+
+        def update_func(config):
+            config.setdefault("orcalab", {})["font_scale_percent"] = value
 
         self.set_user_config("orcalab", update_func)
 
@@ -567,40 +583,6 @@ class ConfigService:
                 status_file.unlink()
             except IOError as e:
                 logger.warning(f"无法删除MCP状态文件: {e}")
-
-    def _get_url_service_status_file_path(self) -> pathlib.Path:
-        home = pathlib.Path.home()
-        status_dir = home / "Orca" / "OrcaLab"
-        return status_dir / "url_service_port.json"
-
-    def write_url_service_port(self, port: int) -> None:
-        status_file = self._get_url_service_status_file_path()
-        status_file.parent.mkdir(parents=True, exist_ok=True)
-        status = {"port": port}
-        try:
-            with open(status_file, "w", encoding="utf-8") as f:
-                json.dump(status, f, ensure_ascii=False, indent=2)
-        except IOError as e:
-            logger.warning(f"无法写入URL服务状态文件: {e}")
-
-    def read_url_service_port(self) -> int | None:
-        status_file = self._get_url_service_status_file_path()
-        if not status_file.exists():
-            return None
-        try:
-            with open(status_file, "r", encoding="utf-8") as f:
-                status = json.load(f)
-                return status.get("port")
-        except (json.JSONDecodeError, IOError):
-            return None
-
-    def clear_url_service_status(self) -> None:
-        status_file = self._get_url_service_status_file_path()
-        if status_file.exists():
-            try:
-                status_file.unlink()
-            except IOError as e:
-                logger.warning(f"无法删除URL服务状态文件: {e}")
 
     def set_send_statistics(self, value: str):
         self.config.setdefault("orcalab", {})["send_statistics"] = value

@@ -1,4 +1,4 @@
-from typing import override
+from typing_extensions import override
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.ui.edit.base_number_edit import BaseNumberEdit, BaseNumberEditState
@@ -9,7 +9,7 @@ def is_close(a: float, b: float, tol: float = 1e-6) -> bool:
 
 
 class FloatEdit(BaseNumberEdit[float]):
-    def __init__(self, parent: QtWidgets.QWidget | None = None, step: float = 0.01):
+    def __init__(self, parent: QtWidgets.QWidget | None = None, step: float = 0.01, is_limited:bool = False, min_value: float = 0.0, max_value: float = 1.0):
         super().__init__(parent)
 
         self.setValidator(QtGui.QDoubleValidator())
@@ -17,6 +17,9 @@ class FloatEdit(BaseNumberEdit[float]):
         self.setText("0.0")
         self._step = step
         self.max_float_before_precision_loss = 100000.0
+        self.is_limited = is_limited
+        self.min_value = min_value
+        self.max_value = max_value
 
     @override
     def _text_to_value(self, text: str) -> float | None:
@@ -28,7 +31,7 @@ class FloatEdit(BaseNumberEdit[float]):
 
     @override
     def _value_to_text(self, value: float) -> str:
-        return f"{value:.2f}"
+        return f"{value:.3f}"
 
     @override
     def value(self) -> float:
@@ -36,24 +39,21 @@ class FloatEdit(BaseNumberEdit[float]):
 
     @override
     def _set_value_only(self, value: float) -> bool:
-        clamped = max(
-            -self.max_float_before_precision_loss,
-            min(value, self.max_float_before_precision_loss),
-        )
-
         is_clamped = False
-        if clamped == self.max_float_before_precision_loss or clamped == -self.max_float_before_precision_loss:
-            is_clamped = True
+
+        if(self.is_limited):
+            clamped = max(self.min_value, min(value, self.max_value))
+            if clamped == self.max_value or clamped == self.min_value:
+                is_clamped = True
+        else:
+            clamped = max(-self.max_float_before_precision_loss, min(value, self.max_float_before_precision_loss))
+            if clamped == self.max_float_before_precision_loss or clamped == -self.max_float_before_precision_loss:
+                is_clamped = True
 
         if is_close(clamped, self._value) and not is_clamped:
             return False
 
         self._value = clamped
-
-        if self._state != BaseNumberEditState.Typing:
-            text = self._value_to_text(self.value())
-            if self.text() != text:
-                self.setText(text)
         return True
 
     @override

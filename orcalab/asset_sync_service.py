@@ -11,6 +11,7 @@ OrcaLab 资产同步服务
 import json
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from numpy import int64
 import requests
 import aiohttp
@@ -42,14 +43,14 @@ class AssetSyncCallbacks:
         """查询完成"""
         pass
     
-    def on_asset_status(self, asset_id: str, asset_name: str, file_name: str, size: int, status: str):
+    def on_asset_status(self, asset_id: str, asset_name: str, file_name: str, size: int, status: str, has_local: bool = False):
         """
         资产包状态
-        status: 'ok' (已最新), 'download' (待下载), 'delete' (待删除)
+        status: 'ok' (已最新), 'download' (待下载), 'delete' (待删除), 'cloud_deleted' (云端已删除)
         """
         pass
 
-    def on_set_status(self, asset_id: str, asset_name: str, file_name: str, size: int, status: str):
+    def on_set_status(self, asset_id: str, status: str):
         """
         设置资产包状态
         status: 'ok' (已最新), 'download' (待下载), 'delete' (待删除)
@@ -62,7 +63,7 @@ class AssetSyncCallbacks:
         """
         pass
     
-    def on_download_start(self, asset_id: str, asset_name: str):
+    def on_download_start(self, asset_id: str):
         """开始下载"""
         pass
     
@@ -98,9 +99,9 @@ class AssetSyncCallbacks:
 
 class AssetSyncService:
     """资产同步服务"""
-    
+
     def __init__(self, username: str, access_token: str, base_url: str, cache_folder: pathlib.Path, downloaded_packages_folder: pathlib.Path,
-                 config_paks: List[str], pak_urls: List[str] = None, timeout: int = 60, callbacks: Optional[AssetSyncCallbacks] = None,
+                 config_paks: List[str], pak_urls: List[str] = [], timeout: int = 10, callbacks: Optional[AssetSyncCallbacks] = None,
                  verbose: bool = False, cancel_event: Optional[threading.Event] = None):
         """
         初始化资产同步服务
@@ -123,24 +124,30 @@ class AssetSyncService:
         self.cache_folder = cache_folder
         self.downloaded_packages_folder = downloaded_packages_folder
         self.timeout = timeout
+        self.aiohttp_timeout = aiohttp.ClientTimeout(
+            total=None,
+            connect=5,
+            sock_connect=5,
+            sock_read=timeout,
+        )
         self.callbacks = callbacks or AssetSyncCallbacks()
         self.verbose = verbose
         self._cancel_event = cancel_event
         self._callback_lock = threading.Lock()  # 保护回调函数的线程安全
-        
+
         # 提取配置paks的文件名（用于后续比对）
         self.config_pak_names = set()
         for pak_path in config_paks:
             pak_file = pathlib.Path(pak_path)
             self.config_pak_names.add(pak_file.name)
-        
+
         # 提取pak_urls的文件名（用于后续比对）
         self.pak_url_names = set()
         if pak_urls:
             for url in pak_urls:
                 filename = url.split("/")[-1]
                 self.pak_url_names.add(filename)
-        
+
         if self.verbose:
             logger.info(
                 "资产同步服务初始化: 用户=%s, 配置pak数=%s, pak_urls数=%s",
@@ -148,15 +155,15 @@ class AssetSyncService:
                 len(self.config_pak_names),
                 len(self.pak_url_names),
             )
-    
+
     def _cancelled(self) -> bool:
         return self._cancel_event is not None and self._cancel_event.is_set()
-    
+
     def log(self, message: str):
         """简化日志输出"""
         if self.verbose:
             logger.info(message)
-    
+
     def get_headers(self) -> Dict[str, str]:
         """构造请求头"""
         return {
@@ -164,7 +171,13 @@ class AssetSyncService:
             'username': self.username,
             'Content-Type': 'application/json'
         }
-    
+
+    def _raise_if_token_expired(self, status_code: int) -> None:
+        """统一检查 401 状态码，抛出 TokenExpiredException"""
+        if status_code == 401:
+            logger.debug("认证失败（Token 可能已过期）. Status code: %d", status_code)
+            raise TokenExpiredException("Token 已过期")
+
     def query_subscribed_packages(self, app_version: str) -> Tuple[List[Dict], List[Dict]]:
         """
         查询用户订阅的资产包列表
@@ -181,42 +194,44 @@ class AssetSyncService:
             platform = "linux"
 
         params = f"?version={app_version}&platform={platform}"
-        
+
         try:
             url = f"{self.base_url}/orcalab/subscribed_packages/{params}"
             _start = time.monotonic()
             response = requests.get(url, headers=self.get_headers(), timeout=self.timeout)
             elapsed = time.monotonic() - _start
-            logger.debug("HTTP GET %s/orcalab/subscribed_packages/ 耗时: %.3f 秒 (状态码: %s)", url, elapsed, response.status_code)
-            
-            if response.status_code == 401:
-                logger.debug("认证失败（Token 可能已过期）. Status code: %d", response.status_code)
-                raise TokenExpiredException("Token 已过期")
-            
+            logger.debug("HTTP GET %s 耗时: %.3f 秒 (状态码: %s)", url, elapsed, response.status_code)
+
+            self._raise_if_token_expired(response.status_code)
+
             if response.status_code != 200:
                 logger.debug("查询失败: HTTP %d", response.status_code)
                 return [],[]
-            
+
             data = response.json()
             packages = data.get('packages', [])
             incompatible_packages = data.get('incompatiblePackages', [])
-            
+
             self.callbacks.on_query_complete(packages)
             logger.debug(f"✓ 查询成功: {len(packages) + len(incompatible_packages)} 个资产包")
-            
+
             return packages, incompatible_packages
 
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
             logger.debug(f"❌ 连接资产库失败: {e}")
             raise ConnectionFailedException("连接资产库失败")
-            
+
+        except json.JSONDecodeError as e:
+            logger.warning(f"❌ 订阅列表响应解析失败，保留现有资产包: {e}")
+            raise ConnectionFailedException("订阅列表响应解析失败")
+
         except TokenExpiredException:
             raise
-            
+
         except Exception as e:
             logger.debug(f"❌ 查询失败: {e}")
             return [],[]
-    
+
     async def check_local_packages(self, packages: List[Dict], incompatible_packages: List[Dict]) -> tuple[List[Dict], List[str]]:
         """
         检查本地资产包
@@ -225,12 +240,10 @@ class AssetSyncService:
             (需要下载的列表, 需要删除的列表)
         """
         missing_packages = []
-        
-        self.base_pkg_map = {}
-        self.patch_to_base_map = {}
-        self.base_to_patch_map = {}
-        self.download_info_cache = {}
+
         required_pkg_ids = set()
+        self.base_pkg_map = {}
+        self.download_info_cache = {}
 
         for pkg in packages:
             required_pkg_ids.add(pkg['id'])
@@ -240,9 +253,29 @@ class AssetSyncService:
             base_name = file_name.removesuffix(".pak")
             self.base_pkg_map[base_name] = pkg['id']
 
+        # 并发获取所有下载信息
+        if required_pkg_ids:
+            tasks = []
+            pkg_id_list = list(required_pkg_ids)
+            for pkg_id in pkg_id_list:
+                tasks.append(self.get_download_url(pkg_id))
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for i, result in enumerate(results):
+                pkg_id = pkg_id_list[i]
+                if isinstance(result, Exception):
+                    logger.debug(f"获取 {pkg_id} 的下载信息失败: {result}")
+                    self.download_info_cache[pkg_id] = None
+                else:
+                    self.download_info_cache[pkg_id] = result
+                    logger.debug(result)
+
+        self.patch_to_base_map = {}
+        self.base_to_patch_map = {}
         for pkg in packages:
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
 
+            download_info = self.download_info_cache[pkg['id']]
             if "_patch_" not in file_name:
                 continue
 
@@ -255,22 +288,6 @@ class AssetSyncService:
                     self.base_to_patch_map[base_pkg_id] = []
                 self.base_to_patch_map[base_pkg_id].append(pkg)
 
-        # 并发获取所有下载信息
-        if required_pkg_ids:
-            tasks = []
-            pkg_id_list = list(required_pkg_ids)
-            for pkg_id in pkg_id_list:
-                tasks.append(self.get_download_url(pkg_id))
-            
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for i, result in enumerate(results):
-                pkg_id = pkg_id_list[i]
-                if isinstance(result, Exception):
-                    logger.debug(f"获取 {pkg_id} 的下载信息失败: {result}")
-                    self.download_info_cache[pkg_id] = None
-                else:
-                    self.download_info_cache[pkg_id] = result
-
         for pkg in packages:
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
             local_path = self.cache_folder / file_name
@@ -278,21 +295,47 @@ class AssetSyncService:
             pkg_id = pkg['id']
             pkg_name = pkg['name']
             size = pkg['size']
-            
-            download_info = self.download_info_cache.get(pkg_id)
-            if download_info is None:
-                logger.debug("download_info_cache 中未找到包 %s 的下载信息", pkg_id)
 
-            if "_patch_" in file_name:
+            download_info = self.download_info_cache.get(pkg_id)
+
+            if pkg_id is None:
+                logger.debug("缺少pak_id, 无法设置状态")
+                continue
+
+            if "_patch_" not in file_name:
+                if download_info is None:
+                    self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
+                    self.callbacks.on_set_status(pkg_id, 'failed')
+                    logger.debug("%s %s 获取 download url 失败", file_name, pkg_name)
+                    continue
+                else:
+                    if download_info.get("isDeleted") == False:
+                        self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
+                    else:
+                        if download_info.get("_forbidden") == True:
+                            self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'forbidden')
+                            logger.debug("%s %s 已下线", file_name, pkg_name)
+                            continue
+                        else:
+                            has_local = local_path.exists() or downloaded_path.exists()
+                            self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'cloud_deleted', has_local)
+                            logger.debug("%s %s 已被云端删除", file_name, pkg_name)
+                            continue
+            else:
+                if download_info and download_info.get("isDeleted") == True:
+                    logger.debug("%s %s 增量包已被云端删除", file_name, pkg_name)
+                    continue # 跳过已被云端删除的增量包
                 pkg_id = self.patch_to_base_map.get(pkg['id'])
                 if pkg_id is None:
-                    logger.debug("patch_to_base_map 中未找到包 %s 对应的全量包映射", pkg['id'])
-            else:
-                self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, size, 'download')
+                    logger.debug("patch_to_base_map 中未找到包 %s %s 对应的全量包映射", file_name, pkg_name)
+                    continue
 
-            if download_info == None:
-                self.callbacks.on_set_status(pkg_id, 'failed')
-                logger.debug("%s 获取 download url 失败", file_name)
+            if download_info is None:
+                continue
+
+            if download_info.get("_forbidden"):
+                self.callbacks.on_set_status(pkg_id, 'forbidden')
+                logger.debug("%s %s 已下线", file_name, pkg_name)
                 continue
             cloud_file_sha256 = download_info.get("sha256")
             if local_path.exists():
@@ -300,33 +343,33 @@ class AssetSyncService:
                     local_file_sha256 = calculate_file_sha256(local_path)
                     if local_file_sha256.lower() == cloud_file_sha256:
                         self.callbacks.on_set_status(pkg_id, 'ok')
-                        logger.info("%s 已最新", file_name)
+                        logger.info("%s %s 已最新", file_name, pkg_name)
                     else:
                         self.callbacks.on_set_status(pkg_id, 'download')
                         missing_packages.append(pkg)
-                        logger.info("%s hash 不匹配，需重新下载", file_name)
+                        logger.info("%s %s hash 不匹配，需重新下载", file_name, pkg_name)
                 else:
                     self.callbacks.on_set_status(pkg_id, 'ok')
-                    logger.info("%s 已最新", file_name)
+                    logger.info("%s %s 已最新", file_name, pkg_name)
             elif downloaded_path.exists():
                 if cloud_file_sha256:
                     local_file_sha256 = calculate_file_sha256(downloaded_path)
                     if local_file_sha256.lower() == cloud_file_sha256:
                         shutil.copy2(downloaded_path, local_path)
                         self.callbacks.on_set_status(pkg_id, 'ok')
-                        logger.info("%s 已最新", file_name)
+                        logger.info("%s %s 已最新", file_name, pkg_name)
                     else:
                         self.callbacks.on_set_status(pkg_id, 'download')
                         missing_packages.append(pkg)
-                        logger.info("%s hash 不匹配，需重新下载", file_name)
+                        logger.info("%s %s hash 不匹配，需重新下载", file_name, pkg_name)
                 else:
                     shutil.copy2(downloaded_path, local_path)
                     self.callbacks.on_set_status(pkg_id, 'ok')
-                    logger.info("%s 已最新", file_name)
+                    logger.info("%s %s 已最新", file_name, pkg_name)
             else:
                 self.callbacks.on_set_status(pkg_id, 'download')
                 missing_packages.append(pkg)
-                logger.info("%s 需要下载", file_name)
+                logger.info("%s %s 需要下载", file_name, pkg_name)
 
         for pkg in incompatible_packages:
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
@@ -334,17 +377,17 @@ class AssetSyncService:
             pkg_name = pkg['name']
             if "_patch_" not in file_name:
                 self.callbacks.on_asset_status(pkg_id, pkg_name, file_name, 0, 'incompatible')
-            logger.info("%s 没有与当前版本兼容的资产", file_name)
-        
+            logger.info("%s %s 没有与当前版本兼容的资产", file_name, pkg_name)
+
         # 检查需要删除的文件
         subscribed_file_names = set()
         for pkg in packages:
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
             subscribed_file_names.add(file_name)
-        
+
         # 合并所有需要保留的文件名：订阅包、手工pak、pak_urls
         keep_file_names = subscribed_file_names | self.config_pak_names | self.pak_url_names
-        
+
         to_delete = []
         for pak_file in self.cache_folder.glob("*.pak"):
             file_name = pak_file.name
@@ -352,9 +395,9 @@ class AssetSyncService:
                 to_delete.append(file_name)
                 self.callbacks.on_delete(file_name)
                 self.log(f"✗ {file_name} 待删除")
-        
+
         return missing_packages, to_delete
-    
+
     async def get_download_url(self, package_id: str) -> Optional[Dict]:
         """获取资产包的下载链接"""
         if sys.platform == "win32":
@@ -367,31 +410,45 @@ class AssetSyncService:
             url = f"{self.base_url}/orcalab/package/{package_id}/download_url/{params}"
             _start = time.monotonic()
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=self.get_headers(), timeout=aiohttp.ClientTimeout(total=self.timeout)) as response:
+                async with session.get(url, headers=self.get_headers(), timeout=self.aiohttp_timeout) as response:
                     elapsed = time.monotonic() - _start
                     logger.debug("HTTP GET %s 耗时: %.3f 秒 (状态码: %s)", url, elapsed, response.status)
-                    
+
+                    self._raise_if_token_expired(response.status)
+                    if response.status == 403:
+                        logger.debug(f"❌ 获取下载链接失败: HTTP 403 无权限")
+                        return {"_forbidden": True}
                     if response.status != 200:
                         logger.debug(f"❌ 获取下载链接失败: HTTP {response.status}")
                         return None
-                    
+
                     return await response.json()
-            
+
+        except TokenExpiredException:
+            raise
+
         except Exception as e:
             logger.debug(f"❌ 获取下载链接失败: {e}")
             return None
-    
-    def get_image_url(self, asset_id: str) -> str:
-        get_asset_metadata_url = f"{self.base_url}/asset/{asset_id}/"
-        _start = time.monotonic()
-        response = requests.get(get_asset_metadata_url, headers=self.get_headers(), timeout=self.timeout)
-        elapsed = time.monotonic() - _start
-        logger.debug("HTTP GET %s/asset/%s/ 耗时: %.3f 秒 (状态码: %s)", self.base_url, asset_id, elapsed, response.status_code)
-        if response.status_code != 200:
-            logger.debug(f"Get image url failed. Asset Id: {asset_id} Status: {response.status_code}")
+
+    def get_image_picture(self, asset_id: str) -> Optional[str]:
+        try:
+            get_asset_metadata_url = f"{self.base_url}/asset/{asset_id}/picture"
+            _start = time.monotonic()
+            response = requests.get(get_asset_metadata_url, headers=self.get_headers(), timeout=self.timeout)
+            elapsed = time.monotonic() - _start
+            logger.debug("HTTP GET %s 耗时: %.3f 秒 (状态码: %s)", get_asset_metadata_url, elapsed, response.status_code)
+            self._raise_if_token_expired(response.status_code)
+            if response.status_code != 200:
+                logger.debug(f"Get image url failed. Asset Id: {asset_id} Status: {response.status_code}")
+                return None
+            asset_metadata = response.json()
+            return json.dumps(asset_metadata, ensure_ascii=False, indent=2)
+        except TokenExpiredException:
+            raise
+        except Exception as e:
+            logger.debug(f"❌ 获取资产元数据失败: {e}")
             return None
-        asset_metadata = response.json()
-        return json.dumps(asset_metadata, ensure_ascii=False, indent=2)
 
     def check_metadata(self, packages: List[Dict], to_delete: List[str], to_missing: List[Dict]):
         metadata_path = self.cache_folder / "metadata.json"
@@ -407,69 +464,29 @@ class AssetSyncService:
                 continue
         else:
             metadata = {}
-        
+
         # 清理已删除的元数据
         for to_delete_pak in to_delete:
             pak_id = to_delete_pak.removesuffix('.pak')
             if pak_id in metadata.keys():
                 del metadata[pak_id]
-        
+
         to_update_metadata = set()
-        package_infos = [
-            {
-                "id": package['id'],
-                "name": package['name'],
-                "revisionKind": package.get('revisionKind')
-            }
-            for package in packages
+        package_ids = [package['id'] for package in packages]
+
+        for pkg_id in package_ids:
+            if pkg_id not in metadata:
+                to_update_metadata.add(pkg_id)
+
+        missing_pak_ids = [
+            to_missing_pak['id'] for to_missing_pak in to_missing
         ]
 
-        patch_names = {
-            p["name"] for p in package_infos if p["revisionKind"] == "patch"
-        }
-        
-        for package_info in package_infos:
-            pkg_id = package_info["id"]
-            name = package_info["name"]
-            kind = package_info["revisionKind"]
+        for missing_pak_id in missing_pak_ids:
+            to_update_metadata.add(missing_pak_id)
+            if missing_pak_id in metadata.keys():
+                del metadata[missing_pak_id]
 
-            if kind == "patch":
-                if pkg_id not in metadata:
-                    to_update_metadata.add(pkg_id)
-            else:
-                if name not in patch_names and pkg_id not in metadata:
-                    to_update_metadata.add(pkg_id)
-
-        package_ids = [package['id'] for package in package_infos]
-
-
-        missing_pak_infos = [
-            {
-                "id": to_missing_pak['id'],
-                "name": to_missing_pak['name'],
-                "revisionKind": to_missing_pak.get('revisionKind')
-            }
-            for to_missing_pak in to_missing
-        ]
-
-        missing_patch_names = {
-            p["name"] for p in missing_pak_infos if p["revisionKind"] == "patch"
-        }
-        for missing_pak_info in missing_pak_infos:
-            pkg_id = missing_pak_info["id"]
-            name = missing_pak_info["name"]
-            kind = missing_pak_info["revisionKind"]
-
-            if kind == "patch":
-                to_update_metadata.add(missing_pak_info['id'])
-                if missing_pak_info['id'] in metadata.keys():
-                    del metadata[missing_pak_info['id']]
-            else:
-                if name not in missing_patch_names:
-                    to_update_metadata.add(missing_pak_info['id'])
-                    if missing_pak_info['id'] in metadata.keys():
-                        del metadata[missing_pak_info['id']]
-        
         keys = list(metadata.keys())
         for key in keys:
             if key not in package_ids and key not in to_update_metadata:
@@ -478,41 +495,57 @@ class AssetSyncService:
         to_update_metadata_json = {}
         for package_id in to_update_metadata:
             to_update_metadata_json[package_id] = {}
-        
+
         if len(to_update_metadata) == 0:
             self.callbacks.on_metadata_sync('complete', 0, 0)
         else:
             # 开始同步元数据
             self.callbacks.on_metadata_sync('start', 0, len(to_update_metadata))
             self.callbacks.on_metadata_sync('fetching', 0, 0)
-            
-            _start = time.monotonic()
-            response = requests.get(f"{self.base_url}/meta/?isPublished=true", headers=self.get_headers(), timeout=self.timeout)
-            elapsed = time.monotonic() - _start
-            logger.debug("HTTP GET %s/meta/?isPublished=true 耗时: %.3f 秒 (状态码: %s)", self.base_url, elapsed, response.status_code)
-            if response.status_code != 200:
-                logger.debug(f"❌ 获取metadata失败: HTTP {response.status_code}")
+
+            try:
+                _start = time.monotonic()
+                response = requests.get(f"{self.base_url}/meta/?isPublished=true", headers=self.get_headers(), timeout=self.timeout)
+                elapsed = time.monotonic() - _start
+                logger.debug("HTTP GET %s/meta/?isPublished=true 耗时: %.3f 秒 (状态码: %s)", self.base_url, elapsed, response.status_code)
+                self._raise_if_token_expired(response.status_code)
+                if response.status_code != 200:
+                    logger.debug(f"❌ 获取metadata失败: HTTP {response.status_code}")
+                    return
+                remote_metadata_published = response.json()
+
+                _start = time.monotonic()
+                response = requests.get(f"{self.base_url}/meta/?isPublished=false", headers=self.get_headers(), timeout=self.timeout)
+                elapsed = time.monotonic() - _start
+                logger.debug("HTTP GET %s/meta/?isPublished=false 耗时: %.3f 秒 (状态码: %s)", self.base_url, elapsed, response.status_code)
+                self._raise_if_token_expired(response.status_code)
+                if response.status_code != 200:
+                    logger.debug(f"❌ 获取metadata失败: HTTP {response.status_code}")
+                    return
+                remote_metadata_unpublished = response.json()
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                logger.debug(f"❌ 连接资产库失败: {e}")
+                self.callbacks.on_metadata_sync('failed', 0, 0)
                 return
-            remote_metadata_published = response.json()
-            
-            _start = time.monotonic()
-            response = requests.get(f"{self.base_url}/meta/?isPublished=false", headers=self.get_headers(), timeout=self.timeout)
-            elapsed = time.monotonic() - _start
-            logger.debug("HTTP GET %s/meta/?isPublished=false 耗时: %.3f 秒 (状态码: %s)", self.base_url, elapsed, response.status_code)
-            if response.status_code != 200:
-                logger.debug(f"❌ 获取metadata失败: HTTP {response.status_code}")
+            except TokenExpiredException:
+                self.callbacks.on_metadata_sync('failed', 0, 0)
+                raise
+            except json.JSONDecodeError as e:
+                logger.debug(f"❌ metadata响应解析失败: {e}")
+                self.callbacks.on_metadata_sync('failed', 0, 0)
                 return
-            remote_metadata_unpublished = response.json()
+            except Exception as e:
+                logger.debug(f"❌ 获取metadata失败: {e}")
+                self.callbacks.on_metadata_sync('failed', 0, 0)
+                return
             remote_metadata = remote_metadata_published + remote_metadata_unpublished
 
             updated_count = 0
-            total_remote = len(remote_metadata)
+            assets_need_images = []
             for index, sub_metadata in enumerate(remote_metadata, start=1):
                 if self._cancelled():
                     logger.debug("元数据同步已取消")
                     return
-                if total_remote > 0 and (index == 1 or index % 20 == 0 or index == total_remote):
-                    self.callbacks.on_metadata_sync('scanning', index, total_remote)
                 if sub_metadata['id'] in to_update_metadata:
                     for key, value in sub_metadata.items():
                         if sub_metadata['id'] not in metadata.keys():
@@ -520,22 +553,37 @@ class AssetSyncService:
                             metadata[sub_metadata['id']]['children'] = []
                         metadata[sub_metadata['id']][key] = value
                     updated_count += 1
-                    
+
                 if 'parentPackageId' in sub_metadata and sub_metadata['parentPackageId'] in to_update_metadata:
                     if sub_metadata['parentPackageId'] not in metadata.keys():
                         metadata[sub_metadata['parentPackageId']] = {}
                         metadata[sub_metadata['parentPackageId']]['children'] = []
                     metadata[sub_metadata['parentPackageId']]['children'].append(sub_metadata)
-                    
-                    asset_id = sub_metadata['id']
-                    image_url = self.get_image_url(asset_id)
-                    if image_url is not None:
-                        image_url = json.loads(image_url)
-                        sub_metadata['pictures'] = image_url['pictures']
-            
-            # 完成同步
-            self.callbacks.on_metadata_sync('complete', updated_count, len(to_update_metadata))
-            
+                    assets_need_images.append((sub_metadata['id'], sub_metadata))
+
+            # 并发获取 image_url
+            total_images = len(assets_need_images)
+            completed_images = 0
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                future_to_sub = {
+                    executor.submit(self.get_image_picture, asset_id): sub_metadata
+                    for asset_id, sub_metadata in assets_need_images
+                }
+                for future in as_completed(future_to_sub):
+                    sub_metadata = future_to_sub[future]
+                    try:
+                        pictures = future.result()
+                        if pictures is not None:
+                            pictures = json.loads(pictures)
+                            sub_metadata['pictures'] = pictures['pictures']
+                    except Exception as e:
+                        logger.debug("并发获取图片URL失败: %s", e)
+                    completed_images += 1
+                    if total_images > 0 and (completed_images == 1 or completed_images % 5 == 0 or completed_images == total_images):
+                        self.callbacks.on_metadata_sync('scanning', completed_images, total_images)
+
+            self.callbacks.on_metadata_sync('complete', len(to_update_metadata), len(to_update_metadata))
+
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, ensure_ascii=False, indent=2)
 
@@ -552,7 +600,7 @@ class AssetSyncService:
         """
         success_count = 0
         fail_count = 0
-        
+
         # 计算总大小
         total_group_size = 0
         for pkg in packages:
@@ -560,45 +608,61 @@ class AssetSyncService:
             if not download_info:
                 logger.debug("download_info_cache 中未找到包 %s 的下载信息，尝试重新获取", pkg['id'])
                 download_info = await self.get_download_url(pkg['id'])
-                self.download_info_cache[pkg['id']] = download_info
+                if download_info:
+                    self.download_info_cache[pkg['id']] = download_info
             if download_info:
                 total_group_size += download_info.get('size', 0)
-        
+
         # 记录已下载大小
         downloaded_group_size = 0
         start_time = time.time()
-        
+
         for pkg in packages:
             if self._cancelled():
                 break
-            
+
             package_id = pkg['id']
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
-            
+
             download_info = self.download_info_cache.get(package_id)
             if not download_info:
                 logger.debug("download_info_cache 中未找到包 %s 的下载信息，尝试重新获取", package_id)
                 download_info = await self.get_download_url(package_id)
-            
+
             if not download_info:
                 fail_count += 1
                 with self._callback_lock:
                     self.callbacks.on_download_complete(group_id, False, "无法获取下载链接")
                 continue
-            
+
+            if download_info.get("_forbidden"):
+                fail_count += 1
+                with self._callback_lock:
+                    self.callbacks.on_download_complete(group_id, False, "forbidden")
+                continue
+
             download_url = download_info.get('downloadUrl') or download_info.get('download_url')
             size = download_info.get('size')
             cloud_file_sha256 = download_info.get("sha256")
-            
+
             # 下载当前包
+            if download_url is None or size is None:
+                fail_count += 1
+                with self._callback_lock:
+                    self.callbacks.on_download_complete(group_id, False, "下载信息不完整")
+                continue
+
             success = await self._download_package_with_group_progress(
                 group_id, file_name, download_url, cloud_file_sha256,
                 total_group_size, downloaded_group_size, start_time
             )
-            
+
             if success:
                 success_count += 1
                 downloaded_group_size += size
+                json_files_url = download_info.get('jsonFilesUrl')
+                if json_files_url:
+                    await self._download_json_files(json_files_url)
             else:
                 # 失败后重试一次
                 retry_success = await self._download_package_with_group_progress(
@@ -608,17 +672,49 @@ class AssetSyncService:
                 if retry_success:
                     success_count += 1
                     downloaded_group_size += size
+                    json_files_url = download_info.get('jsonFilesUrl')
+                    if json_files_url:
+                        await self._download_json_files(json_files_url)
                 else:
                     fail_count += 1
-        
+
         if not self._cancelled():
             with self._callback_lock:
                 self.callbacks.on_download_complete(group_id, success_count > 0 and fail_count == 0)
-        
+
         return success_count, fail_count
-    
+
+    async def _download_json_files(self, json_files_url: list):
+        for json_file_info in json_files_url:
+            if self._cancelled():
+                break
+            download_url = json_file_info.get('downloadUrl')
+            file_name = json_file_info.get('fileName')
+            if not download_url or not file_name:
+                continue
+            local_path = self.cache_folder / file_name
+            temp_path = self.cache_folder / f"{file_name}.tmp"
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(download_url, timeout=self.aiohttp_timeout) as response:
+                        if response.status != 200:
+                            logger.debug("❌ JSON文件下载失败: %s HTTP %s", file_name, response.status)
+                            continue
+                        with open(temp_path, 'wb') as f:
+                            async for chunk in response.content.iter_chunked(8192):
+                                if chunk:
+                                    f.write(chunk)
+                if local_path.exists():
+                    local_path.unlink()
+                temp_path.rename(local_path)
+                logger.debug("✓ JSON文件 %s 下载完成", file_name)
+            except Exception as e:
+                logger.debug("❌ JSON文件下载失败: %s - %s", file_name, e)
+                if temp_path.exists():
+                    temp_path.unlink()
+
     async def _download_package_with_group_progress(self, group_id: str, file_name: str, download_url: str, 
-                                           cloud_file_sha256: str, total_group_size: int, downloaded_group_size: int, 
+                                           cloud_file_sha256: str | None, total_group_size: int, downloaded_group_size: int, 
                                            group_start_time: float) -> bool:
         """
         下载单个包并更新组进度
@@ -638,16 +734,16 @@ class AssetSyncService:
         try:
             local_path = self.cache_folder / file_name
             temp_path = self.cache_folder / f"{file_name}.tmp"
-            
+
             # 线程安全的回调调用
             with self._callback_lock:
                 self.callbacks.on_set_name_size(group_id, file_name, float(total_group_size))
                 self.callbacks.on_download_start(group_id)
-            
+
             # 异步流式下载
             _start = time.monotonic()
             async with aiohttp.ClientSession() as session:
-                async with session.get(download_url, timeout=aiohttp.ClientTimeout(total=self.timeout * 2)) as response:
+                async with session.get(download_url, timeout=self.aiohttp_timeout) as response:
                     elapsed = time.monotonic() - _start
                     logger.debug("HTTP GET %s 首包耗时: %.3f 秒 (状态码: %s)", download_url, elapsed, response.status)
 
@@ -656,10 +752,10 @@ class AssetSyncService:
                         with self._callback_lock:
                             self.callbacks.on_download_complete(group_id, False, f"HTTP {response.status}")
                         return False
-                    
+
                     current_downloaded = 0
                     last_update_time = time.time()
-                    
+
                     with open(temp_path, 'wb') as f:
                         async for chunk in response.content.iter_chunked(8192):
                             if self._cancelled():
@@ -672,7 +768,7 @@ class AssetSyncService:
                             if chunk:
                                 f.write(chunk)
                                 current_downloaded += len(chunk)
-                                
+
                                 # 更新组进度（每0.1秒更新一次）
                                 current_time = time.time()
                                 if total_group_size > 0 and current_time - last_update_time >= 0.1:
@@ -683,7 +779,7 @@ class AssetSyncService:
                                     with self._callback_lock:
                                         self.callbacks.on_download_progress(group_id, progress, speed)
                                     last_update_time = current_time
-            
+
             if self._cancelled():
                 self.log(f"下载已取消: {file_name}")
                 if temp_path.exists():
@@ -691,14 +787,14 @@ class AssetSyncService:
                 with self._callback_lock:
                     self.callbacks.on_download_complete(group_id, False, "已取消")
                 return False
-            
+
             # 最终组进度更新
             if total_group_size > 0:
                 total_downloaded = downloaded_group_size + current_downloaded
                 progress = int64((total_downloaded / total_group_size) * 100)
                 with self._callback_lock:
                     self.callbacks.on_download_progress(group_id, progress, 0)
-            
+
             # 文件完整性验证
             local_file_sha256 = calculate_file_sha256(temp_path)
             if cloud_file_sha256:
@@ -706,15 +802,15 @@ class AssetSyncService:
                     with self._callback_lock:
                         self.callbacks.on_download_complete(group_id, False, "incomplete")
                     return False
-            
+
             # 重命名
             if local_path.exists():
                 local_path.unlink()
             temp_path.rename(local_path)
-            
+
             logger.debug(f"✓ {file_name} 下载完成")
             return True
-            
+
         except Exception as e:
             logger.debug(f"❌ 下载失败: {e}")
             if 'temp_path' in locals() and temp_path.exists():
@@ -722,7 +818,7 @@ class AssetSyncService:
             with self._callback_lock:
                 self.callbacks.on_download_complete(group_id, False, str(e))
             return False
-    
+
     def clean_unsubscribed_packages(self, to_delete: List[str]):
         """删除不需要的pak文件"""
         for file_name in to_delete:
@@ -733,7 +829,7 @@ class AssetSyncService:
                 logger.debug(f"✓ 已删除 {file_name}")
             except Exception as e:
                 logger.debug(f"✗ 删除失败 {file_name}: {e}")
-    
+
     async def sync_packages(self, init_paks: bool = False) -> bool:
         """
         同步资产包（主流程）
@@ -749,7 +845,7 @@ class AssetSyncService:
         # 根据版本号获取对应的资产ID
         config_service = ConfigService()
         app_version = config_service.app_version()
-        
+
         # 1. 查询订阅列表
 
         try:
@@ -762,24 +858,24 @@ class AssetSyncService:
             self.log("⚠️  连接资产库失败，保留现有资产包，进入离线模式")
             self.callbacks.on_complete(False, "连接资产库失败，进入离线模式")
             return False
-        
+
         if self._cancelled():
             self.log("同步已由用户取消")
             self.callbacks.on_complete(False, "用户已取消")
             return False
-        
+
         # 收集订阅列表中的文件名
         subscribed_file_names = set()
         if packages:
             for pkg in packages:
                 file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
                 subscribed_file_names.add(file_name)
-        
+
         # 如果 init_paks=true，清除既不在手工列表、订阅列表也不在pak_urls列表中的包
         if init_paks:
             # 合并手工pak、订阅pak和pak_urls的文件名（要保留的文件）
             keep_file_names = subscribed_file_names | self.config_pak_names | self.pak_url_names
-            
+
             from orcalab.project_util import move_packages_to_downloaded_folder
             if keep_file_names:
                 # 把要删除的包复制到 downloaded_packages_folder 中
@@ -789,25 +885,25 @@ class AssetSyncService:
                 # 如果没有任何要保留的包，迁移所有
                 move_packages_to_downloaded_folder()
                 self.log("已清除所有pak文件（没有任何需要保留的包）")
-        
+
         # 2. 检查本地文件
         missing_packages, to_delete = await self.check_local_packages(packages, incompatible_packages)
-        
+
         if self._cancelled():
             self.log("同步已由用户取消")
             self.callbacks.on_complete(False, "用户已取消")
             return False
-        
+
         # 3. 下载缺失的资产包
         success_count = 0
         fail_count = 0
-        
+
         # 按全量包分组，将全量包和其增量包放在一起
         base_package_groups = {}
         for pkg in missing_packages:
             package_id = pkg['id']
             file_name = pkg.get('fileName') or pkg.get('file_name', f"{pkg['id']}.pak")
-            
+
             # 确定分组ID（使用全量包ID）
             if "_patch_" in file_name and pkg['id'] in self.patch_to_base_map:
                 group_id = self.patch_to_base_map[pkg['id']]
@@ -815,11 +911,11 @@ class AssetSyncService:
                 if "_patch_" in file_name:
                     logger.debug("patch_to_base_map 中未找到增量包 %s 对应的全量包映射，将使用自身ID作为分组", pkg['id'])
                 group_id = package_id
-            
+
             if group_id not in base_package_groups:
                 base_package_groups[group_id] = []
             base_package_groups[group_id].append(pkg)
-        
+
         # 并发下载每组包（每组内按顺序下载：先全量包，后增量包）
         if base_package_groups:
             # 创建异步任务列表
@@ -829,7 +925,7 @@ class AssetSyncService:
                     break
                 # 创建异步任务
                 download_tasks.append(self._download_package_group(group_id, group_packages))
-            
+
             # 执行异步任务
             if download_tasks:
                 results = await asyncio.gather(*download_tasks, return_exceptions=True)
@@ -843,14 +939,17 @@ class AssetSyncService:
                     else:
                         logger.debug(f"❌ 下载组任务异常: {result}")
                         fail_count += 1
-        
+
         if self._cancelled():
             self.log("同步已由用户取消（跳过元数据与本地清理）")
             self.callbacks.on_complete(False, "用户已取消")
             return False
-        
+
         # check metadata
-        self.check_metadata(packages, to_delete, missing_packages)
+        try:
+            self.check_metadata(packages, to_delete, missing_packages)
+        except TokenExpiredException:
+            self.log("⚠️  Token 已过期，跳过元数据同步")
 
         if self._cancelled():
             self.log("同步已由用户取消（跳过本地清理）")
@@ -859,16 +958,16 @@ class AssetSyncService:
 
         # 4. 清理不需要的文件
         self.clean_unsubscribed_packages(to_delete)
-        
+
         # 5. 完成
         message = f"下载: {success_count} 成功, {fail_count} 失败; 删除: {len(to_delete)} 个"
         self.callbacks.on_complete(True, message)
         self.log(f"同步完成: {message}")
-        
+
         return True
 
 
-def sync_assets(config_service, callbacks: Optional[AssetSyncCallbacks] = None, verbose: bool = False,
+def sync_assets(config_service: ConfigService, callbacks: Optional[AssetSyncCallbacks] = None, verbose: bool = False,
                 cancel_event: Optional[threading.Event] = None) -> bool:
     """
     资产同步入口函数

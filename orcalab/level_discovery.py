@@ -59,7 +59,8 @@ def _read_scene_layouts(pak_path: Path) -> List[Dict[str, str]]:
         path = _to_spawnable_path(scene.get("path"))
         if not path:
             continue
-        if path.lower() not in pak_file_set:
+        is_patch = "_patch_" in pak_path.stem
+        if not is_patch and path.lower() not in pak_file_set:
             logger.warning(
                 "场景 '%s' 的 spawnable 文件不存在于 pak 中，已跳过: %s",
                 name or path,
@@ -86,25 +87,30 @@ def _to_spawnable_path(path: str | None) -> str | None:
 
 
 def discover_levels_from_cache() -> List[Dict[str, str]]:
-    """扫描缓存目录下的pak文件，收集场景信息"""
+    """扫描缓存目录下的pak文件，收集场景信息。增量包的布局优先于全量包。"""
     cache_folder = get_cache_folder()
     if not cache_folder.exists():
         logger.info("缓存目录不存在，跳过场景扫描: %s", cache_folder)
         return []
 
     discovered_levels: List[Dict[str, str]] = []
-    seen_paths = set()
+    seen_paths: Dict[str, int] = {}
 
     for pak_path in sorted(cache_folder.rglob("*.pak")):
         scenes = _read_scene_layouts(pak_path)
         if not scenes:
             continue
 
+        is_patch = "_patch_" in pak_path.stem
+
         for scene in scenes:
             path = scene["path"]
             if path in seen_paths:
+                idx = seen_paths[path]
+                if is_patch:
+                    discovered_levels[idx] = scene
                 continue
-            seen_paths.add(path)
+            seen_paths[path] = len(discovered_levels)
             discovered_levels.append(scene)
 
     return discovered_levels

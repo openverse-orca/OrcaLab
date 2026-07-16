@@ -7,9 +7,14 @@ import pathlib
 from typing import List
 import asyncio
 import sys
+import io
 import signal
 import logging
 import time
+
+# Ensure UTF-8 encoding for stdout/stderr on Windows
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
 from orcalab.cli_options import create_argparser, resolve_and_validate_workspace
 from orcalab.config_service import ConfigService
@@ -30,7 +35,6 @@ import orcalab.assets.rc_assets
 from qasync import QEventLoop
 from orcalab.python_project_installer import ensure_python_project_installed
 from orcalab.ui.icon_util import app_window_icon, set_windows_app_user_model_id
-from orcalab.url_service.url_service import find_free_port, DEFAULT_PORT as URL_SERVICE_DEFAULT_PORT
 
 # This is needed to display the app icon on the taskbar on Windows
 if os.name == 'nt':
@@ -80,7 +84,7 @@ def register_signal_handlers():
         signal.signal(signal.SIGHUP, signal_handler)  # Hangup signal
 
 
-async def main_async(q_app, fullscreen: bool, url_service_port: int):
+async def main_async(q_app, fullscreen: bool):
     global _main_window
 
     app_close_event = asyncio.Event()
@@ -88,7 +92,7 @@ async def main_async(q_app, fullscreen: bool, url_service_port: int):
     if fullscreen:
         main_window = MainWindowFullScreen()
     else:
-        main_window = MainWindow(url_service_port=url_service_port)
+        main_window = MainWindow()
     _main_window = main_window  # Store reference for signal handlers
     await main_window.init()
     await app_close_event.wait()
@@ -232,8 +236,24 @@ def select_scene_and_layout(
         prepare_layout()
 
 
+def _ensure_xcb_platform() -> None:
+    if sys.platform != "linux":
+        return
+    if os.environ.get("QT_QPA_PLATFORM"):
+        return
+    session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+    if session_type == "wayland":
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
+        print(
+            "[OrcaLab] 检测到 Wayland 会话，引擎 Vulkan RHI 仅支持 XCB Surface，"
+            "已自动设置 QT_QPA_PLATFORM=xcb"
+        )
+
+
 def main():
     """Main entry point for the orcalab application"""
+    _ensure_xcb_platform()
+
     _main_start = time.monotonic()
     parser = create_argparser()
     args, unknown = parser.parse_known_args()
@@ -266,6 +286,12 @@ def main():
     current_dir = pathlib.Path(__file__).parent.resolve()
     project_root = current_dir.parent  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root, workspace)
+
+    verbose = getattr(args, "verbose", False)
+    config_service.set_verbose(verbose)
+
+    verbose = getattr(args, "verbose", False)
+    config_service.set_verbose(verbose)
 
     # 命令行参数覆盖配置文件中的 GPU 适配器设置
     if getattr(args, "force_adapter", None):
@@ -324,24 +350,30 @@ def main():
     # 处理pak包
     logger.info("正在准备资产包...")
     _pak_start = time.monotonic()
-    if config_service.init_paks():
-        paks = config_service.paks()
-        if paks:
-            # 如果paks有内容，则复制本地文件
-            logger.info("使用本地pak文件...")
-            copy_packages(paks)
+    if config_service.connect_builder_hub():
+        logger.info("Builder 模式，跳过 pak 包处理")
+    else:
+        if config_service.init_paks():
+            paks = config_service.paks()
+            if paks:
+                # 如果paks有内容，则复制本地文件
+                logger.info("使用本地pak文件...")
+                copy_packages(paks)
 
-    # 处理pak_urls（独立于paks和订阅列表，下载到orcalab子目录）
-    pak_urls = config_service.pak_urls()
-    pak_urls_sha256 = config_service.pak_urls_sha256()
-    if pak_urls:
-        logger.info("正在同步pak_urls列表...")
-        sync_pak_urls(pak_urls, pak_urls_sha256)
+        # 处理pak_urls（独立于paks和订阅列表，下载到orcalab子目录）
+        pak_urls = config_service.pak_urls()
+        pak_urls_sha256 = config_service.pak_urls_sha256()
+        if pak_urls:
+            logger.info("正在同步pak_urls列表...")
+            sync_pak_urls(pak_urls, pak_urls_sha256)
     logger.info("pak包处理完成, 耗时: %.2f 秒", time.monotonic() - _pak_start)
 
     # 同步订阅的资产包（带UI）
     _sync_start = time.monotonic()
-    run_asset_sync_ui(config_service)
+    if config_service.connect_builder_hub():
+        logger.info("Builder 模式，跳过资产同步")
+    else:
+        run_asset_sync_ui(config_service)
     logger.info("资产同步完成, 耗时: %.2f 秒", time.monotonic() - _sync_start)
 
     from orcalab.level_discovery import discover_levels_from_cache
@@ -368,24 +400,10 @@ def main():
     event_loop = QEventLoop(q_app)
     asyncio.set_event_loop(event_loop)
 
-    cli_port = getattr(args, "port", None)
-    if cli_port is not None:
-        url_service_port = find_free_port(start_port=cli_port)
-        logger.info("使用命令行指定的URL服务端口: %s", url_service_port)
-    else:
-        config_port = config_service.url_service_port()
-        url_service_port = find_free_port(start_port=config_port)
-        if url_service_port != config_port:
-            logger.warning("默认端口 %s 不可用，已自动切换到端口 %s", config_port, url_service_port)
-        else:
-            logger.info("使用默认URL服务端口: %s", url_service_port)
-
-    config_service.write_url_service_port(url_service_port)
-
     try:
         fullscreen = args.full_screen
         
-        event_loop.run_until_complete(main_async(q_app, fullscreen, url_service_port))
+        event_loop.run_until_complete(main_async(q_app, fullscreen))
     except KeyboardInterrupt:
         logger.info("Received KeyboardInterrupt, cleaning up...")
     except Exception as e:
@@ -396,12 +414,6 @@ def main():
     # 确保MCP状态文件被清理
     try:
         ConfigService().clear_mcp_status()
-    except Exception:
-        pass
-
-    # 确保URL服务状态文件被清理
-    try:
-        ConfigService().clear_url_service_status()
     except Exception:
         pass
 

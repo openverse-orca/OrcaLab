@@ -1,6 +1,5 @@
-from copy import deepcopy
 import logging
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, TypeVar
 
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.actor_property import (
@@ -8,7 +7,6 @@ from orcalab.actor_property import (
     ActorPropertyGroup,
     ActorPropertyKey,
     ActorPropertyType,
-    TreePropertyNode,
 )
 from orcalab.application_util import get_local_scene
 from orcalab.local_scene import LocalScene
@@ -16,6 +14,8 @@ from orcalab.path import Path
 from orcalab.metadata_service_bus import MetadataServiceRequestBus
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 
 def is_valid_char(c: str) -> bool:
@@ -133,133 +133,18 @@ class ActorIterator:
         return current
 
 
-def collect_tree_propertys(
-    keys: List[ActorPropertyKey],
-    props: List[ActorProperty],
-    actor_path: Path,
-    group_prefix: str,
-    node: TreePropertyNode,
-):
-    """递归收集树形属性的子属性"""
-    for prop in node.properties:
-        full_name = f"{node.name}.{prop.name()}"
-        key = ActorPropertyKey(
-            actor_path,
-            group_prefix,
-            full_name,
-            prop.value_type(),
-        )
-        keys.append(key)
-        props.append(prop)
-
-    for child in node.children:
-        collect_tree_propertys(keys, props, actor_path, group_prefix, child)
 
 
-def collect_properties(
-    keys: List[ActorPropertyKey],
-    props: List[ActorProperty],
-    properties: List[ActorPropertyGroup],
-    actor_path: Path,
-):
-    for group in properties:
-        for prop in group.properties:
-            # TREE 类型的属性没有直接值，跳过获取
-            if prop.value_type() == ActorPropertyType.TREE:
-                continue
-            key = ActorPropertyKey(
-                actor_path, group.prefix, prop.name(), prop.value_type()
-            )
-            props.append(prop)
-            keys.append(key)
-
-        # 收集树形属性的子属性
-        for tree_node in group.tree_data:
-            collect_tree_propertys(keys, props, actor_path, group.prefix, tree_node)
-
-
-class TreePropertyNode_PairIterator:
-    """同时遍历两个 ActorPropertyGroup 的树形属性节点，返回节点对 (node1, node2)，如果两个树并不匹配，抛出异常"""
-
-    def __init__(
-        self, tree_data1: List[TreePropertyNode], tree_data2: List[TreePropertyNode]
-    ):
-        self.stack1: List[TreePropertyNode] = []
-        self.stack2: List[TreePropertyNode] = []
-        self.stack1.extend(reversed(tree_data1))
-        self.stack2.extend(reversed(tree_data2))
-
-    def __iter__(self):
-        return self
-
-    def __next__(self) -> Tuple[TreePropertyNode, TreePropertyNode]:
-        if len(self.stack1) != len(self.stack2):
-            raise Exception(f"Tree mismatch")
-
-        if not self.stack1 and not self.stack2:
-            raise StopIteration
-
-        node1 = self.stack1.pop()
-        node2 = self.stack2.pop()
-
-        if len(node1.children) != len(node2.children):
-            raise Exception(f"Tree mismatch")
-
-        for child in reversed(node1.children):
-            self.stack1.append(child)
-        for child in reversed(node2.children):
-            self.stack2.append(child)
-
-        return node1, node2
-
-
-def collect_properties_duplicate_data(
-    keys: List[ActorPropertyKey],
-    props: List[ActorProperty],
-    values: List[Any],
-    src_properties: List[ActorPropertyGroup],
-    dst_properties: List[ActorPropertyGroup],
-    dst_actor_path: Path,
-):
-    for src_group, dst_group in zip(src_properties, dst_properties):
-        for prop in src_group.properties:
-            # TREE 类型的属性没有直接值，跳过获取
-            if prop.value_type() == ActorPropertyType.TREE:
-                continue
-            key = ActorPropertyKey(
-                dst_actor_path, src_group.prefix, prop.name(), prop.value_type()
-            )
-            keys.append(key)
-            props.append(prop)
-            values.append(prop.value())
-
-        # 收集树形属性的子属性
-        for src_node, dst_node in TreePropertyNode_PairIterator(
-            src_group.tree_data, dst_group.tree_data
-        ):
-            for src_prop, dst_prop in zip(src_node.properties, dst_node.properties):
-                full_name = f"{dst_node.name}.{dst_prop.name()}"
-                key = ActorPropertyKey(
-                    dst_actor_path,
-                    dst_group.prefix,
-                    full_name,
-                    dst_prop.value_type(),
-                )
-                keys.append(key)
-                props.append(dst_prop)
-                values.append(src_prop.value())
-
-
-def sort_actors_with_data[T](
-    actor_paths: List[Path], datas: List[T]
-) -> Tuple[List[Path], List[T]]:
+def sort_actors_with_data(
+    actor_paths: List[Path], datas: List[_T]
+) -> Tuple[List[Path], List[_T]]:
     if len(actor_paths) != len(datas):
         raise Exception("actor_paths and datas must have the same length")
 
     if len(actor_paths) == 0:
         return [], []
 
-    def _key(pair: Tuple[Path, T]):
+    def _key(pair: Tuple[Path, _T]):
         return pair[0]
 
     sorted_pairs = sorted(zip(actor_paths, datas), key=_key)
@@ -267,13 +152,15 @@ def sort_actors_with_data[T](
     return list(sorted_actor_paths), list(sorted_datas)
 
 
-def clone_actor_basic[T](actor: T) -> T:
+_T_clone = TypeVar("_T_clone", BaseActor, AssetActor, GroupActor)
+
+
+def clone_actor_basic(actor: _T_clone) -> _T_clone:
     """Clone actor without parent-child relationships."""
     if isinstance(actor, GroupActor):
         new_actor = GroupActor(actor.name)
     elif isinstance(actor, AssetActor):
         new_actor = AssetActor(actor.name, actor.asset_path)
-        new_actor.property_groups = deepcopy(actor.property_groups)
     else:
         raise Exception("Unsupported actor type")
 

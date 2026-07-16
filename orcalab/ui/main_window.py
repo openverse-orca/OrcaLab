@@ -1,28 +1,26 @@
 import asyncio
-import math
 import time
 import webbrowser
 
-from typing import Any, Dict, List, Tuple, override
+from typing import Any, Dict, List, Tuple
+from typing_extensions import override
 import numpy as np
 import logging
 
 import json
-import ast
 import os
-from pathlib import Path as SystemPath
 from PySide6 import QtCore, QtWidgets, QtGui
 from qasync import asyncWrap
 
-from orcalab.actor import AssetActor, BaseActor, GroupActor
+from orcalab.actor import AssetActor, GroupActor
 from orcalab.actor_util import make_unique_name
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.pyside_util import connect
 from orcalab.remote_scene import RemoteScene
-from orcalab.report.ask_statistics_dialog import AskStatisticsDialog
 from orcalab.report.report import ask_user_consent, collect_user_env, send_report_directly
-from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
+from orcalab.scene_layout.scene_layout_service import SceneLayoutService
+from orcalab.selection_data import SelectionData
 from orcalab.setting.settings_dialog import SettingsDialog
 from orcalab.simulation.simulation_bus import (
     SimulationRequestBus,
@@ -31,8 +29,8 @@ from orcalab.simulation.simulation_bus import (
     SimulationState,
 )
 from orcalab.simulation.simulation_service import SimulationService
-from orcalab.state_sync_bus import ManipulatorType,CameraMovementType, MeasureType, StateSyncRequest, StateSyncRequestBus
-from orcalab.ui.actor_editor import ActorEditor
+from orcalab.state_sync_bus import ManipulatorType,CameraMovementType, MeasureType, PivotPointType, StateSyncRequest, StateSyncRequestBus
+from orcalab.ui.property_editor import PropertyEditor
 from orcalab.ui.actor_outline import ActorOutline
 from orcalab.ui.actor_outline_model import ActorOutlineModel
 from orcalab.ui.asset_browser.asset_browser import AssetBrowser
@@ -47,6 +45,7 @@ from orcalab.ui.camera.camera_bus import (
 from orcalab.ui.camera.camera_selector import CameraSelector
 from orcalab.ui.copilot import CopilotPanel
 from orcalab.ui.icon_util import make_icon, schedule_windows_taskbar_icon_refresh
+from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.theme_service import ThemeService
 from orcalab.ui.tool_bar import ToolBar
 from orcalab.ui.manipulator_bar import ManipulatorBar
@@ -54,18 +53,14 @@ from orcalab.ui.terminal_widget import TerminalWidget
 from orcalab.ui.viewport import Viewport
 from orcalab.ui.panel_manager import PanelManager
 from orcalab.ui.panel import Panel
-from orcalab.math import Transform
+from orcalab.transform import Transform
 from orcalab.config_service import ConfigService
 from orcalab.undo_service.undo_service import UndoService
 from orcalab.scene_edit_service import SceneEditService
 from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.undo_service.undo_service_bus import can_redo, can_undo
-from orcalab.url_service.url_service import UrlServiceServer
-from orcalab.asset_service import AssetService
-from orcalab.asset_service_bus import (
-    AssetServiceNotification,
-    AssetServiceNotificationBus,
-)
+from orcalab.texture_asset_cache import get_texture_asset_cache
+
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 from orcalab.token_storage import TokenStorage
 from orcalab.mcp_service.mcp_service import OrcaLabMCPServer
@@ -78,7 +73,6 @@ logger = logging.getLogger(__name__)
 class MainWindow(
     PanelManager,
     ApplicationRequest,
-    AssetServiceNotification,
     UserEventRequest,
     CameraNotification,
     CameraRequest,
@@ -87,19 +81,17 @@ class MainWindow(
 ):
 
     add_item_by_drag = QtCore.Signal(str, Transform)
-    load_scene_layout_sig = QtCore.Signal(str)
 
-    def __init__(self, url_service_port: int = 50651):
+    def __init__(self):
         super().__init__()
-        self.cwd = os.getcwd()
         self.config_service = ConfigService()
         self._base_title = self.config_service._get_package_version()
-        self.default_layout_path: str | None = None
-        self.current_layout_path: str | None = None
+
         self._cleanup_in_progress = False
         self._cleanup_completed = False
         self._is_runtime_mode = False
-        self._url_service_port = url_service_port
+
+        self._selection_before_sim : SelectionData | None = None
 
         # 状态指示器（顶部蓝色条）
         self._status_indicator = None
@@ -115,7 +107,6 @@ class MainWindow(
     def connect_buses(self):
         super().connect_buses()
         ApplicationRequestBus.connect(self)
-        AssetServiceNotificationBus.connect(self)
         UserEventRequestBus.connect(self)
         CameraNotificationBus.connect(self)
         CameraRequestBus.connect(self)
@@ -127,7 +118,6 @@ class MainWindow(
         StateSyncRequestBus.disconnect(self)
         SimulationNotificationBus.disconnect(self)
         UserEventRequestBus.disconnect(self)
-        AssetServiceNotificationBus.disconnect(self)
         ApplicationRequestBus.disconnect(self)
         CameraNotificationBus.disconnect(self)
         CameraRequestBus.disconnect(self)
@@ -141,10 +131,8 @@ class MainWindow(
         _init_start = time.monotonic()
 
         self.local_scene = LocalScene()
-        self.remote_scene = RemoteScene(self.config_service)
+        self.remote_scene = RemoteScene(self.config_service, self.local_scene)
 
-        self.asset_service = AssetService()
-        self.url_server = UrlServiceServer(port=self._url_service_port)
         self.simulation_service = SimulationService()
         self.undo_service = UndoService()
 
@@ -153,20 +141,16 @@ class MainWindow(
         def add_command_with_dirty(command, _orig=original_add_command):
             _orig(command)
             if not self.undo_service._in_undo_redo:
-                self._layout_modified = True
-                self._update_title()
+                self.layout_service.layout_modified = True
+                self.update_title()
 
         self.undo_service.add_command = add_command_with_dirty
 
         self.scene_edit_service = SceneEditService(self.local_scene, self.remote_scene)
+        self.layout_service = SceneLayoutService(self.local_scene, self.remote_scene, self)
 
         self._viewport_widget = Viewport()
 
-        self.scene_layout_helper = SceneLayoutHelper(self.local_scene)
-
-        self._current_scene_name: str | None = None
-        self._current_layout_name: str | None = None
-        self._layout_modified: bool = False
 
         logger.info("开始初始化 UI…")
         await self._init_ui()
@@ -203,7 +187,7 @@ class MainWindow(
         message_box.setText("正在初始化引擎，请稍候...   ")
         message_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.NoButton)
         message_box.show()
-        
+
         await asyncio.sleep(0.2) 
         self._viewport_widget.init_viewport()
         logger.info("init_viewport 完成, 耗时: %.2f 秒", time.monotonic() - _engine_start)
@@ -212,7 +196,7 @@ class MainWindow(
         self._viewport_widget.start_viewport_main_loop()
         await asyncio.sleep(0.5)
         logger.info("start_viewport_main_loop + sleep(0.5) 完成, 耗时: %.2f 秒", time.monotonic() - _vp_loop_start)
-        
+
         message_box.accept()
         logger.info("引擎初始化完成, 耗时: %.2f 秒", time.monotonic() - start_time)
 
@@ -230,7 +214,6 @@ class MainWindow(
         connect(self.menu_help.aboutToShow, self.prepare_help_menu)
 
         connect(self.add_item_by_drag, self.add_item_drag)
-        connect(self.load_scene_layout_sig, self.load_scene_layout)
 
         connect(self._viewport_widget.assetDropped, self.get_transform_and_add_item)
 
@@ -254,50 +237,26 @@ class MainWindow(
 
         _post_grpc_start = time.monotonic()
         await self.remote_scene.set_sync_from_mujoco_to_scene(False)
-        await self.remote_scene.set_selection([])
+        await self.remote_scene.set_selection(SelectionData())
         await self.remote_scene.clear_scene()
         logger.info("set_sync + set_selection + clear_scene 完成, 耗时: %.2f 秒", time.monotonic() - _post_grpc_start)
 
-        self.default_layout_path = self._resolve_path(self.config_service.default_layout_file())
-        if self.default_layout_path and SystemPath(self.default_layout_path).exists():
-            _layout_start = time.monotonic()
-            try:
-                await self.load_scene_layout(self.default_layout_path)
-                logger.info("load_scene_layout 完成, 耗时: %.2f 秒", time.monotonic() - _layout_start)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("加载默认布局失败: %s", exc)
-                import traceback
+        _texture_cache_start = time.monotonic()
+        await get_texture_asset_cache().initialize(self.remote_scene)
+        logger.info("纹理资产缓存初始化完成, 耗时: %.2f 秒", time.monotonic() - _texture_cache_start)
 
-                detail_text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-                QtWidgets.QMessageBox.critical(
-                    self,
-                    "加载默认布局失败",
-                    "所选场景的默认布局加载失败。\n"
-                    "请复制下方错误信息寻求帮助，并重新启动程序选择“空白布局”。\n\n"
-                    f"{detail_text}",
-                    QtWidgets.QMessageBox.StandardButton.Ok,
-                )
-                QtWidgets.QApplication.quit()
-                return
-            else:
-                self._mark_layout_clean()
+        await self.layout_service.start_up_open_layout()
 
         _cache_start = time.monotonic()
         self.cache_folder = await self.remote_scene.get_cache_folder()
         logger.info("get_cache_folder 完成, 耗时: %.2f 秒", time.monotonic() - _cache_start)
 
-        _url_start = time.monotonic()
-        await self.url_server.start()
-        logger.info("url_server.start 完成, 耗时: %.2f 秒", time.monotonic() - _url_start)
-
         logger.info("启动异步资产加载…")
         asyncio.create_task(self._load_assets_async())
 
-        await self.scene_layout_helper.get_flycamera_transform()
-
         # Load cameras from remote scene.
         _cam_start = time.monotonic()
-        cameras = await self.remote_scene. get_cameras()
+        cameras = await self.remote_scene.get_cameras()
         viewport_camera_index = await self.remote_scene.get_active_camera()
         self.on_cameras_changed(cameras, viewport_camera_index)
         logger.info("get_cameras 完成, 耗时: %.2f 秒", time.monotonic() - _cam_start)
@@ -307,6 +266,11 @@ class MainWindow(
         self.mcp_service.add_tools()
         self.mcp_service._task = asyncio.create_task(self.mcp_service.run())
         logger.info("MCP 服务启动完成, 耗时: %.2f 秒", time.monotonic() - _mcp_start)
+
+        # 加载插件（在 MCP 服务启动后，插件可注册 MCP 工具）
+        _plugin_start = time.monotonic()
+        self._load_plugins()
+        logger.info("插件加载完成, 耗时: %.2f 秒", time.monotonic() - _plugin_start)
 
         # Reset camera's move & rotate sensitivity
         _sens_start = time.monotonic()
@@ -334,6 +298,61 @@ class MainWindow(
             await send_abnormal_exit_report()
         except Exception:
             logger.exception("crash_reports 上传失败")
+
+    def _load_plugins(self):
+        """加载已启用的插件。"""
+        try:
+            from orcalab.plugin_system.plugin_context import PluginContext
+            from orcalab.plugin_system.plugin_manager import PluginManager
+
+            self._plugin_context = PluginContext(self)
+            self._plugin_manager = PluginManager(self._plugin_context)
+            self._plugin_manager.load_enabled()
+            loaded = self._plugin_manager.list_loaded()
+            if loaded:
+                logger.info("已加载插件: %s", ", ".join(loaded))
+            else:
+                logger.info("没有需要加载的已启用插件")
+
+            errors = self._plugin_manager.get_load_errors()
+            if errors:
+                err_summary = "\n".join(f"- {name}: {info.splitlines()[0]}" for name, info in errors.items())
+                logger.error("以下插件加载失败:\n%s", err_summary)
+                self._plugin_load_errors = errors
+        except Exception:
+            logger.exception("插件系统初始化失败")
+            self._plugin_manager = None
+
+    def _unload_plugins(self):
+        """卸载所有已加载的插件。"""
+        plugin_mgr = getattr(self, "_plugin_manager", None)
+        if plugin_mgr is not None:
+            try:
+                plugin_mgr.unload_all()
+            except Exception:
+                logger.exception("插件卸载失败")
+
+    def show_plugin_manager_dialog(self):
+        """打开插件管理对话框。"""
+        from orcalab.plugin_system.plugin_manager_dialog import PluginManagerDialog
+
+        plugin_mgr = getattr(self, "_plugin_manager", None)
+        if plugin_mgr is None:
+            QtWidgets.QMessageBox.warning(self, "插件管理", "插件系统未初始化")
+            return
+        dialog = PluginManagerDialog(plugin_mgr, parent=self)
+        dialog.exec()
+
+    def show_plugin_install_dialog(self):
+        """打开插件安装对话框。"""
+        from orcalab.plugin_system.plugin_install_dialog import PluginInstallDialog
+
+        plugin_mgr = getattr(self, "_plugin_manager", None)
+        if plugin_mgr is None:
+            QtWidgets.QMessageBox.warning(self, "安装插件", "插件系统未初始化")
+            return
+        dialog = PluginInstallDialog(plugin_mgr, parent=self)
+        dialog.exec()
 
     def stop_viewport_main_loop(self):
         """停止viewport主循环"""
@@ -393,18 +412,172 @@ class MainWindow(
             logger.exception("资产加载失败: %s", e)
             await self.asset_browser_widget.set_assets([])
 
+    def _build_global_stylesheet(self) -> str:
+        from orcalab.ui.theme_service import ThemeService
+        theme = ThemeService()
+        bg_color = theme.get_color_hex("bg")
+        bg_hover_color = theme.get_color_hex("bg_hover")
+        bg_select_color = theme.get_color_hex("button_bg_pressed")
+        text_color = theme.get_color_hex("text")
+        scrollbar_handle_bg = theme.get_color_hex("scrollbar_handle_bg")
+        scrollbar_handle_bg_hover = theme.get_color_hex("scrollbar_handle_bg_hover")
+        split_line_color = theme.get_color_hex("split_line")
+        fs = FontService()
+        return f"""
+            QWidget {{
+                background-color: {bg_color};
+                color: {text_color};
+            }}
+
+            QTreeView, QListView {{
+                outline: none;
+                selection-background-color: #404040;
+                alternate-background-color: #333333;
+            }}
+            QTreeView::item, QListView::item {{
+                border: none;
+                show-decoration-selected: 1;
+            }}
+            QTreeView::item:selected, QListView::item:selected {{
+                background-color: {bg_select_color};
+            }}
+            QTreeView::item:hover, QListView::item:hover {{
+                background-color: {bg_hover_color};
+            }}
+            QHeaderView::section {{
+                color: #ffffff;
+                padding: 4px;
+                {fs.get_font_css('tree_header')}
+            }}
+
+            QScrollBar {{
+                background: transparent;
+                margin: 0;
+                width: 8px;
+                border: none;
+            }}
+            QScrollBar::handle {{
+                border: 1px solid transparent;
+                border-radius: 2px;
+                margin: 1px;
+            }}
+            QScrollBar::handle:vertical {{
+                min-width: 4px;
+                min-height: 20px;
+                background: {scrollbar_handle_bg};
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {scrollbar_handle_bg_hover};
+            }}
+
+            QScrollBar::handle:horizontal {{
+                min-width: 20px;
+                min-height: 4px;
+                background: {scrollbar_handle_bg};
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background: {scrollbar_handle_bg_hover};
+            }}
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical,
+            QScrollBar::add-page:horizontal,
+            QScrollBar::sub-page:horizontal {{
+                background: transparent;
+            }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical,
+            QScrollBar::add-line:horizontal,
+            QScrollBar::sub-line:horizontal {{
+                height: 0;
+                width: 0;
+            }}
+
+            QSplitter::handle {{
+                background-color: {split_line_color};
+            }}
+            QSplitter::handle:horizontal {{
+                width: 2px;
+            }}
+            QSplitter::handle:vertical {{
+                height: 2px;
+            }}
+        """
+
+    def _build_toolbar_stylesheet(self) -> str:
+        fs = FontService()
+        return f"""
+            QWidget {{
+                background-color: #3c3c3c;
+                border-bottom: 1px solid #404040;
+            }}
+            QToolButton {{
+                background-color: #4a4a4a;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                padding: 4px;
+                margin: 2px;
+                {fs.get_font_css('button_paint')}
+            }}
+            QToolButton:hover {{
+                background-color: #5a5a5a;
+                border-color: #666666;
+            }}
+            QToolButton:pressed {{
+                background-color: #2a2a2a;
+            }}
+        """
+
+    def _build_menubar_stylesheet(self) -> str:
+        fs = FontService()
+        return f"""
+            QMenuBar {{
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border-bottom: 1px solid #404040;
+                {fs.get_font_css('body')}
+            }}
+            QMenuBar::item {{
+                background-color: transparent;
+            }}
+            QMenuBar::item:selected {{
+                background-color: #4a4a4a;
+            }}
+            QMenuBar::item:pressed {{
+                background-color: #2a2a2a;
+            }}
+            QMenu {{
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #404040;
+                border-radius: 3px;
+                {fs.get_font_css('body')}
+            }}
+            QMenu::item {{
+                padding: 6px 20px;
+            }}
+            QMenu::item:selected {{
+                background-color: #4a4a4a;
+            }}
+            QMenu::item:disabled {{
+                color: #aaaaaa;
+                background-color: transparent;
+            }}
+        """
+
     async def _init_ui(self):
         # 创建运行时状态指示器（顶部蓝色条带文字）
         self._status_indicator = QtWidgets.QLabel()
         self._status_indicator.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self._status_indicator.setFixedHeight(0)  # 默认隐藏
-        self._status_indicator.setStyleSheet("""
+        FontService().bind_widget_stylesheet(
+            self._status_indicator,
+            lambda: f"""
             background-color: #2196F3;
             color: white;
-            font-weight: bold;
-            font-size: 12px;
+            {FontService().get_font_css("status_bar")}
             padding: 4px;
-        """)
+        """,
+        )
         self._status_indicator.setText("● 运行时模式 (RunTime)")
 
         # 将状态指示器插入到窗口布局的最顶部
@@ -420,26 +593,9 @@ class MainWindow(
         layout.addWidget(self.tool_bar)
 
         # 为工具栏添加样式
-        self.tool_bar.setStyleSheet("""
-            QWidget {
-                background-color: #3c3c3c;
-                border-bottom: 1px solid #404040;
-            }
-            QToolButton {
-                background-color: #4a4a4a;
-                border: 1px solid #555555;
-                border-radius: 3px;
-                padding: 4px;
-                margin: 2px;
-            }
-            QToolButton:hover {
-                background-color: #5a5a5a;
-                border-color: #666666;
-            }
-            QToolButton:pressed {
-                background-color: #2a2a2a;
-            }
-        """)
+        self._fs = FontService()
+        self._fs.bind_widget_stylesheet(self, self._build_global_stylesheet)
+        self._fs.bind_widget_stylesheet(self.tool_bar, self._build_toolbar_stylesheet)
         connect(self.tool_bar.action_start.triggered, self.start_sim)
         connect(self.tool_bar.action_stop.triggered, self.stop_sim)
 
@@ -472,10 +628,12 @@ class MainWindow(
         self.add_panel(panel, "left")
 
         logger.info("创建属性编辑器…")
-        self.actor_editor_widget = ActorEditor()
-        panel = Panel("编辑", self.actor_editor_widget)
+        self.actor_editor_widget = PropertyEditor()
+        panel = Panel("属性", self.actor_editor_widget)
         panel.panel_icon = make_icon(":/icons/circle_edit.svg", panel_icon_color)
         self.add_panel(panel, "right")
+
+        connect(self.manipulator_bar.recursive_display_changed, self.actor_editor_widget.set_recursive_display)
 
         logger.info("创建资产浏览器…")
         self.asset_browser_widget = AssetBrowser()
@@ -514,69 +672,39 @@ class MainWindow(
         layout.setSpacing(0)
         layout.addWidget(self.menu_bar)
 
-        # 为菜单栏添加样式
-        self.menu_bar.setStyleSheet("""
-            QMenuBar {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                border-bottom: 1px solid #404040;
-            }
-            QMenuBar::item {
-                background-color: transparent;
-            }
-            QMenuBar::item:selected {
-                background-color: #4a4a4a;
-            }
-            QMenuBar::item:pressed {
-                background-color: #2a2a2a;
-            }
-            QMenu {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                border: 1px solid #404040;
-                border-radius: 3px;
-            }
-            QMenu::item {
-                padding: 6px 20px;
-            }
-            QMenu::item:selected {
-                background-color: #4a4a4a;
-            }
-            QMenu::item:disabled {
-                color: #aaaaaa; /* Light gray text */
-                background-color: transparent;
-            }
-        """)
+        self._fs.bind_widget_stylesheet(self.menu_bar, self._build_menubar_stylesheet)
 
         self.menu_file = self.menu_bar.addMenu("文件")
         self.menu_edit = self.menu_bar.addMenu("编辑")
         self.menu_run = self.menu_bar.addMenu("运行")
         self.menu_help = self.menu_bar.addMenu("帮助")
         self.menu_user = self.menu_bar.addMenu("用户")
+        self.menu_plugins = self.menu_bar.addMenu("插件")
+        connect(self.menu_plugins.aboutToShow, self.prepare_plugins_menu)
         connect(self.menu_user.aboutToShow, self.prepare_user_menu)
 
         self.action_create_layout = QtGui.QAction("新建布局…", self)
         self.action_create_layout.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.New))
         self.action_create_layout.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(self.action_create_layout.triggered, self.create_scene_layout)
+        connect(self.action_create_layout.triggered, self.layout_service.create_scene_layout)
         self.addAction(self.action_create_layout)
 
         self.action_open_layout = QtGui.QAction("打开布局…", self)
         self.action_open_layout.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Open))
         self.action_open_layout.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(self.action_open_layout.triggered, self.open_scene_layout)
+        connect(self.action_open_layout.triggered, self.layout_service.open_scene_layout)
         self.addAction(self.action_open_layout)
 
         self.action_save_layout = QtGui.QAction("保存布局", self)
         self.action_save_layout.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Save))
         self.action_save_layout.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(self.action_save_layout.triggered, self.save_scene_layout)
+        connect(self.action_save_layout.triggered, self.layout_service.save_scene_layout)
         self.addAction(self.action_save_layout)
 
         self.action_save_layout_as = QtGui.QAction("另存为…", self)
         self.action_save_layout_as.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.SaveAs))
         self.action_save_layout_as.setShortcutContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
-        connect(self.action_save_layout_as.triggered, self.save_scene_layout_as)
+        connect(self.action_save_layout_as.triggered, self.layout_service.save_scene_layout_as)
         self.addAction(self.action_save_layout_as)
 
         self.action_exit = QtGui.QAction("退出", self)
@@ -586,99 +714,7 @@ class MainWindow(
         connect(self.action_about.triggered, self.show_about_dialog)
 
         # 为主窗体设置背景色
-
-        theme = ThemeService()
-        bg_color = theme.get_color_hex("bg")
-        bg_hover_color = theme.get_color_hex("bg_hover")
-        bg_select_color = theme.get_color_hex("button_bg_pressed")
-        text_color = theme.get_color_hex("text")
-        scrollbar_handle_bg = theme.get_color_hex("scrollbar_handle_bg")
-        scrollbar_handle_bg_hover = theme.get_color_hex("scrollbar_handle_bg_hover")
-        split_line_color = theme.get_color_hex("split_line")
-
-        self.setStyleSheet(f"""
-            QWidget {{
-                background-color: {bg_color};
-                color: {text_color};
-            }}
-
-            QTreeView, QListView {{
-                outline: none;
-                selection-background-color: #404040;
-                alternate-background-color: #333333;
-            }}
-            QTreeView::item, QListView::item {{
-                border: none;
-                show-decoration-selected: 1;
-            }}
-            QTreeView::item:selected, QListView::item:selected {{
-                background-color: {bg_select_color};
-            }}
-            QTreeView::item:hover, QListView::item:hover {{
-                background-color: {bg_hover_color};
-            }}
-            QHeaderView::section {{
-                color: #ffffff;
-                padding: 4px;
-            }}
-
-
-
-            QScrollBar {{
-                background: transparent;
-                margin: 0;
-                width: 8px;
-                width: 8px;
-                border: none;
-            }}
-            QScrollBar::handle {{
-                border: 1px solid transparent;
-                border-radius: 2px;
-                margin: 1px;
-            }}
-            QScrollBar::handle:vertical {{
-                min-width: 4px;
-                min-height: 20px;
-                background: {scrollbar_handle_bg};
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background: {scrollbar_handle_bg_hover};
-            }}
-
-            QScrollBar::handle:horizontal {{
-                min-width: 20px;
-                min-height: 4px;
-                background: {scrollbar_handle_bg};
-            }}
-            QScrollBar::handle:horizontal:hover {{
-                background: {scrollbar_handle_bg_hover};
-            }}
-            QScrollBar::add-page:vertical,
-            QScrollBar::sub-page:vertical,
-            QScrollBar::add-page:horizontal,
-            QScrollBar::sub-page:horizontal {{
-            background: transparent;
-            }}
-            QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical,
-            QScrollBar::add-line:horizontal,
-            QScrollBar::sub-line:horizontal {{
-            height: 0;
-            width: 0;
-            }}
-
-            
-
-            QSplitter::handle {{
-                background-color: {split_line_color};
-            }}
-            QSplitter::handle:horizontal {{
-                width: 2px;
-            }}
-            QSplitter::handle:vertical {{
-                height: 2px;
-            }}
-        """)
+        # (样式表由 _build_global_stylesheet + bind_widget_stylesheet 管理)
 
         # 初始化按钮状态
         self.tool_bar.action_start.setEnabled(True)
@@ -688,14 +724,19 @@ class MainWindow(
         self._set_window_border_style(is_runtime=False)
 
     async def start_sim(self):
-        await SimulationRequestBus().start_simulation()
+        self._selection_before_sim = self.local_scene.selection()
+        await SceneEditRequestBus().set_selection(SelectionData(), undo=False)
         await self.manipulator_bar.set_translation()
-        await self.scene_edit_service.set_selection_and_active_actor([], None, True)
+        await SimulationRequestBus().start_simulation()
 
     async def stop_sim(self):
         await SimulationRequestBus().stop_simulation()
         if self.manipulator_bar._grab == True:
             await self.manipulator_bar.set_runtime_grab()
+
+        if self._selection_before_sim:
+            await SceneEditRequestBus().set_selection(self._selection_before_sim, undo=False)
+            self._selection_before_sim = None
 
     def _set_window_border_style(self, is_runtime: bool):
         """设置运行时状态指示：运行时显示蓝色指示器，编辑模式隐藏"""
@@ -744,7 +785,7 @@ class MainWindow(
             self.tool_bar.action_stop.setEnabled(True)
             self._is_runtime_mode = True
             self._set_window_border_style(is_runtime=True)
-            self._update_title()
+            self.update_title()
 
         if new_state == SimulationState.Stopped:
             self._enable_edit()
@@ -752,13 +793,7 @@ class MainWindow(
             self.tool_bar.action_stop.setEnabled(False)
             self._is_runtime_mode = False
             self._set_window_border_style(is_runtime=False)
-            self._update_title()
-
-    @override
-    async def on_asset_downloaded(self, file):
-        await self.remote_scene.load_package(file)
-        assets = await self.remote_scene.get_actor_assets()
-        self.asset_browser_widget.set_assets(assets)
+            self.update_title()
 
     def prepare_file_menu(self):
         self.menu_file.clear()
@@ -769,233 +804,7 @@ class MainWindow(
         self.menu_file.addSeparator()
         self.menu_file.addAction(self.action_exit)
 
-    def _resolve_path(self, path: str | None) -> str | None:
-        if not path:
-            return None
-        try:
-            return str(SystemPath(path).expanduser().resolve())
-        except Exception:
-            return str(path)
-
-    def _is_default_layout(self, path: str | None) -> bool:
-        if not path or not self.default_layout_path:
-            return False
-        try:
-            return SystemPath(path).expanduser().resolve() == SystemPath(self.default_layout_path).expanduser().resolve()
-        except Exception:
-            return False
-
-    def _write_scene_layout_file(self, filename: str):
-        root = self.local_scene.root_actor
-        scene_layout_dict = self.actor_to_dict(root)
-
-        try:
-            with open(filename, "w", encoding="utf-8") as f:
-                json.dump(scene_layout_dict, f, indent=4, ensure_ascii=False)
-            logger.info("场景布局已保存至 %s", filename)
-        except Exception as e:
-            logger.exception("保存场景布局失败: %s", e)
-        else:
-            self.current_layout_path = self._resolve_path(filename)
-            self._infer_scene_and_layout_names()
-            self._mark_layout_clean()
-            logger.debug("_write_scene_layout_file: 保存完成 path=%s", self.current_layout_path)
-            self._update_title()
-
-    async def save_scene_layout(self):       
-        if not self.current_layout_path or self._is_default_layout(self.current_layout_path):
-            await self.save_scene_layout_as()
-            return
-        self.scene_layout_helper.flycamera_transform = await self.remote_scene.get_flycamera_transform()
-        self._write_scene_layout_file(self.current_layout_path)
-
-    async def save_scene_layout_as(self):
-        def select_file():
-            filename, _ = QtWidgets.QFileDialog.getSaveFileName(
-                self,
-                "保存场景布局",
-                self.cwd,
-                "布局文件 (*.json);;所有文件 (*)"
-            )
-            return filename
-
-        filename = await asyncWrap(select_file)
-
-        if not filename:
-            return
-        if not filename.lower().endswith(".json"):
-            filename += ".json"
-
-        self.scene_layout_helper.flycamera_transform = await self.remote_scene.get_flycamera_transform()
-        self._write_scene_layout_file(filename)
-        self.cwd = os.path.dirname(filename)
-
-    def actor_to_dict(self, actor: AssetActor | GroupActor):
-        def to_list(v):
-            lst = v.tolist() if hasattr(v, "tolist") else v
-            return lst
-        def compact_array(arr):
-            return "[" + ",".join(str(x) for x in arr) + "]"
-
-        data = {
-            "name": actor.name,
-            "path": self.local_scene.get_actor_path(actor)._p,
-            "transform": {
-                "position": compact_array(to_list(actor.transform.position)),
-                "rotation": compact_array(to_list(actor.transform.rotation)),
-                "scale": actor.transform.scale,
-            },
-            "is_visible": actor.is_visible,
-            "is_parent_visible": actor.is_parent_visible,
-            "is_locked": actor.is_locked,
-            "is_parent_locked": actor.is_parent_locked,
-        }
-
-        if actor.name == "root":
-            flycamera_transform = self.scene_layout_helper.flycamera_transform
-            new_fields = {
-                "version": "1.0",
-                "flycamera_transform": {
-                    "position": compact_array(to_list(flycamera_transform.position)),
-                    "rotation": compact_array(to_list(flycamera_transform.rotation)),
-                    "scale": flycamera_transform.scale,
-                }
-            }
-            data = {**new_fields, **data}
-
-        if isinstance(actor, AssetActor):
-            data["type"] = "AssetActor"
-            data["asset_path"] = actor._asset_path
-            data["modified_properties"] = SceneLayoutHelper.collect_modified_properties(actor)
-
-        if isinstance(actor, GroupActor):
-            data["type"] = "GroupActor"
-            data["children"] = [self.actor_to_dict(child) for child in actor.children]
-
-        return data
-
-    async def create_scene_layout(self):
-        def select_file():
-            filename, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self,
-            "新建场景布局",
-            self.cwd,
-            "布局文件 (*.json);;所有文件 (*)"
-            )
-            return filename
-
-        filename =await asyncWrap(select_file)
-
-        if not filename:
-            return
-        if not filename.lower().endswith(".json"):
-            filename += ".json"
-
-        if not await asyncWrap(lambda: self._confirm_discard_changes(close_after_save=False)):
-            return
-
-        self.scene_layout_helper.create_empty_layout(filename)
-
-        await self.scene_layout_helper.clear_layout()
-
-        self.cwd = os.path.dirname(filename)
-        self.current_layout_path = filename
-        self._infer_scene_and_layout_names()
-        self._mark_layout_clean()
-        self._update_title()
-        logger.debug("create_scene_layout: 用户新建布局 path=%s", filename)
-        self.undo_service.command_history = []
-        self.undo_service.command_history_index = -1
-
-    def open_scene_layout(self):
-        filename, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self,
-            "打开场景布局",
-            self.cwd,
-            "布局文件 (*.json);;所有文件 (*)"
-        )
-        if not filename:
-            return
-        if not self._confirm_discard_changes(close_after_save=False):
-            return
-        self.load_scene_layout_sig.emit(filename)
-        self.cwd = os.path.dirname(filename)
-        self._infer_scene_and_layout_names()
-        self._mark_layout_clean()
-        self._update_title()
-        logger.debug("open_scene_layout: 用户打开 path=%s", filename)
-
-    def _show_scene_loading_dialog(self):
-        """显示「场景加载中」弹窗并禁用主窗口操作。"""
-        self._scene_loading_in_progress = True
-        if self._scene_loading_dialog is None:
-            self._scene_loading_dialog = QtWidgets.QDialog(self)
-            self._scene_loading_dialog.installEventFilter(self)
-            self._scene_loading_dialog.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
-            self._scene_loading_dialog.setWindowFlags(
-                QtCore.Qt.WindowType.Dialog
-                | QtCore.Qt.WindowType.MSWindowsFixedSizeDialogHint
-                & ~QtCore.Qt.WindowType.WindowCloseButtonHint
-            )
-            self._scene_loading_dialog.setWindowTitle("Orcalab")
-            self._scene_loading_dialog.setMinimumSize(220, 136)
-            layout = QtWidgets.QVBoxLayout(self._scene_loading_dialog)
-            layout.setContentsMargins(32, 32, 32, 32)
-            layout.addStretch()
-            row_label = QtWidgets.QHBoxLayout()
-            row_label.addStretch()
-            label = QtWidgets.QLabel("场景加载中", self._scene_loading_dialog)
-            label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            font = label.font()
-            font.setPointSize(10)
-            label.setFont(font)
-            row_label.addWidget(label)
-            row_label.addStretch()
-            layout.addLayout(row_label)
-            layout.addStretch()
-            self._scene_loading_dialog._label = label
-        self._scene_loading_dialog._label.setText("场景加载中")
-        self._scene_loading_dialog.resize(220, 136)
-        self._scene_loading_dialog.show()
-        self.setEnabled(False)
-
-    def _hide_scene_loading_dialog(self):
-        """关闭「场景加载中」弹窗并恢复主窗口操作。"""
-        self._scene_loading_in_progress = False
-        if self._scene_loading_dialog is not None:
-            self._scene_loading_dialog.close()
-        self.setEnabled(True)
-
-    def eventFilter(self, obj, event):
-        """布局加载期间禁止用户关闭弹窗，忽略关闭操作。"""
-        if (
-            obj is self._scene_loading_dialog
-            and event.type() == QtCore.QEvent.Type.Close
-            and self._scene_loading_in_progress
-        ):
-            event.ignore()
-            return True
-        return super().eventFilter(obj, event)
-
-    async def load_scene_layout(self, filename):
-        resolved = self._resolve_path(filename)
-        show_loading = self.isVisible()
-        if show_loading:
-            self._show_scene_loading_dialog()
-        try:
-            if not await self.scene_layout_helper.load_scene_layout(self, filename):
-                return
-
-            self.current_layout_path = resolved
-            self._infer_scene_and_layout_names()
-            self._mark_layout_clean()
-            self.undo_service.command_history = []
-            self.undo_service.command_history_index = -1
-
-            logger.debug("create_actor_from_scene_layout: 标记布局已修改")
-        finally:
-            if show_loading:
-                self._hide_scene_loading_dialog()
+   
 
     def prepare_edit_menu(self):
         self.menu_edit.clear()
@@ -1038,16 +847,12 @@ class MainWindow(
 
         action_set_flycamera_transform = self.menu_edit.addAction("恢复视角")
         action_set_flycamera_transform.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
-        async def set_flycamera_transform_wrapper():
-            await self.scene_layout_helper.set_flycamera_transform()
-            logger.info("恢复视角")
-        connect(action_set_flycamera_transform.triggered, set_flycamera_transform_wrapper)
+        connect(action_set_flycamera_transform.triggered, self.layout_service.restore_flycamera_transform)
 
         self.menu_edit.addSeparator()
 
         action_settings = self.menu_edit.addAction("配置")
         connect(action_settings.triggered, self.open_settings)
-
 
     def prepare_run_menu(self):
         self.menu_run.clear()
@@ -1067,6 +872,25 @@ class MainWindow(
     def prepare_help_menu(self):
         self.menu_help.clear()
         self.menu_help.addAction(self.action_about)
+
+    def prepare_plugins_menu(self):
+        self.menu_plugins.clear()
+        action_install = self.menu_plugins.addAction("安装插件…")
+        connect(action_install.triggered, self.show_plugin_install_dialog)
+        action_manage = self.menu_plugins.addAction("管理插件…")
+        connect(action_manage.triggered, self.show_plugin_manager_dialog)
+
+        plugin_mgr = getattr(self, "_plugin_manager", None)
+        if plugin_mgr is not None:
+            menu_items = plugin_mgr.get_all_menu_items()
+            if menu_items:
+                self.menu_plugins.addSeparator()
+                for menu_title, item_text, callback in menu_items:
+                    if menu_title:
+                        act = self.menu_plugins.addAction(f"{menu_title} / {item_text}")
+                    else:
+                        act = self.menu_plugins.addAction(item_text)
+                    connect(act.triggered, callback)
 
     def prepare_user_menu(self):
         self.menu_user.clear()
@@ -1123,6 +947,7 @@ class MainWindow(
     def show_about_dialog(self):
         version = self.config_service._get_package_version()
 
+        fs = FontService()
         about_html = f"""
         <div style="font-family: Arial, sans-serif;">
             <h2 style="color: #007acc; margin-bottom: 10px;">OrcaLab</h2>
@@ -1142,7 +967,7 @@ class MainWindow(
                    https://github.com/openverse-orca/OrcaLab
                 </a>
             </p>
-            <p style="margin: 15px 0 5px 0; color: #666; font-size: 11px;">
+            <p style="margin: 15px 0 5px 0; color: #666; font-size: {fs.get_font_size_px("small")};">
                 云原生机器人仿真平台，提供先进的UI和资产管理功能
             </p>
         </div>
@@ -1155,40 +980,45 @@ class MainWindow(
         msg_box.setIconPixmap(QtGui.QPixmap())
         msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Ok)
 
-        msg_box.setStyleSheet("""
-            QMessageBox {
+        fs = FontService()
+        msg_box.setStyleSheet(f"""
+            QMessageBox {{
                 background-color: #2b2b2b;
-            }
-            QMessageBox QLabel {
+            }}
+            QMessageBox QLabel {{
                 color: #ffffff;
                 background-color: #2b2b2b;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 background-color: #007acc;
                 color: #ffffff;
                 border: none;
                 border-radius: 3px;
                 padding: 6px 20px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
+                {fs.get_font_css("button")}
+            }}
+            QPushButton:hover {{
                 background-color: #005a9e;
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background-color: #004578;
-            }
+            }}
         """)
 
         msg_box.exec()
 
-    async def undo(self, source:str = ""):
+    async def undo(self, source: str = ""):
         logger.debug("undo. source: %s", source)
-        if can_undo():
+        edit_actors = []
+        self.scene_edit_service.get_editing_actor_path(edit_actors)
+        if not edit_actors and can_undo():
             await self.undo_service.undo()
 
     async def redo(self, source:str = ""):
         logger.debug("redo. source: %s", source)
-        if can_redo():
+        edit_actors = []
+        self.scene_edit_service.get_editing_actor_path(edit_actors)
+        if not edit_actors and can_redo():
             await self.undo_service.redo()
 
     async def get_transform_and_add_item(self, asset_name, x, y):
@@ -1258,26 +1088,29 @@ class MainWindow(
             # 2. 停止仿真进程
             await self.stop_sim()
 
-            # 3. 断开总线连接
+            # 3. 卸载插件（在断开总线之前，插件 on_unload 可使用总线）
+            self._unload_plugins()
+
+            # 4. 断开总线连接
             self.disconnect_buses()
 
-            # 4. 清理远程场景（这会终止服务器进程）
+            # 5. 清理远程场景（这会终止服务器进程）
             if hasattr(self, 'remote_scene'):
                 logger.info("cleanup: 调用 remote_scene.destroy_grpc()…")
                 await self.remote_scene.destroy_grpc()
                 logger.info("cleanup: remote_scene.destroy_grpc() 完成")
 
-            # 5. 停止URL服务器
+            # 6. 停止URL服务器
             if hasattr(self, 'url_server'):
                 await self.url_server.stop()
 
-            # 6. 停止MCP服务
+            # 7. 停止MCP服务
             if hasattr(self, 'mcp_service'):
                 self.mcp_service.stop()
                 self.config_service.clear_mcp_status()
                 logger.info("cleanup: MCP服务已停止")
 
-            # 7. 强制垃圾回收
+            # 8. 强制垃圾回收
             import gc
             gc.collect()
 
@@ -1291,16 +1124,36 @@ class MainWindow(
 
     def closeEvent(self, event):
         """Handle window close event"""
-        logger.info("Window close 事件触发 (cleanup_in_progress=%s, layout_modified=%s)", getattr(self, '_cleanup_in_progress', False), self._layout_modified)
+        logger.info("Window close 事件触发 (cleanup_in_progress=%s, layout_modified=%s)", getattr(self, '_cleanup_in_progress', False), self.layout_service.layout_modified)
 
         if self._cleanup_completed:
             logger.debug("closeEvent: 清理已完成，接受关闭")
             event.accept()
             return
 
-        if not self._confirm_discard_changes():
-            logger.debug("closeEvent: 用户取消关闭")
+        if self.layout_service.layout_modified:
+            logger.debug("closeEvent: 布局已修改，忽略关闭事件")
             event.ignore()
+
+            async def confirm_and_close():
+                if not await self.layout_service.confirm_discard_changes(close_after_save=True):
+                    logger.debug("closeEvent: 用户取消关闭")
+                    return
+                if hasattr(self, '_cleanup_in_progress') and self._cleanup_in_progress:
+                    logger.info("清理进行中，接受关闭事件")
+                    QtWidgets.QApplication.quit()
+                    return
+                self._cleanup_in_progress = True
+                try:
+                    logger.debug("cleanup_and_close: 开始执行 cleanup")
+                    await self.cleanup()
+                    logger.info("cleanup_and_close: 清理完成，调用 QApplication.quit()")
+                    QtWidgets.QApplication.quit()
+                except Exception as e:
+                    logger.exception("清理过程中出现错误: %s", e)
+                    QtWidgets.QApplication.quit()
+
+            asyncio.create_task(confirm_and_close())
             return
 
         # Check if we're already in cleanup process to avoid infinite loop
@@ -1410,7 +1263,7 @@ class MainWindow(
         await self.remote_scene.change_measure_type(type)
 
     @override
-    async def set_pivot_point_type(self, type: MeasureType) -> None:
+    async def set_pivot_point_type(self, type: PivotPointType) -> None:
         await self.remote_scene.change_pivot_point_type(type)
 
     @override
@@ -1427,26 +1280,14 @@ class MainWindow(
         else:
             await self.remote_scene.custom_command(f"user_control:false")
 
-    def _mark_layout_clean(self):
-        self._layout_modified = False
-        self._update_title()
-
-    def _infer_scene_and_layout_names(self):
-        level_info = self.config_service.current_level_info()
-        self._current_scene_name = None
-        if level_info:
-            name = level_info.get("name") or level_info.get("path")
-            self._current_scene_name = name
-
-        if self.current_layout_path:
-            self._current_layout_name = SystemPath(self.current_layout_path).stem
-        else:
-            self._current_layout_name = None
-
-    def _update_title(self):
-        scene_part = self._current_scene_name or "Unknown Scene"
-        layout_part = self._current_layout_name or "Unsaved Layout"
-        if self._layout_modified:
+    async def set_recursive_display(self, enabled: bool):
+        await self.remote_scene.set_recursive_display(enabled)
+    
+    @override
+    def update_title(self):
+        scene_part = self.layout_service.current_scene_name or "Unknown Scene"
+        layout_part = self.layout_service.current_layout_name or "Unsaved Layout"
+        if self.layout_service.layout_modified:
             layout_label = f"[* {layout_part}]"
         else:
             layout_label = f"[{layout_part}]"
@@ -1454,43 +1295,7 @@ class MainWindow(
         mode_label = "RunTime" if self._is_runtime_mode else "Editor"
         self.setWindowTitle(f"{self._base_title}    [{scene_part}]    {layout_label}    [{mode_label}]")
 
-    def _confirm_discard_changes(self, close_after_save: bool = True) -> bool:
-        if not self._layout_modified:
-            return True
-        logger.debug("_confirm_discard_changes: 布局已修改，弹窗确认")
-        message_box = QtWidgets.QMessageBox(self)
-        message_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
-        message_box.setWindowTitle("未保存的修改")
-        message_box.setText("当前布局有未保存的修改")
-
-        cancel_button = message_box.addButton("取消", QtWidgets.QMessageBox.ButtonRole.RejectRole)
-        discard_button = message_box.addButton("放弃修改", QtWidgets.QMessageBox.ButtonRole.DestructiveRole)
-        save_button = message_box.addButton("保存修改", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
-        message_box.setDefaultButton(save_button)
-
-        message_box.exec()
-        clicked = message_box.clickedButton()
-
-        if clicked == cancel_button:
-            return False
-        if clicked == save_button:
-            if close_after_save:
-                async def save_and_close():
-                    await self.save_scene_layout()
-                    self.close()
-                asyncio.create_task(save_and_close())
-                return False
-            else:
-                async def save_and_continue():
-                    await self.save_scene_layout()
-                    self._mark_layout_clean()
-                asyncio.create_task(save_and_continue())
-                return True
-        # 放弃修改
-        logger.debug("_confirm_discard_changes: 用户选择放弃修改，重置状态")
-        self._mark_layout_clean()
-        return True
-
+   
     async def send_statistics(self):
         if not await ask_user_consent():
             return
@@ -1502,16 +1307,16 @@ class MainWindow(
         SettingsDialog(self, remote_scene=self.remote_scene).exec()
 
     def can_duplicate_selection(self) -> bool:
-        if not self.local_scene.selection:
+        if not self.local_scene.selected_actors:
             return False
 
-        ok, err = self.local_scene.can_duplicate_actors(self.local_scene.selection)
+        ok, err = self.local_scene.can_duplicate_actors(self.local_scene.selected_actors)
         return ok
 
     async def duplicate_selection(self, source:str = ""):
         logger.debug("duplicate_selection. source: %s", source)
 
-        selection = self.local_scene.selection.copy()
+        selection = self.local_scene.selected_actors.copy()
         if not selection:
             return
 
@@ -1519,16 +1324,16 @@ class MainWindow(
         await bus.duplicate_actors(selection)
 
     def can_delete_selection(self) -> bool:
-        if not self.local_scene.selection:
+        if not self.local_scene.selected_actors:
             return False
 
-        ok, err = self.local_scene.can_delete_actors(self.local_scene.selection)
+        ok, err = self.local_scene.can_delete_actors(self.local_scene.selected_actors)
         return ok
 
     async def delete_selection(self, source:str = ""):
         logger.debug("delete_selection. source: %s", source)
 
-        selection = self.local_scene.selection
+        selection = self.local_scene.selected_actors
         if not selection:
             return
 
