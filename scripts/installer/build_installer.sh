@@ -51,13 +51,14 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -h|--help)
-            echo "Usage: $0 [--lang zh_CN|en_US] [--pip-source test|prod]"
+            echo "Usage: $0 [--lang zh_CN|en_US|all] [--pip-source test|prod]"
+            echo "  --lang all builds both zh_CN and en_US installers."
             echo "Legacy usage still works: $0 test|prod"
             exit 0
             ;;
         *)
             echo "Error: unknown argument '$1'"
-            echo "Usage: $0 [--lang zh_CN|en_US] [--pip-source test|prod]"
+            echo "Usage: $0 [--lang zh_CN|en_US|all] [--pip-source test|prod]"
             exit 1
             ;;
     esac
@@ -70,8 +71,10 @@ case "$LANGUAGE" in
     zh|zh_CN|cn|chinese)
         LANGUAGE="zh_CN"
         ;;
+    all)
+        ;;
     *)
-        echo "Error: unsupported language '$LANGUAGE' (expected zh_CN or en_US)"
+        echo "Error: unsupported language '$LANGUAGE' (expected zh_CN, en_US, or all)"
         exit 1
         ;;
 esac
@@ -84,6 +87,14 @@ case "$PIP_SOURCE" in
         exit 1
         ;;
 esac
+
+if [ "$LANGUAGE" = "all" ]; then
+    echo "Building both zh_CN and en_US installers..."
+    "$SCRIPT_DIR/build_installer.sh" --lang zh_CN --pip-source "$PIP_SOURCE"
+    "$SCRIPT_DIR/build_installer.sh" --lang en_US --pip-source "$PIP_SOURCE"
+    echo "✅ Both installers built successfully."
+    exit 0
+fi
 
 echo "Installer language: $LANGUAGE"
 echo "Pip source: $PIP_SOURCE"

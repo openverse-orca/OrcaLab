@@ -1,7 +1,11 @@
 import ast
+import json
 import os
 import re
+import shutil
 import string
+import subprocess
+import textwrap
 import tomllib
 from collections import Counter
 from pathlib import Path
@@ -476,6 +480,113 @@ def test_windows_installers_use_explicit_locale_suffixes():
     assert 'INSTALLER_SUFFIX="-zh-CN"' in build_script
     assert 'INSTALLER_SUFFIX="-en-US"' in build_script
     assert 'INSTALLER_SUFFIX="-en"' not in build_script
+
+
+def test_windows_installer_all_language_option_builds_both_locales(tmp_path):
+    project_root = tmp_path / "project"
+    installer_dir = project_root / "scripts" / "installer"
+    icon_dir = project_root / "orcalab" / "assets" / "icons"
+    fake_bin = tmp_path / "bin"
+    installer_dir.mkdir(parents=True)
+    icon_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+
+    source_installer_dir = _REPO_ROOT / "scripts" / "installer"
+    for filename in ("build_installer.sh", "orcalab.bat", "orcalab.vbs"):
+        shutil.copy2(source_installer_dir / filename, installer_dir / filename)
+    shutil.copy2(_REPO_ROOT / "pyproject.toml", project_root / "pyproject.toml")
+    (icon_dir / "orcalab_logo.ico").write_bytes(b"test icon")
+
+    makensis_log = tmp_path / "makensis.jsonl"
+    fake_makensis = fake_bin / "makensis"
+    fake_makensis.write_text(
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env python3
+            import json
+            import os
+            import sys
+            from pathlib import Path
+
+            args = sys.argv[1:]
+            defines = {}
+            for arg in args:
+                if arg.startswith("-D") and "=" in arg:
+                    name, value = arg[2:].split("=", 1)
+                    defines[name] = value
+
+            source_dir = Path.cwd() / defines["INSTALLER_SOURCE_DIR"]
+            record = {
+                "args": args,
+                "batch": (source_dir / "orcalab.bat").read_text(encoding="utf-8"),
+            }
+            with Path(os.environ["FAKE_MAKENSIS_LOG"]).open(
+                "a", encoding="utf-8"
+            ) as log:
+                log.write(json.dumps(record) + "\\n")
+
+            output = (
+                Path.cwd()
+                / ".."
+                / ".."
+                / "dist"
+                / (
+                    f"OrcaLab-{defines['PRODUCT_VERSION']}-Setup"
+                    f"{defines['INSTALLER_SUFFIX']}.exe"
+                )
+            )
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.touch()
+            """
+        ),
+        encoding="utf-8",
+    )
+    fake_makensis.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["FAKE_MAKENSIS_LOG"] = str(makensis_log)
+    result = subprocess.run(
+        [
+            str(installer_dir / "build_installer.sh"),
+            "--lang",
+            "all",
+            "--pip-source",
+            "prod",
+        ],
+        cwd=project_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    records = [
+        json.loads(line)
+        for line in makensis_log.read_text(encoding="utf-8").splitlines()
+    ]
+    assert len(records) == 2
+
+    chinese, english = records
+    assert "-DINSTALLER_SUFFIX=-zh-CN" in chinese["args"]
+    assert "-DORCALAB_ENGLISH" not in chinese["args"]
+    assert "INITIAL_UI_LANGUAGE=zh_CN" in chinese["batch"]
+    assert "-DINSTALLER_SUFFIX=-en-US" in english["args"]
+    assert "-DORCALAB_ENGLISH" in english["args"]
+    assert "INITIAL_UI_LANGUAGE=en_US" in english["batch"]
+    assert all(
+        "--extra-index-url https://pypi.org/simple" in record["batch"]
+        for record in records
+    )
+    assert all("test.pypi.org" not in record["batch"] for record in records)
+
+    version = tomllib.loads(
+        (project_root / "pyproject.toml").read_text(encoding="utf-8")
+    )["project"]["version"]
+    assert (project_root / "dist" / f"OrcaLab-{version}-Setup-zh-CN.exe").is_file()
+    assert (project_root / "dist" / f"OrcaLab-{version}-Setup-en-US.exe").is_file()
+    assert not list(installer_dir.glob(".installer-build.*"))
 
 
 def test_known_ui_text_producers_translate_before_returning_text():
