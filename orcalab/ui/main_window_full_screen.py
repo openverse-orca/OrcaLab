@@ -27,6 +27,7 @@ from orcalab.ui.camera.camera_bus import (
 from orcalab.ui.icon_util import schedule_windows_taskbar_icon_refresh
 from orcalab.ui.viewport import Viewport
 from orcalab.config_service import ConfigService
+from orcalab.i18n import tr
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
 from orcalab.report.abnormal_exit_report import take_pending_abnormal_exit_report, send_abnormal_exit_report
@@ -120,8 +121,8 @@ class MainWindowFullScreen(
             if not await helper.load_scene_layout(self, default_layout_path):
                 QtWidgets.QMessageBox.critical(
                     self,
-                    "加载默认布局失败",
-                    "所选场景的默认布局加载失败。\n",
+                    tr("加载默认布局失败"),
+                    tr("所选场景的默认布局加载失败。\n"),
                     QtWidgets.QMessageBox.StandardButton.Ok,
                 )
                 QtWidgets.QApplication.quit()

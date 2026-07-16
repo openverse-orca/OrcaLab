@@ -375,7 +375,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
         if ok_count > 0:
             parts.append(f"<span style='color: green;'>{tr('已最新')}: {ok_count}</span>")
         
-        stats_text = " | ".join(parts) if parts else "无资产包"
+        stats_text = " | ".join(parts) if parts else tr("无资产包")
         self.stats_label.setText(tr("总计: {total} 个资产包 | {stats_text}", total=total, stats_text=stats_text))
     
     def set_asset_status(self, asset_id: str, status: str):
@@ -412,7 +412,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
     
     def _set_message_impl(self, message: str):
         """内部实现：设置底部状态消息"""
-        self.status_label.setText(message)
+        self.status_label.setText(tr(message))
 
     def set_metadata_progress(self, status: str, count: int = 0, total: int = 0):
         """线程安全：设置元数据同步进度。"""
@@ -502,7 +502,11 @@ class SyncProgressWindow(QtWidgets.QDialog):
             if not has_delete_local:
                 self.start_countdown(5)
         else:
-            error_msg = tr("同步失败：{message}", message=message) if message else tr("同步失败")
+            error_msg = (
+                tr("同步失败：{message}", message=tr(message))
+                if message
+                else tr("同步失败")
+            )
             self._set_message_impl(error_msg)
             self.sync_failed.emit(message)
             

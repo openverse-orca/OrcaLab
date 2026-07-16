@@ -12,6 +12,8 @@ from typing import Optional, Dict, Callable
 from urllib.parse import urlencode
 import logging
 
+from orcalab.i18n import tr
+
 logger = logging.getLogger(__name__)
 
 
@@ -204,7 +206,7 @@ class AuthService:
             包含 username, access_token, refresh_token 的字典，失败返回 None
         """
         # 1. 获取 nonce
-        msg = "正在获取认证 nonce..."
+        msg = tr("正在获取认证 nonce...")
         if progress_callback:
             progress_callback(msg)
         if window:
@@ -212,7 +214,7 @@ class AuthService:
         
         nonce = self.get_nonce()
         if not nonce:
-            msg = "获取 nonce 失败"
+            msg = tr("获取 nonce 失败")
             if progress_callback:
                 progress_callback(msg)
             if window:
@@ -220,7 +222,7 @@ class AuthService:
             return None
         
         # 2. 打开浏览器
-        msg = "正在打开浏览器进行认证..."
+        msg = tr("正在打开浏览器进行认证...")
         if progress_callback:
             progress_callback(msg)
         if window:
@@ -232,7 +234,7 @@ class AuthService:
             window.show_root_user_warning()
         
         if not self.open_auth_page(nonce, redirect_url=redirect_url):
-            msg = "无法打开浏览器"
+            msg = tr("无法打开浏览器")
             if progress_callback:
                 progress_callback(msg)
             if window:
@@ -240,7 +242,7 @@ class AuthService:
             return None
         
         # 3. 等待用户完成认证
-        msg = "请在浏览器中完成认证..."
+        msg = tr("请在浏览器中完成认证...")
         if progress_callback:
             progress_callback(msg)
         if window:
@@ -255,19 +257,21 @@ class AuthService:
             browser_help_shown = True
             if window:
                 window.show_browser_help_dialog(auth_url)
-                window.update_status("等待浏览器认证超过 30 秒，请检查浏览器后重试")
+                window.update_status(
+                    tr("等待浏览器认证超过 30 秒，请检查浏览器后重试")
+                )
 
         credentials = self.verify_nonce(nonce, waiting_callback=on_waiting)
         
         if credentials:
-            msg = f"认证成功: {credentials['username']}"
+            msg = tr("认证成功: {username}", username=credentials["username"])
             if progress_callback:
                 progress_callback(msg)
             if window:
                 window.update_status(msg)
             return credentials
         else:
-            msg = "认证失败或超时"
+            msg = tr("认证失败或超时")
             if progress_callback:
                 progress_callback(msg)
             if window:
@@ -309,4 +313,3 @@ class AuthService:
         except Exception as e:
             logger.exception("验证 token 失败: %s", e)
             return False
-

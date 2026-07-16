@@ -15,6 +15,8 @@ cd "$SCRIPT_DIR"
 echo "🔧 Building OrcaLab Windows Installer..."
 echo ""
 
+# Controls the NSIS installer UI and seeds the Python app's language only when
+# the user has no saved preference yet.
 LANGUAGE="zh_CN"
 PIP_SOURCE="test"
 
@@ -83,7 +85,7 @@ case "$PIP_SOURCE" in
         ;;
 esac
 
-echo "Language: $LANGUAGE"
+echo "Installer language: $LANGUAGE"
 echo "Pip source: $PIP_SOURCE"
 
 # Check makensis
@@ -124,7 +126,7 @@ cp "$SCRIPT_DIR/orcalab.vbs" "$VBS_FILE"
 
 # Inject version into staged orcalab.bat
 sed -i "s/__ORCALAB_VERSION__/$VERSION/g" "$BAT_FILE"
-sed -i "s/__ORCALAB_LANG__/$LANGUAGE/g" "$BAT_FILE"
+sed -i "s/__INITIAL_UI_LANGUAGE__/$LANGUAGE/g" "$BAT_FILE"
 
 PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
 sed -i "s|__PIP_INDEX_URL__|$PIP_INDEX_URL|g" "$BAT_FILE"
@@ -157,11 +159,13 @@ NSIS_ARGS=(
     "-DVI_PRODUCT_VERSION=$VI_VERSION"
     "-DINSTALLER_SOURCE_DIR=$(basename "$BUILD_DIR")"
 )
-INSTALLER_SUFFIX=""
 if [ "$LANGUAGE" = "en_US" ]; then
-    INSTALLER_SUFFIX="-en"
-    NSIS_ARGS+=("-DORCALAB_ENGLISH" "-DINSTALLER_SUFFIX=$INSTALLER_SUFFIX")
+    INSTALLER_SUFFIX="-en-US"
+    NSIS_ARGS+=("-DORCALAB_ENGLISH")
+else
+    INSTALLER_SUFFIX="-zh-CN"
 fi
+NSIS_ARGS+=("-DINSTALLER_SUFFIX=$INSTALLER_SUFFIX")
 makensis "${NSIS_ARGS[@]}" setup.nsi
 
 echo ""

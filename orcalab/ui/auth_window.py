@@ -98,10 +98,11 @@ class AuthWindow(QtWidgets.QDialog):
     
     def _on_status_update(self, message: str):
         """更新状态文本"""
-        self.status_label.setText(message)
+        self.status_label.setText(tr(message))
     
     def _on_auth_complete(self, success: bool, message: str):
         """认证完成"""
+        message = tr(message)
         self._auth_finished = True
         self.auth_success = success
         self.auth_message = message
@@ -128,8 +129,8 @@ class AuthWindow(QtWidgets.QDialog):
 
         msg_box = QtWidgets.QMessageBox(self)
         msg_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
-        msg_box.setWindowTitle(title)
-        msg_box.setText(message)
+        msg_box.setWindowTitle(tr(title))
+        msg_box.setText(tr(message))
         msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Ok)
         msg_box.exec()
     
@@ -199,7 +200,7 @@ class AuthWindow(QtWidgets.QDialog):
                 if credentials:
                     self.complete_auth(True, tr("认证成功: {username}", username=credentials['username']))
                 else:
-                    self.complete_auth(False, "认证失败或超时")
+                    self.complete_auth(False, tr("认证失败或超时"))
                     
             except Exception as e:
                 self.complete_auth(False, tr("认证出错: {error}", error=str(e)))

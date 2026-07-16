@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 set "ENV_NAME=orcalab"
-set "ORCALAB_LANG=__ORCALAB_LANG__"
+set "INITIAL_UI_LANGUAGE=__INITIAL_UI_LANGUAGE__"
 set "MINICONDA_URL=https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe"
 set "INSTALLER=%TEMP%\miniconda_installer.exe"
 set "SETUP_ONLY_FLAG=%TEMP%\orcalab_setup_only"
@@ -155,6 +155,7 @@ if "%SETUP_ONLY%"=="1" (
 )
 
 REM -- Step 4: Launch ---------------------------------------
+setlocal DisableDelayedExpansion
 echo.
 echo   [4/4] Launching OrcaLab...
 echo   ----------------------------------------
@@ -164,12 +165,12 @@ echo.
 REM -- Launch detached with pythonw.exe so the launcher window can close --
 set "PYW_EXE=%ENV_PREFIX%\pythonw.exe"
 if exist "%PYW_EXE%" (
-    start "" "%PYW_EXE%" -m orcalab %*
+    start "" "%PYW_EXE%" -m orcalab --initial-lang "%INITIAL_UI_LANGUAGE%" %*
     exit /b 0
 )
 
 REM -- Fallback: pythonw.exe missing, run in foreground with error report --
-"%CONDA_EXE%" run --no-capture-output --prefix "%ENV_PREFIX%" python -m orcalab %*
+"%CONDA_EXE%" run --no-capture-output --prefix "%ENV_PREFIX%" python -m orcalab --initial-lang "%INITIAL_UI_LANGUAGE%" %*
 
 if %ERRORLEVEL% NEQ 0 (
     echo.

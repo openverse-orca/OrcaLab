@@ -15,6 +15,7 @@ import requests
 import importlib.metadata
 
 from orcalab.config_service import ConfigService
+from orcalab.i18n import tr
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.project_util import project_id, calculate_file_sha256, get_cache_folder
 from orcalab.ui.viewport import Viewport
@@ -89,13 +90,14 @@ class InstallProgressDialog(QtWidgets.QDialog):
         
     def set_status(self, status: str):
         """设置当前状态"""
-        self.status_label.setText(status)
-        self.log(status)
+        translated_status = tr(status)
+        self.status_label.setText(translated_status)
+        self.log(translated_status)
         QtWidgets.QApplication.processEvents()
     
     def set_detail(self, detail: str):
         """设置详细信息"""
-        self.detail_label.setText(detail)
+        self.detail_label.setText(tr(detail))
         QtWidgets.QApplication.processEvents()
     
     def set_progress(self, value: int):
@@ -105,7 +107,7 @@ class InstallProgressDialog(QtWidgets.QDialog):
     
     def log(self, message: str):
         """添加日志"""
-        self.log_text.append(message)
+        self.log_text.append(tr(message))
         scrollbar = self.log_text.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
         QtWidgets.QApplication.processEvents()
@@ -290,7 +292,10 @@ def _download_archive(url: str, target_file: Path, progress_callback: Optional[C
                         else:
                             print(f"\r下载进度: {detail} ({percent}%)", end='', flush=True)
                     else:
-                        detail = f"已下载: {downloaded / 1024 / 1024:.1f}MB"
+                        detail = tr(
+                            "已下载: {size:.1f}MB",
+                            size=downloaded / 1024 / 1024,
+                        )
                         if progress_callback:
                             progress_callback(0, detail)
                         else:
@@ -319,7 +324,12 @@ def _extract_tar_xz(archive_path: Path, dest_dir: Path, progress_callback: Optio
             tf.extract(member, dest_dir)
             if progress_callback and total_members > 0:
                 percent = int((i + 1) / total_members * 100)
-                detail = f"解压: {member.name} ({i + 1}/{total_members})"
+                detail = tr(
+                    "解压: {member} ({current}/{total})",
+                    member=member.name,
+                    current=i + 1,
+                    total=total_members,
+                )
                 progress_callback(percent, detail)
 
 
@@ -385,7 +395,10 @@ def _download_pak_file(url: str, target_path: Path, cloud_file_sha256: str, prog
                             if progress_callback:
                                 progress_callback(percent, detail)
                         else:
-                            detail = f"已下载: {downloaded / 1024 / 1024:.1f}MB"
+                            detail = tr(
+                                "已下载: {size:.1f}MB",
+                                size=downloaded / 1024 / 1024,
+                            )
                             if progress_callback:
                                 progress_callback(0, detail)
 
@@ -438,56 +451,80 @@ def _build_user_friendly_install_error(error: Exception) -> str:
 
     if isinstance(error, requests.exceptions.ProxyError):
         lines = [
-            "下载资源时无法连接代理服务器。",
-            "请检查系统或终端环境变量中的代理配置（如 HTTP_PROXY、HTTPS_PROXY）。",
+            tr("下载资源时无法连接代理服务器。"),
+            tr(
+                "请检查系统或终端环境变量中的代理配置（如 HTTP_PROXY、HTTPS_PROXY）。"
+            ),
         ]
         if "127.0.0.1" in raw_error or "localhost" in lower_error:
-            lines.append("检测到当前代理指向本机地址，可能是代理软件未启动，或端口配置不正确。")
-        lines.append("如果当前网络不需要代理，请关闭代理后重试。")
+            lines.append(
+                tr(
+                    "检测到当前代理指向本机地址，可能是代理软件未启动，或端口配置不正确。"
+                )
+            )
+        lines.append(tr("如果当前网络不需要代理，请关闭代理后重试。"))
         lines.append("")
-        lines.append(f"原始错误: {raw_error}")
+        lines.append(tr("原始错误: {error}", error=raw_error))
         return "\n".join(lines)
 
     if isinstance(error, requests.exceptions.SSLError):
-        return (
-            "下载资源时 HTTPS 证书校验失败。\n"
-            "请检查系统时间是否正确、网络是否经过 HTTPS 代理，或当前系统证书是否完整。\n\n"
-            f"原始错误: {raw_error}"
+        return "\n".join(
+            [
+                tr("下载资源时 HTTPS 证书校验失败。"),
+                tr(
+                    "请检查系统时间是否正确、网络是否经过 HTTPS 代理，或当前系统证书是否完整。"
+                ),
+                "",
+                tr("原始错误: {error}", error=raw_error),
+            ]
         )
 
     if isinstance(error, requests.exceptions.Timeout):
-        return (
-            "下载资源超时，当前网络可能较慢或连接不稳定。\n"
-            "请确认可以访问网络后重试，必要时切换网络或稍后再试。\n\n"
-            f"原始错误: {raw_error}"
+        return "\n".join(
+            [
+                tr("下载资源超时，当前网络可能较慢或连接不稳定。"),
+                tr("请确认可以访问网络后重试，必要时切换网络或稍后再试。"),
+                "",
+                tr("原始错误: {error}", error=raw_error),
+            ]
         )
 
     if isinstance(error, requests.exceptions.HTTPError):
         response = getattr(error, "response", None)
         status_code = getattr(response, "status_code", None)
         if status_code == 404:
-            reason = "下载地址不存在或文件已被移除。"
+            reason = tr("下载地址不存在或文件已被移除。")
         elif status_code == 403:
-            reason = "下载地址无访问权限，可能是权限策略或鉴权配置有误。"
+            reason = tr("下载地址无访问权限，可能是权限策略或鉴权配置有误。")
         elif status_code and status_code >= 500:
-            reason = "下载服务器暂时不可用，请稍后重试。"
+            reason = tr("下载服务器暂时不可用，请稍后重试。")
         else:
-            reason = "下载服务器返回异常状态码。"
-        return f"{reason}\n\n原始错误: {raw_error}"
+            reason = tr("下载服务器返回异常状态码。")
+        return f"{reason}\n\n{tr('原始错误: {error}', error=raw_error)}"
 
     if isinstance(error, requests.exceptions.ConnectionError):
         if "name or service not known" in lower_error or "temporary failure in name resolution" in lower_error:
-            reason = "域名解析失败，请检查 DNS 或当前网络是否可以正常访问网络。"
+            reason = tr("域名解析失败，请检查 DNS 或当前网络是否可以正常访问网络。")
         elif "failed to establish a new connection" in lower_error or "connection refused" in lower_error:
-            reason = "网络连接失败，目标地址不可达或对应端口未开启。"
+            reason = tr("网络连接失败，目标地址不可达或对应端口未开启。")
         else:
-            reason = "建立网络连接失败，请检查网络、代理或防火墙设置。"
-        return f"{reason}\n\n原始错误: {raw_error}"
+            reason = tr("建立网络连接失败，请检查网络、代理或防火墙设置。")
+        return f"{reason}\n\n{tr('原始错误: {error}', error=raw_error)}"
 
     if isinstance(error, requests.exceptions.RequestException):
-        return f"下载资源时发生网络错误，请检查网络连接和代理配置。\n\n原始错误: {raw_error}"
+        return "\n\n".join(
+            [
+                tr("下载资源时发生网络错误，请检查网络连接和代理配置。"),
+                tr("原始错误: {error}", error=raw_error),
+            ]
+        )
 
-    return f"安装过程中出现错误，请根据下方信息排查。\n\n原始错误: {raw_error}"
+    return "\n\n".join(
+        [
+            tr("安装过程中出现错误，请根据下方信息排查。"),
+            tr("原始错误: {error}", error=raw_error),
+        ]
+    )
 
 
 def ensure_python_project_installed(config: Optional[ConfigService] = None) -> None:
@@ -531,7 +568,7 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         
         if local_path:
             progress_dialog.set_status("使用本地开发路径...")
-            progress_dialog.log(f"本地路径: {local_path}")
+            progress_dialog.log(tr("本地路径: {path}", path=local_path))
             
             candidate = Path(local_path).expanduser().resolve()
             if not candidate.exists():
@@ -548,7 +585,7 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
             # 从URL提取版本号
             url_version = _extract_version_from_url(download_url)
             logger.info("Extracted version from URL: %s", url_version)
-            progress_dialog.log(f"检测到版本: {url_version}")
+            progress_dialog.log(tr("检测到版本: {version}", version=url_version))
             
             # 记录当前URL和版本
             state_update["installed_url"] = download_url
@@ -569,11 +606,15 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
             expected_sha256 = orcalab_cfg.get("python_project_sha256", "")
             
             if archive_path.exists() and expected_sha256 == calculate_file_sha256(archive_path):
-                progress_dialog.log(f"下载完成: {archive_path.name}")
+                progress_dialog.log(
+                    tr("下载完成: {name}", name=archive_path.name)
+                )
             else:
-                progress_dialog.log(f"开始下载: {download_url}")
+                progress_dialog.log(tr("开始下载: {url}", url=download_url))
                 _download_archive(download_url, archive_path, download_progress)
-                progress_dialog.log(f"下载完成: {archive_path.name}")
+                progress_dialog.log(
+                    tr("下载完成: {name}", name=archive_path.name)
+                )
 
                 progress_dialog.set_status("正在校验文件完整性...")
 
@@ -585,13 +626,17 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
 
                     if actual_sha256.lower() != expected_sha256:
                         raise ValueError(
-                            f"SHA256 mismatch! 文件下载不完整，请重新安装\n"
-                            f"expected: {expected_sha256}\n"
-                            f"actual:   {actual_sha256}"
+                            tr(
+                                "SHA256 mismatch! 文件下载不完整，请重新安装\n"
+                                "expected: {expected}\n"
+                                "actual:   {actual}",
+                                expected=expected_sha256,
+                                actual=actual_sha256,
+                            )
                         )
 
                 progress_dialog.set_progress(50)
-                progress_dialog.log("SHA256 校验通过")
+                progress_dialog.log(tr("SHA256 校验通过"))
 
             # 解压进度回调
             def extract_progress(percent: int, detail: str):
@@ -599,9 +644,9 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
                 progress_dialog.set_detail(detail)
                 progress_dialog.set_progress(50 + percent // 2)  # 50-100%
             
-            progress_dialog.log(f"开始解压到: {dest_root}")
+            progress_dialog.log(tr("开始解压到: {path}", path=dest_root))
             _extract_tar_xz(archive_path, dest_root, extract_progress)
-            progress_dialog.log("解压完成")
+            progress_dialog.log(tr("解压完成"))
 
             # Try to locate package root (in case archive contains a top-level directory)
             found = _find_editable_root(dest_root)
@@ -611,18 +656,23 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         progress_dialog.set_status("正在安装 Python 包...")
         progress_dialog.set_detail("运行 pip install -e ...")
         progress_dialog.set_indeterminate()
-        progress_dialog.log(f"安装可编辑包: {editable_root}")
+        progress_dialog.log(tr("安装可编辑包: {path}", path=editable_root))
         
         logger.info("Installing editable package from %s...", editable_root)
         _pip_install_editable(editable_root)
-        progress_dialog.log("包安装完成")
+        progress_dialog.log(tr("包安装完成"))
         
         # 下载 pak 文件（如果配置了）
         pak_urls = orcalab_cfg.get("pak_urls", [])
         pak_urls_sha256 = orcalab_cfg.get("pak_urls_sha256", [])
         if pak_urls:
             progress_dialog.set_determinate()
-            progress_dialog.log(f"检测到 {len(pak_urls)} 个 pak 文件需要下载")
+            progress_dialog.log(
+                tr(
+                    "检测到 {count} 个 pak 文件需要下载",
+                    count=len(pak_urls),
+                )
+            )
             
             for i, pak_url in enumerate(pak_urls):
                 filename = pak_url.split("/")[-1]
@@ -633,21 +683,35 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
                     local_file_sha256 = calculate_file_sha256(target_path)
                     if local_file_sha256 == clound_file_sha256:
                         logger.info("File %s already exists in cache, skipping download", filename)
-                        progress_dialog.log(f"pak 文件已存在，跳过: {filename}")
+                        progress_dialog.log(
+                            tr("pak 文件已存在，跳过: {filename}", filename=filename)
+                        )
                         continue
                 
                 def pak_download_progress(percent: int, detail: str):
-                    progress_dialog.set_status(f"正在下载 pak 文件 ({i+1}/{len(pak_urls)})...")
+                    progress_dialog.set_status(
+                        tr(
+                            "正在下载 pak 文件 ({current}/{total})...",
+                            current=i + 1,
+                            total=len(pak_urls),
+                        )
+                    )
                     progress_dialog.set_detail(f"{filename}: {detail}")
                     progress_dialog.set_progress(percent)
                 
-                progress_dialog.log(f"开始下载 pak 文件: {filename}")
+                progress_dialog.log(
+                    tr("开始下载 pak 文件: {filename}", filename=filename)
+                )
                 success = _download_pak_file(pak_url, target_path, clound_file_sha256, pak_download_progress)
                 
                 if success:
-                    progress_dialog.log(f"pak 文件下载完成: {filename}")
+                    progress_dialog.log(
+                        tr("pak 文件下载完成: {filename}", filename=filename)
+                    )
                 else:
-                    progress_dialog.log(f"pak 文件下载失败: {filename}")
+                    progress_dialog.log(
+                        tr("pak 文件下载失败: {filename}", filename=filename)
+                    )
         
         # 保存安装状态
         state_update["installed_at"] = str(Path.cwd())
@@ -665,14 +729,14 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
         progress_dialog.set_progress(100)
         progress_dialog.set_status("安装完成！")
         progress_dialog.set_detail("请重新运行 OrcaLab")
-        progress_dialog.log("所有安装步骤已完成")
+        progress_dialog.log(tr("所有安装步骤已完成"))
         
         QtWidgets.QMessageBox.information(progress_dialog, "安装完成", "orcalab初始化完成, 请重新运行orcalab")
         
     except Exception as e:
         logger.exception("Installation failed: %s", e)
         friendly_error = _build_user_friendly_install_error(e)
-        progress_dialog.log(f"错误: {friendly_error}")
+        progress_dialog.log(tr("错误: {error}", error=friendly_error))
         QtWidgets.QMessageBox.critical(progress_dialog, "安装失败", friendly_error)
         progress_dialog.close()
         sys.exit(1)
@@ -685,4 +749,3 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
 
 def cli() -> None:
     ensure_python_project_installed()
-

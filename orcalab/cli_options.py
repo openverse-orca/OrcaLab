@@ -5,6 +5,25 @@ import sys
 
 from orcalab.i18n import tr
 
+_UI_LANGUAGE_CHOICES = ("zh_CN", "zh", "en_US", "en")
+
+
+def _preparse_option(argv: list[str], option_name: str) -> str | None:
+    for index, arg in enumerate(argv):
+        if arg == option_name and index + 1 < len(argv):
+            return argv[index + 1]
+        if arg.startswith(f"{option_name}="):
+            return arg.split("=", 1)[1]
+    return None
+
+
+def preparse_ui_languages(argv: list[str]) -> tuple[str | None, str | None]:
+    """Return the explicit language and the installer's first-run hint."""
+    return (
+        _preparse_option(argv, "--lang"),
+        _preparse_option(argv, "--initial-lang"),
+    )
+
 
 def create_argparser():
     parser = argparse.ArgumentParser(
@@ -21,7 +40,10 @@ def create_argparser():
         "--log-level",
         dest="log_level",
         metavar="LEVEL",
-        help=tr("控制台日志等级（支持 DEBUG/INFO/WARNING/ERROR/CRITICAL），默认输出 WARNING 及以上，日志文件会记录 INFO 及以上的全部日志。"),
+        help=tr(
+            "控制台日志等级（支持 DEBUG/INFO/WARNING/ERROR/CRITICAL），"
+            "默认输出 WARNING 及以上，日志文件会记录 INFO 及以上的全部日志。"
+        ),
     )
 
     parser.add_argument(
@@ -35,8 +57,15 @@ def create_argparser():
     parser.add_argument("--verbose", action="store_true", help=tr("输出所有信息到终端"))
     parser.add_argument(
         "--lang",
-        choices=("zh_CN", "zh", "en_US", "en"),
-        help=tr("设置界面语言（zh_CN 或 en_US）。默认读取 ORCALAB_LANG。"),
+        choices=_UI_LANGUAGE_CHOICES,
+        help=tr(
+            "临时设置本次启动的界面语言（zh_CN 或 en_US），不修改已保存设置。"
+        ),
+    )
+    parser.add_argument(
+        "--initial-lang",
+        choices=_UI_LANGUAGE_CHOICES,
+        help=argparse.SUPPRESS,
     )
 
     parser.add_argument(

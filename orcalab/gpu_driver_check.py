@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
+from orcalab.i18n import tr
+
 logger = logging.getLogger(__name__)
 
 
@@ -369,7 +371,7 @@ def _check_driver_amd(device: GpuDeviceInfo) -> GpuDeviceInfo:
                 return device
 
     device.driver_status = DriverStatus.NOT_INSTALLED
-    device.driver_cli_tool = "amd-smi 或 rocm-smi"
+    device.driver_cli_tool = tr("amd-smi 或 rocm-smi")
     return device
 
 
@@ -405,7 +407,7 @@ def _check_driver_intel(device: GpuDeviceInfo) -> GpuDeviceInfo:
             return device
 
     device.driver_status = DriverStatus.NOT_INSTALLED
-    device.driver_cli_tool = "xpu-smi 或 intel_gpu_top"
+    device.driver_cli_tool = tr("xpu-smi 或 intel_gpu_top")
     return device
 
 
@@ -428,7 +430,7 @@ def _check_driver_generic(device: GpuDeviceInfo, tool_names: List[str]) -> GpuDe
             return device
 
     device.driver_status = DriverStatus.NOT_INSTALLED
-    device.driver_cli_tool = " 或 ".join(tool_names)
+    device.driver_cli_tool = tr(" 或 ").join(tool_names)
     return device
 
 
@@ -510,7 +512,11 @@ def _detect_gpu_hardware_windows() -> List[GpuDeviceInfo]:
 
             vendor = _match_vendor_windows(compat, name)
 
-            mem_mb = str(adapter_ram // (1024 * 1024)) if isinstance(adapter_ram, (int, float)) and adapter_ram > 0 else ""
+            mem_mb = (
+                str(adapter_ram // (1024 * 1024))
+                if isinstance(adapter_ram, (int, float)) and adapter_ram > 0
+                else ""
+            )
 
             device = GpuDeviceInfo(
                 vendor=vendor,
@@ -537,7 +543,7 @@ def build_driver_guidance_text(result: GpuDriverCheckResult) -> str:
         return ""
 
     if not result.has_gpu_hardware:
-        return (
+        return tr(
             "未检测到任何 GPU 硬件。\n\n"
             "OrcaLab 需要独立显卡才能运行。请确认：\n"
             "1. 您的电脑已安装独立显卡\n"
@@ -546,39 +552,81 @@ def build_driver_guidance_text(result: GpuDriverCheckResult) -> str:
             "最低 GPU 要求：NVIDIA RTX 3060 或同等性能显卡"
         )
 
-    lines = ["检测到 GPU 硬件但驱动未安装或不可用：\n"]
+    lines = [tr("检测到 GPU 硬件但驱动未安装或不可用：\n")]
 
     for device in result.devices_without_driver():
         guidance = _VENDOR_DRIVER_GUIDANCE.get(device.vendor, _VENDOR_DRIVER_GUIDANCE[GpuVendor.UNKNOWN])
-        lines.append(f"【{guidance['name_cn']}】{device.name}")
-        lines.append(f"  检测工具: {device.driver_cli_tool}")
-        lines.append(f"  驱动状态: {_driver_status_text(device.driver_status)}")
-        lines.append(f"  安装方式 (Ubuntu): {guidance['install_ubuntu']}")
-        lines.append(f"  通用安装: {guidance['install_generic']}")
+        lines.append(
+            tr(
+                "【{vendor}】{device}",
+                vendor=tr(guidance["name_cn"]),
+                device=device.name,
+            )
+        )
+        lines.append(
+            tr("  检测工具: {tool}", tool=tr(device.driver_cli_tool))
+        )
+        lines.append(
+            tr(
+                "  驱动状态: {status}",
+                status=_driver_status_text(device.driver_status),
+            )
+        )
+        lines.append(
+            tr(
+                "  安装方式 (Ubuntu): {instructions}",
+                instructions=tr(guidance["install_ubuntu"]),
+            )
+        )
+        lines.append(
+            tr(
+                "  通用安装: {instructions}",
+                instructions=tr(guidance["install_generic"]),
+            )
+        )
         if guidance["url"]:
-            lines.append(f"  驱动下载: {guidance['url']}")
-        lines.append(f"  安装后验证: {guidance['verify_cmd']}")
+            lines.append(tr("  驱动下载: {url}", url=guidance["url"]))
+        lines.append(
+            tr(
+                "  安装后验证: {command}",
+                command=tr(guidance["verify_cmd"]),
+            )
+        )
         lines.append("")
 
-    lines.append("安装驱动后请重启电脑，然后重新启动 OrcaLab。")
+    lines.append(tr("安装驱动后请重启电脑，然后重新启动 OrcaLab。"))
     return "\n".join(lines)
 
 
 def build_driver_detail_text(result: GpuDriverCheckResult) -> str:
     if not result.devices:
-        return "未检测到 GPU 设备"
+        return tr("未检测到 GPU 设备")
 
     lines = []
     for i, device in enumerate(result.devices):
         guidance = _VENDOR_DRIVER_GUIDANCE.get(device.vendor, _VENDOR_DRIVER_GUIDANCE[GpuVendor.UNKNOWN])
         lines.append(f"--- GPU {i} ---")
-        lines.append(f"厂商: {guidance['name_cn']}")
-        lines.append(f"设备名: {device.name}")
-        lines.append(f"PCI 地址: {device.pci_address or 'N/A'}")
-        lines.append(f"驱动状态: {_driver_status_text(device.driver_status)}")
-        lines.append(f"驱动版本: {device.driver_version or 'N/A'}")
-        lines.append(f"检测工具: {device.driver_cli_tool or 'N/A'}")
-        lines.append(f"显存: {device.memory_total_mb or 'N/A'} MB")
+        lines.append(tr("厂商: {vendor}", vendor=tr(guidance["name_cn"])))
+        lines.append(tr("设备名: {device}", device=device.name))
+        lines.append(tr("PCI 地址: {address}", address=device.pci_address or "N/A"))
+        lines.append(
+            tr(
+                "驱动状态: {status}",
+                status=_driver_status_text(device.driver_status),
+            )
+        )
+        lines.append(
+            tr("驱动版本: {version}", version=device.driver_version or "N/A")
+        )
+        lines.append(
+            tr(
+                "检测工具: {tool}",
+                tool=tr(device.driver_cli_tool) if device.driver_cli_tool else "N/A",
+            )
+        )
+        lines.append(
+            tr("显存: {memory} MB", memory=device.memory_total_mb or "N/A")
+        )
         lines.append("")
 
     return "\n".join(lines)
@@ -586,12 +634,12 @@ def build_driver_detail_text(result: GpuDriverCheckResult) -> str:
 
 def _driver_status_text(status: DriverStatus) -> str:
     mapping = {
-        DriverStatus.OK: "正常",
-        DriverStatus.NOT_INSTALLED: "未安装",
-        DriverStatus.ERROR: "异常",
-        DriverStatus.UNKNOWN: "未知",
+        DriverStatus.OK: tr("正常"),
+        DriverStatus.NOT_INSTALLED: tr("未安装"),
+        DriverStatus.ERROR: tr("异常"),
+        DriverStatus.UNKNOWN: tr("未知"),
     }
-    return mapping.get(status, "未知")
+    return mapping.get(status, tr("未知"))
 
 
 def show_gpu_driver_warning(result: GpuDriverCheckResult) -> bool:
@@ -604,24 +652,31 @@ def show_gpu_driver_warning(result: GpuDriverCheckResult) -> bool:
     detail_text = build_driver_detail_text(result)
 
     msg_box = QtWidgets.QMessageBox()
-    msg_box.setWindowTitle("GPU 驱动异常")
+    msg_box.setWindowTitle(tr("GPU 驱动异常"))
     msg_box.setIcon(QtWidgets.QMessageBox.Icon.Critical)
     msg_box.setMinimumSize(800, 500)
 
     if not result.has_gpu_hardware:
-        msg_box.setText("未检测到 GPU 硬件，OrcaLab 无法启动。")
+        msg_box.setText(tr("未检测到 GPU 硬件，OrcaLab 无法启动。"))
         msg_box.setInformativeText(
-            "OrcaLab 需要独立显卡才能运行。\n\n"
-            "请确认已安装独立显卡并正确连接，然后重新启动 OrcaLab。"
+            tr(
+                "OrcaLab 需要独立显卡才能运行。\n\n"
+                "请确认已安装独立显卡并正确连接，然后重新启动 OrcaLab。"
+            )
         )
     else:
-        msg_box.setText("GPU 驱动未安装或不可用，OrcaLab 无法正常启动。")
+        msg_box.setText(tr("GPU 驱动未安装或不可用，OrcaLab 无法正常启动。"))
         msg_box.setInformativeText(guidance_text)
 
     msg_box.setDetailedText(detail_text)
 
-    continue_button = msg_box.addButton("继续启动（可能无法正常渲染）", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
-    exit_button = msg_box.addButton("退出", QtWidgets.QMessageBox.ButtonRole.RejectRole)
+    continue_button = msg_box.addButton(
+        tr("继续启动（可能无法正常渲染）"),
+        QtWidgets.QMessageBox.ButtonRole.AcceptRole,
+    )
+    exit_button = msg_box.addButton(
+        tr("退出"), QtWidgets.QMessageBox.ButtonRole.RejectRole
+    )
     msg_box.setDefaultButton(exit_button)
 
     msg_box.show()

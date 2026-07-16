@@ -95,8 +95,8 @@ def ask_offline_or_exit(title: str, message: str) -> bool:
     """
     from PySide6 import QtWidgets
     msg_box = QtWidgets.QMessageBox()
-    msg_box.setWindowTitle(title)
-    msg_box.setText(message)
+    msg_box.setWindowTitle(tr(title))
+    msg_box.setText(tr(message))
     msg_box.setInformativeText("是否以离线模式继续启动？\n\n点击「是」使用现有资产包继续启动\n点击「否」退出程序")
     msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No)
     msg_box.setDefaultButton(QtWidgets.QMessageBox.StandardButton.Yes)
@@ -293,7 +293,10 @@ def run_asset_sync_ui(config_service) -> bool:
         ask_offline_or_exit("Token 已过期", "访问令牌已过期，请重新登录。")
     elif connection_failed[0]:
         logger.warning("⚠️  连接资产库失败")
-        ask_offline_or_exit("连接资产库失败", "同步过程中无法连接到资产服务器，请检查网络连接。")
+        ask_offline_or_exit(
+            "连接资产库失败",
+            "同步过程中无法连接到资产服务器，请检查网络连接。",
+        )
     elif not sync_result[0]:
         logger.warning("⚠️  资产同步失败")
         ask_offline_or_exit("资产同步失败", "资产同步过程中发生错误。")

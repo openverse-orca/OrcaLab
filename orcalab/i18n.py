@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import locale
 import os
 from importlib import import_module
 from typing import Any, Callable
 
-
-_DEFAULT_LANGUAGE = "zh_CN"
+_DEFAULT_LANGUAGE = "en_US"
 _language = _DEFAULT_LANGUAGE
 _translations: dict[str, str] = {}
 _qt_hooks_installed = False
@@ -15,9 +15,77 @@ def normalize_language(language: str | None) -> str:
     value = (language or "").strip().replace("-", "_").lower()
     if value in {"en", "en_us", "english"}:
         return "en_US"
-    if value in {"zh", "zh_cn", "cn", "chinese", "simpchinese", "simplified_chinese"}:
+    if value.startswith("zh_") or value in {
+        "zh",
+        "cn",
+        "chinese",
+        "simpchinese",
+        "simplified_chinese",
+    }:
         return "zh_CN"
     return _DEFAULT_LANGUAGE
+
+
+def resolve_language(*candidates: str | None) -> str:
+    for candidate in candidates:
+        if candidate is not None and candidate.strip():
+            return normalize_language(candidate)
+    return _DEFAULT_LANGUAGE
+
+
+def language_from_locale(locale_name: str | None) -> str:
+    """Map a system locale to one of OrcaLab's supported UI languages."""
+    value = (locale_name or "").strip()
+    if not value:
+        return _DEFAULT_LANGUAGE
+
+    # GNU LANGUAGE may contain an ordered fallback list such as zh_CN:en_US.
+    value = value.split(":", 1)[0]
+    value = value.split(".", 1)[0].split("@", 1)[0]
+    value = value.replace("-", "_").lower()
+    primary_language = value.split("_", 1)[0]
+    if primary_language == "zh" or primary_language.startswith("chinese"):
+        return "zh_CN"
+    return _DEFAULT_LANGUAGE
+
+
+def _qt_ui_locale_name() -> str | None:
+    try:
+        from PySide6 import QtCore
+
+        system_locale = QtCore.QLocale.system()
+        ui_languages = system_locale.uiLanguages()
+        if ui_languages:
+            return ui_languages[0]
+        locale_name = system_locale.name()
+        return locale_name or None
+    except (AttributeError, ImportError, OSError, RuntimeError, TypeError):
+        return None
+
+
+def _environment_locale_name() -> str | None:
+    for variable_name in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
+        value = os.environ.get(variable_name)
+        if value and value.strip():
+            return value
+    return None
+
+
+def detect_system_language() -> str:
+    """Detect the preferred app language on Windows and Ubuntu."""
+    qt_locale = _qt_ui_locale_name()
+    if qt_locale:
+        return language_from_locale(qt_locale)
+
+    environment_locale = _environment_locale_name()
+    if environment_locale:
+        return language_from_locale(environment_locale)
+
+    try:
+        python_locale = locale.getlocale()[0]
+    except (locale.Error, TypeError, ValueError):
+        python_locale = None
+    return language_from_locale(python_locale)
 
 
 def _load_translations(language: str) -> dict[str, str]:
@@ -31,12 +99,7 @@ def set_language(language: str | None) -> str:
     global _language, _translations
     _language = normalize_language(language)
     _translations = _load_translations(_language)
-    os.environ["ORCALAB_LANG"] = _language
     return _language
-
-
-def configure_from_environment() -> str:
-    return set_language(os.environ.get("ORCALAB_LANG"))
 
 
 def get_language() -> str:
@@ -79,7 +142,8 @@ def _wrap_text_arg(func: Callable[..., Any], indexes: tuple[int, ...]) -> Callab
 
 def _patch_method(cls: type, name: str, indexes: tuple[int, ...] = (1,)) -> None:
     marker = f"__orcalab_i18n_original_{name}"
-    if hasattr(cls, marker):
+    # A subclass may inherit this marker while overriding the Qt method itself.
+    if marker in cls.__dict__:
         return
     try:
         original = getattr(cls, name)
@@ -206,4 +270,4 @@ def install_qt_translation_hooks() -> None:
     _qt_hooks_installed = True
 
 
-configure_from_environment()
+set_language(_DEFAULT_LANGUAGE)

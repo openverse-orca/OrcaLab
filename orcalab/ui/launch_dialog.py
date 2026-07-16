@@ -217,10 +217,11 @@ class LaunchDialog(QtWidgets.QDialog):
             radio.setProperty("program_config", program)
             
             # 设置工具提示
+            description = tr(program.get('description', 'No description'))
             tooltip = tr("名称: {name}\n", name=program.get('name', 'Unknown'))
             tooltip += tr("命令: {command}\n", command=program.get('command', 'Unknown'))
             tooltip += tr("参数: {args}\n", args=' '.join(program.get('args', [])))
-            tooltip += tr("描述: {description}", description=program.get('description', 'No description'))
+            tooltip += tr("描述: {description}", description=description)
             radio.setToolTip(tooltip)
             
             self.button_group.addButton(radio, i)
@@ -260,7 +261,7 @@ class LaunchDialog(QtWidgets.QDialog):
         if args:
             details.append(tr("命令行参数: {args}", args=' '.join(args)))
         
-        description = program_config.get('description', '')
+        description = tr(program_config.get('description', ''))
         if description:
             details.append(tr("描述: {description}", description=description))
         

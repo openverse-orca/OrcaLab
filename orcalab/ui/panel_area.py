@@ -37,7 +37,7 @@ class PanelButton(Button):
             self._icon = self.panel.panel_icon
             return
 
-        name = self.panel.panel_name
+        name = self.panel.display_name
         if len(name) > 2:
             short_name = name[:2]
         else:

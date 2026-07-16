@@ -5,10 +5,11 @@ from typing import List
 
 from PySide6 import QtCore, QtWidgets
 
+from orcalab.i18n import tr
+from orcalab.plugin_system.plugin_config_dialog import PluginConfigDialog
 from orcalab.plugin_system.plugin_installer import PluginInstaller
 from orcalab.plugin_system.plugin_manager import PluginManager
 from orcalab.plugin_system.plugin_manifest import PluginManifest
-from orcalab.plugin_system.plugin_config_dialog import PluginConfigDialog
 from orcalab.ui.fonts.font_service import FontService
 
 logger = logging.getLogger(__name__)
@@ -98,7 +99,7 @@ class PluginManagerDialog(QtWidgets.QDialog):
             version_item.setFlags(QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable)
             self._table.setItem(row, 2, version_item)
 
-            desc_item = QtWidgets.QTableWidgetItem(manifest.description or "")
+            desc_item = QtWidgets.QTableWidgetItem(tr(manifest.description or ""))
             desc_item.setFlags(QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable)
             self._table.setItem(row, 3, desc_item)
 
@@ -111,7 +112,15 @@ class PluginManagerDialog(QtWidgets.QDialog):
             logger.info("插件 %s 已%s (registry 状态: %s)", plugin_name, "启用" if enabled else "禁用", actual)
         except Exception as e:
             logger.exception("保存插件 %s 启用状态失败: %s", plugin_name, e)
-            QtWidgets.QMessageBox.critical(self, "保存失败", f"无法保存插件 {plugin_name} 的启用状态:\n{e}")
+            QtWidgets.QMessageBox.critical(
+                self,
+                "保存失败",
+                tr(
+                    "无法保存插件 {plugin_name} 的启用状态:\n{error}",
+                    plugin_name=plugin_name,
+                    error=e,
+                ),
+            )
 
     def _on_uninstall(self):
         rows = self._table.selectionModel().selectedRows()
@@ -125,7 +134,11 @@ class PluginManagerDialog(QtWidgets.QDialog):
         reply = QtWidgets.QMessageBox.question(
             self,
             "卸载插件",
-            f"确定要卸载插件 {plugin_name} 吗？\n这将删除插件目录和所有文件。",
+            tr(
+                "确定要卸载插件 {plugin_name} 吗？\n"
+                "这将删除插件目录和所有文件。",
+                plugin_name=plugin_name,
+            ),
             QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
         )
         if reply != QtWidgets.QMessageBox.StandardButton.Yes:
@@ -133,12 +146,19 @@ class PluginManagerDialog(QtWidgets.QDialog):
 
         if self._installer.uninstall(plugin_name):
             QtWidgets.QMessageBox.information(
-                self, "卸载完成", f"插件 {plugin_name} 已卸载"
+                self,
+                "卸载完成",
+                tr("插件 {plugin_name} 已卸载", plugin_name=plugin_name),
             )
             self._refresh()
         else:
             QtWidgets.QMessageBox.warning(
-                self, "卸载失败", f"插件 {plugin_name} 卸载失败，请查看日志"
+                self,
+                "卸载失败",
+                tr(
+                    "插件 {plugin_name} 卸载失败，请查看日志",
+                    plugin_name=plugin_name,
+                ),
             )
 
     def _get_selected_manifest(self) -> PluginManifest | None:
@@ -181,7 +201,7 @@ class PluginManagerDialog(QtWidgets.QDialog):
         if custom_widget is not None:
             # 插件提供自定义配置 UI
             dialog = QtWidgets.QDialog(self)
-            dialog.setWindowTitle(f"插件配置 - {manifest.name}")
+            dialog.setWindowTitle(tr("插件配置 - {name}", name=manifest.name))
             dialog.setModal(True)
             dialog.resize(700, 500)
             layout = QtWidgets.QVBoxLayout(dialog)
@@ -194,10 +214,13 @@ class PluginManagerDialog(QtWidgets.QDialog):
         if not manifest.get_config_file_paths():
             QtWidgets.QMessageBox.information(
                 self, "无配置文件",
-                f"插件 {manifest.name} 未声明配置文件。\n\n"
-                "插件可选两种方式提供配置 UI:\n"
-                "1. 覆写 PluginBase.create_config_widget() 返回自定义控件\n"
-                "2. 在 plugin.toml 中添加 config_files 字段使用通用编辑器",
+                tr(
+                    "插件 {plugin_name} 未声明配置文件。\n\n"
+                    "插件可选两种方式提供配置 UI:\n"
+                    "1. 覆写 PluginBase.create_config_widget() 返回自定义控件\n"
+                    "2. 在 plugin.toml 中添加 config_files 字段使用通用编辑器",
+                    plugin_name=manifest.name,
+                ),
             )
             return
         dialog = PluginConfigDialog(manifest, self)

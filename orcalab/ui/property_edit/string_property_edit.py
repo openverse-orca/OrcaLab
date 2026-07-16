@@ -7,6 +7,7 @@ from PySide6 import QtCore, QtWidgets
 from orcalab.actor import AssetActor
 from orcalab.actor_property import ActorEntities, ActorPropertyGroup, ActorPropertyKey
 from orcalab.application_util import get_local_scene, get_remote_scene
+from orcalab.i18n import tr
 from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.ui.property_edit.base_property_edit import (
     BasePropertyEdit,
@@ -183,7 +184,10 @@ class StringPropertyEdit(BasePropertyEdit[str]):
                 new_name,
             )
         elif new_name in self._all_existing_names:
-            return False, f"关节名称 '{new_name}' 已存在，无法使用重复名称。"
+            return False, tr(
+                "关节名称 '{name}' 已存在，无法使用重复名称。",
+                name=new_name,
+            )
 
         return True, ""
 

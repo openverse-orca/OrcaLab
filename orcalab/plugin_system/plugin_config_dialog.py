@@ -5,6 +5,7 @@ import pathlib
 
 from PySide6 import QtCore, QtWidgets
 
+from orcalab.i18n import tr
 from orcalab.plugin_system.plugin_manifest import PluginManifest
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ class PluginConfigDialog(QtWidgets.QDialog):
 
     def __init__(self, manifest: PluginManifest, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(f"插件配置 - {manifest.name}")
+        self.setWindowTitle(tr("插件配置 - {name}", name=manifest.name))
         self.setModal(True)
         self.resize(700, 500)
         self._manifest = manifest
@@ -75,9 +76,11 @@ class PluginConfigDialog(QtWidgets.QDialog):
 
         if not self._config_paths:
             self._editor.setPlainText(
-                "此插件未声明配置文件。\n\n"
-                "在 plugin.toml 中添加 config_files 字段即可支持配置编辑：\n"
-                '  config_files = ["bundleMcp.yaml", "config/settings.toml"]'
+                tr(
+                    "此插件未声明配置文件。\n\n"
+                    "在 plugin.toml 中添加 config_files 字段即可支持配置编辑：\n"
+                    '  config_files = ["bundleMcp.yaml", "config/settings.toml"]'
+                )
             )
             self._editor.setReadOnly(True)
             self._btn_save.setEnabled(False)
@@ -94,10 +97,10 @@ class PluginConfigDialog(QtWidgets.QDialog):
         try:
             text = path.read_text(encoding="utf-8")
             self._editor.setPlainText(text)
-            self._hint.setText(f"已加载: {path}")
+            self._hint.setText(tr("已加载: {path}", path=path))
         except Exception as e:
             self._editor.setPlainText("")
-            self._hint.setText(f"加载失败: {e}")
+            self._hint.setText(tr("加载失败: {error}", error=e))
             logger.error("加载配置文件 %s 失败: %s", path, e)
 
     def _save(self):
@@ -106,13 +109,21 @@ class PluginConfigDialog(QtWidgets.QDialog):
             return
         try:
             path.write_text(self._editor.toPlainText(), encoding="utf-8")
-            self._hint.setText(f"已保存: {path}")
+            self._hint.setText(tr("已保存: {path}", path=path))
             logger.info("配置文件已保存: %s", path)
-            QtWidgets.QMessageBox.information(self, "保存成功", f"配置文件已保存:\n{path}")
+            QtWidgets.QMessageBox.information(
+                self,
+                "保存成功",
+                tr("配置文件已保存:\n{path}", path=path),
+            )
         except Exception as e:
-            self._hint.setText(f"保存失败: {e}")
+            self._hint.setText(tr("保存失败: {error}", error=e))
             logger.error("保存配置文件 %s 失败: %s", path, e)
-            QtWidgets.QMessageBox.critical(self, "保存失败", f"无法保存配置文件:\n{e}")
+            QtWidgets.QMessageBox.critical(
+                self,
+                "保存失败",
+                tr("无法保存配置文件:\n{error}", error=e),
+            )
 
     def _open_external(self):
         path = self._current_path()

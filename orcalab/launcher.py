@@ -1,13 +1,18 @@
-import subprocess
-import shutil
-import pathlib
-import sys
 import os
+import pathlib
+import shutil
+import subprocess
+import sys
 import threading
 from datetime import datetime
 
-from orcalab.config_service import ConfigService
-from orcalab.cli_options import create_argparser, resolve_and_validate_workspace
+from orcalab.cli_options import (
+    create_argparser,
+    preparse_ui_languages,
+    resolve_and_validate_workspace,
+)
+from orcalab.config_service import ConfigService, read_user_ui_language
+from orcalab.i18n import resolve_language, set_language
 from orcalab.project_util import get_user_log_folder
 
 
@@ -109,7 +114,7 @@ def launch_orcalab_gui(verbose: bool = False):
             sys.exit(0)
     except KeyboardInterrupt:
         sys.exit(0)
-    except Exception as e:
+    except Exception:
         if verbose:
             raise
         sys.exit(1)
@@ -124,6 +129,14 @@ def main():
 
             sys.exit(mcp_main(mcp_argv))
 
+        cli_language, initial_language = preparse_ui_languages(sys.argv[1:])
+        set_language(
+            resolve_language(
+                cli_language,
+                read_user_ui_language(),
+                initial_language,
+            )
+        )
         parser = create_argparser()
         args, unknown = parser.parse_known_args()
         verbose = args.verbose

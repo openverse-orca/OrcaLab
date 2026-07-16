@@ -9,6 +9,7 @@ import numpy as np
 from orcalab.actor import AssetActor, BaseActor, GroupActor
 from orcalab.actor_property import ActorPropertyType, PropertyOverride
 from orcalab.entity_path import EntityPath, NameWithIndex
+from orcalab.i18n import tr
 from orcalab.local_scene import LocalScene
 from orcalab.transform import Transform
 from orcalab.metadata_service_bus import MetadataServiceRequestBus
@@ -567,7 +568,11 @@ class SceneLayoutHelperV3:
     ):
         version = layout_dict.get("version", "")
         if version != self.VERSION:
-            msg = f"场景布局(v3)版本不匹配，期望 {self.VERSION}，实际 {version}"
+            msg = tr(
+                "场景布局(v3)版本不匹配，期望 {expected}，实际 {actual}",
+                expected=self.VERSION,
+                actual=version,
+            )
             logger.error(msg)
             errors.append(msg)
             return False
@@ -575,7 +580,7 @@ class SceneLayoutHelperV3:
         parser = SceneLayoutV3Parser()
         layout_data = parser.parse(layout_dict)
         if layout_data is None:
-            msg = "场景布局(v3)文件格式错误"
+            msg = tr("场景布局(v3)文件格式错误")
             logger.error(msg)
             errors.append(msg)
             return False
@@ -677,7 +682,7 @@ class SceneLayoutHelperV3:
     ):
         name = actor_data.name
         if not Path.is_valid_name(name):
-            msg = f"跳过 {name}, Actor名称{name}非法。"
+            msg = tr("跳过 {name}, Actor名称{name}非法。", name=name)
             warnings.append(msg)
             logger.warning(msg)
             return
@@ -689,7 +694,11 @@ class SceneLayoutHelperV3:
             output = []
             MetadataServiceRequestBus().get_asset_info(asset_path, output)
             if not output or output[0] is None:
-                msg = f"跳过 {current_path}, 资产{asset_path}不存在。"
+                msg = tr(
+                    "跳过 {path}, 资产{asset_path}不存在。",
+                    path=current_path,
+                    asset_path=asset_path,
+                )
                 warnings.append(msg)
                 logger.warning(msg)
                 return

@@ -16,9 +16,17 @@ import time
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
-from orcalab.cli_options import create_argparser, resolve_and_validate_workspace
+from orcalab.cli_options import (
+    create_argparser,
+    preparse_ui_languages,
+    resolve_and_validate_workspace,
+)
 from orcalab.config_service import ConfigService
-from orcalab.i18n import install_qt_translation_hooks, set_language
+from orcalab.i18n import (
+    install_qt_translation_hooks,
+    resolve_language,
+    set_language,
+)
 from orcalab.project_util import check_project_folder, copy_packages, sync_pak_urls
 from orcalab.asset_sync_ui import run_asset_sync_ui
 from orcalab.ui.main_window import MainWindow
@@ -49,18 +57,9 @@ _main_window = None
 logger = logging.getLogger("orcalab.main")
 
 
-def _preparse_language(argv: list[str]) -> str | None:
-    for index, arg in enumerate(argv):
-        if arg == "--lang" and index + 1 < len(argv):
-            return argv[index + 1]
-        if arg.startswith("--lang="):
-            return arg.split("=", 1)[1]
-    return None
-
-
 def _start_force_exit_watchdog(timeout: int = 10) -> None:
     """启动守护线程，若进程在 timeout 秒内未正常退出则强制终止。
-    
+
     使用 os._exit() 绕过 Python 清理流程，防止卡死的后台线程（gRPC/网络IO等）
     导致进程变成无法杀死的僵尸进程。
     """
@@ -265,10 +264,12 @@ def main():
     _ensure_xcb_platform()
 
     _main_start = time.monotonic()
-    set_language(_preparse_language(sys.argv[1:]) or os.environ.get("ORCALAB_LANG"))
+    cli_language, initial_language = preparse_ui_languages(sys.argv[1:])
+    set_language(resolve_language(cli_language, initial_language))
     parser = create_argparser()
     args, unknown = parser.parse_known_args()
-    set_language(getattr(args, "lang", None) or os.environ.get("ORCALAB_LANG"))
+    cli_language = getattr(args, "lang", None)
+    initial_language = getattr(args, "initial_lang", None)
 
     console_level = logging.INFO
     if getattr(args, "log_level", logging.INFO):
@@ -298,6 +299,8 @@ def main():
     current_dir = pathlib.Path(__file__).parent.resolve()
     project_root = current_dir.parent  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root, workspace)
+    saved_language = config_service.ensure_ui_language(initial_language)
+    set_language(resolve_language(cli_language, saved_language))
 
     verbose = getattr(args, "verbose", False)
     config_service.set_verbose(verbose)
@@ -415,7 +418,7 @@ def main():
 
     try:
         fullscreen = args.full_screen
-        
+
         event_loop.run_until_complete(main_async(q_app, fullscreen))
     except KeyboardInterrupt:
         logger.info("Received KeyboardInterrupt, cleaning up...")

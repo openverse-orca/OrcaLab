@@ -9,8 +9,9 @@ import tarfile
 import tempfile
 from typing import Callable, Optional
 
-from orcalab.plugin_system.plugin_manifest import PluginManifest
+from orcalab.i18n import tr
 from orcalab.plugin_system.plugin_manager import get_plugins_root
+from orcalab.plugin_system.plugin_manifest import PluginManifest
 from orcalab.plugin_system.plugin_registry import PluginRegistry
 
 logger = logging.getLogger(__name__)
@@ -54,66 +55,85 @@ class PluginInstaller:
         """
         archive_path = pathlib.Path(archive_path)
         if not archive_path.is_file():
-            raise FileNotFoundError(f"压缩包不存在: {archive_path}")
+            raise FileNotFoundError(tr("压缩包不存在: {path}", path=archive_path))
 
         def _report(percent: int, detail: str) -> None:
             if progress_callback:
                 progress_callback(percent, detail)
 
-        _report(5, f"开始安装: {archive_path.name}")
+        _report(5, tr("开始安装: {archive_name}", archive_name=archive_path.name))
 
         with tempfile.TemporaryDirectory(prefix="orcalab_plugin_") as tmp_dir:
             tmp_path = pathlib.Path(tmp_dir)
 
-            _report(10, "解压压缩包…")
+            _report(10, tr("解压压缩包…"))
             self._extract_archive(archive_path, tmp_path, progress_callback)
 
-            _report(30, "查找插件清单…")
+            _report(30, tr("查找插件清单…"))
             manifest = self._find_manifest(tmp_path)
             if manifest is None:
                 raise ValueError(
-                    f"压缩包中未找到 plugin.toml: {archive_path}"
+                    tr(
+                        "压缩包中未找到 plugin.toml: {path}",
+                        path=archive_path,
+                    )
                 )
 
             plugin_name = manifest.name
             logger.info("发现插件: %s v%s", plugin_name, manifest.version)
-            _report(35, f"插件: {plugin_name} v{manifest.version}")
+            _report(
+                35,
+                tr(
+                    "插件: {plugin_name} v{version}",
+                    plugin_name=plugin_name,
+                    version=manifest.version,
+                ),
+            )
 
             dest_dir = get_plugins_root() / plugin_name
             if dest_dir.exists():
                 logger.info("插件目录已存在，覆盖安装: %s", dest_dir)
                 shutil.rmtree(dest_dir)
 
-            _report(40, f"复制文件到 {dest_dir}…")
+            _report(40, tr("复制文件到 {path}…", path=dest_dir))
             shutil.copytree(manifest.plugin_dir, dest_dir)
 
             manifest.plugin_dir = dest_dir
 
             init_script = dest_dir / manifest.init_script
             if init_script.is_file():
-                _report(50, f"执行初始化脚本: {manifest.init_script}…")
+                _report(
+                    50,
+                    tr(
+                        "执行初始化脚本: {script}…",
+                        script=manifest.init_script,
+                    ),
+                )
                 self._run_init_script(init_script, dest_dir, progress_callback)
             else:
                 logger.info("插件无 init.sh，跳过初始化")
-                _report(50, "无初始化脚本，跳过")
+                _report(50, tr("无初始化脚本，跳过"))
 
             if manifest.has_requirements_file:
-                _report(70, "从 requirements.txt 安装 Python 依赖…")
+                _report(70, tr("从 requirements.txt 安装 Python 依赖…"))
                 self._install_python_deps_from_requirements(
                     manifest.requirements_path, progress_callback
                 )
             elif manifest.python_dependencies:
-                _report(70, "安装 Python 依赖…")
+                _report(70, tr("安装 Python 依赖…"))
                 self._install_python_deps(manifest.python_dependencies, progress_callback)
             else:
-                _report(70, "无 Python 依赖，跳过")
+                _report(70, tr("无 Python 依赖，跳过"))
 
-            _report(90, "注册插件…")
+            _report(90, tr("注册插件…"))
             self._registry.register_installed(
                 plugin_name, manifest.version, str(dest_dir)
             )
 
-            _report(100, f"插件 {plugin_name} 安装完成")
+            _report(
+                100,
+                tr("插件 {plugin_name} 安装完成", plugin_name=plugin_name),
+            )
             logger.info("插件 %s 安装完成: %s", plugin_name, dest_dir)
             return manifest
 
@@ -204,7 +224,9 @@ class PluginInstaller:
                     return PluginManifest.from_toml(toml_path)
                 except Exception as e:
                     logger.error("解析 plugin.toml 失败: %s", e)
-                    raise ValueError(f"plugin.toml 解析失败: {e}") from e
+                    raise ValueError(
+                        tr("plugin.toml 解析失败: {error}", error=e)
+                    ) from e
         return None
 
     @staticmethod
@@ -232,7 +254,9 @@ class PluginInstaller:
                 check=False,
             )
         except FileNotFoundError as e:
-            raise RuntimeError(f"无法执行 init.sh（bash 不可用）: {e}") from e
+            raise RuntimeError(
+                tr("无法执行 init.sh（bash 不可用）: {error}", error=e)
+            ) from e
 
         if result.stdout:
             for line in result.stdout.strip().splitlines():
@@ -243,7 +267,11 @@ class PluginInstaller:
 
         if result.returncode != 0:
             raise RuntimeError(
-                f"init.sh 执行失败 (退出码 {result.returncode}): {result.stderr.strip()}"
+                tr(
+                    "init.sh 执行失败 (退出码 {return_code}): {error}",
+                    return_code=result.returncode,
+                    error=result.stderr.strip(),
+                )
             )
 
     @staticmethod
@@ -298,7 +326,11 @@ class PluginInstaller:
         if result.returncode != 0:
             logger.error("[pip] %s", result.stderr.strip())
             raise RuntimeError(
-                f"Python 依赖安装失败 (退出码 {result.returncode}): {result.stderr.strip()}"
+                tr(
+                    "Python 依赖安装失败 (退出码 {return_code}): {error}",
+                    return_code=result.returncode,
+                    error=result.stderr.strip(),
+                )
             )
 
     @staticmethod
@@ -316,5 +348,9 @@ class PluginInstaller:
         if result.returncode != 0:
             logger.error("[pip] %s", result.stderr.strip())
             raise RuntimeError(
-                f"requirements.txt 依赖安装失败 (退出码 {result.returncode}): {result.stderr.strip()}"
+                tr(
+                    "requirements.txt 依赖安装失败 (退出码 {return_code}): {error}",
+                    return_code=result.returncode,
+                    error=result.stderr.strip(),
+                )
             )

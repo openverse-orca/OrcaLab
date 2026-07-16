@@ -9,4 +9,10 @@ If Not FSO.FileExists(envPath) Then
                    "A setup window will show the progress.", 5, "OrcaLab Startup", 64
 End If
 
-WshShell.Run """" & scriptDir & "\orcalab.bat""", 1, False
+command = """" & scriptDir & "\orcalab.bat"""
+For Each argument In WScript.Arguments
+    escapedArgument = Replace(argument, Chr(34), Chr(34) & Chr(34))
+    command = command & " " & Chr(34) & escapedArgument & Chr(34)
+Next
+
+WshShell.Run command, 1, False

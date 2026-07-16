@@ -14,6 +14,7 @@ from orcalab.scene_edit_types import AddActorRequest
 
 from PySide6 import QtCore, QtWidgets, QtGui
 from orcalab.application_util import get_remote_scene
+from orcalab.i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +75,20 @@ class SceneLayoutHelper:
                 for actor, _ in post_add_items:
                     if isinstance(actor, AssetActor):
                         errors.append(
-                            f"创建 Actor {actor.name} 失败: {e}, asset_path: {actor.asset_path}"
+                            tr(
+                                "创建 Actor {name} 失败: {error}, asset_path: {asset_path}",
+                                name=actor.name,
+                                error=e,
+                                asset_path=actor.asset_path,
+                            )
                         )
                     else:
                         errors.append(
-                            f"创建 Actor {actor.name} 失败: {e}"
+                            tr(
+                                "创建 Actor {name} 失败: {error}",
+                                name=actor.name,
+                                error=e,
+                            )
                         )
                 return
 
@@ -94,8 +104,11 @@ class SceneLayoutHelper:
 
             except Exception as e:
                 if isinstance(actor, AssetActor):
-                    error_msg = (
-                        f"创建 Actor {actor.name} 后处理失败: {e}, asset_path: {actor.asset_path}"
+                    error_msg = tr(
+                        "创建 Actor {name} 后处理失败: {error}, asset_path: {asset_path}",
+                        name=actor.name,
+                        error=e,
+                        asset_path=actor.asset_path,
                     )
                     logger.warning(error_msg)
                     errors.append(error_msg)
@@ -144,7 +157,11 @@ class SceneLayoutHelper:
                 MetadataServiceRequestBus().get_asset_info(asset_path, output)
                 if not output or output[0] is None:
                     errors.append(
-                        f"跳过 Actor {name}: 资产不存在, asset_path: {asset_path}"
+                        tr(
+                            "跳过 Actor {name}: 资产不存在, asset_path: {asset_path}",
+                            name=name,
+                            asset_path=asset_path,
+                        )
                     )
                     logger.warning("跳过 Actor %s: 资产不存在, asset_path: %s", name, asset_path)
                     return

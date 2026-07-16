@@ -5,6 +5,8 @@ import sys
 from dataclasses import dataclass, field
 from typing import Dict, List
 
+from orcalab.i18n import tr
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:
@@ -70,12 +72,20 @@ class PluginManifest:
         entry = plugin_section.get("entry", "")
 
         if not name:
-            raise ValueError(f"plugin.toml 缺少 [plugin].name: {toml_path}")
+            raise ValueError(
+                tr("plugin.toml 缺少 [plugin].name: {path}", path=toml_path)
+            )
         if not version:
-            raise ValueError(f"plugin.toml 缺少 [plugin].version: {toml_path}")
+            raise ValueError(
+                tr("plugin.toml 缺少 [plugin].version: {path}", path=toml_path)
+            )
         if not entry or ":" not in entry:
             raise ValueError(
-                f"plugin.toml [plugin].entry 必须为 'module.path:ClassName' 格式: {toml_path}"
+                tr(
+                    "plugin.toml [plugin].entry 必须为 "
+                    "'module.path:ClassName' 格式: {path}",
+                    path=toml_path,
+                )
             )
 
         deps_section = plugin_section.get("dependencies", {}) or {}

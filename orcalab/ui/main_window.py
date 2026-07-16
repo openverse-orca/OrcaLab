@@ -87,7 +87,7 @@ class MainWindow(
     def __init__(self):
         super().__init__()
         self.config_service = ConfigService()
-        self._base_title = self.config_service._get_package_version()
+        self._base_title = self.config_service.app_version()
 
         self._cleanup_in_progress = False
         self._cleanup_completed = False
@@ -952,38 +952,44 @@ class MainWindow(
         # Show success message and exit
         QtWidgets.QMessageBox.information(
             self,
-            "退出登录成功",
-            "已成功退出登录。\n请重新启动应用程序以完成登录。"
+            tr("退出登录成功"),
+            tr("已成功退出登录。\n请重新启动应用程序以完成登录。"),
         )
 
         # Exit application
         QtWidgets.QApplication.quit()
 
     def show_about_dialog(self):
-        version = self.config_service._get_package_version()
+        version = self.config_service.app_version()
 
         fs = FontService()
+        version_label = tr("版本")
+        copyright_label = tr("版权所有")
+        company_website_label = tr("公司主页")
+        github_repository_label = tr("GitHub 仓库")
+        company_name = tr("松应科技")
+        product_description = tr("云原生机器人仿真平台，提供先进的UI和资产管理功能")
         about_html = f"""
         <div style="font-family: Arial, sans-serif;">
             <h2 style="color: #007acc; margin-bottom: 10px;">OrcaLab</h2>
-            <p style="margin: 5px 0;"><b>版本:</b> {version}</p>
-            <p style="margin: 5px 0;"><b>版权所有:</b> © 2026 松应科技</p>
+            <p style="margin: 5px 0;"><b>{version_label}:</b> {version}</p>
+            <p style="margin: 5px 0;"><b>{copyright_label}:</b> © 2026 {company_name}</p>
             <p style="margin: 5px 0;">
-                <b>公司主页:</b> 
-                <a href="http://www.orca3d.cn" 
+                <b>{company_website_label}:</b>
+                <a href="http://www.orca3d.cn"
                    style="color: #007acc; text-decoration: none;">
                    http://www.orca3d.cn
                 </a>
             </p>
             <p style="margin: 5px 0;">
-                <b>GitHub 仓库:</b> 
-                <a href="https://github.com/openverse-orca/OrcaLab" 
+                <b>{github_repository_label}:</b>
+                <a href="https://github.com/openverse-orca/OrcaLab"
                    style="color: #007acc; text-decoration: none;">
                    https://github.com/openverse-orca/OrcaLab
                 </a>
             </p>
             <p style="margin: 15px 0 5px 0; color: #666; font-size: {fs.get_font_size_px("small")};">
-                云原生机器人仿真平台，提供先进的UI和资产管理功能
+                {product_description}
             </p>
         </div>
         """
