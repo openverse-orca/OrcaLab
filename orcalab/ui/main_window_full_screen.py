@@ -3,7 +3,6 @@ import json
 from typing import List
 from typing_extensions import override
 import logging
-from pathlib import Path as SystemPath
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtGui import QKeyEvent
 
