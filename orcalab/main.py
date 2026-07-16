@@ -18,6 +18,7 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="repla
 
 from orcalab.cli_options import create_argparser, resolve_and_validate_workspace
 from orcalab.config_service import ConfigService
+from orcalab.i18n import install_qt_translation_hooks, set_language
 from orcalab.project_util import check_project_folder, copy_packages, sync_pak_urls
 from orcalab.asset_sync_ui import run_asset_sync_ui
 from orcalab.ui.main_window import MainWindow
@@ -46,6 +47,15 @@ if os.name == 'nt':
 _main_window = None
 
 logger = logging.getLogger("orcalab.main")
+
+
+def _preparse_language(argv: list[str]) -> str | None:
+    for index, arg in enumerate(argv):
+        if arg == "--lang" and index + 1 < len(argv):
+            return argv[index + 1]
+        if arg.startswith("--lang="):
+            return arg.split("=", 1)[1]
+    return None
 
 
 def _start_force_exit_watchdog(timeout: int = 10) -> None:
@@ -255,8 +265,10 @@ def main():
     _ensure_xcb_platform()
 
     _main_start = time.monotonic()
+    set_language(_preparse_language(sys.argv[1:]) or os.environ.get("ORCALAB_LANG"))
     parser = create_argparser()
     args, unknown = parser.parse_known_args()
+    set_language(getattr(args, "lang", None) or os.environ.get("ORCALAB_LANG"))
 
     console_level = logging.INFO
     if getattr(args, "log_level", logging.INFO):
@@ -313,6 +325,7 @@ def main():
 
     set_windows_app_user_model_id()
 
+    install_qt_translation_hooks()
     q_app = QtWidgets.QApplication(sys.argv)
     q_app.setWindowIcon(app_window_icon())
 

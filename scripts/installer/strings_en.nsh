@@ -1,0 +1,6 @@
+!define STR_PRODUCT_PUBLISHER "Songying Technology"
+!define STR_FILE_DESCRIPTION "OrcaLab Installer"
+!define STR_SECTION_INSTALL "Install"
+!define STR_UPGRADE_PROMPT "OrcaLab $0 is already installed.$\n$\nDo you want to upgrade to version ${PRODUCT_VERSION}?$\n$\nYour configuration data will be preserved."
+!define STR_SETUP_ENV_DETAIL "Setting up the OrcaLab runtime environment. This may take a few minutes..."
+!define STR_SETUP_ENV_WARNING "Warning: environment setup returned code $1. OrcaLab will retry on first launch."

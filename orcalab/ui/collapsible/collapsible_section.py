@@ -4,6 +4,7 @@ from typing import Callable, List
 
 from PySide6 import QtCore, QtWidgets, QtGui
 
+from orcalab.i18n import tr
 from orcalab.perf_log import perf_timer
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.styled_widget import StyledWidget
@@ -28,7 +29,7 @@ class SectionHeader(QtWidgets.QWidget):
         has_children: bool = True,
     ):
         super().__init__(parent)
-        self._title = title
+        self._title = tr(title)
         self._icon = icon
         self._badge = badge
         self._indent_level = indent_level
@@ -88,7 +89,7 @@ class SectionHeader(QtWidgets.QWidget):
         self.update()
 
     def set_title(self, title: str):
-        self._title = title
+        self._title = tr(title)
         self.update()
 
     def set_badge(self, badge: str):
@@ -211,6 +212,7 @@ class SectionHeader(QtWidgets.QWidget):
         tail_items: list[tuple[str, QtGui.QIcon]] | None = None,
         show_divider: bool = True,
     ) -> dict[str, QtCore.QRect]:
+        title = tr(title)
         theme = ThemeService()
 
         if selected:
@@ -319,7 +321,7 @@ class CollapsibleSection(StyledWidget):
     ):
         super().__init__(parent)
 
-        self._title = title
+        self._title = tr(title)
         self._icon = icon
         self._badge = badge
         self._indent_level = indent_level
@@ -333,7 +335,7 @@ class CollapsibleSection(StyledWidget):
 
         self._header = SectionHeader(
             self,
-            title=title,
+            title=self._title,
             icon=icon,
             badge=badge,
             indent_level=indent_level,
@@ -444,8 +446,8 @@ class CollapsibleSection(StyledWidget):
             self.collapse()
 
     def set_title(self, title: str):
-        self._title = title
-        self._header.set_title(title)
+        self._title = tr(title)
+        self._header.set_title(self._title)
 
     def set_badge(self, badge: str):
         self._badge = badge

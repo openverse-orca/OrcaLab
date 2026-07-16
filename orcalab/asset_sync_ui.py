@@ -10,6 +10,7 @@ import logging
 from PySide6 import QtWidgets
 from numpy import int64
 
+from orcalab.i18n import tr
 from orcalab.config_service import ConfigService
 from orcalab.asset_sync_service import sync_assets, AssetSyncCallbacks
 from orcalab.ui.sync_progress_window import SyncProgressWindow
@@ -65,16 +66,16 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
     def on_metadata_sync(self, status: str, count: int = 0, total: int = 0):
         self.window.set_metadata_progress(status, count, total)
         if status == 'start':
-            self.window.set_status(f"正在准备同步元数据... (待更新 {total} 个包)")
+            self.window.set_status(tr("正在准备同步元数据... (待更新 {total} 个包)", total=total))
         elif status == 'fetching':
             self.window.set_status("正在获取远端元数据列表...")
         elif status == 'scanning':
-            self.window.set_status(f"正在扫描远端元数据... ({count}/{total})")
+            self.window.set_status(tr("正在扫描远端元数据... ({count}/{total})", count=count, total=total))
         elif status == 'complete':
             if count == 0 and total == 0:
                 self.window.set_status("元数据已是最新，无需同步")
             else:
-                self.window.set_status(f"元数据同步完成 (更新 {count}/{total} 个包)")
+                self.window.set_status(tr("元数据同步完成 (更新 {count}/{total} 个包)", count=count, total=total))
     
     def on_complete(self, success: bool, message: str = ""):
         self.window.complete_sync(success, message)
@@ -300,4 +301,3 @@ def run_asset_sync_ui(config_service) -> bool:
         logger.info("✓ 资产同步完成")
     
     return True  # 总是返回 True，允许程序继续启动
-

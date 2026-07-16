@@ -2,6 +2,7 @@
 setlocal enabledelayedexpansion
 
 set "ENV_NAME=orcalab"
+set "ORCALAB_LANG=__ORCALAB_LANG__"
 set "MINICONDA_URL=https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe"
 set "INSTALLER=%TEMP%\miniconda_installer.exe"
 set "SETUP_ONLY_FLAG=%TEMP%\orcalab_setup_only"
@@ -120,7 +121,7 @@ set "PIP_OK=0"
 for /L %%i in (1,1,3) do (
     if "!PIP_OK!"=="0" (
         echo   [INFO] pip install attempt %%i/3 ...
-        "%CONDA_EXE%" run --no-capture-output --prefix "%ENV_PREFIX%" pip install --quiet orca-lab==__ORCALAB_VERSION__ --retries 5 --timeout 60 -i https://pypi.tuna.tsinghua.edu.cn/simple __PIP_EXTRA_INDEX_URLS__
+        "%CONDA_EXE%" run --no-capture-output --prefix "%ENV_PREFIX%" pip install --quiet orca-lab==__ORCALAB_VERSION__ --retries 5 --timeout 60 -i __PIP_INDEX_URL__ __PIP_EXTRA_INDEX_URLS__
         if !ERRORLEVEL! NEQ 0 (
             echo   [WARN] pip install attempt %%i failed (possible network issue^). Retrying...
         ) else (

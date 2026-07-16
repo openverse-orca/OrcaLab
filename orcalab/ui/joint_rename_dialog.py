@@ -1,6 +1,8 @@
 from PySide6 import QtWidgets
 from typing import Callable, Tuple
 
+from orcalab.i18n import tr
+
 
 class JointRenameDialog(QtWidgets.QDialog):
     def __init__(
@@ -26,7 +28,7 @@ class JointRenameDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout(self)
         self.setLayout(layout)
 
-        info_label = QtWidgets.QLabel(f"当前名称: {self._current_name}")
+        info_label = QtWidgets.QLabel(tr("当前名称: {name}", name=self._current_name))
         layout.addWidget(info_label)
 
         self.line_edit = QtWidgets.QLineEdit(self)
@@ -60,7 +62,7 @@ class JointRenameDialog(QtWidgets.QDialog):
 
         valid, error = self._validate(new_name)
         if not valid:
-            self.error_message.setText(error)
+            self.error_message.setText(tr(error))
             return
 
         self.new_name = new_name

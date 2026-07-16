@@ -123,14 +123,15 @@ class InstallProgressDialog(QtWidgets.QDialog):
 
 def _extract_version_from_url(url: str) -> str:
     """从 URL 中提取版本号"""
-    # 匹配类似 python-project.25.10.4.tar.xz 的模式
-    match = re.search(r'python-project\.(\d+\.\d+\.\d+)\.tar\.xz', url)
+    # 匹配 python-project.25.10.4.tar.xz、
+    # python-project_linux.26.7.1.3.tar.xz 等平台与多段版本格式。
+    match = re.search(r'python-project(?:_[^./]+)?\.(\d+(?:\.\d+){2,})\.tar\.xz', url)
     if match:
         return match.group(1)
     
     # 如果没有匹配到，尝试从 URL 的其他部分提取版本号
-    # 匹配类似 /python-project.25.10.4/ 的模式
-    match = re.search(r'/(\d+\.\d+\.\d+)/', url)
+    # 匹配类似 /26.7.1.3/ 的路径格式
+    match = re.search(r'/(\d+(?:\.\d+){2,})/', url)
     if match:
         return match.group(1)
     
@@ -684,5 +685,4 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
 
 def cli() -> None:
     ensure_python_project_installed()
-
 

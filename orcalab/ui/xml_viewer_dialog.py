@@ -10,6 +10,7 @@ from orca_gym.protos import mjc_message_pb2, mjc_message_pb2_grpc
 from orcalab.actor import AssetActor
 from orcalab.application_util import get_local_scene, get_remote_scene
 from orcalab.config_service import ConfigService
+from orcalab.i18n import tr
 from orcalab.metadata_service_bus import MetadataServiceRequestBus
 from orcalab.path import Path
 from orcalab.pyside_util import connect
@@ -90,7 +91,7 @@ class XmlViewerDialog(QtWidgets.QDialog):
             for name, path in actors:
                 self.actor_combo.addItem(f"{name}", path)
         else:
-            self.actor_combo.addItem("（场景中无 AssetActor）", None)
+            self.actor_combo.addItem(tr("（场景中无 AssetActor）"), None)
         self.actor_combo.setMinimumWidth(300)
         top_layout.addWidget(self.actor_combo, 1)
 
@@ -167,7 +168,7 @@ class XmlViewerDialog(QtWidgets.QDialog):
                     self._extract_actor_xml(self._full_xml, actor_name)
                 )
             else:
-                self.text_edit.setPlainText('获取XML失败')
+                self.text_edit.setPlainText(tr("获取XML失败"))
 
             self.fetch_btn.setText("刷新 XML")
             logger.info("成功获取 XML")
@@ -175,7 +176,7 @@ class XmlViewerDialog(QtWidgets.QDialog):
         except Exception as e:
             logger.exception("获取 XML 失败")
             QtWidgets.QMessageBox.warning(
-                self, "获取失败", f"无法获取 XML：\n{e}"
+                self, "获取失败", tr("无法获取 XML：\n{error}", error=e)
             )
         finally:
             self.fetch_btn.setEnabled(True)
@@ -198,7 +199,7 @@ class XmlViewerDialog(QtWidgets.QDialog):
         success = await remote_scene.change_sim_state(True)
         await asyncio.sleep(0.5)
         if not success:
-            raise RuntimeError("启动仿真引擎失败")
+            raise RuntimeError(tr("启动仿真引擎失败"))
 
         try:
             logger.info("读取 MJCF...")
@@ -225,9 +226,13 @@ class XmlViewerDialog(QtWidgets.QDialog):
                 response.status
                 != mjc_message_pb2.LoadLocalEnvResponse.SUCCESS
             ):
-                error_msg = response.error_message or "未知错误"
+                error_msg = response.error_message or tr("未知错误")
                 raise RuntimeError(
-                    f"引擎返回错误（status={response.status}）：{error_msg}"
+                    tr(
+                        "引擎返回错误（status={status}）：{error}",
+                        status=response.status,
+                        error=error_msg,
+                    )
                 )
             return response.xml_content.decode("utf-8")
         finally:

@@ -1,5 +1,6 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 from orcalab.config_service import ConfigService
+from orcalab.i18n import tr
 from orcalab.ui.fonts.font_service import FontService
 
 
@@ -216,10 +217,10 @@ class LaunchDialog(QtWidgets.QDialog):
             radio.setProperty("program_config", program)
             
             # 设置工具提示
-            tooltip = f"名称: {program.get('name', 'Unknown')}\n"
-            tooltip += f"命令: {program.get('command', 'Unknown')}\n"
-            tooltip += f"参数: {' '.join(program.get('args', []))}\n"
-            tooltip += f"描述: {program.get('description', 'No description')}"
+            tooltip = tr("名称: {name}\n", name=program.get('name', 'Unknown'))
+            tooltip += tr("命令: {command}\n", command=program.get('command', 'Unknown'))
+            tooltip += tr("参数: {args}\n", args=' '.join(program.get('args', [])))
+            tooltip += tr("描述: {description}", description=program.get('description', 'No description'))
             radio.setToolTip(tooltip)
             
             self.button_group.addButton(radio, i)
@@ -239,7 +240,9 @@ class LaunchDialog(QtWidgets.QDialog):
         self.launch_button.setEnabled(True)
         
         if button == self.no_program_radio:
-            self.details_text.setText("将不启动任何仿真程序。\n用户需要手动启动仿真程序并通过其他方式连接到OrcaLab。")
+            self.details_text.setText(
+                tr("将不启动任何仿真程序。\n用户需要手动启动仿真程序并通过其他方式连接到OrcaLab。")
+            )
         else:
             program_config = button.property("program_config")
             if program_config:
@@ -249,17 +252,17 @@ class LaunchDialog(QtWidgets.QDialog):
     def _format_program_details(self, program_config):
         """格式化程序详情显示"""
         details = []
-        details.append(f"程序名称: {program_config.get('name', 'Unknown')}")
-        details.append(f"显示名称: {program_config.get('display_name', 'Unknown')}")
-        details.append(f"执行命令: {program_config.get('command', 'Unknown')}")
+        details.append(tr("程序名称: {name}", name=program_config.get('name', 'Unknown')))
+        details.append(tr("显示名称: {name}", name=program_config.get('display_name', 'Unknown')))
+        details.append(tr("执行命令: {command}", command=program_config.get('command', 'Unknown')))
         
         args = program_config.get('args', [])
         if args:
-            details.append(f"命令行参数: {' '.join(args)}")
+            details.append(tr("命令行参数: {args}", args=' '.join(args)))
         
         description = program_config.get('description', '')
         if description:
-            details.append(f"描述: {description}")
+            details.append(tr("描述: {description}", description=description))
         
         return '\n'.join(details)
     

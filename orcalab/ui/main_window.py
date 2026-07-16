@@ -14,6 +14,7 @@ from qasync import asyncWrap
 
 from orcalab.actor import AssetActor, GroupActor
 from orcalab.actor_util import make_unique_name
+from orcalab.i18n import tr
 from orcalab.local_scene import LocalScene
 from orcalab.path import Path
 from orcalab.pyside_util import connect
@@ -909,10 +910,10 @@ class MainWindow(
     def prepare_user_menu(self):
         self.menu_user.clear()
         token_data = TokenStorage.load_token()
-        username = token_data.get('username', '未登录') if token_data else '未登录'
+        username = token_data.get('username', tr("未登录")) if token_data else tr("未登录")
 
         # Display username (non-clickable)
-        action_username = QtGui.QAction(f"当前用户: {username}", self)
+        action_username = QtGui.QAction(tr("当前用户: {username}", username=username), self)
         action_username.setEnabled(False)
         self.menu_user.addAction(action_username)
 

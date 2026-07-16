@@ -1,0 +1,6 @@
+!define STR_PRODUCT_PUBLISHER "松应科技"
+!define STR_FILE_DESCRIPTION "OrcaLab 安装程序"
+!define STR_SECTION_INSTALL "安装"
+!define STR_UPGRADE_PROMPT "检测到已安装 OrcaLab $0。$\n$\n是否覆盖安装为新版本 ${PRODUCT_VERSION}？$\n$\n注意：覆盖安装将保留您的配置数据。"
+!define STR_SETUP_ENV_DETAIL "正在设置 OrcaLab 运行环境（可能需要几分钟）..."
+!define STR_SETUP_ENV_WARNING "警告: 环境设置返回代码 $1。首次启动时将自动重试。"

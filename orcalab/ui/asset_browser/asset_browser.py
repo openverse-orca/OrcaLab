@@ -22,6 +22,7 @@ from orcalab.metadata_service import MetadataService
 from orcalab.ui.asset_browser.thumbnail_render_bus import ThumbnailRenderRequestBus
 from orcalab.ui.asset_browser.thumbnail_render_service import ThumbnailRenderService
 from orcalab.http_service.http_service import HttpService
+from orcalab.i18n import tr
 from orcalab.project_util import get_cache_folder
 from orcalab.config_service import ConfigService
 from orcalab.ui.fonts.font_service import FontService
@@ -179,7 +180,7 @@ class AssetBrowser(QtWidgets.QWidget):
         self._view = AssetView()
         self._model = AssetModel()
         self._view.set_model(self._model)
-        self._view.set_loading_text("正在加载资产缩略图...")
+        self._view.set_loading_text(tr("正在加载资产缩略图..."))
 
         self._view.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self._view.customContextMenuRequested.connect(self.show_context_menu)

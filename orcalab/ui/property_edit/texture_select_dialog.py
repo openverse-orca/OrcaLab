@@ -2,6 +2,7 @@ from typing import List, Tuple
 
 from PySide6 import QtCore, QtWidgets, QtGui
 
+from orcalab.i18n import tr
 from orcalab.texture_asset_cache import TextureAssetCache
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.theme_service import ThemeService
@@ -150,9 +151,11 @@ class TextureSelectDialog(QtWidgets.QDialog):
     def _update_status(self, count: int):
         total = len(self._cache._uuid_to_path)
         if count == total:
-            self._status_label.setText(f"共 {total} 个纹理")
+            self._status_label.setText(tr("共 {total} 个纹理", total=total))
         else:
-            self._status_label.setText(f"显示 {count} / {total} 个纹理")
+            self._status_label.setText(
+                tr("显示 {count} / {total} 个纹理", count=count, total=total)
+            )
 
     def _on_search_changed(self, text: str):
         if not text:

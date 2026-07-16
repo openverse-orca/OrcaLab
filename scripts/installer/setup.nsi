@@ -4,25 +4,43 @@
 Unicode true
 SetCompressor /SOLID lzma
 
-!define PRODUCT_NAME "OrcaLab"
+!ifndef PRODUCT_VERSION
 !define PRODUCT_VERSION "26.4.3"
-!define PRODUCT_PUBLISHER "松应科技"
+!endif
+!ifndef VI_PRODUCT_VERSION
+!define VI_PRODUCT_VERSION "${PRODUCT_VERSION}.0"
+!endif
+!ifndef INSTALLER_SUFFIX
+!define INSTALLER_SUFFIX ""
+!endif
+!ifndef INSTALLER_SOURCE_DIR
+!define INSTALLER_SOURCE_DIR "."
+!endif
+
+!ifdef ORCALAB_ENGLISH
+!include "strings_en.nsh"
+!else
+!include "strings_zh.nsh"
+!endif
+
+!define PRODUCT_NAME "OrcaLab"
+!define PRODUCT_PUBLISHER "${STR_PRODUCT_PUBLISHER}"
 !define PRODUCT_WEB_SITE "https://orca3d.cn"
 !define PRODUCT_DIR_REGKEY "Software\Microsoft\Windows\CurrentVersion\App Paths\orcalab.bat"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define APP_USER_MODEL_ID "OrcaLab.Songying.OrcaLab"
 
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}"
-OutFile "..\..\dist\OrcaLab-${PRODUCT_VERSION}-Setup.exe"
+OutFile "..\..\dist\OrcaLab-${PRODUCT_VERSION}-Setup${INSTALLER_SUFFIX}.exe"
 InstallDir "$LOCALAPPDATA\OrcaLab"
 InstallDirRegKey HKCU "${PRODUCT_DIR_REGKEY}" ""
 RequestExecutionLevel user
 
-VIProductVersion "${PRODUCT_VERSION}.0"
+VIProductVersion "${VI_PRODUCT_VERSION}"
 VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
 VIAddVersionKey "CompanyName" "${PRODUCT_PUBLISHER}"
 VIAddVersionKey "LegalCopyright" "${PRODUCT_PUBLISHER}"
-VIAddVersionKey "FileDescription" "OrcaLab Installer"
+VIAddVersionKey "FileDescription" "${STR_FILE_DESCRIPTION}"
 VIAddVersionKey "FileVersion" "${PRODUCT_VERSION}"
 
 ; ── Interface ───────────────────────────────────────────
@@ -41,7 +59,11 @@ VIAddVersionKey "FileVersion" "${PRODUCT_VERSION}"
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 
+!ifdef ORCALAB_ENGLISH
+!insertmacro MUI_LANGUAGE "English"
+!else
 !insertmacro MUI_LANGUAGE "SimpChinese"
+!endif
 
 ; ── Detect existing installation ─────────────────────────
 Function .onInit
@@ -49,7 +71,7 @@ Function .onInit
     IfErrors no_previous_version
 
     MessageBox MB_YESNO|MB_ICONQUESTION \
-        "检测到已安装 OrcaLab $0。$\n$\n是否覆盖安装为新版本 ${PRODUCT_VERSION}？$\n$\n注意：覆盖安装将保留您的配置数据。" \
+        "${STR_UPGRADE_PROMPT}" \
         IDYES upgrade_confirm
     Quit
 
@@ -91,20 +113,20 @@ Function SetShortcutAppId
 FunctionEnd
 
 ; ── Install Section ─────────────────────────────────────
-Section "Install"
+Section "${STR_SECTION_INSTALL}"
     SetOutPath "$INSTDIR"
 
-    File "orcalab.bat"
-    File "orcalab.vbs"
+    File "${INSTALLER_SOURCE_DIR}\orcalab.bat"
+    File "${INSTALLER_SOURCE_DIR}\orcalab.vbs"
     File "..\..\orcalab\assets\icons\orcalab_logo.ico"
 
     ; Run conda environment setup during installation
-    DetailPrint "正在设置 OrcaLab 运行环境（可能需要几分钟）..."
+    DetailPrint "${STR_SETUP_ENV_DETAIL}"
     FileOpen $0 "$TEMP\orcalab_setup_only" w
     FileClose $0
     ExecWait '"$INSTDIR\orcalab.bat"' $1
     ${If} $1 != 0
-        DetailPrint "警告: 环境设置返回代码 $1。首次启动时将自动重试。"
+        DetailPrint "${STR_SETUP_ENV_WARNING}"
     ${EndIf}
 
     ; Desktop shortcut (point to .vbs for invisible launch)

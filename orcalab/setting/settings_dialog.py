@@ -4,6 +4,7 @@ from collections.abc import Callable
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from orcalab.config_service import ConfigService
+from orcalab.i18n import tr
 from orcalab.remote_scene import RemoteScene
 from orcalab.ui.checkbox import CheckBox
 from orcalab.ui.fonts.font_service import FontService
@@ -230,7 +231,7 @@ class SettingsDialog(QtWidgets.QDialog):
         self.fps_combo = QtWidgets.QComboBox()
         self.fps_combo.setObjectName("OrcaSettingsFpsCombo")
         for fps in _filtered_fps_options():
-            label = f"{_AUTO_FPS_LABEL} ({Viewport._detect_screen_refresh_rate()} FPS)" if fps == 0 else f"{fps} FPS"
+            label = f"{tr(_AUTO_FPS_LABEL)} ({Viewport._detect_screen_refresh_rate()} FPS)" if fps == 0 else f"{fps} FPS"
             self.fps_combo.addItem(label, fps)
         current_fps = config.lock_fps_value()
         idx = self.fps_combo.findData(current_fps)
