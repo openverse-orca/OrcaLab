@@ -114,7 +114,7 @@ class AuthService:
             包含 username, accessToken, refreshToken 的字典，失败返回 None
         """
         try:
-            url = f"{self.auth_url}/nonce/verify/"
+            url = f"{self.auth_url}/nonce/verifynowait/"
             
             start_time = time.monotonic()
             for i in range(max_retries):
@@ -126,7 +126,7 @@ class AuthService:
                         timeout=self.timeout
                     )
                     elapsed = time.monotonic() - _start
-                    logger.debug("HTTP POST %s/nonce/verify/ 耗时: %.3f 秒 (状态码: %s)", self.auth_url, elapsed, response.status_code)
+                    logger.debug("HTTP POST %s 耗时: %.3f 秒 (状态码: %s)", url, elapsed, response.status_code)
                     
                     if response.status_code == 200:
                         data = response.json()
@@ -135,6 +135,8 @@ class AuthService:
                             'access_token': data.get('accessToken'),
                             'refresh_token': data.get('refreshToken')
                         }
+
+                    logger.debug("nonce 验证返回状态码 %s，响应内容: %s", response.status_code, response.text[:300] if response.text else "")
 
                     if waiting_callback:
                         waiting_callback(time.monotonic() - start_time)
@@ -252,13 +254,13 @@ class AuthService:
 
         def on_waiting(elapsed_seconds: float):
             nonlocal browser_help_shown
-            if browser_help_shown or elapsed_seconds < 30:
+            if browser_help_shown or elapsed_seconds < 60:
                 return
             browser_help_shown = True
             if window:
                 window.show_browser_help_dialog(auth_url)
                 window.update_status(
-                    tr("等待浏览器认证超过 30 秒，请检查浏览器后重试")
+                    tr("等待浏览器认证超过 60 秒，请检查浏览器后重试")
                 )
 
         credentials = self.verify_nonce(nonce, waiting_callback=on_waiting)

@@ -88,6 +88,10 @@ class AssetModel(ThumbnailModel):
 
         result: List[AssetInfo] = []
         for asset in input:
+            if asset.pak_id != "":
+                if self.category_filter == asset.pak_id:
+                    result.append(asset)
+                    continue
             if asset.metadata is not None:
                 category_path = asset.metadata.get('categoryPath', '')
                 if isinstance(category_path, str) and category_path.startswith(self.category_filter):

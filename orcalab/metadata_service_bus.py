@@ -21,6 +21,9 @@ class MetadataServiceRequest:
     def update_asset_info(self, asset_path: str, asset_info: AssetMetadata) -> None:
         pass
 
+    def get_pak_name(self, pak_id: str) -> str:
+        pass
+
 MetadataServiceRequestBus = create_event_bus(MetadataServiceRequest)
 
 

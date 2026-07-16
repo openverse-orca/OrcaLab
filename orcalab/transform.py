@@ -22,7 +22,7 @@ class Transform:
     """
 
     def __init__(
-        self, position=np.array([0, 0, 0]), rotation=np.array([1, 0, 0, 0]), scale=1.0
+        self, position=np.array([0.0, 0.0, 0.0]), rotation=np.array([1.0, 0.0, 0.0, 0.0]), scale=1.0
     ):
         self.position = position
         self.rotation = rotation

@@ -14,6 +14,7 @@ class AssetTreeView(QtWidgets.QTreeWidget):
         self.setMaximumWidth(300)
         
         self._assets: List[AssetInfo] = []
+        self.category_map = {}
         
         fs = FontService()
         header = self.header()
@@ -48,19 +49,31 @@ class AssetTreeView(QtWidgets.QTreeWidget):
     def _rebuild_tree(self):
         self.clear()
         
-        category_map = {}
+        self.category_map = {}
         root_item = QtWidgets.QTreeWidgetItem(self, ["/"])
         root_item.setData(0, QtCore.Qt.UserRole, "/")
-        category_map["/"] = root_item
+        self.category_map["/"] = root_item
+
+        paks_item = QtWidgets.QTreeWidgetItem(root_item, ["paks"])
+        paks_item.setData(0, QtCore.Qt.UserRole, "/paks")
+        self.category_map["/paks"] = paks_item
+
         other_item = QtWidgets.QTreeWidgetItem(root_item, ["other"])
         other_item.setData(0, QtCore.Qt.UserRole, "/other")
-        category_map["/other"] = other_item
+        self.category_map["/other"] = other_item
 
         for asset in self._assets:
             if asset.metadata is not None:
                 category_path = asset.metadata.get('categoryPath', '')
                 if isinstance(category_path, str) and category_path:
-                    self._build_branch(category_path, category_map)
+                    self._build_branch(category_path, self.category_map)
+
+            if asset.pak_id not in self.category_map:
+                paks_item = self.category_map.get("/paks")
+                if paks_item is not None:
+                    pak_item = QtWidgets.QTreeWidgetItem(paks_item, [asset.pak_name])
+                    pak_item.setData(0, QtCore.Qt.UserRole, asset.pak_name)
+                    self.category_map[asset.pak_id] = pak_item
         
         self.expandAll()
 
@@ -79,6 +92,8 @@ class AssetTreeView(QtWidgets.QTreeWidget):
 
     
     def _on_item_clicked(self, item: QtWidgets.QTreeWidgetItem, column: int):
-        category = item.data(0, QtCore.Qt.UserRole)
-        self.category_selected.emit(category)
+        for category, tree_item in self.category_map.items():
+            if tree_item == item:
+                self.category_selected.emit(category)
+                return
 

@@ -366,8 +366,8 @@ TRANSLATIONS = {
     "关闭": "Close",
     "浏览器未正常打开": "Browser Did Not Open",
     "不建议使用 root 用户": "Running as root is not recommended",
-    "等待浏览器认证已超过 30 秒，浏览器可能没有正常弹出，或认证页没有成功打开。\n\n": (
-        "Browser authentication has been waiting for over 30 seconds. The browser may "
+    "等待浏览器认证已超过 60 秒，浏览器可能没有正常弹出，或认证页没有成功打开。\n\n": (
+        "Browser authentication has been waiting for over 60 seconds. The browser may "
         "not have opened, or the authentication page may not have loaded.\n\n"
     ),
     "建议尝试：\n": "Try the following:\n",
@@ -392,8 +392,9 @@ TRANSLATIONS = {
     "正在打开浏览器进行认证...": "Opening your browser for authentication...",
     "无法打开浏览器": "Unable to open the browser",
     "请在浏览器中完成认证...": "Complete authentication in your browser...",
-    "等待浏览器认证超过 30 秒，请检查浏览器后重试": (
-        "Browser authentication timed out after 30 seconds. Check your browser and try again."
+    "等待浏览器认证超过 60 秒，请检查浏览器后重试": (
+        "Browser authentication has been waiting for over 60 seconds. "
+        "Check your browser and try again."
     ),
     "资产包同步": "Asset Package Sync",
     "正在同步资产包...": "Syncing asset packages...",
