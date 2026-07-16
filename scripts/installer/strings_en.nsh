@@ -1,5 +1,5 @@
 LangString STR_SECTION_INSTALL ${LANG_ENGLISH} "Install"
 LangString STR_UNINSTALL ${LANG_ENGLISH} "Uninstall"
-LangString STR_UPGRADE_PROMPT ${LANG_ENGLISH} "OrcaLab $0 is already installed.$\n$\nDo you want to upgrade to version ${PRODUCT_VERSION}?$\n$\nYour configuration data will be preserved."
+LangString STR_UPGRADE_PROMPT ${LANG_ENGLISH} "OrcaLab $0 is already installed.$\n$\nDo you want to upgrade to version ${PRODUCT_VERSION}?$\n$\nOther configuration data will be preserved. The interface language will be set to English."
 LangString STR_SETUP_ENV_DETAIL ${LANG_ENGLISH} "Setting up the OrcaLab runtime environment. This may take a few minutes..."
 LangString STR_SETUP_ENV_WARNING ${LANG_ENGLISH} "Warning: environment setup returned code $1. OrcaLab will retry on first launch."

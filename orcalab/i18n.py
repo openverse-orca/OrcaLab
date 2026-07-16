@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import locale
 import os
+import sys
 from importlib import import_module
 from typing import Any, Callable
 
@@ -82,21 +83,54 @@ def _environment_locale_name() -> str | None:
     return None
 
 
+def _windows_ui_language_id() -> int | None:
+    """Return the current user's Windows UI language identifier."""
+    if sys.platform != "win32":
+        return None
+
+    try:
+        import ctypes
+
+        language_id = int(ctypes.windll.kernel32.GetUserDefaultUILanguage())
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+    return language_id or None
+
+
+def _python_locale_name() -> str | None:
+    try:
+        return locale.getlocale()[0]
+    except (locale.Error, TypeError, ValueError):
+        return None
+
+
 def detect_system_language() -> str:
     """Detect the preferred app language on Windows and Ubuntu."""
+    if sys.platform == "win32":
+        windows_language_id = _windows_ui_language_id()
+        if windows_language_id is not None:
+            # LANGID's low 10 bits contain the primary language identifier.
+            return "zh_CN" if windows_language_id & 0x03FF == 0x04 else "en_US"
+
+        qt_locale = _qt_ui_locale_name()
+        if qt_locale:
+            return language_from_locale(qt_locale)
+        return language_from_locale(_python_locale_name())
+
+    if sys.platform.startswith("linux"):
+        environment_locale = _environment_locale_name()
+        if environment_locale:
+            return language_from_locale(environment_locale)
+
+        qt_locale = _qt_ui_locale_name()
+        if qt_locale:
+            return language_from_locale(qt_locale)
+        return language_from_locale(_python_locale_name())
+
     qt_locale = _qt_ui_locale_name()
     if qt_locale:
         return language_from_locale(qt_locale)
-
-    environment_locale = _environment_locale_name()
-    if environment_locale:
-        return language_from_locale(environment_locale)
-
-    try:
-        python_locale = locale.getlocale()[0]
-    except (locale.Error, TypeError, ValueError):
-        python_locale = None
-    return language_from_locale(python_locale)
+    return language_from_locale(_python_locale_name())
 
 
 def _load_translations(language: str) -> dict[str, str]:

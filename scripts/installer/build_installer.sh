@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build Windows NSIS installer for OrcaLab
 # Prerequisites: sudo apt-get install nsis
-# The installer wraps orcalab.bat + icon, creates desktop shortcut, and selects
-# its UI language from the Windows system language at runtime.
+# Builds separate Chinese and English installers with fixed installer and app
+# languages. The installed shortcut remains language-neutral after setup.
 # No code signing required — .bat scripts bypass Device Guard.
 
 set -e
@@ -34,6 +34,7 @@ while [ $# -gt 0 ]; do
             ;;
         -h|--help)
             echo "Usage: $0 [--pip-source test|prod]"
+            echo "Builds both zh-CN and en-US installers."
             echo "Legacy usage still works: $0 test|prod"
             exit 0
             ;;
@@ -81,22 +82,13 @@ VERSION=$(grep '^version' "$PROJECT_ROOT/pyproject.toml" | head -1 | sed 's/.*"\
 echo "Version: $VERSION"
 
 # Prepare staged installer sources so parallel builds never mutate templates.
-BUILD_DIR="$(mktemp -d "$SCRIPT_DIR/.installer-build.XXXXXX")"
+BUILD_ROOT="$(mktemp -d "$SCRIPT_DIR/.installer-build.XXXXXX")"
 cleanup_staging() {
-    rm -rf "$BUILD_DIR"
+    rm -rf "$BUILD_ROOT"
 }
 trap cleanup_staging EXIT
 
-BAT_FILE="$BUILD_DIR/orcalab.bat"
-VBS_FILE="$BUILD_DIR/orcalab.vbs"
-cp "$SCRIPT_DIR/orcalab.bat" "$BAT_FILE"
-cp "$SCRIPT_DIR/orcalab.vbs" "$VBS_FILE"
-
-# Inject version into staged orcalab.bat
-sed -i "s/__ORCALAB_VERSION__/$VERSION/g" "$BAT_FILE"
-
 PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
-sed -i "s|__PIP_INDEX_URL__|$PIP_INDEX_URL|g" "$BAT_FILE"
 
 # Inject pip extra index URLs based on pip_source.
 # Keep Tsinghua as the primary index because orca-gym releases are expected
@@ -106,28 +98,45 @@ if [ "$PIP_SOURCE" = "test" ]; then
 else
     EXTRA_INDEX_URLS="--extra-index-url https://pypi.org/simple"
 fi
-sed -i "s|__PIP_EXTRA_INDEX_URLS__|$EXTRA_INDEX_URLS|g" "$BAT_FILE"
 
 VI_VERSION=$(echo "$VERSION" | awk -F. '{if (NF==3) print $0".0"; else print $0}')
 
-# Convert .bat and .vbs to CRLF line endings
-# Windows cmd.exe requires CRLF for batch files; VBScript also works better with CRLF
-echo "Converting line endings to CRLF..."
-sed -i 's/\r$//;s/$/\r/' "$BAT_FILE"
-sed -i 's/\r$//;s/$/\r/' "$VBS_FILE"
-echo "  ✓ Line endings converted"
-
-# Build installer
 mkdir -p "$DIST_DIR"
-echo ""
-echo "Building NSIS installer..."
-NSIS_ARGS=(
-    "-DPRODUCT_VERSION=$VERSION"
-    "-DVI_PRODUCT_VERSION=$VI_VERSION"
-    "-DINSTALLER_SOURCE_DIR=$(basename "$BUILD_DIR")"
-)
-makensis "${NSIS_ARGS[@]}" setup.nsi
+
+build_variant() {
+    local language="$1"
+    local suffix="$2"
+    local build_dir="$BUILD_ROOT/$language"
+    local bat_file="$build_dir/orcalab.bat"
+    local vbs_file="$build_dir/orcalab.vbs"
+
+    mkdir -p "$build_dir"
+    cp "$SCRIPT_DIR/orcalab.bat" "$bat_file"
+    cp "$SCRIPT_DIR/orcalab.vbs" "$vbs_file"
+
+    sed -i "s/__ORCALAB_VERSION__/$VERSION/g" "$bat_file"
+    sed -i "s/__INSTALLER_LANGUAGE__/$language/g" "$bat_file" "$vbs_file"
+    sed -i "s|__PIP_INDEX_URL__|$PIP_INDEX_URL|g" "$bat_file"
+    sed -i "s|__PIP_EXTRA_INDEX_URLS__|$EXTRA_INDEX_URLS|g" "$bat_file"
+
+    # Windows cmd.exe requires CRLF; VBScript is also more reliable with it.
+    sed -i 's/\r$//;s/$/\r/' "$bat_file" "$vbs_file"
+
+    local nsis_args=(
+        "-DPRODUCT_VERSION=$VERSION"
+        "-DVI_PRODUCT_VERSION=$VI_VERSION"
+        "-DINSTALLER_SOURCE_DIR=$(basename "$BUILD_ROOT")/$language"
+    )
+    if [ "$language" = "en_US" ]; then
+        nsis_args+=("-DORCALAB_ENGLISH")
+    fi
+
+    echo "Building $language installer..."
+    makensis "${nsis_args[@]}" setup.nsi
+    echo "✅ Installer built: $DIST_DIR/OrcaLab-$VERSION-Setup-$suffix.exe"
+    ls -lh "$DIST_DIR/OrcaLab-$VERSION-Setup-$suffix.exe"
+}
 
 echo ""
-echo "✅ Installer built: $DIST_DIR/OrcaLab-$VERSION-Setup.exe"
-ls -lh "$DIST_DIR"/OrcaLab-"$VERSION"-Setup.exe
+build_variant "zh_CN" "zh-CN"
+build_variant "en_US" "en-US"

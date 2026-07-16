@@ -22,7 +22,11 @@ SetCompressor /SOLID lzma
 !define APP_USER_MODEL_ID "OrcaLab.Songying.OrcaLab"
 
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}"
-OutFile "..\..\dist\OrcaLab-${PRODUCT_VERSION}-Setup.exe"
+!ifdef ORCALAB_ENGLISH
+OutFile "..\..\dist\OrcaLab-${PRODUCT_VERSION}-Setup-en-US.exe"
+!else
+OutFile "..\..\dist\OrcaLab-${PRODUCT_VERSION}-Setup-zh-CN.exe"
+!endif
 InstallDir "$LOCALAPPDATA\OrcaLab"
 InstallDirRegKey HKCU "${PRODUCT_DIR_REGKEY}" ""
 RequestExecutionLevel user
@@ -51,36 +55,16 @@ VIAddVersionKey "FileVersion" "${PRODUCT_VERSION}"
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 
+!ifdef ORCALAB_ENGLISH
 !insertmacro MUI_LANGUAGE "English"
-!insertmacro MUI_LANGUAGE "SimpChinese"
-!insertmacro MUI_LANGUAGE "TradChinese"
-
 !include "strings_en.nsh"
+!else
+!insertmacro MUI_LANGUAGE "SimpChinese"
 !include "strings_zh.nsh"
-
-; Select English for non-Chinese Windows UI languages. All Chinese variants
-; use Chinese, with zh-CN/zh-SG using simplified and the rest traditional.
-!macro SelectSystemLanguage
-    System::Call 'kernel32::GetUserDefaultUILanguage() i .r9'
-    IntOp $8 $9 & 0x03FF
-    ${If} $8 != 0x04
-        StrCpy $LANGUAGE ${LANG_ENGLISH}
-    ${Else}
-        IntOp $7 $9 >> 10
-        ${If} $7 == 2
-        ${OrIf} $7 == 4
-        ${OrIf} $7 == 0
-            StrCpy $LANGUAGE ${LANG_SIMPCHINESE}
-        ${Else}
-            StrCpy $LANGUAGE ${LANG_TRADCHINESE}
-        ${EndIf}
-    ${EndIf}
-!macroend
+!endif
 
 ; ── Detect existing installation ─────────────────────────
 Function .onInit
-    !insertmacro SelectSystemLanguage
-
     ReadRegStr $0 HKCU "${PRODUCT_UNINST_KEY}" "DisplayVersion"
     IfErrors no_previous_version
 
@@ -136,6 +120,8 @@ Section "$(STR_SECTION_INSTALL)"
 
     ; Run conda environment setup during installation
     DetailPrint "$(STR_SETUP_ENV_DETAIL)"
+    FileOpen $0 "$INSTDIR\orcalab_apply_installer_language" w
+    FileClose $0
     FileOpen $0 "$TEMP\orcalab_setup_only" w
     FileClose $0
     ExecWait '"$INSTDIR\orcalab.bat"' $1
@@ -169,15 +155,11 @@ Section "$(STR_SECTION_INSTALL)"
     WriteUninstaller "$INSTDIR\uninst.exe"
 SectionEnd
 
-; ── Uninstall Section ───────────────────────────────────
-Function un.onInit
-    !insertmacro SelectSystemLanguage
-FunctionEnd
-
 ; NSIS requires this reserved section name to identify uninstaller code.
 Section "Uninstall"
     Delete "$INSTDIR\orcalab.bat"
     Delete "$INSTDIR\orcalab.vbs"
+    Delete "$INSTDIR\orcalab_apply_installer_language"
     Delete "$INSTDIR\orcalab_logo.ico"
     Delete "$INSTDIR\uninst.exe"
     RMDir "$INSTDIR"
