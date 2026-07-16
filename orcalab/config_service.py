@@ -139,23 +139,36 @@ class ConfigService:
             platform_config_name, root_folder.as_posix()
         )
 
-        with open(self.config_path, "rb") as file:
-            shared_config = tomllib.load(file)
+        shared_config = {}
+        try:
+            with open(self.config_path, "rb") as file:
+                shared_config = tomllib.load(file)
+        except tomllib.TOMLDecodeError:
+            logger.warning("共享配置文件格式损坏，已跳过: %s", self.config_path)
 
         platform_config = {}
         if os.path.exists(self.platform_config_path):
-            with open(self.platform_config_path, "rb") as file:
-                platform_config = tomllib.load(file)
+            try:
+                with open(self.platform_config_path, "rb") as file:
+                    platform_config = tomllib.load(file)
+            except tomllib.TOMLDecodeError:
+                logger.warning("平台配置文件格式损坏，已跳过: %s", self.platform_config_path)
 
         user_config = {}
         if os.path.exists(self.user_config_path):
-            with open(self.user_config_path, "rb") as file:
-                user_config = tomllib.load(file)
+            try:
+                with open(self.user_config_path, "rb") as file:
+                    user_config = tomllib.load(file)
+            except tomllib.TOMLDecodeError:
+                logger.warning("用户配置文件格式损坏，已跳过: %s", self.user_config_path)
 
         workspace_config = {}
         if os.path.exists(self.workspace_config_file()):
-            with open(self.workspace_config_file(), "rb") as file:
-                workspace_config = tomllib.load(file)
+            try:
+                with open(self.workspace_config_file(), "rb") as file:
+                    workspace_config = tomllib.load(file)
+            except tomllib.TOMLDecodeError:
+                logger.warning("工作区配置文件格式损坏，已跳过: %s", self.workspace_config_file())
 
         self.config = deep_merge(self.config, shared_config)
         self.config = deep_merge(self.config, platform_config)
@@ -518,9 +531,13 @@ class ConfigService:
         # 更新指定键值对
         cb(user_config)
 
-        # 保存回文件
-        with open(self.user_config_path, "wb") as file:
+        # 保存回文件（原子写入：先写临时文件，再替换，防止断电导致文件损坏）
+        tmp_path = self.user_config_path + ".tmp"
+        with open(tmp_path, "wb") as file:
             tomli_w.dump(user_config, file)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(tmp_path, self.user_config_path)
         
     def send_statistics(self) -> str:
         return self.config.get("orcalab", {}).get("send_statistics", "unset")
