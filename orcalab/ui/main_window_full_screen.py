@@ -3,7 +3,6 @@ import json
 from typing import List
 from typing_extensions import override
 import logging
-from pathlib import Path as SystemPath
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtGui import QKeyEvent
 
@@ -15,7 +14,8 @@ from orcalab.report.report import (
     send_report_directly,
 )
 from orcalab.scene_edit_service import SceneEditService
-from orcalab.scene_layout.scene_layout_helper import SceneLayoutHelper
+from orcalab.scene_layout.scene_layout_service import SceneLayoutService
+from orcalab.selection_data import SelectionData
 from orcalab.simulation.simulation_bus import SimulationRequestBus
 from orcalab.simulation.simulation_service import SimulationService
 from orcalab.ui.camera.camera_bus import (
@@ -27,7 +27,6 @@ from orcalab.ui.camera.camera_bus import (
 from orcalab.ui.icon_util import schedule_windows_taskbar_icon_refresh
 from orcalab.ui.viewport import Viewport
 from orcalab.config_service import ConfigService
-from orcalab.i18n import tr
 from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
 from orcalab.report.abnormal_exit_report import take_pending_abnormal_exit_report, send_abnormal_exit_report
@@ -66,6 +65,7 @@ class MainWindowFullScreen(
         self.remote_scene = RemoteScene(self.config_service, self.local_scene)
         self.scene_edit_service = SceneEditService(self.local_scene, self.remote_scene)
         self.simulation_service = SimulationService()
+        self.layout_service = SceneLayoutService(self.local_scene, self.remote_scene, self)
 
         logger.info("开始初始化 UI…")
 
@@ -112,21 +112,10 @@ class MainWindowFullScreen(
 
         await self.remote_scene.init_grpc()
         await self.remote_scene.set_sync_from_mujoco_to_scene(False)
-        await self.remote_scene.set_selection([])
+        await self.remote_scene.set_selection(SelectionData())
         await self.remote_scene.clear_scene()
 
-        default_layout_path = self.config_service.default_layout_file()
-        if default_layout_path and SystemPath(default_layout_path).exists():
-            helper = SceneLayoutHelper(self.local_scene)
-            if not await helper.load_scene_layout(self, default_layout_path):
-                QtWidgets.QMessageBox.critical(
-                    self,
-                    tr("加载默认布局失败"),
-                    tr("所选场景的默认布局加载失败。\n"),
-                    QtWidgets.QMessageBox.StandardButton.Ok,
-                )
-                QtWidgets.QApplication.quit()
-                return
+        await self.layout_service.start_up_open_layout()
 
         # Load cameras from remote scene.
         cameras = await self.remote_scene.get_cameras()
