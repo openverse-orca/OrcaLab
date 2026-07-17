@@ -99,7 +99,7 @@ class PluginManagerDialog(QtWidgets.QDialog):
             version_item.setFlags(QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable)
             self._table.setItem(row, 2, version_item)
 
-            desc_item = QtWidgets.QTableWidgetItem(tr(manifest.description or ""))
+            desc_item = QtWidgets.QTableWidgetItem(manifest.get_description())
             desc_item.setFlags(QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable)
             self._table.setItem(row, 3, desc_item)
 

@@ -5,12 +5,58 @@ import sys
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-from orcalab.i18n import tr
+from orcalab.i18n import get_language, tr
 
 if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
+
+
+def _canonical_locale_key(locale_name: str) -> str:
+    """Normalize supported locale aliases without treating unknown locales as English."""
+    value = locale_name.strip().replace("-", "_")
+    normalized = value.lower()
+    primary_language = normalized.split("_", 1)[0]
+
+    if primary_language == "en" or normalized == "english":
+        return "en_US"
+    if primary_language == "zh" or normalized in {
+        "cn",
+        "chinese",
+        "simpchinese",
+        "simplified_chinese",
+    }:
+        return "zh_CN"
+    return normalized
+
+
+def _localized_descriptions(plugin_section: dict) -> Dict[str, str]:
+    locales = plugin_section.get("locales", {})
+    if not isinstance(locales, dict):
+        return {}
+
+    descriptions: Dict[str, str] = {}
+    priorities: Dict[str, int] = {}
+    for locale_name, locale_data in locales.items():
+        if not isinstance(locale_name, str) or not isinstance(locale_data, dict):
+            continue
+
+        description = locale_data.get("description")
+        if not isinstance(description, str) or not description.strip():
+            continue
+
+        locale_key = _canonical_locale_key(locale_name)
+        if not locale_key:
+            continue
+
+        # If aliases collide, prefer the canonical spelling regardless of TOML order.
+        priority = int(locale_name == locale_key)
+        if locale_key not in descriptions or priority > priorities[locale_key]:
+            descriptions[locale_key] = description
+            priorities[locale_key] = priority
+
+    return descriptions
 
 
 @dataclass
@@ -29,6 +75,17 @@ class PluginManifest:
     init_script: str = ""
     uninstall_script: str = ""
     plugin_dir: pathlib.Path = field(default_factory=lambda: pathlib.Path())
+    localized_descriptions: Dict[str, str] = field(default_factory=dict, kw_only=True)
+
+    def get_description(self, language: str | None = None) -> str:
+        """Return the plugin description for the requested or current UI language."""
+        locale_key = _canonical_locale_key(language if language is not None else get_language())
+        return (
+            self.localized_descriptions.get(locale_key)
+            or self.localized_descriptions.get("en_US")
+            or self.description
+            or ""
+        )
 
     @property
     def init_script_path(self) -> pathlib.Path:
@@ -95,12 +152,16 @@ class PluginManifest:
 
         extensions = plugin_section.get("extensions", {}) or {}
 
+        description = plugin_section.get("description", "")
+        if not isinstance(description, str):
+            description = ""
+
         return cls(
             name=name,
             version=version,
             entry=entry,
             author=plugin_section.get("author", ""),
-            description=plugin_section.get("description", ""),
+            description=description,
             min_orcalab_version=plugin_section.get("min_orcalab_version", ""),
             python_dependencies=python_deps,
             config_files=config_files,
@@ -108,4 +169,5 @@ class PluginManifest:
             init_script=plugin_section.get("init_script", "init.sh"),
             uninstall_script=plugin_section.get("uninstall_script", "uninstall.sh"),
             plugin_dir=toml_path.parent,
+            localized_descriptions=_localized_descriptions(plugin_section),
         )

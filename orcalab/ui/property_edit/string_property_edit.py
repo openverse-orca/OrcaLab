@@ -1,24 +1,33 @@
 import asyncio
 import logging
 from typing import List
-from typing_extensions import override
+
 from PySide6 import QtCore, QtWidgets
+from typing_extensions import override
 
 from orcalab.actor import AssetActor
 from orcalab.actor_property import ActorEntities, ActorPropertyGroup, ActorPropertyKey
 from orcalab.application_util import get_local_scene, get_remote_scene
 from orcalab.i18n import tr
 from orcalab.scene_edit_bus import SceneEditRequestBus
+from orcalab.ui.edit.multiline_string_edit import MultilineStringEdit
+from orcalab.ui.edit.string_edit import StringEdit
+from orcalab.ui.fonts.font_service import FontService
+from orcalab.ui.joint_rename_dialog import JointRenameDialog
 from orcalab.ui.property_edit.base_property_edit import (
     BasePropertyEdit,
     PropertyEditContext,
 )
-from orcalab.ui.edit.string_edit import StringEdit
-from orcalab.ui.edit.multiline_string_edit import MultilineStringEdit
-from orcalab.ui.fonts.font_service import FontService
-from orcalab.ui.joint_rename_dialog import JointRenameDialog
 
 logger = logging.getLogger(__name__)
+
+_LOCALIZABLE_READ_ONLY_VALUES = frozenset({"未加载"})
+
+
+def _display_string_value(value: str, read_only: bool) -> str:
+    if read_only and value in _LOCALIZABLE_READ_ONLY_VALUES:
+        return tr(value)
+    return value
 
 
 def _normalize_float_vec(text: str) -> str | None:
@@ -107,6 +116,9 @@ class StringPropertyEdit(BasePropertyEdit[str]):
         is_name_prop = _is_name_property(context.prop.name()) and isinstance(
             context.actor, AssetActor
         )
+        initial_display_value = _display_string_value(
+            context.prop.value(), context.prop.is_read_only()
+        )
 
         if is_name_prop:
             root_layout = QtWidgets.QHBoxLayout(self)
@@ -116,7 +128,7 @@ class StringPropertyEdit(BasePropertyEdit[str]):
             label = self._create_label(label_width)
 
             editor = StringEdit()
-            editor.setText(context.prop.value())
+            editor.setText(initial_display_value)
             editor.setReadOnly(True)
             editor.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
             editor.setStyleSheet(self.base_style)
@@ -144,7 +156,7 @@ class StringPropertyEdit(BasePropertyEdit[str]):
             )
 
             editor = MultilineStringEdit()
-            editor.setText(context.prop.value())
+            editor.setText(initial_display_value)
             editor.value_changed.connect(self._on_text_changed)
             FontService().bind_widget_font(editor, "property_edit")
 
@@ -158,7 +170,7 @@ class StringPropertyEdit(BasePropertyEdit[str]):
             label = self._create_label(label_width)
 
             editor = StringEdit()
-            editor.setText(context.prop.value())
+            editor.setText(initial_display_value)
             editor.value_changed.connect(self._on_text_changed)
             editor.setStyleSheet(self.base_style)
             editor.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
@@ -276,13 +288,16 @@ class StringPropertyEdit(BasePropertyEdit[str]):
     @override
     def set_value(self, value: str):
         self._block_events = True
-
-        normalized = _normalize_float_vec(value)
-        display = normalized if normalized is not None else value
-        self.context.prop.set_value(display)
-        self._editor.setText(display)
-
-        self._block_events = False
+        try:
+            normalized = _normalize_float_vec(value)
+            raw_value = normalized if normalized is not None else value
+            self.context.prop.set_value(raw_value)
+            display = _display_string_value(
+                raw_value, self.context.prop.is_read_only()
+            )
+            self._editor.setText(display)
+        finally:
+            self._block_events = False
 
     @override
     def set_read_only(self, read_only: bool):

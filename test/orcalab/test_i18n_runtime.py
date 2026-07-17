@@ -50,6 +50,42 @@ def test_unspecified_language_defaults_to_english():
 
 
 @pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("变换", "Transform"),
+        ("网格", "Mesh"),
+        ("方向光源", "Directional Light"),
+        ("区域光源", "Area Light"),
+        ("材质", "Material"),
+        ("碰撞体", "Geometry"),
+        ("刚体", "Rigid Body"),
+        ("肌腱", "Tendon"),
+        ("关节", "Joint"),
+        ("标记点", "Site"),
+        ("相机", "Camera"),
+        ("执行器", "Actuator"),
+        ("传感器", "Sensor"),
+        ("未加载", "Not Loaded"),
+        ("自定义", "Custom"),
+        ("钢铁", "Steel"),
+        ("铝合金", "Aluminum Alloy"),
+        ("木头", "Wood"),
+        ("塑料", "Plastic"),
+        ("橡胶", "Rubber"),
+        ("石头", "Stone"),
+        ("玻璃", "Glass"),
+        ("冰", "Ice"),
+        ("泡沫", "Foam"),
+    ],
+)
+def test_engine_property_metadata_has_english_translations(source, expected):
+    translated = tr(source)
+
+    assert translated == expected
+    _assert_english(translated)
+
+
+@pytest.mark.parametrize(
     "locale_name",
     [
         "zh",
