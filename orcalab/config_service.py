@@ -58,6 +58,34 @@ def read_user_ui_language() -> str | None:
     return normalize_language(value)
 
 
+def write_user_ui_language(value: str, config_path: str | None = None) -> str:
+    """Persist a UI language without initializing the full config service."""
+    language = normalize_language(value)
+    config_path = config_path or get_user_config_path()
+    user_config = {}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "rb") as config_file:
+                user_config = tomllib.load(config_file)
+        except tomllib.TOMLDecodeError:
+            logger.warning("用户配置文件格式损坏，将以空配置覆盖修复: %s", config_path)
+        except OSError as e:
+            logger.warning("用户配置文件无法读取，将以空配置覆盖修复: %s (%s)", config_path, e)
+
+    user_config.setdefault("orcalab", {})["language"] = language
+    parent_folder = os.path.dirname(config_path)
+    if parent_folder:
+        os.makedirs(parent_folder, exist_ok=True)
+
+    tmp_path = config_path + ".tmp"
+    with open(tmp_path, "wb") as config_file:
+        tomli_w.dump(user_config, config_file)
+        config_file.flush()
+        os.fsync(config_file.fileno())
+    os.replace(tmp_path, config_path)
+    return language
+
+
 # ConfigService is a singleton
 class ConfigService:
     _instance = None
@@ -553,24 +581,33 @@ class ConfigService:
     def ui_language(self) -> str:
         return self.configured_ui_language() or normalize_language(None)
 
-    def ensure_ui_language(self) -> str:
-        """Persist the detected system language once and return the preference."""
+    def ensure_ui_language(
+        self,
+        requested_language: str | None = None,
+        *,
+        detected_language: str | None = None,
+    ) -> str:
+        """Persist an explicit language or initialize it from the system once."""
+        if requested_language is not None and requested_language.strip():
+            self.set_ui_language(requested_language)
+            return self.ui_language()
+
         configured_language = self.configured_ui_language()
         if configured_language is not None:
             return configured_language
 
-        language = detect_system_language()
+        language = (
+            normalize_language(detected_language)
+            if detected_language is not None and detected_language.strip()
+            else detect_system_language()
+        )
         self.set_ui_language(language)
         return language
 
     def set_ui_language(self, value: str) -> None:
         language = normalize_language(value)
         self.config.setdefault("orcalab", {})["language"] = language
-
-        def update_func(config):
-            config.setdefault("orcalab", {})["language"] = language
-
-        self.set_user_config("orcalab", update_func)
+        write_user_ui_language(language, self.user_config_path)
 
     def set_user_config(self, key: str, cb):
         """更新用户配置文件中的指定键值对"""

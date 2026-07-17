@@ -2,51 +2,18 @@
 setlocal enabledelayedexpansion
 
 set "ENV_NAME=orcalab"
+set "INSTALLER_LANGUAGE=__INSTALLER_LANGUAGE__"
 set "MINICONDA_URL=https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe"
 set "INSTALLER=%TEMP%\miniconda_installer.exe"
 set "SETUP_ONLY_FLAG=%TEMP%\orcalab_setup_only"
+set "LANGUAGE_PENDING_FLAG=%~dp0orcalab_apply_installer_language"
 
-call :resolve_launcher_language %*
-if /i "%LAUNCHER_LANGUAGE%"=="zh_CN" chcp 65001 >nul
+if /i "%INSTALLER_LANGUAGE%"=="zh_CN" chcp 65001 >nul
 call :load_launcher_strings
 goto :launcher_start
 
-:resolve_launcher_language
-set "LAUNCHER_LANGUAGE="
-:resolve_launcher_language_next
-if "%~1"=="" goto :resolve_launcher_system_language
-set "LAUNCHER_ARG=%~1"
-if /i "!LAUNCHER_ARG!"=="--lang" (
-    set "LAUNCHER_LANGUAGE="
-    if not "%~2"=="" call :normalize_launcher_language "%~2"
-    shift
-) else if /i "!LAUNCHER_ARG:~0,7!"=="--lang=" (
-    set "LAUNCHER_LANGUAGE="
-    call :normalize_launcher_language "!LAUNCHER_ARG:~7!"
-)
-shift
-goto :resolve_launcher_language_next
-
-:resolve_launcher_system_language
-if defined LAUNCHER_LANGUAGE exit /b 0
-set "WINDOWS_UI_LANGUAGE="
-for /f "usebackq delims=" %%L in (`powershell.exe -NoProfile -NonInteractive -Command "[Globalization.CultureInfo]::CurrentUICulture.TwoLetterISOLanguageName" 2^>nul`) do set "WINDOWS_UI_LANGUAGE=%%L"
-if /i "!WINDOWS_UI_LANGUAGE!"=="zh" (
-    set "LAUNCHER_LANGUAGE=zh_CN"
-) else (
-    set "LAUNCHER_LANGUAGE=en_US"
-)
-exit /b 0
-
-:normalize_launcher_language
-if /i "%~1"=="zh" set "LAUNCHER_LANGUAGE=zh_CN"
-if /i "%~1"=="zh_CN" set "LAUNCHER_LANGUAGE=zh_CN"
-if /i "%~1"=="en" set "LAUNCHER_LANGUAGE=en_US"
-if /i "%~1"=="en_US" set "LAUNCHER_LANGUAGE=en_US"
-exit /b 0
-
 :load_launcher_strings
-if /i "%LAUNCHER_LANGUAGE%"=="zh_CN" (
+if /i "%INSTALLER_LANGUAGE%"=="zh_CN" (
     set "MSG_ENV_SETUP_TITLE=OrcaLab 环境配置"
     set "MSG_LAUNCHER_TITLE=OrcaLab 启动器"
     set "MSG_CHECK_CONDA=正在检查 conda 安装"
@@ -72,6 +39,8 @@ if /i "%LAUNCHER_LANGUAGE%"=="zh_CN" (
     set "MSG_PACKAGE_INSTALL_FAILED=多次尝试后仍无法安装 orca-lab"
     set "MSG_CHECK_NETWORK=排查建议：请检查网络连接"
     set "MSG_PACKAGE_INSTALLED=已安装"
+    set "MSG_CONFIGURE_LANGUAGE=正在设置 OrcaLab 界面语言"
+    set "MSG_CONFIGURE_LANGUAGE_FAILED=设置 OrcaLab 界面语言失败"
     set "MSG_SETUP_COMPLETE=环境配置完成"
     set "MSG_CAN_LAUNCH=现在可以启动 OrcaLab"
     set "MSG_LAUNCHING=正在启动 OrcaLab"
@@ -107,6 +76,8 @@ if /i "%LAUNCHER_LANGUAGE%"=="zh_CN" (
     set "MSG_PACKAGE_INSTALL_FAILED=Failed to install orca-lab after multiple attempts"
     set "MSG_CHECK_NETWORK=Troubleshooting: Check your internet connection"
     set "MSG_PACKAGE_INSTALLED=installed"
+    set "MSG_CONFIGURE_LANGUAGE=Setting the OrcaLab interface language"
+    set "MSG_CONFIGURE_LANGUAGE_FAILED=Failed to set the OrcaLab interface language"
     set "MSG_SETUP_COMPLETE=Environment setup complete"
     set "MSG_CAN_LAUNCH=You can now launch OrcaLab"
     set "MSG_LAUNCHING=Launching OrcaLab"
@@ -257,6 +228,21 @@ if "!PIP_OK!"=="0" (
     exit /b 1
 )
 echo   [OK] orca-lab __ORCALAB_VERSION__ !MSG_PACKAGE_INSTALLED!.
+
+REM -- Apply the installer language once, retrying after incomplete setup --
+if exist "%LANGUAGE_PENDING_FLAG%" (
+    echo   [INFO] !MSG_CONFIGURE_LANGUAGE!: %INSTALLER_LANGUAGE%...
+    "%ENV_PREFIX%\python.exe" -c "from orcalab.config_service import write_user_ui_language; write_user_ui_language('%INSTALLER_LANGUAGE%')"
+    if !ERRORLEVEL! NEQ 0 (
+        echo   [ERROR] !MSG_CONFIGURE_LANGUAGE_FAILED!.
+        exit /b 1
+    )
+    del /q "%LANGUAGE_PENDING_FLAG%" 2>nul
+    if exist "%LANGUAGE_PENDING_FLAG%" (
+        echo   [ERROR] !MSG_CONFIGURE_LANGUAGE_FAILED!.
+        exit /b 1
+    )
+)
 
 REM -- If setup-only, exit here -----------------------------
 if "%SETUP_ONLY%"=="1" (

@@ -4,8 +4,7 @@ from pathlib import Path
 import pytest
 
 import orcalab.config_service as config_service_module
-from orcalab.config_service import ConfigService
-from orcalab.i18n import resolve_language
+from orcalab.config_service import ConfigService, write_user_ui_language
 
 
 @pytest.fixture
@@ -88,23 +87,49 @@ def test_ensure_ui_language_detects_and_persists_first_language(
     assert persisted["orcalab"]["language"] == detected_language
 
 
-def test_cli_language_is_temporary_while_first_system_language_is_saved(
+def test_ensure_ui_language_can_persist_an_early_system_detection(
     fresh_config_service, monkeypatch, tmp_path
 ):
     user_config_path = tmp_path / "config.toml"
     fresh_config_service.user_config_path = user_config_path.as_posix()
+
+    def fail_if_detected_again():
+        raise AssertionError("the startup language should be reused")
+
     monkeypatch.setattr(
-        config_service_module, "detect_system_language", lambda: "zh_CN"
+        config_service_module,
+        "detect_system_language",
+        fail_if_detected_again,
     )
 
-    saved_language = fresh_config_service.ensure_ui_language()
-    effective_language = resolve_language("en_US", saved_language)
-
-    assert effective_language == "en_US"
-    assert fresh_config_service.configured_ui_language() == "zh_CN"
+    assert (
+        fresh_config_service.ensure_ui_language(detected_language="zh_CN")
+        == "zh_CN"
+    )
     with user_config_path.open("rb") as config_file:
         persisted = tomllib.load(config_file)
     assert persisted["orcalab"]["language"] == "zh_CN"
+
+
+def test_requested_language_overrides_saved_language_and_is_persisted(
+    fresh_config_service, monkeypatch, tmp_path
+):
+    user_config_path = tmp_path / "config.toml"
+    fresh_config_service.user_config_path = user_config_path.as_posix()
+    fresh_config_service.config["orcalab"]["language"] = "zh_CN"
+    monkeypatch.setattr(
+        config_service_module,
+        "detect_system_language",
+        lambda: pytest.fail("an explicit language must not detect the system"),
+    )
+
+    effective_language = fresh_config_service.ensure_ui_language("en_US")
+
+    assert effective_language == "en_US"
+    assert fresh_config_service.configured_ui_language() == "en_US"
+    with user_config_path.open("rb") as config_file:
+        persisted = tomllib.load(config_file)
+    assert persisted["orcalab"]["language"] == "en_US"
 
 
 def test_configured_ui_language_is_not_reinitialized(
@@ -138,6 +163,38 @@ def test_read_user_ui_language_returns_saved_value(monkeypatch, tmp_path):
     )
 
     assert config_service_module.read_user_ui_language() == "zh_CN"
+
+
+def test_write_user_ui_language_overrides_only_language(tmp_path):
+    user_config_path = tmp_path / "config.toml"
+    user_config_path.write_text(
+        (
+            '[orcalab]\nlanguage = "zh_CN"\nfont_scale_percent = 125\n'
+            '\n[plugin]\nenabled = true\n'
+        ),
+        encoding="utf-8",
+    )
+    assert write_user_ui_language("en_US", user_config_path.as_posix()) == "en_US"
+    with user_config_path.open("rb") as config_file:
+        persisted = tomllib.load(config_file)
+
+    assert persisted["orcalab"] == {
+        "language": "en_US",
+        "font_scale_percent": 125,
+    }
+    assert persisted["plugin"] == {"enabled": True}
+
+
+def test_write_user_ui_language_repairs_invalid_config_atomically(tmp_path):
+    user_config_path = tmp_path / "config.toml"
+    user_config_path.write_text("invalid = [", encoding="utf-8")
+
+    assert write_user_ui_language("zh_CN", user_config_path.as_posix()) == "zh_CN"
+
+    with user_config_path.open("rb") as config_file:
+        persisted = tomllib.load(config_file)
+    assert persisted == {"orcalab": {"language": "zh_CN"}}
+    assert not Path(f"{user_config_path}.tmp").exists()
 
 
 def test_shared_config_does_not_pin_the_ui_language():

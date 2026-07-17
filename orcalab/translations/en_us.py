@@ -14,11 +14,8 @@ TRANSLATIONS = {
     "工作目录，默认为当前目录": "Workspace directory. Defaults to the current directory.",
     "初始化配置文件并退出": "Initialize the config file and exit",
     "输出所有信息到终端": "Print all messages to the terminal",
-    (
-        "临时设置本次启动的界面语言（zh_CN 或 en_US），不修改已保存设置。"
-    ): (
-        "Temporarily set the UI language for this launch (zh_CN or en_US) without "
-        "changing the saved setting."
+    "设置并保存界面语言（zh_CN 或 en_US），后续启动继续使用该设置。": (
+        "Set and save the UI language (zh_CN or en_US) for subsequent launches."
     ),
     "指定要加载的场景文件。不指定会弹出场景选择界面。": (
         "Specify the scene file to load. If omitted, the scene selection dialog opens."

@@ -124,6 +124,7 @@ def test_explicit_chinese_language_variants_are_normalized(language):
     [("zh-Hans-CN", "zh_CN"), ("zh-Hant-TW", "zh_CN"), ("en-US", "en_US")],
 )
 def test_qt_system_ui_language_is_used(monkeypatch, qt_locale, expected):
+    monkeypatch.setattr(i18n_module.sys, "platform", "darwin")
     monkeypatch.setattr(i18n_module, "_qt_ui_locale_name", lambda: qt_locale)
 
     assert detect_system_language() == expected
@@ -141,7 +142,8 @@ def test_qt_system_ui_language_is_used(monkeypatch, qt_locale, expected):
     ],
 )
 def test_ubuntu_locale_environment_fallback(monkeypatch, environment, expected):
-    monkeypatch.setattr(i18n_module, "_qt_ui_locale_name", lambda: None)
+    monkeypatch.setattr(i18n_module.sys, "platform", "linux")
+    monkeypatch.setattr(i18n_module, "_qt_ui_locale_name", lambda: "en-US")
     for variable_name in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
         monkeypatch.delenv(variable_name, raising=False)
     for variable_name, value in environment.items():
@@ -150,7 +152,44 @@ def test_ubuntu_locale_environment_fallback(monkeypatch, environment, expected):
     assert detect_system_language() == expected
 
 
+def test_ubuntu_qt_locale_is_used_when_environment_is_empty(monkeypatch):
+    monkeypatch.setattr(i18n_module.sys, "platform", "linux")
+    for variable_name in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
+        monkeypatch.delenv(variable_name, raising=False)
+    monkeypatch.setattr(i18n_module, "_qt_ui_locale_name", lambda: "zh-CN")
+
+    assert detect_system_language() == "zh_CN"
+
+
+@pytest.mark.parametrize("language_id", [0x0004, 0x0404, 0x0804, 0x0C04, 0x1004, 0x1404])
+def test_windows_chinese_ui_language_ids_use_chinese(monkeypatch, language_id):
+    monkeypatch.setattr(i18n_module.sys, "platform", "win32")
+    monkeypatch.setattr(
+        i18n_module, "_windows_ui_language_id", lambda: language_id
+    )
+    monkeypatch.setattr(i18n_module, "_qt_ui_locale_name", lambda: "en-US")
+
+    assert detect_system_language() == "zh_CN"
+
+
+def test_windows_native_ui_language_takes_priority_over_qt(monkeypatch):
+    monkeypatch.setattr(i18n_module.sys, "platform", "win32")
+    monkeypatch.setattr(i18n_module, "_windows_ui_language_id", lambda: 0x0409)
+    monkeypatch.setattr(i18n_module, "_qt_ui_locale_name", lambda: "zh-CN")
+
+    assert detect_system_language() == "en_US"
+
+
+def test_windows_qt_locale_is_used_when_native_detection_fails(monkeypatch):
+    monkeypatch.setattr(i18n_module.sys, "platform", "win32")
+    monkeypatch.setattr(i18n_module, "_windows_ui_language_id", lambda: None)
+    monkeypatch.setattr(i18n_module, "_qt_ui_locale_name", lambda: "zh-CN")
+
+    assert detect_system_language() == "zh_CN"
+
+
 def test_system_language_detection_fails_safe_to_english(monkeypatch):
+    monkeypatch.setattr(i18n_module.sys, "platform", "linux")
     monkeypatch.setattr(i18n_module, "_qt_ui_locale_name", lambda: None)
     for variable_name in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
         monkeypatch.delenv(variable_name, raising=False)
@@ -187,7 +226,7 @@ def test_legacy_initial_language_option_is_hidden_and_ignored():
     assert args.lang is None
     assert "--lang" in help_text
     assert "--initial-lang" not in help_text
-    assert "without changing the saved setting" in help_text
+    assert "subsequent launches" in help_text
 
 
 @pytest.mark.parametrize(

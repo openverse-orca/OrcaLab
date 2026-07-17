@@ -1,67 +1,11 @@
-Function NormalizeLauncherLanguage(value)
-    normalized = LCase(CStr(value))
-    If normalized = "zh" Or normalized = "zh_cn" Then
-        NormalizeLauncherLanguage = "zh_CN"
-    ElseIf normalized = "en" Or normalized = "en_us" Then
-        NormalizeLauncherLanguage = "en_US"
-    Else
-        NormalizeLauncherLanguage = ""
-    End If
-End Function
-
-Function DetectSystemLanguage(shell)
-    windowsUiLanguage = ""
-    On Error Resume Next
-    languageCommand = "powershell.exe -NoProfile -NonInteractive -Command """ & _
-        "[Globalization.CultureInfo]::CurrentUICulture.TwoLetterISOLanguageName" & _
-        """"
-    Set languageProcess = shell.Exec(languageCommand)
-    If Err.Number = 0 Then
-        windowsUiLanguage = Trim(languageProcess.StdOut.ReadAll)
-    End If
-    Err.Clear
-    On Error GoTo 0
-
-    If LCase(windowsUiLanguage) = "zh" Then
-        DetectSystemLanguage = "zh_CN"
-    ElseIf windowsUiLanguage = "" And (GetLocale() And &H3FF) = 4 Then
-        DetectSystemLanguage = "zh_CN"
-    Else
-        DetectSystemLanguage = "en_US"
-    End If
-End Function
-
-Function ResolveLauncherLanguage(arguments, shell)
-    language = ""
-    index = 0
-    Do While index < arguments.Count
-        argument = CStr(arguments(index))
-        If LCase(argument) = "--lang" Then
-            language = ""
-            If index + 1 < arguments.Count Then
-                language = NormalizeLauncherLanguage(arguments(index + 1))
-                index = index + 1
-            End If
-        ElseIf Left(LCase(argument), 7) = "--lang=" Then
-            language = NormalizeLauncherLanguage(Mid(argument, 8))
-        End If
-        index = index + 1
-    Loop
-
-    If language = "" Then
-        language = DetectSystemLanguage(shell)
-    End If
-    ResolveLauncherLanguage = language
-End Function
-
 Set WshShell = CreateObject("WScript.Shell")
 Set FSO = CreateObject("Scripting.FileSystemObject")
 scriptDir = FSO.GetParentFolderName(WScript.ScriptFullName)
+installerLanguage = "__INSTALLER_LANGUAGE__"
 
 envPath = WshShell.ExpandEnvironmentStrings("%USERPROFILE%") & "\.conda\envs\orcalab\python.exe"
 If Not FSO.FileExists(envPath) Then
-    launcherLanguage = ResolveLauncherLanguage(WScript.Arguments, WshShell)
-    If launcherLanguage = "zh_CN" Then
+    If installerLanguage = "zh_CN" Then
         popupText = "OrcaLab " & ChrW(&H6B63) & ChrW(&H5728) & ChrW(&H9996) & _
             ChrW(&H6B21) & ChrW(&H914D) & ChrW(&H7F6E) & ChrW(&H8FD0) & _
             ChrW(&H884C) & ChrW(&H73AF) & ChrW(&H5883) & "..." & vbCrLf & _

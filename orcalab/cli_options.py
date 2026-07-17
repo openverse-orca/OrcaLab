@@ -19,7 +19,7 @@ def _preparse_option(argv: list[str], option_name: str) -> str | None:
 
 
 def preparse_ui_language(argv: list[str]) -> str | None:
-    """Return the explicit language requested for this launch."""
+    """Return the explicit language requested from the command line."""
     return _preparse_option(argv, "--lang")
 
 
@@ -57,7 +57,7 @@ def create_argparser():
         "--lang",
         choices=_UI_LANGUAGE_CHOICES,
         help=tr(
-            "临时设置本次启动的界面语言（zh_CN 或 en_US），不修改已保存设置。"
+            "设置并保存界面语言（zh_CN 或 en_US），后续启动继续使用该设置。"
         ),
     )
     # Compatibility only: older dual-language Windows launchers may still pass

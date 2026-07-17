@@ -24,7 +24,6 @@ from orcalab.cli_options import (
 from orcalab.config_service import ConfigService, read_user_ui_language
 from orcalab.i18n import (
     install_qt_translation_hooks,
-    resolve_language,
     resolve_startup_language,
     set_language,
 )
@@ -266,12 +265,11 @@ def main():
 
     _main_start = time.monotonic()
     cli_language = preparse_ui_language(sys.argv[1:])
-    set_language(
-        resolve_startup_language(
-            cli_language,
-            read_user_ui_language(),
-        )
+    startup_language = resolve_startup_language(
+        cli_language,
+        read_user_ui_language(),
     )
+    set_language(startup_language)
     parser = create_argparser()
     args, unknown = parser.parse_known_args()
     cli_language = getattr(args, "lang", None)
@@ -304,8 +302,11 @@ def main():
     current_dir = pathlib.Path(__file__).parent.resolve()
     project_root = current_dir.parent  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root, workspace)
-    saved_language = config_service.ensure_ui_language()
-    set_language(resolve_language(cli_language, saved_language))
+    saved_language = config_service.ensure_ui_language(
+        cli_language,
+        detected_language=startup_language,
+    )
+    set_language(saved_language)
 
     verbose = getattr(args, "verbose", False)
     config_service.set_verbose(verbose)
