@@ -5,6 +5,7 @@ import os
 import pathlib
 import sys
 import time
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import tomli_w
 
@@ -13,7 +14,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
-from orcalab.i18n import detect_system_language, normalize_language
+from orcalab.i18n import detect_system_language, get_language, normalize_language
 from orcalab.project_util import get_project_dir
 
 logger = logging.getLogger(__name__)
@@ -499,9 +500,28 @@ class ConfigService:
         )
 
     def web_server_url(self) -> str:
-        """获取资产库服务器地址（用于认证后跳转）"""
+        """获取不带界面语言参数的资产库服务器地址。"""
         return self.config.get("datalink", {}).get(
             "web_server_url", "https://simassets.orca3d.cn/"
+        )
+
+    def asset_store_url(self) -> str:
+        """Return the browser-facing asset store URL in the current UI language."""
+        parsed = urlsplit(self.web_server_url())
+        query = [
+            (key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if key.lower() != "lang"
+        ]
+        query.append(("lang", "zh" if get_language() == "zh_CN" else "en"))
+        return urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path or "/",
+                urlencode(query),
+                parsed.fragment,
+            )
         )
 
     def layout_mode(self) -> str:

@@ -206,6 +206,55 @@ def test_shared_config_does_not_pin_the_ui_language():
 
 
 @pytest.mark.parametrize(
+    ("language", "base_url", "expected"),
+    [
+        (
+            "zh_CN",
+            "https://simassets.orca3d.cn/",
+            "https://simassets.orca3d.cn/?lang=zh",
+        ),
+        (
+            "en_US",
+            "https://simassets.orca3d.cn",
+            "https://simassets.orca3d.cn/?lang=en",
+        ),
+        (
+            "zh_CN",
+            "https://simassets.orca3d.cn/store?source=orcalab&lang=en#packages",
+            "https://simassets.orca3d.cn/store?source=orcalab&lang=zh#packages",
+        ),
+    ],
+)
+def test_asset_store_url_uses_current_ui_language(
+    fresh_config_service,
+    monkeypatch,
+    language,
+    base_url,
+    expected,
+):
+    fresh_config_service.config["datalink"] = {"web_server_url": base_url}
+    monkeypatch.setattr(config_service_module, "get_language", lambda: language)
+
+    assert fresh_config_service.asset_store_url() == expected
+
+
+def test_asset_store_url_follows_runtime_language_before_restart(
+    fresh_config_service,
+    monkeypatch,
+):
+    fresh_config_service.config["orcalab"]["language"] = "en_US"
+    fresh_config_service.config["datalink"] = {
+        "web_server_url": "https://simassets.orca3d.cn/"
+    }
+    monkeypatch.setattr(config_service_module, "get_language", lambda: "zh_CN")
+
+    assert (
+        fresh_config_service.asset_store_url()
+        == "https://simassets.orca3d.cn/?lang=zh"
+    )
+
+
+@pytest.mark.parametrize(
     ("requested", "expected"),
     [
         ("zh", "zh_CN"),

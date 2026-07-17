@@ -126,7 +126,7 @@ def authenticate_user(config_service, window=None) -> bool:
     base_url = config_service.datalink_base_url()
     auth_server_url = config_service.datalink_auth_server_url()
     timeout = config_service.datalink_timeout()
-    redirect_url = config_service.web_server_url()
+    redirect_url = config_service.asset_store_url()
     
     # 创建认证服务
     auth_service = AuthService(base_url, auth_server_url=auth_server_url, timeout=timeout)

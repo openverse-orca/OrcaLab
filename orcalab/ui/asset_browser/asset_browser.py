@@ -316,7 +316,7 @@ class AssetBrowser(QtWidgets.QWidget):
         self._model.apply_filters()
 
     def _on_open_asset_store_clicked(self):
-        asset_store_url = self._config_service.web_server_url()
+        asset_store_url = self._config_service.asset_store_url()
         try:
             webbrowser.open(asset_store_url)
             logger.info(f"Opening asset store: {asset_store_url}")
