@@ -1,13 +1,17 @@
 import asyncio
 import json
-from typing import List
-from typing_extensions import override
 import logging
+from typing import List
+
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtGui import QKeyEvent
+from typing_extensions import override
 
+from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
+from orcalab.config_service import ConfigService
 from orcalab.local_scene import LocalScene
 from orcalab.remote_scene import RemoteScene
+from orcalab.report.abnormal_exit_report import send_abnormal_exit_report, take_pending_abnormal_exit_report
 from orcalab.report.report import (
     ask_user_consent,
     collect_user_env,
@@ -20,16 +24,13 @@ from orcalab.simulation.simulation_bus import SimulationRequestBus
 from orcalab.simulation.simulation_service import SimulationService
 from orcalab.ui.camera.camera_bus import (
     CameraNotification,
-    CameraRequest,
     CameraNotificationBus,
+    CameraRequest,
     CameraRequestBus,
 )
 from orcalab.ui.icon_util import schedule_windows_taskbar_icon_refresh
-from orcalab.ui.viewport import Viewport
-from orcalab.config_service import ConfigService
-from orcalab.application_bus import ApplicationRequest, ApplicationRequestBus
 from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
-from orcalab.report.abnormal_exit_report import take_pending_abnormal_exit_report, send_abnormal_exit_report
+from orcalab.ui.viewport import Viewport
 
 logger = logging.getLogger(__name__)
 

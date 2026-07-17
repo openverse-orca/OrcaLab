@@ -8,6 +8,7 @@ from PySide6 import QtWidgets, QtCore, QtGui
 import threading
 from typing import Optional, Callable
 
+from orcalab.i18n import tr
 from orcalab.ui.fonts.font_service import FontService
 
 
@@ -97,10 +98,11 @@ class AuthWindow(QtWidgets.QDialog):
     
     def _on_status_update(self, message: str):
         """更新状态文本"""
-        self.status_label.setText(message)
+        self.status_label.setText(tr(message))
     
     def _on_auth_complete(self, success: bool, message: str):
         """认证完成"""
+        message = tr(message)
         self._auth_finished = True
         self.auth_success = success
         self.auth_message = message
@@ -127,8 +129,8 @@ class AuthWindow(QtWidgets.QDialog):
 
         msg_box = QtWidgets.QMessageBox(self)
         msg_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
-        msg_box.setWindowTitle(title)
-        msg_box.setText(message)
+        msg_box.setWindowTitle(tr(title))
+        msg_box.setText(tr(message))
         msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Ok)
         msg_box.exec()
     
@@ -157,12 +159,12 @@ class AuthWindow(QtWidgets.QDialog):
             return
         self._browser_help_shown = True
         message = (
-            "等待浏览器认证已超过 60 秒，浏览器可能没有正常弹出，或认证页没有成功打开。\n\n"
-            "建议尝试：\n"
-            "1. 检查默认浏览器是否可正常启动。\n"
-            "2. 检查是否被弹窗拦截、远程桌面会话限制或系统安全策略阻止。\n"
-            "3. 复制下面地址到浏览器中手动打开后继续登录：\n"
-            f"{auth_url}"
+            tr("等待浏览器认证已超过 60 秒，浏览器可能没有正常弹出，或认证页没有成功打开。\n\n")
+            + tr("建议尝试：\n")
+            + tr("1. 检查默认浏览器是否可正常启动。\n")
+            + tr("2. 检查是否被弹窗拦截、远程桌面会话限制或系统安全策略阻止。\n")
+            + tr("3. 复制下面地址到浏览器中手动打开后继续登录：\n")
+            + f"{auth_url}"
         )
         self.show_warning_dialog_signal.emit("浏览器未正常打开", message)
 
@@ -172,9 +174,9 @@ class AuthWindow(QtWidgets.QDialog):
             return
         self._root_warning_shown = True
         message = (
-            "检测到当前使用 root 用户运行 OrcaLab。\n\n"
-            "不建议使用 root 用户启动 OrcaLab，这可能导致浏览器沙箱报错，认证页面无法正常打开。\n"
-            "建议切换到普通用户后重新启动。"
+            tr("检测到当前使用 root 用户运行 OrcaLab。\n\n")
+            + tr("不建议使用 root 用户启动 OrcaLab，这可能导致浏览器沙箱报错，认证页面无法正常打开。\n")
+            + tr("建议切换到普通用户后重新启动。")
         )
         self.show_warning_dialog_signal.emit("不建议使用 root 用户", message)
     
@@ -196,12 +198,12 @@ class AuthWindow(QtWidgets.QDialog):
                 result_container[0] = credentials
                 
                 if credentials:
-                    self.complete_auth(True, f"认证成功: {credentials['username']}")
+                    self.complete_auth(True, tr("认证成功: {username}", username=credentials['username']))
                 else:
-                    self.complete_auth(False, "认证失败或超时")
+                    self.complete_auth(False, tr("认证失败或超时"))
                     
             except Exception as e:
-                self.complete_auth(False, f"认证出错: {str(e)}")
+                self.complete_auth(False, tr("认证出错: {error}", error=str(e)))
         
         # 启动认证线程
         thread = threading.Thread(target=auth_thread, daemon=True)
@@ -238,4 +240,3 @@ def show_auth_dialog(auth_func: Callable[[], Optional[dict]], parent=None) -> Op
     """
     dialog = AuthWindow(parent)
     return dialog.run_auth(auth_func)
-

@@ -5,6 +5,7 @@ import pathlib
 
 from PySide6 import QtCore, QtWidgets
 
+from orcalab.i18n import tr
 from orcalab.plugin_system.plugin_installer import PluginInstaller
 from orcalab.plugin_system.plugin_manager import PluginManager
 from orcalab.ui.fonts.font_service import FontService
@@ -96,7 +97,11 @@ class PluginInstallDialog(QtWidgets.QDialog):
 
         archive_path = pathlib.Path(archive_path_str)
         if not archive_path.is_file():
-            QtWidgets.QMessageBox.warning(self, "安装插件", f"文件不存在: {archive_path}")
+            QtWidgets.QMessageBox.warning(
+                self,
+                "安装插件",
+                tr("文件不存在: {path}", path=archive_path),
+            )
             return
 
         self._btn_install.setEnabled(False)
@@ -120,17 +125,28 @@ class PluginInstallDialog(QtWidgets.QDialog):
 
     def _on_install_ok(self, plugin_name: str, version: str):
         self._progress_bar.setValue(100)
-        self._status_label.setText(f"安装完成: {plugin_name} v{version}")
-        self._log(f"✓ 插件 {plugin_name} 安装成功")
+        self._status_label.setText(
+            tr(
+                "安装完成: {plugin_name} v{version}",
+                plugin_name=plugin_name,
+                version=version,
+            )
+        )
+        self._log(tr("✓ 插件 {plugin_name} 安装成功", plugin_name=plugin_name))
         QtWidgets.QMessageBox.information(
             self,
             "安装完成",
-            f"插件 {plugin_name} v{version} 安装成功！\n请在插件管理中启用后重启 OrcaLab 生效。",
+            tr(
+                "插件 {plugin_name} v{version} 安装成功！\n"
+                "请在插件管理中启用后重启 OrcaLab 生效。",
+                plugin_name=plugin_name,
+                version=version,
+            ),
         )
         self._btn_close.setText("完成")
 
     def _on_install_error(self, error_msg: str):
-        self._status_label.setText(f"安装失败: {error_msg}")
+        self._status_label.setText(tr("安装失败: {error}", error=error_msg))
         self._log(f"✗ {error_msg}")
         QtWidgets.QMessageBox.critical(self, "安装失败", error_msg)
         self._btn_install.setEnabled(True)

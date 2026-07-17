@@ -13,6 +13,8 @@ import asyncio
 import logging
 from PySide6 import QtWidgets
 
+from orcalab.i18n import tr
+
 
 project_id = "{3DB8A56E-2458-4543-93A1-1A41756B97DA}"
 
@@ -326,8 +328,16 @@ async def download_pak_from_url(url: str, target_path: pathlib.Path, cloud_file_
                 local_file_sha256 = calculate_file_sha256(temp_path)
                 if local_file_sha256.lower() != cloud_file_sha256:
                     logger.error("文件下载不完整，源文件sha256: %s, 下载文件sha256: %s", cloud_file_sha256, local_file_sha256)
-                    msg = f"源文件sha256: {cloud_file_sha256}\n下载文件sha256: {local_file_sha256}"
-                    QtWidgets.QMessageBox.information(None, "pak 下载不完整, 请重新启动 orcalab", msg)
+                    msg = tr(
+                        "源文件sha256: {source}\n下载文件sha256: {downloaded}",
+                        source=cloud_file_sha256,
+                        downloaded=local_file_sha256,
+                    )
+                    QtWidgets.QMessageBox.information(
+                        None,
+                        tr("pak 下载不完整, 请重新启动 orcalab"),
+                        msg,
+                    )
                     sys.exit(1)
                     return False
 
@@ -420,4 +430,3 @@ def download_pak_files_sync(pak_urls: List[str]) -> List[str]:
         List[str]: 下载成功的文件路径列表
     """
     return sync_pak_urls(pak_urls)
-    

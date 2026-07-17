@@ -11,6 +11,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 
 from orcalab.application_bus import ApplicationRequestBus
 from orcalab.config_service import ConfigService
+from orcalab.i18n import tr
 from orcalab.local_scene import LocalScene
 from orcalab.transform import Transform
 from orcalab.remote_scene import RemoteScene
@@ -232,10 +233,12 @@ class SceneLayoutService:
                 )
                 QtWidgets.QMessageBox.critical(
                     self.main_window,
-                    "加载默认布局失败",
-                    "所选场景的默认布局加载失败。\n"
-                    "请复制下方错误信息寻求帮助，并重新启动程序选择“空白布局”。\n\n"
-                    f"{detail_text}",
+                    tr("加载默认布局失败"),
+                    tr(
+                        "所选场景的默认布局加载失败。\n"
+                        "请复制下方错误信息寻求帮助，并重新启动程序选择“空白布局”。\n\n"
+                    )
+                    + detail_text,
                     QtWidgets.QMessageBox.StandardButton.Ok,
                 )
                 QtWidgets.QApplication.quit()
@@ -279,15 +282,18 @@ class SceneLayoutService:
         def show_error_dialog():
             QtWidgets.QMessageBox.critical(
                 self.main_window,
-                "场景布局加载错误",
+                tr("场景布局加载错误"),
                 "\n".join(errors),
             )
 
         def show_warning_dialog():
             _show_scrollable_warning(
                 self.main_window,
-                "场景布局加载警告",
-                f"加载场景布局时产生 {len(warnings)} 条警告：",
+                tr("场景布局加载警告"),
+                tr(
+                    "加载场景布局时产生 {count} 条警告：",
+                    count=len(warnings),
+                ),
                 "\n".join(warnings),
             )
 
@@ -304,24 +310,26 @@ class SceneLayoutService:
         try:
             resolved = self._resolve_path(filename)
             if resolved is None:
-                errors.append("布局文件路径无效")
+                errors.append(tr("布局文件路径无效"))
                 return
 
             with open(resolved, "r", encoding="utf-8") as f:
                 layout_dict = json.load(f)
 
             if not isinstance(layout_dict, dict):
-                errors.append("布局文件格式错误")
+                errors.append(tr("布局文件格式错误"))
                 return
 
             version = layout_dict.get("version", "")
             if version == "":
-                errors.append("布局文件版本号缺失")
+                errors.append(tr("布局文件版本号缺失"))
                 return
 
             if version == "1.0" or version == "2.0":
                 warnings.append(
-                    "加载旧版(v1.0/v2.0)场景布局，建议重新保存以升级到 v3.0 格式"
+                    tr(
+                        "加载旧版(v1.0/v2.0)场景布局，建议重新保存以升级到 v3.0 格式"
+                    )
                 )
                 helper = SceneLayoutHelper(self.local_scene)
                 await helper.load_scene_layout(layout_dict, errors)
@@ -329,7 +337,9 @@ class SceneLayoutService:
                 helper = SceneLayoutHelperV3(self.local_scene, self.remote_scene)
                 await helper.load_scene_layout(layout_dict, errors, warnings)
             else:
-                errors.append(f"布局文件版本号 {version} 不支持")
+                errors.append(
+                    tr("布局文件版本号 {version} 不支持", version=version)
+                )
                 return
 
             self.current_layout_path = resolved
@@ -338,7 +348,13 @@ class SceneLayoutService:
             UndoRequestBus().clear_history()
 
         except Exception as e:
-            errors.append(f"加载布局文件 {filename} 时出错: {e}")
+            errors.append(
+                tr(
+                    "加载布局文件 {filename} 时出错: {error}",
+                    filename=filename,
+                    error=e,
+                )
+            )
             return
 
     @property

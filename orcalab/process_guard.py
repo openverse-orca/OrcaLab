@@ -7,6 +7,7 @@ from filelock import FileLock, Timeout
 import json
 
 from orcalab.config_service import ConfigService
+from orcalab.i18n import tr
 from PySide6 import QtWidgets
 from PySide6.QtCore import QTimer
 
@@ -118,23 +119,31 @@ def ensure_single_instance():
     logger.warning("检测到已有 OrcaLab 进程: %s, this pid %s", details_text, os.getpid())
 
     msg_box = QtWidgets.QMessageBox()
-    msg_box.setWindowTitle("检测到正在运行的 OrcaLab 进程")
+    msg_box.setWindowTitle(tr("检测到正在运行的 OrcaLab 进程"))
     msg_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
-    msg_box.setText("当前系统上已存在正在运行的 OrcaLab 实例。")
+    msg_box.setText(tr("当前系统上已存在正在运行的 OrcaLab 实例。"))
     msg_box.setInformativeText(
-        "OrcaLab 不支持在同一台电脑同时运行多个实例。\n\n"
-        "选择\"终止并继续\"将尝试结束所有已发现的 OrcaLab 进程后再继续启动。\n"
-        "选择\"退出\"将直接退出当前启动。\n\n"
-        "若 5 秒内未操作，将自动终止已有进程并继续启动。"
+        tr(
+            "OrcaLab 不支持在同一台电脑同时运行多个实例。\n\n"
+            "选择\"终止并继续\"将尝试结束所有已发现的 OrcaLab 进程后再继续启动。\n"
+            "选择\"退出\"将直接退出当前启动。\n\n"
+            "若 5 秒内未操作，将自动终止已有进程并继续启动。"
+        )
     )
-    msg_box.setDetailedText(details_text or "未获取到进程信息")
+    msg_box.setDetailedText(details_text or tr("未获取到进程信息"))
 
-    kill_button = msg_box.addButton("终止并继续", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
-    exit_button = msg_box.addButton("退出", QtWidgets.QMessageBox.ButtonRole.RejectRole)
+    kill_button = msg_box.addButton(
+        tr("终止并继续"), QtWidgets.QMessageBox.ButtonRole.AcceptRole
+    )
+    exit_button = msg_box.addButton(
+        tr("退出"), QtWidgets.QMessageBox.ButtonRole.RejectRole
+    )
     msg_box.setDefaultButton(kill_button)
 
     countdown_seconds = 5
-    kill_button.setText(f"终止并继续（{countdown_seconds}s）")
+    kill_button.setText(
+        tr("终止并继续（{seconds}s）", seconds=countdown_seconds)
+    )
 
     def _tick():
         nonlocal countdown_seconds
@@ -142,7 +151,9 @@ def ensure_single_instance():
         if countdown_seconds <= 0:
             msg_box.accept()
             return
-        kill_button.setText(f"终止并继续（{countdown_seconds}s）")
+        kill_button.setText(
+            tr("终止并继续（{seconds}s）", seconds=countdown_seconds)
+        )
 
     timer = QTimer()
     timer.timeout.connect(_tick)
@@ -186,12 +197,14 @@ def ensure_single_instance():
 
     if failed:
         error_box = QtWidgets.QMessageBox()
-        error_box.setWindowTitle("无法终止所有 OrcaLab 进程")
+        error_box.setWindowTitle(tr("无法终止所有 OrcaLab 进程"))
         error_box.setIcon(QtWidgets.QMessageBox.Icon.Critical)
-        error_box.setText("部分 OrcaLab 进程无法自动终止。")
+        error_box.setText(tr("部分 OrcaLab 进程无法自动终止。"))
         error_box.setInformativeText(
-            "请手动结束以下进程后重新启动 OrcaLab:\n"
-            + ", ".join(str(pid) for pid in failed)
+            tr(
+                "请手动结束以下进程后重新启动 OrcaLab:\n{pids}",
+                pids=", ".join(str(pid) for pid in failed),
+            )
         )
         error_box.exec()
         logger.error("仍有进程未终止，放弃启动: %s", failed)
@@ -234,16 +247,20 @@ def ensure_single_instance_by_file_lock(config_service: ConfigService):
         # show_message(format_instance_info(data))
         msg_box = QtWidgets.QMessageBox()
         msg_box.setMinimumSize(800, 600)
-        msg_box.setWindowTitle("检测到正在运行的 OrcaLab 进程")
+        msg_box.setWindowTitle(tr("检测到正在运行的 OrcaLab 进程"))
         msg_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
-        msg_box.setText("当前系统上已存在正在运行的 OrcaLab 实例。")
+        msg_box.setText(tr("当前系统上已存在正在运行的 OrcaLab 实例。"))
         msg_box.setInformativeText(
-            "OrcaLab 不支持在同一台电脑同时运行多个实例。\n\n"
-            "请根据详细信息关闭已有实例后再继续启动。\n"
+            tr(
+                "OrcaLab 不支持在同一台电脑同时运行多个实例。\n\n"
+                "请根据详细信息关闭已有实例后再继续启动。\n"
+            )
         )
         msg_box.setDetailedText(format_instance_info(data))
 
-        exit_button = msg_box.addButton("退出", QtWidgets.QMessageBox.ButtonRole.RejectRole)
+        exit_button = msg_box.addButton(
+            tr("退出"), QtWidgets.QMessageBox.ButtonRole.RejectRole
+        )
         msg_box.setDefaultButton(exit_button)
         msg_box.show()
         msg_box.resize(1500, 500)

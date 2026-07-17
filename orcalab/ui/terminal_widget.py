@@ -6,6 +6,7 @@ import os
 import sys
 import re
 
+from orcalab.i18n import tr
 from orcalab.ui.fonts.font_service import FontService
 
 
@@ -329,7 +330,9 @@ class TerminalWidget(QtWidgets.QWidget):
             )
             
             self.is_running = True
-            self.status_label.setText(f"运行中 (PID: {self.process.pid})")
+            self.status_label.setText(
+                tr("运行中 (PID: {pid})", pid=self.process.pid)
+            )
             self._set_status_style("#3fb950")
             
             # 启动输出读取线程
@@ -340,15 +343,19 @@ class TerminalWidget(QtWidgets.QWidget):
             self.output_thread.start()
             
             # 添加启动信息
-            self._append_output(f"启动进程: {' '.join(cmd)}\n")
-            self._append_output(f"工作目录: {working_dir or os.getcwd()}\n")
+            self._append_output(
+                tr("启动进程: {command}\n", command=" ".join(cmd))
+            )
+            self._append_output(
+                tr("工作目录: {working_dir}\n", working_dir=working_dir or os.getcwd())
+            )
             self._append_output("-" * 50 + "\n")
             
             return True
             
         except Exception as e:
-            self._append_output(f"启动进程失败: {str(e)}\n")
-            self.status_label.setText("启动失败")
+            self._append_output(tr("启动进程失败: {error}\n", error=str(e)))
+            self.status_label.setText(tr("启动失败"))
             self._set_status_style("#f85149")
             return False
     
@@ -359,7 +366,7 @@ class TerminalWidget(QtWidgets.QWidget):
         
         try:
             self._append_output("\n" + "-" * 50 + "\n")
-            self._append_output("正在停止进程...\n")
+            self._append_output(tr("正在停止进程...\n"))
             
             # 尝试优雅终止
             self.process.terminate()
@@ -371,17 +378,17 @@ class TerminalWidget(QtWidgets.QWidget):
                 # 强制终止
                 self.process.kill()
                 self.process.wait()
-                self._append_output("进程已强制终止\n")
+                self._append_output(tr("进程已强制终止\n"))
             else:
-                self._append_output("进程已正常终止\n")
+                self._append_output(tr("进程已正常终止\n"))
             
             self.is_running = False
             self.process = None
-            self.status_label.setText("已停止")
+            self.status_label.setText(tr("已停止"))
             self._set_status_style("#7d8590")
             
         except Exception as e:
-            self._append_output(f"停止进程时出错: {str(e)}\n")
+            self._append_output(tr("停止进程时出错: {error}\n", error=str(e)))
     
     def _send_input(self, text):
         """向进程发送输入"""
@@ -419,7 +426,7 @@ class TerminalWidget(QtWidgets.QWidget):
                 self.process.stdin.write(data)
                 self.process.stdin.flush()
         except (BrokenPipeError, OSError):
-            self._append_output_safe("\n[输入失败: 进程已关闭]\n")
+            self._append_output_safe(tr("\n[输入失败: 进程已关闭]\n"))
     
     def _read_output(self):
         """在后台线程中读取进程输出"""
@@ -435,10 +442,12 @@ class TerminalWidget(QtWidgets.QWidget):
                 self.output_queue.put(chunk.decode("utf-8", errors="replace"))
             
             return_code = self.process.wait()
-            self.output_queue.put(f"\n进程退出，返回码: {return_code}\n")
+            self.output_queue.put(
+                tr("\n进程退出，返回码: {return_code}\n", return_code=return_code)
+            )
                 
         except Exception as e:
-            self.output_queue.put(f"读取输出时出错: {str(e)}\n")
+            self.output_queue.put(tr("读取输出时出错: {error}\n", error=str(e)))
     
     def _update_output(self):
         """更新UI显示输出"""
@@ -472,7 +481,7 @@ class TerminalWidget(QtWidgets.QWidget):
     def clear_output(self):
         """清空输出"""
         self.output_text.clear()
-        self._append_output("输出已清空\n")
+        self._append_output(tr("输出已清空\n"))
     
     def _set_status_style(self, color: str):
         self._status_color = color
@@ -488,9 +497,14 @@ class TerminalWidget(QtWidgets.QWidget):
             self._set_status_style("#58a6ff")
             
             # 2秒后恢复状态
-            QtCore.QTimer.singleShot(2000, lambda: self.status_label.setText(
-                "运行中 (PID: {})".format(self.process.pid) if self.is_running and self.process else "就绪"
-            ))
+            QtCore.QTimer.singleShot(
+                2000,
+                lambda: self.status_label.setText(
+                    tr("运行中 (PID: {pid})", pid=self.process.pid)
+                    if self.is_running and self.process
+                    else tr("就绪")
+                ),
+            )
     
     def set_win_pty_process(self, win_pty):
         """设置 Windows ConPTY 进程（pywinpty.PtyProcess）"""
@@ -500,7 +514,7 @@ class TerminalWidget(QtWidgets.QWidget):
         self.is_running = True
         self.output_text._pty_mode = True
         pid = getattr(win_pty, 'pid', '?')
-        self.status_label.setText(f"运行中 (PID: {pid})")
+        self.status_label.setText(tr("运行中 (PID: {pid})", pid=pid))
         self._set_status_style("#3fb950")
         self.output_text.clear_input_buffer()
 
@@ -509,7 +523,9 @@ class TerminalWidget(QtWidgets.QWidget):
         self.process = process
         self._pty_master_fd = None
         self.is_running = True
-        self.status_label.setText(f"运行中 (PID: {process.pid})")
+        self.status_label.setText(
+            tr("运行中 (PID: {pid})", pid=process.pid)
+        )
         self._set_status_style("#3fb950")
         self.output_text.clear_input_buffer()
     
@@ -519,7 +535,9 @@ class TerminalWidget(QtWidgets.QWidget):
         self._pty_master_fd = master_fd
         self.is_running = True
         self.output_text._pty_mode = True
-        self.status_label.setText(f"运行中 (PID: {process.pid})")
+        self.status_label.setText(
+            tr("运行中 (PID: {pid})", pid=process.pid)
+        )
         self._set_status_style("#3fb950")
         self.output_text.clear_input_buffer()
     

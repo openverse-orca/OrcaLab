@@ -213,6 +213,7 @@ __marimo__/
 # vscode
 .VSCodeCounter/
 .vscode/
+*.code-workspace
 .cursor/
 
 

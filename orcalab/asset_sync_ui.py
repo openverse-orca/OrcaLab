@@ -10,6 +10,7 @@ import logging
 from PySide6 import QtWidgets
 from numpy import int64
 
+from orcalab.i18n import tr
 from orcalab.config_service import ConfigService
 from orcalab.asset_sync_service import sync_assets, AssetSyncCallbacks
 from orcalab.ui.sync_progress_window import SyncProgressWindow
@@ -65,16 +66,16 @@ class SyncCallbacksImpl(AssetSyncCallbacks):
     def on_metadata_sync(self, status: str, count: int = 0, total: int = 0):
         self.window.set_metadata_progress(status, count, total)
         if status == 'start':
-            self.window.set_status(f"正在准备同步元数据... (待更新 {total} 个包)")
+            self.window.set_status(tr("正在准备同步元数据... (待更新 {total} 个包)", total=total))
         elif status == 'fetching':
             self.window.set_status("正在获取远端元数据列表...")
         elif status == 'scanning':
-            self.window.set_status(f"正在扫描远端元数据... ({count}/{total})")
+            self.window.set_status(tr("正在扫描远端元数据... ({count}/{total})", count=count, total=total))
         elif status == 'complete':
             if count == 0 and total == 0:
                 self.window.set_status("元数据已是最新，无需同步")
             else:
-                self.window.set_status(f"元数据同步完成 (更新 {count}/{total} 个包)")
+                self.window.set_status(tr("元数据同步完成 (更新 {count}/{total} 个包)", count=count, total=total))
     
     def on_complete(self, success: bool, message: str = ""):
         self.window.complete_sync(success, message)
@@ -94,8 +95,8 @@ def ask_offline_or_exit(title: str, message: str) -> bool:
     """
     from PySide6 import QtWidgets
     msg_box = QtWidgets.QMessageBox()
-    msg_box.setWindowTitle(title)
-    msg_box.setText(message)
+    msg_box.setWindowTitle(tr(title))
+    msg_box.setText(tr(message))
     msg_box.setInformativeText("是否以离线模式继续启动？\n\n点击「是」使用现有资产包继续启动\n点击「否」退出程序")
     msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No)
     msg_box.setDefaultButton(QtWidgets.QMessageBox.StandardButton.Yes)
@@ -125,7 +126,7 @@ def authenticate_user(config_service, window=None) -> bool:
     base_url = config_service.datalink_base_url()
     auth_server_url = config_service.datalink_auth_server_url()
     timeout = config_service.datalink_timeout()
-    redirect_url = config_service.web_server_url()
+    redirect_url = config_service.asset_store_url()
     
     # 创建认证服务
     auth_service = AuthService(base_url, auth_server_url=auth_server_url, timeout=timeout)
@@ -292,7 +293,10 @@ def run_asset_sync_ui(config_service) -> bool:
         ask_offline_or_exit("Token 已过期", "访问令牌已过期，请重新登录。")
     elif connection_failed[0]:
         logger.warning("⚠️  连接资产库失败")
-        ask_offline_or_exit("连接资产库失败", "同步过程中无法连接到资产服务器，请检查网络连接。")
+        ask_offline_or_exit(
+            "连接资产库失败",
+            "同步过程中无法连接到资产服务器，请检查网络连接。",
+        )
     elif not sync_result[0]:
         logger.warning("⚠️  资产同步失败")
         ask_offline_or_exit("资产同步失败", "资产同步过程中发生错误。")
@@ -300,4 +304,3 @@ def run_asset_sync_ui(config_service) -> bool:
         logger.info("✓ 资产同步完成")
     
     return True  # 总是返回 True，允许程序继续启动
-

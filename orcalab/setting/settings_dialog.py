@@ -4,6 +4,7 @@ from collections.abc import Callable
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from orcalab.config_service import ConfigService
+from orcalab.i18n import tr
 from orcalab.remote_scene import RemoteScene
 from orcalab.ui.checkbox import CheckBox
 from orcalab.ui.fonts.font_service import FontService
@@ -230,7 +231,12 @@ class SettingsDialog(QtWidgets.QDialog):
         self.fps_combo = QtWidgets.QComboBox()
         self.fps_combo.setObjectName("OrcaSettingsFpsCombo")
         for fps in _filtered_fps_options():
-            label = f"{_AUTO_FPS_LABEL} ({Viewport._detect_screen_refresh_rate()} FPS)" if fps == 0 else f"{fps} FPS"
+            label = (
+                f"{tr(_AUTO_FPS_LABEL)} "
+                f"({Viewport._detect_screen_refresh_rate()} FPS)"
+                if fps == 0
+                else f"{fps} FPS"
+            )
             self.fps_combo.addItem(label, fps)
         current_fps = config.lock_fps_value()
         idx = self.fps_combo.findData(current_fps)
@@ -256,6 +262,22 @@ class SettingsDialog(QtWidgets.QDialog):
                 "垂直同步 (VSync)",
                 "开启 VSync 可防止画面撕裂，关闭可提高帧率。需重启生效",
                 self.vsync_checkbox,
+                self._setting_row_hover_bg,
+            )
+        )
+
+        self.language_combo = QtWidgets.QComboBox()
+        self.language_combo.setObjectName("OrcaSettingsLanguageCombo")
+        self.language_combo.addItem(tr("英语"), "en_US")
+        self.language_combo.addItem(tr("简体中文"), "zh_CN")
+        language_index = self.language_combo.findData(config.ui_language())
+        if language_index >= 0:
+            self.language_combo.setCurrentIndex(language_index)
+        content_layout.addWidget(
+            _vscode_style_setting_row(
+                "界面语言",
+                "选择 OrcaLab 的界面语言。重启应用后生效",
+                self.language_combo,
                 self._setting_row_hover_bg,
             )
         )
@@ -408,7 +430,8 @@ class SettingsDialog(QtWidgets.QDialog):
                 color: {split_line_color};
                 max-height: 1px;
             }}
-            QComboBox#OrcaSettingsFpsCombo {{
+            QComboBox#OrcaSettingsFpsCombo,
+            QComboBox#OrcaSettingsLanguageCombo {{
                 border: 1px solid {split_line_color};
                 border-radius: 3px;
                 padding: 3px 6px;
@@ -417,14 +440,17 @@ class SettingsDialog(QtWidgets.QDialog):
                 {fs.get_font_css('body')}
                 min-width: 96px;
             }}
-            QComboBox#OrcaSettingsFpsCombo:hover {{
+            QComboBox#OrcaSettingsFpsCombo:hover,
+            QComboBox#OrcaSettingsLanguageCombo:hover {{
                 border: 1px solid #505050;
             }}
-            QComboBox#OrcaSettingsFpsCombo::drop-down {{
+            QComboBox#OrcaSettingsFpsCombo::drop-down,
+            QComboBox#OrcaSettingsLanguageCombo::drop-down {{
                 border: none;
                 width: 20px;
             }}
-            QComboBox#OrcaSettingsFpsCombo QAbstractItemView {{
+            QComboBox#OrcaSettingsFpsCombo QAbstractItemView,
+            QComboBox#OrcaSettingsLanguageCombo QAbstractItemView {{
                 border: 1px solid {split_line_color};
                 background-color: {button_bg};
                 color: {text_color};
@@ -449,6 +475,7 @@ class SettingsDialog(QtWidgets.QDialog):
         config.set_camera_move_sensitivity(move)
         config.set_camera_rotation_sensitivity(rot)
         config.set_send_statistics("true" if self.checkbox.checked() else "false")
+        config.set_ui_language(self.language_combo.currentData())
 
         fps_value = self.fps_combo.currentData()
         config.set_lock_fps(fps_value)

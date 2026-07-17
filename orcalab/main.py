@@ -16,8 +16,17 @@ import time
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
-from orcalab.cli_options import create_argparser, resolve_and_validate_workspace
-from orcalab.config_service import ConfigService
+from orcalab.cli_options import (
+    create_argparser,
+    preparse_ui_language,
+    resolve_and_validate_workspace,
+)
+from orcalab.config_service import ConfigService, read_user_ui_language
+from orcalab.i18n import (
+    install_qt_translation_hooks,
+    resolve_startup_language,
+    set_language,
+)
 from orcalab.project_util import check_project_folder, copy_packages, sync_pak_urls
 from orcalab.asset_sync_ui import run_asset_sync_ui
 from orcalab.ui.main_window import MainWindow
@@ -50,7 +59,7 @@ logger = logging.getLogger("orcalab.main")
 
 def _start_force_exit_watchdog(timeout: int = 10) -> None:
     """启动守护线程，若进程在 timeout 秒内未正常退出则强制终止。
-    
+
     使用 os._exit() 绕过 Python 清理流程，防止卡死的后台线程（gRPC/网络IO等）
     导致进程变成无法杀死的僵尸进程。
     """
@@ -255,8 +264,15 @@ def main():
     _ensure_xcb_platform()
 
     _main_start = time.monotonic()
+    cli_language = preparse_ui_language(sys.argv[1:])
+    startup_language = resolve_startup_language(
+        cli_language,
+        read_user_ui_language(),
+    )
+    set_language(startup_language)
     parser = create_argparser()
     args, unknown = parser.parse_known_args()
+    cli_language = getattr(args, "lang", None)
 
     console_level = logging.INFO
     if getattr(args, "log_level", logging.INFO):
@@ -286,6 +302,11 @@ def main():
     current_dir = pathlib.Path(__file__).parent.resolve()
     project_root = current_dir.parent  # 从 orcalab/ 目录回到项目根目录
     config_service.init_config(project_root, workspace)
+    saved_language = config_service.ensure_ui_language(
+        cli_language,
+        detected_language=startup_language,
+    )
+    set_language(saved_language)
 
     verbose = getattr(args, "verbose", False)
     config_service.set_verbose(verbose)
@@ -313,6 +334,7 @@ def main():
 
     set_windows_app_user_model_id()
 
+    install_qt_translation_hooks()
     q_app = QtWidgets.QApplication(sys.argv)
     q_app.setWindowIcon(app_window_icon())
 
@@ -402,7 +424,7 @@ def main():
 
     try:
         fullscreen = args.full_screen
-        
+
         event_loop.run_until_complete(main_async(q_app, fullscreen))
     except KeyboardInterrupt:
         logger.info("Received KeyboardInterrupt, cleaning up...")

@@ -49,7 +49,7 @@ class HttpService(HttpServiceRequest):
             self.username = None
         self.cache_folder = get_cache_folder()
         self.base_url = ConfigService().datalink_base_url()
-        self.version = ConfigService()._get_package_version()
+        self.version = ConfigService().app_version()
         self._executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="http_service")
         self._upload_futures = []
         self.platform = "linux" if sys.platform == "linux" else "pc"

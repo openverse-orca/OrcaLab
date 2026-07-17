@@ -22,6 +22,7 @@ from orcalab.metadata_service import MetadataService
 from orcalab.ui.asset_browser.thumbnail_render_bus import ThumbnailRenderRequestBus
 from orcalab.ui.asset_browser.thumbnail_render_service import ThumbnailRenderService
 from orcalab.http_service.http_service import HttpService
+from orcalab.i18n import tr
 from orcalab.project_util import get_cache_folder
 from orcalab.config_service import ConfigService
 from orcalab.ui.fonts.font_service import FontService
@@ -60,7 +61,7 @@ class AssetBrowser(QtWidgets.QWidget):
         fs = FontService()
 
         include_label = QtWidgets.QLabel("包含:")
-        include_label.setFixedWidth(40)
+        include_label.setFixedWidth(60)
         fs.bind_widget_stylesheet(
             include_label,
             lambda: f"color: #ffffff; {fs.get_font_css('small')}",
@@ -86,7 +87,7 @@ class AssetBrowser(QtWidgets.QWidget):
         )
 
         exclude_label = QtWidgets.QLabel("排除:")
-        exclude_label.setFixedWidth(40)
+        exclude_label.setFixedWidth(60)
         fs.bind_widget_stylesheet(
             exclude_label,
             lambda: f"color: #ffffff; {fs.get_font_css('small')}",
@@ -179,7 +180,7 @@ class AssetBrowser(QtWidgets.QWidget):
         self._view = AssetView()
         self._model = AssetModel()
         self._view.set_model(self._model)
-        self._view.set_loading_text("正在加载资产缩略图...")
+        self._view.set_loading_text(tr("正在加载资产缩略图..."))
 
         self._view.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self._view.customContextMenuRequested.connect(self.show_context_menu)
@@ -315,7 +316,7 @@ class AssetBrowser(QtWidgets.QWidget):
         self._model.apply_filters()
 
     def _on_open_asset_store_clicked(self):
-        asset_store_url = self._config_service.web_server_url()
+        asset_store_url = self._config_service.asset_store_url()
         try:
             webbrowser.open(asset_store_url)
             logger.info(f"Opening asset store: {asset_store_url}")

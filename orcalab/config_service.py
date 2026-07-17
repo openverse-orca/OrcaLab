@@ -1,17 +1,20 @@
-import os
-import sys
-import pathlib
 import importlib.metadata
-import logging
-import tomli_w
 import json
+import logging
+import os
+import pathlib
+import sys
 import time
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+import tomli_w
 
 if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
 
+from orcalab.i18n import detect_system_language, get_language, normalize_language
 from orcalab.project_util import get_project_dir
 
 logger = logging.getLogger(__name__)
@@ -37,6 +40,51 @@ def deep_merge(dict1, dict2):
 def get_user_config_path() -> str:
     """返回用户配置文件路径"""
     return pathlib.Path("~/Orca/OrcaLab/config.toml").expanduser().as_posix()
+
+
+def read_user_ui_language() -> str | None:
+    """Read the saved user language without initializing the full config service."""
+    config_path = get_user_config_path()
+    if not os.path.exists(config_path):
+        return None
+    try:
+        with open(config_path, "rb") as config_file:
+            user_config = tomllib.load(config_file)
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+
+    value = user_config.get("orcalab", {}).get("language")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return normalize_language(value)
+
+
+def write_user_ui_language(value: str, config_path: str | None = None) -> str:
+    """Persist a UI language without initializing the full config service."""
+    language = normalize_language(value)
+    config_path = config_path or get_user_config_path()
+    user_config = {}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "rb") as config_file:
+                user_config = tomllib.load(config_file)
+        except tomllib.TOMLDecodeError:
+            logger.warning("用户配置文件格式损坏，将以空配置覆盖修复: %s", config_path)
+        except OSError as e:
+            logger.warning("用户配置文件无法读取，将以空配置覆盖修复: %s (%s)", config_path, e)
+
+    user_config.setdefault("orcalab", {})["language"] = language
+    parent_folder = os.path.dirname(config_path)
+    if parent_folder:
+        os.makedirs(parent_folder, exist_ok=True)
+
+    tmp_path = config_path + ".tmp"
+    with open(tmp_path, "wb") as config_file:
+        tomli_w.dump(user_config, config_file)
+        config_file.flush()
+        os.fsync(config_file.fileno())
+    os.replace(tmp_path, config_path)
+    return language
 
 
 # ConfigService is a singleton
@@ -265,7 +313,7 @@ class ConfigService:
 
     def pak_urls(self) -> list:
         return self.config["orcalab"].get("pak_urls", [])
-    
+
     def pak_urls_sha256(self) -> dict:
         return self.config["orcalab"].get("pak_urls_sha256", [])
 
@@ -387,7 +435,7 @@ class ConfigService:
 
     def copilot_timeout(self) -> int:
         return self.config.get("copilot", {}).get("timeout", 180)
-    
+
     def copilot_enable(self) -> bool:
         return self.config.get("copilot", {}).get("enable", False)
 
@@ -452,9 +500,28 @@ class ConfigService:
         )
 
     def web_server_url(self) -> str:
-        """获取资产库服务器地址（用于认证后跳转）"""
+        """获取不带界面语言参数的资产库服务器地址。"""
         return self.config.get("datalink", {}).get(
             "web_server_url", "https://simassets.orca3d.cn/"
+        )
+
+    def asset_store_url(self) -> str:
+        """Return the browser-facing asset store URL in the current UI language."""
+        parsed = urlsplit(self.web_server_url())
+        query = [
+            (key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if key.lower() != "lang"
+        ]
+        query.append(("lang", "zh" if get_language() == "zh_CN" else "en"))
+        return urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path or "/",
+                urlencode(query),
+                parsed.fragment,
+            )
         )
 
     def layout_mode(self) -> str:
@@ -482,7 +549,7 @@ class ConfigService:
         if isinstance(level_value, str):
             return {"name": level_value, "path": level_value}
         return None
-    
+
     def enable_debug_tool(self) -> bool:
         return self.config.get("orcalab", {}).get("debug_tool", False)
 
@@ -525,13 +592,50 @@ class ConfigService:
 
         self.set_user_config("orcalab", update_func)
 
+    def configured_ui_language(self) -> str | None:
+        value = self.config.get("orcalab", {}).get("language")
+        if not isinstance(value, str) or not value.strip():
+            return None
+        return normalize_language(value)
+
+    def ui_language(self) -> str:
+        return self.configured_ui_language() or normalize_language(None)
+
+    def ensure_ui_language(
+        self,
+        requested_language: str | None = None,
+        *,
+        detected_language: str | None = None,
+    ) -> str:
+        """Persist an explicit language or initialize it from the system once."""
+        if requested_language is not None and requested_language.strip():
+            self.set_ui_language(requested_language)
+            return self.ui_language()
+
+        configured_language = self.configured_ui_language()
+        if configured_language is not None:
+            return configured_language
+
+        language = (
+            normalize_language(detected_language)
+            if detected_language is not None and detected_language.strip()
+            else detect_system_language()
+        )
+        self.set_ui_language(language)
+        return language
+
+    def set_ui_language(self, value: str) -> None:
+        language = normalize_language(value)
+        self.config.setdefault("orcalab", {})["language"] = language
+        write_user_ui_language(language, self.user_config_path)
+
     def set_user_config(self, key: str, cb):
         """更新用户配置文件中的指定键值对"""
         user_config = {}
-        
+
         parent_forder = os.path.dirname(self.user_config_path)
         os.makedirs(parent_forder, exist_ok=True)
-        
+
         if os.path.exists(self.user_config_path):
             try:
                 with open(self.user_config_path, "rb") as file:
@@ -551,7 +655,7 @@ class ConfigService:
             file.flush()
             os.fsync(file.fileno())
         os.replace(tmp_path, self.user_config_path)
-        
+
     def send_statistics(self) -> str:
         return self.config.get("orcalab", {}).get("send_statistics", "unset")
 

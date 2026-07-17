@@ -1,12 +1,13 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 
+from orcalab.i18n import tr
 from orcalab.ui.theme_service import ThemeService
 
 
 class TextLabel(QtWidgets.QWidget):
     def __init__(self, text: str = "", parent: QtWidgets.QWidget | None = None):
         super().__init__(parent)
-        self._text = text
+        self._text = tr(text)
         self.alignment = (
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )

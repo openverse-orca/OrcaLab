@@ -1,7 +1,10 @@
 import asyncio
-from typing_extensions import override
-from PySide6 import QtWidgets, QtCore
 
+from PySide6 import QtCore, QtWidgets
+from typing_extensions import override
+
+from orcalab.actor_property import ActorPropertyType
+from orcalab.i18n import tr
 from orcalab.scene_edit_bus import SceneEditRequestBus
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.property_edit.base_property_edit import (
@@ -30,8 +33,8 @@ class _PropertyComboBox(QtWidgets.QComboBox):
             event.ignore()
 
 
-class ComboBoxPropertyEdit(BasePropertyEdit[str]):
-    """枚举属性编辑器：使用标签文本进行交互，通过 enum_values 或 editor_hint "options:A,B,C" 解析选项。"""
+class ComboBoxPropertyEdit(BasePropertyEdit[str | int]):
+    """枚举属性编辑器：显示本地化标签，并用 itemData 保留后端原始值。"""
 
     def __init__(
         self,
@@ -58,12 +61,17 @@ class ComboBoxPropertyEdit(BasePropertyEdit[str]):
             )
 
         editor = _PropertyComboBox()
-        editor.addItems(options)
+        if context.prop.value_type() == ActorPropertyType.INTEGER:
+            raw_values: list[str | int] = list(range(len(options)))
+        else:
+            raw_values = options
+
+        for option_label, raw_value in zip(options, raw_values):
+            editor.addItem(tr(option_label), raw_value)
+
         current = context.prop.value()
-        if isinstance(current, str) and current in options:
-            editor.setCurrentIndex(options.index(current))
-        elif isinstance(current, int) and 0 <= current < len(options):
-            editor.setCurrentIndex(current)
+        current_index = editor.findData(current)
+        editor.setCurrentIndex(current_index)
         editor.currentIndexChanged.connect(self._on_index_changed)
 
         root_layout.addWidget(label)
@@ -72,13 +80,12 @@ class ComboBoxPropertyEdit(BasePropertyEdit[str]):
         FontService().bind_widget_font(editor, "property_edit")
 
         self._editor = editor
-        self._options = options
         self._block_events = False
 
     def _on_index_changed(self, index: int):
-        if self._block_events:
+        if self._block_events or index < 0:
             return
-        value = self._editor.currentText()
+        value = self._editor.itemData(index)
         old_value = self.context.prop.value()
         self.context.prop.set_value(value)
 
@@ -92,13 +99,14 @@ class ComboBoxPropertyEdit(BasePropertyEdit[str]):
         asyncio.create_task(task)
 
     @override
-    def set_value(self, value: str):
+    def set_value(self, value: str | int):
         self._block_events = True
-        self.context.prop.set_value(value)
-        idx = self._editor.findText(value)
-        if idx >= 0:
+        try:
+            self.context.prop.set_value(value)
+            idx = self._editor.findData(value)
             self._editor.setCurrentIndex(idx)
-        self._block_events = False
+        finally:
+            self._block_events = False
 
     @override
     def set_read_only(self, read_only: bool):

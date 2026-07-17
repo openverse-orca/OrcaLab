@@ -1,0 +1,5 @@
+LangString STR_SECTION_INSTALL ${LANG_SIMPCHINESE} "安装"
+LangString STR_UNINSTALL ${LANG_SIMPCHINESE} "卸载"
+LangString STR_UPGRADE_PROMPT ${LANG_SIMPCHINESE} "检测到已安装 OrcaLab $0。$\n$\n是否覆盖安装为新版本 ${PRODUCT_VERSION}？$\n$\n其他配置数据将保留，界面语言将设置为中文。"
+LangString STR_SETUP_ENV_DETAIL ${LANG_SIMPCHINESE} "正在设置 OrcaLab 运行环境（可能需要几分钟）..."
+LangString STR_SETUP_ENV_WARNING ${LANG_SIMPCHINESE} "警告：环境设置返回代码 $1。首次启动时将自动重试。"

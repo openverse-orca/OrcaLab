@@ -14,6 +14,7 @@ import time
 
 from numpy import int64
 
+from orcalab.i18n import tr
 from orcalab.ui.fonts.font_service import FontService
 
 
@@ -368,14 +369,14 @@ class SyncProgressWindow(QtWidgets.QDialog):
         
         parts = []
         if download_count > 0:
-            parts.append(f"<span style='color: blue;'>待下载: {download_count}</span>")
+            parts.append(f"<span style='color: blue;'>{tr('待下载')}: {download_count}</span>")
         if delete_count > 0:
-            parts.append(f"<span style='color: red;'>待删除: {delete_count}</span>")
+            parts.append(f"<span style='color: red;'>{tr('待删除')}: {delete_count}</span>")
         if ok_count > 0:
-            parts.append(f"<span style='color: green;'>已最新: {ok_count}</span>")
+            parts.append(f"<span style='color: green;'>{tr('已最新')}: {ok_count}</span>")
         
-        stats_text = " | ".join(parts) if parts else "无资产包"
-        self.stats_label.setText(f"总计: {total} 个资产包 | {stats_text}")
+        stats_text = " | ".join(parts) if parts else tr("无资产包")
+        self.stats_label.setText(tr("总计: {total} 个资产包 | {stats_text}", total=total, stats_text=stats_text))
     
     def set_asset_status(self, asset_id: str, status: str):
         """线程安全：设置资产包状态"""
@@ -411,7 +412,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
     
     def _set_message_impl(self, message: str):
         """内部实现：设置底部状态消息"""
-        self.status_label.setText(message)
+        self.status_label.setText(tr(message))
 
     def set_metadata_progress(self, status: str, count: int = 0, total: int = 0):
         """线程安全：设置元数据同步进度。"""
@@ -424,7 +425,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
             self.metadata_progress_bar.setVisible(True)
             self.metadata_progress_bar.setRange(0, max(total, 1))
             self.metadata_progress_bar.setValue(0)
-            self.metadata_label.setText(f"元数据同步准备中: 待更新 {total} 个包")
+            self.metadata_label.setText(tr("元数据同步准备中: 待更新 {total} 个包", total=total))
             return
 
         if status == 'fetching':
@@ -440,7 +441,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
             if total > 0:
                 self.metadata_progress_bar.setRange(0, total)
                 self.metadata_progress_bar.setValue(min(count, total))
-                self.metadata_label.setText(f"元数据同步进度: 已扫描 {count}/{total}")
+                self.metadata_label.setText(tr("元数据同步进度: 已扫描 {count}/{total}", count=count, total=total))
             else:
                 self.metadata_progress_bar.setRange(0, 0)
                 self.metadata_label.setText("元数据同步进度: 正在扫描...")
@@ -457,7 +458,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
             final_total = max(total, count, 1)
             self.metadata_progress_bar.setRange(0, final_total)
             self.metadata_progress_bar.setValue(min(count, final_total))
-            self.metadata_label.setText(f"元数据同步完成: {count}/{total}")
+            self.metadata_label.setText(tr("元数据同步完成: {count}/{total}", count=count, total=total))
             return
 
         self.metadata_label.setVisible(False)
@@ -488,7 +489,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
         elapsed = time.time() - self.start_time if self.start_time else 0
         
         if success:
-            self._set_message_impl(f"同步完成！用时 {elapsed:.1f} 秒")
+            self._set_message_impl(tr("同步完成！用时 {elapsed:.1f} 秒", elapsed=elapsed))
             self.sync_completed.emit()
             
             self.close_button.setVisible(True)
@@ -501,7 +502,11 @@ class SyncProgressWindow(QtWidgets.QDialog):
             if not has_delete_local:
                 self.start_countdown(5)
         else:
-            error_msg = f"同步失败：{message}" if message else "同步失败"
+            error_msg = (
+                tr("同步失败：{message}", message=tr(message))
+                if message
+                else tr("同步失败")
+            )
             self._set_message_impl(error_msg)
             self.sync_failed.emit(message)
             
@@ -530,7 +535,7 @@ class SyncProgressWindow(QtWidgets.QDialog):
     def update_countdown_button(self):
         """更新倒计时按钮文本"""
         if self.countdown_seconds > 0:
-            self.close_button.setText(f"继续 ({self.countdown_seconds})")
+            self.close_button.setText(tr("继续 ({seconds})", seconds=self.countdown_seconds))
         else:
             self.close_button.setText("继续")
     

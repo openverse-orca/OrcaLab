@@ -1,5 +1,6 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 
+from orcalab.i18n import tr
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.icon_util import make_icon
 from orcalab.ui.panel_bus import PanelRequestBus
@@ -19,6 +20,7 @@ class Panel(QtWidgets.QWidget):
             raise ValueError("panel_name cannot be an empty string")
 
         self.panel_name = panel_name
+        self.display_name = tr(panel_name)
         self.panel_icon: QtGui.QIcon | None = None
         self.panel_order = 0
         self.panel_size = 0
@@ -38,7 +40,7 @@ class Panel(QtWidgets.QWidget):
         self.title_area_layout = QtWidgets.QHBoxLayout(title_area)
         self.title_area_layout.setContentsMargins(5, 0, 5, 0)
         self.title_area_layout.setSpacing(0)
-        title_label = QtWidgets.QLabel(self.panel_name)
+        title_label = QtWidgets.QLabel(self.display_name)
         FontService().bind_widget_font(title_label, "panel_title")
         self.title_area_layout.addWidget(title_label, 0)
         self.title_area_layout.addStretch(1)
