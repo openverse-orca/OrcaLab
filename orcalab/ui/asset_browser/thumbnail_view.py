@@ -290,7 +290,7 @@ class ThumbnailView(QtWidgets.QWidget):
         painter.fillRect(content_rect, bg_color)
 
         if self._selected_item == item:
-            painter.drawRect(item.cell_rect)
+            painter.drawRect(item.content_rect)
 
         content_center = content_rect.center()
 
