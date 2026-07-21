@@ -55,9 +55,8 @@ class PanelManager(QtWidgets.QWidget, PanelRequest):
             body_font = fs.get_font("body")
             fm = QtGui.QFontMetrics(body_font)
             font_height = fm.height()
-            padding = 12
-            min_height = max(32, font_height + padding)
-            window_top_area.setFixedHeight(min_height)
+            min_height = max(32, font_height + 12)
+            window_top_area.setMinimumHeight(min_height)
 
         _update_top_area_height()
         fs.on_scale_changed(_update_top_area_height)

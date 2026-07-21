@@ -11,7 +11,6 @@ class AssetTreeView(QtWidgets.QTreeWidget):
         super().__init__(parent)
         self.setHeaderLabel("资产分类")
         self.setMinimumWidth(200)
-        self.setMaximumWidth(300)
         
         self._assets: List[AssetInfo] = []
         self.category_map = {}
@@ -20,7 +19,9 @@ class AssetTreeView(QtWidgets.QTreeWidget):
         header = self.header()
         header.setFont(fs.get_font("tree_header"))
         fs.bind_widget_font(header, "tree_header")
-        
+
+        fs.bind_widget_font(self, "small")
+
         self.itemClicked.connect(self._on_item_clicked)
 
     def _setup_style(self):

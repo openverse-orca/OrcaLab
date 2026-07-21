@@ -8,6 +8,8 @@ class AssetInfoView(QtWidgets.QWidget):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._setup_ui()
+        self.setMinimumWidth(200)
+        self.setMaximumWidth(800)
 
     def _setup_ui(self):
         scroll_area = QtWidgets.QScrollArea(self)
@@ -46,7 +48,7 @@ class AssetInfoView(QtWidgets.QWidget):
                 color: #ffffff;
                 border: 1px solid #555555;
                 border-radius: 4px;
-                margin-top: 8px;
+                margin-top: {fs.get_font_size('group_title')}px;
                 padding-top: 8px;
             }}
             QGroupBox::title {{

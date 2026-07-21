@@ -546,6 +546,8 @@ class MainWindow(
             }}
             QMenuBar::item {{
                 background-color: transparent;
+                padding: 4px 8px;
+                margin: 0px;
             }}
             QMenuBar::item:selected {{
                 background-color: #4a4a4a;
