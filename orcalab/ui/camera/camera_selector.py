@@ -73,7 +73,7 @@ class _CameraSelectorDelegate(QtWidgets.QStyledItemDelegate):
         rect: QtCore.QRect = option.rect
         rect.setRight(rect.right() - 5)
 
-        font = FontService().apply_font_modifiers("camera_source", painter.font())
+        font = FontService().apply_font_modifiers("camera_source", QtGui.QFont(option.font))
 
         align = (
             QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight
