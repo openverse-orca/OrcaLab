@@ -145,7 +145,8 @@ class Viewport(QtWidgets.QWidget):
         self._viewport_running = False
 
     @staticmethod
-    def _detect_screen_refresh_rate() -> int:
+    def detect_screen_refresh_rate() -> int:
+        """公共 API：获取主屏幕刷新率（FPS）。"""
         refresh_rate = 60
         try:
             screen = QtWidgets.QApplication.primaryScreen()
@@ -158,7 +159,8 @@ class Viewport(QtWidgets.QWidget):
         return refresh_rate
 
     @staticmethod
-    def _detect_max_screen_refresh_rate() -> int:
+    def detect_max_screen_refresh_rate() -> int:
+        """公共 API：获取主屏幕支持的最大刷新率（FPS）。"""
         max_rate = 60
         try:
             screen = QtWidgets.QApplication.primaryScreen()
@@ -182,18 +184,19 @@ class Viewport(QtWidgets.QWidget):
         return max_rate
 
     @staticmethod
-    def _effective_fps(config_fps: int) -> int:
+    def effective_fps(config_fps: int) -> int:
+        """公共 API：根据配置 FPS 计算实际生效的帧率。0 表示跟随屏幕刷新率。"""
         if config_fps <= 0:
-            return Viewport._detect_screen_refresh_rate()
-        return min(config_fps, Viewport._detect_max_screen_refresh_rate())
+            return Viewport.detect_screen_refresh_rate()
+        return min(config_fps, Viewport.detect_max_screen_refresh_rate())
 
     @staticmethod
     def _calc_target_frame_time() -> float:
         config_fps = ConfigService().lock_fps_value()
-        return 1.0 / Viewport._effective_fps(config_fps)
+        return 1.0 / Viewport.effective_fps(config_fps)
 
     def set_target_fps(self, fps: int) -> None:
-        self._target_frame_time = 1.0 / self._effective_fps(fps)
+        self._target_frame_time = 1.0 / Viewport.effective_fps(fps)
 
     async def _viewport_main_loop(self):
         try:

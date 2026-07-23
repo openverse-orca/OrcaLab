@@ -122,6 +122,66 @@ def get_md5_cache_file() -> pathlib.Path:
     cache_folder = get_cache_folder()
     return cache_folder / ".md5_cache.pkl"
 
+
+def get_user_game_cfg_path() -> pathlib.Path:
+    """获取用户级 game.cfg 路径（@user@/game.cfg）。
+
+    引擎加载顺序：pak 内 game.cfg → 磁盘 @products@/game.cfg → @user@/game.cfg。
+    用户级文件优先级最高，用于持久化图形设置等用户自定义 CVAR。
+    """
+    return get_user_folder() / "game.cfg"
+
+
+def write_user_game_cfg(settings: dict) -> pathlib.Path:
+    """将图形设置写入用户级 game.cfg（@user@/game.cfg）。
+
+    settings 为 dict，键为 CVAR 名（str），值为 CVAR 值（str/int/float/bool）。
+    None 值表示跳过该 CVAR（不写入，使用引擎默认）。
+    返回写入的文件路径。
+    """
+    import logging
+
+    _logger = logging.getLogger("orcalab.project_util")
+
+    lines = ["-- OrcaLab 图形设置（用户级，优先级高于项目 game.cfg）", ""]
+
+    for key, value in settings.items():
+        if value is None:
+            continue
+        if isinstance(value, bool):
+            # .cfg 用 1/0 表示布尔
+            value_str = "1" if value else "0"
+        else:
+            value_str = str(value)
+        lines.append(f"{key}={value_str}")
+
+    lines.append("")
+
+    user_folder = get_user_folder()
+    user_folder.mkdir(parents=True, exist_ok=True)
+    game_cfg_path = get_user_game_cfg_path()
+    game_cfg_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _logger.info("用户级 game.cfg 已写入: %s (共 %d 项)", game_cfg_path, len(settings))
+    return game_cfg_path
+
+
+def read_user_game_cfg() -> dict:
+    """读取用户级 game.cfg，返回 {CVAR名: 值字符串} 字典。文件不存在返回空 dict。"""
+    game_cfg_path = get_user_game_cfg_path()
+    if not game_cfg_path.exists():
+        return {}
+    result = {}
+    for line in game_cfg_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("--") or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        result[key.strip()] = value.strip()
+    return result
+
+
 def load_md5_cache() -> Dict[str, Dict]:
     """加载MD5缓存"""
     cache_file = get_md5_cache_file()

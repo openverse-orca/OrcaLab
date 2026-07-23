@@ -22,6 +22,7 @@ from orcalab.remote_scene import RemoteScene
 from orcalab.report.report import ask_user_consent, collect_user_env, send_report_directly
 from orcalab.scene_layout.scene_layout_service import SceneLayoutService
 from orcalab.selection_data import SelectionData
+from orcalab.setting.graphics_settings_dialog import GraphicsSettingsDialog
 from orcalab.setting.settings_dialog import SettingsDialog
 from orcalab.simulation.simulation_bus import (
     SimulationRequestBus,
@@ -869,6 +870,9 @@ class MainWindow(
         action_settings = self.menu_edit.addAction("配置")
         connect(action_settings.triggered, self.open_settings)
 
+        action_graphics_settings = self.menu_edit.addAction("图形设置")
+        connect(action_graphics_settings.triggered, self.open_graphics_settings)
+
     def prepare_run_menu(self):
         self.menu_run.clear()
 
@@ -1328,6 +1332,12 @@ class MainWindow(
 
     def open_settings(self):
         SettingsDialog(self, remote_scene=self.remote_scene).exec()
+
+    def open_graphics_settings(self):
+        """打开图形设置对话框。若用户选择立即重启，则触发应用重启。"""
+        dialog = GraphicsSettingsDialog(self)
+        dialog.exec()
+        # GraphicsSettingsDialog 内部已处理重启提示，此处无需额外逻辑
 
     def can_duplicate_selection(self) -> bool:
         if not self.local_scene.selected_actors:
