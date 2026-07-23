@@ -10,28 +10,12 @@ from orcalab.ui.checkbox import CheckBox
 from orcalab.ui.fonts.font_service import FontService
 from orcalab.ui.text_label import TextLabel
 from orcalab.ui.theme_service import ThemeService
-from orcalab.ui.viewport import Viewport
 
 # 设置行内部水平边距；统计区与底部按钮使用相同值，与标题/正文左缘对齐
 _SETTING_BLOCK_H_MARGIN = 12
 
 _MOVE_SENS_RANGE = (0.1, 10.0)
 _ROT_SENS_RANGE = (0.1, 10.0)
-
-_FPS_OPTIONS = [0, 30, 60, 90, 120, 144, 160, 240]
-
-_AUTO_FPS_LABEL = "自动"
-
-
-def _filtered_fps_options() -> list:
-    max_screen_fps = Viewport._detect_max_screen_refresh_rate()
-    result = [0]
-    for fps in _FPS_OPTIONS:
-        if fps > 0 and fps <= max_screen_fps:
-            result.append(fps)
-    if len(result) == 1:
-        result.append(max_screen_fps)
-    return result
 
 
 class _SettingsNumericLineEdit(QtWidgets.QLineEdit):
@@ -50,11 +34,6 @@ class _SettingsNumericLineEdit(QtWidgets.QLineEdit):
             event.accept()
             return
         super().keyPressEvent(event)
-
-
-class _NoWheelComboBox(QtWidgets.QComboBox):
-    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
-        event.ignore()
 
 
 def _sensitivity_line_edit(lo: float, hi: float, value: float) -> _SettingsNumericLineEdit:
@@ -233,45 +212,7 @@ class SettingsDialog(QtWidgets.QDialog):
             )
         )
 
-        self.fps_combo = QtWidgets.QComboBox()
-        self.fps_combo.setObjectName("OrcaSettingsFpsCombo")
-        for fps in _filtered_fps_options():
-            label = (
-                f"{tr(_AUTO_FPS_LABEL)} "
-                f"({Viewport._detect_screen_refresh_rate()} FPS)"
-                if fps == 0
-                else f"{fps} FPS"
-            )
-            self.fps_combo.addItem(label, fps)
-        current_fps = config.lock_fps_value()
-        idx = self.fps_combo.findData(current_fps)
-        if idx >= 0:
-            self.fps_combo.setCurrentIndex(idx)
-        else:
-            default_idx = self.fps_combo.findData(0)
-            if default_idx >= 0:
-                self.fps_combo.setCurrentIndex(default_idx)
-        content_layout.addWidget(
-            _vscode_style_setting_row(
-                "帧率限制",
-                "限制视口渲染帧率以降低 GPU 负载",
-                self.fps_combo,
-                self._setting_row_hover_bg,
-            )
-        )
-
-        self.vsync_checkbox = CheckBox()
-        self.vsync_checkbox.set_checked(config.vsync_enabled())
-        content_layout.addWidget(
-            _vscode_style_setting_row(
-                "垂直同步 (VSync)",
-                "开启 VSync 可防止画面撕裂，关闭可提高帧率。需重启生效",
-                self.vsync_checkbox,
-                self._setting_row_hover_bg,
-            )
-        )
-
-        self.language_combo = _NoWheelComboBox()
+        self.language_combo = QtWidgets.QComboBox()
         self.language_combo.setObjectName("OrcaSettingsLanguageCombo")
         self.language_combo.addItem(tr("英语"), "en_US")
         self.language_combo.addItem(tr("简体中文"), "zh_CN")
@@ -482,19 +423,10 @@ class SettingsDialog(QtWidgets.QDialog):
         config.set_send_statistics("true" if self.checkbox.checked() else "false")
         config.set_ui_language(self.language_combo.currentData())
 
-        fps_value = self.fps_combo.currentData()
-        config.set_lock_fps(fps_value)
-
-        config.set_vsync(self.vsync_checkbox.checked())
-
         if self._remote_scene is not None:
             asyncio.create_task(
                 self._remote_scene.set_move_rotate_sensitivity(move, rot)
             )
-
-        viewport = self.parent().findChild(Viewport) if self.parent() else None
-        if viewport is not None:
-            viewport.set_target_fps(fps_value)
 
         super().accept()
 

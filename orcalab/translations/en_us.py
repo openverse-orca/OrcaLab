@@ -73,6 +73,58 @@ TRANSLATIONS = {
     "发送用户环境统计数据可以帮助改进OrcaLab。": "Sending anonymous environment statistics helps improve OrcaLab.",
     "确定": "OK",
     "取消": "Cancel",
+    "保存": "Save",
+    "图形设置": "Graphics Settings",
+    "质量预设": "Quality Preset",
+    "全局图形质量等级，影响阴影、纹理等（需重启生效）": (
+        "Global graphics quality level, affects shadows, textures, etc. (restart required)"
+    ),
+    "抗锯齿模式": "Anti-Aliasing Mode",
+    "MSAA 为多重采样，TAA 为时域抗锯齿，SMAA 为子像素形态学抗锯齿": (
+        "MSAA = multi-sampling, TAA = temporal AA, SMAA = sub-pixel morphological AA"
+    ),
+    "MSAA 采样数": "MSAA Sample Count",
+    "仅在抗锯齿模式为 MSAA 时生效。采样数越高画质越好但性能越低": (
+        "Only effective when AA mode is MSAA. Higher sample count = better quality but lower performance"
+    ),
+    "阴影过滤方法": "Shadow Filtering Method",
+    "方向光阴影的过滤算法。EsmPcf 质量最高，Pcf 次之": (
+        "Directional light shadow filtering algorithm. EsmPcf has highest quality, Pcf next"
+    ),
+    "阴影采样数": "Shadow Sample Count",
+    "阴影采样点数量。采样越多阴影越柔和但性能越低": (
+        "Number of shadow samples. More samples = softer shadows but lower performance"
+    ),
+    "纹理质量": "Texture Quality",
+    "控制纹理流式加载的 mip 偏移。高质量加载完整纹理，低质量节省显存": (
+        "Controls texture streaming mip bias. High quality loads full textures, low quality saves VRAM"
+    ),
+    "Bloom (泛光)": "Bloom",
+    "高亮区域的辉光效果": "Glow effect on bright areas",
+    "景深 (DOF)": "Depth of Field",
+    "模拟相机镜头的景深模糊效果": "Simulates camera lens depth-of-field blur",
+    "雾效": "Fog",
+    "场景中的体积雾与距离雾": "Volumetric and distance fog in the scene",
+    "低": "Low",
+    "中": "Medium",
+    "高": "High",
+    "超高": "Ultra",
+    "关闭": "Off",
+    "默认": "Default",
+    "无": "None",
+    "图形设置已保存，需要重启应用才能生效。": "Graphics settings saved. Restart required to take effect.",
+    "自定义": "Custom",
+    "全局图形质量等级，自动调整下方关联设置。单独修改任一设置将切换为自定义": (
+        "Global graphics quality level, auto-adjusts related settings below. "
+        "Modifying any individual setting switches to Custom"
+    ),
+    "Culling 任务粒度": "Culling Task Granularity",
+    "每 Job 处理的 Culling 条目数。值越大派发次数越少，负载越集中": (
+        "Culling entries per Job. Larger value = fewer dispatches, more concentrated load"
+    ),
+    "限制视口渲染帧率以降低 GPU 负载。0 为自动跟随屏幕刷新率": (
+        "Limit viewport render FPS to reduce GPU load. 0 = auto-follow screen refresh rate"
+    ),
     "选择场景": "Select Scene",
     "请选择场景：": "Please select a scene:",
     "布局选项": "Layout Options",
