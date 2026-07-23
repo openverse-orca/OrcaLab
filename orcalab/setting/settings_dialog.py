@@ -52,6 +52,11 @@ class _SettingsNumericLineEdit(QtWidgets.QLineEdit):
         super().keyPressEvent(event)
 
 
+class _NoWheelComboBox(QtWidgets.QComboBox):
+    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+        event.ignore()
+
+
 def _sensitivity_line_edit(lo: float, hi: float, value: float) -> _SettingsNumericLineEdit:
     edit = _SettingsNumericLineEdit()
     edit.setObjectName("OrcaSettingsNumericField")
@@ -266,7 +271,7 @@ class SettingsDialog(QtWidgets.QDialog):
             )
         )
 
-        self.language_combo = QtWidgets.QComboBox()
+        self.language_combo = _NoWheelComboBox()
         self.language_combo.setObjectName("OrcaSettingsLanguageCombo")
         self.language_combo.addItem(tr("英语"), "en_US")
         self.language_combo.addItem(tr("简体中文"), "zh_CN")

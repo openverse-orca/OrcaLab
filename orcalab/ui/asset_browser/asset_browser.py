@@ -61,6 +61,7 @@ class AssetBrowser(QtWidgets.QWidget):
         fs = FontService()
 
         include_label = QtWidgets.QLabel("包含:")
+        include_label.setMinimumWidth(60)
         fs.bind_widget_stylesheet(
             include_label,
             lambda: f"color: #ffffff; {fs.get_font_css('small')}",
@@ -86,6 +87,7 @@ class AssetBrowser(QtWidgets.QWidget):
         )
 
         exclude_label = QtWidgets.QLabel("排除:")
+        exclude_label.setMinimumWidth(60)
         fs.bind_widget_stylesheet(
             exclude_label,
             lambda: f"color: #ffffff; {fs.get_font_css('small')}",
