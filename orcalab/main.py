@@ -45,12 +45,6 @@ from qasync import QEventLoop
 from orcalab.python_project_installer import ensure_python_project_installed
 from orcalab.ui.icon_util import app_window_icon, set_windows_app_user_model_id
 
-# This is needed to display the app icon on the taskbar on Windows
-if os.name == 'nt':
-    import ctypes
-    myappid = 'opvs.orca.orcalab.version' # Arbitrary string
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-
 # Global variable to store main window instance for cleanup
 _main_window = None
 
@@ -261,6 +255,8 @@ def _ensure_xcb_platform() -> None:
 
 def main():
     """Main entry point for the orcalab application"""
+    set_windows_app_user_model_id()
+
     _ensure_xcb_platform()
 
     _main_start = time.monotonic()
@@ -331,8 +327,6 @@ def main():
 
     # Register signal handlers for graceful shutdown
     register_signal_handlers()
-
-    set_windows_app_user_model_id()
 
     install_qt_translation_hooks()
     q_app = QtWidgets.QApplication(sys.argv)

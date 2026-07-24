@@ -17,6 +17,7 @@ import importlib.metadata
 from orcalab.config_service import ConfigService
 from orcalab.i18n import tr
 from orcalab.ui.fonts.font_service import FontService
+from orcalab.ui.icon_util import schedule_windows_taskbar_icon_refresh
 from orcalab.project_util import project_id, calculate_file_sha256, get_cache_folder
 from orcalab.ui.viewport import Viewport
 
@@ -551,6 +552,7 @@ def ensure_python_project_installed(config: Optional[ConfigService] = None) -> N
     
     progress_dialog = InstallProgressDialog()
     progress_dialog.show()
+    schedule_windows_taskbar_icon_refresh(progress_dialog)
     progress_dialog.set_status("正在准备安装...")
     progress_dialog.set_progress(0)
     
