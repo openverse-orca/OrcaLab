@@ -1,4 +1,5 @@
 import os
+import sys
 
 from PySide6 import QtCore, QtWidgets, QtGui, QtSvg
 
@@ -10,10 +11,7 @@ ORCALAB_APP_USER_MODEL_ID = "OrcaLab.Songying.OrcaLab"
 def app_window_icon() -> QtGui.QIcon:
     return QtGui.QIcon(APP_WINDOW_ICON_QRC)
 
-def schedule_windows_taskbar_icon_refresh(window: QtWidgets.QWidget) -> None:
-    if os.name != "nt":
-        return
-
+def schedule_taskbar_icon_refresh(window: QtWidgets.QWidget) -> None:
     def _reapply() -> None:
         icon = app_window_icon()
         window.setWindowIcon(QtGui.QIcon())

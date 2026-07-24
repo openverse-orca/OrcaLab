@@ -28,7 +28,7 @@ from orcalab.ui.camera.camera_bus import (
     CameraRequest,
     CameraRequestBus,
 )
-from orcalab.ui.icon_util import schedule_windows_taskbar_icon_refresh
+from orcalab.ui.icon_util import schedule_taskbar_icon_refresh
 from orcalab.ui.user_event_bus import UserEventRequest, UserEventRequestBus
 from orcalab.ui.viewport import Viewport
 
@@ -83,7 +83,7 @@ class MainWindowFullScreen(
         rect = self.screen().availableGeometry()
         self.resize(rect.width(), rect.height())
         self.showMaximized()
-        schedule_windows_taskbar_icon_refresh(self)
+        schedule_taskbar_icon_refresh(self)
         await asyncio.sleep(0.5)
         logger.info("UI 初始化完成")
 

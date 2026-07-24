@@ -45,12 +45,6 @@ from qasync import QEventLoop
 from orcalab.python_project_installer import ensure_python_project_installed
 from orcalab.ui.icon_util import app_window_icon, set_windows_app_user_model_id
 
-# This is needed to display the app icon on the taskbar on Windows
-if os.name == 'nt':
-    import ctypes
-    myappid = 'opvs.orca.orcalab.version' # Arbitrary string
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-
 # Global variable to store main window instance for cleanup
 _main_window = None
 
@@ -337,6 +331,8 @@ def main():
     install_qt_translation_hooks()
     q_app = QtWidgets.QApplication(sys.argv)
     q_app.setWindowIcon(app_window_icon())
+    if sys.platform == "linux":
+        q_app.setDesktopFileName("orcalab")
 
     # 检测 GPU 驱动状态，驱动缺失或异常时弹窗提示用户
     from orcalab.gpu_driver_check import check_gpu_drivers, show_gpu_driver_warning
