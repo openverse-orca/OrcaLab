@@ -55,10 +55,12 @@ TRANSLATIONS = {
     "相机旋转灵敏度": "Camera Rotation Sensitivity",
     "控制相机旋转时的旋转速度 (范围: 0.1-10)": "Controls camera rotation speed (range: 0.1-10)",
     "帧率限制": "Frame Rate Limit",
-    "限制视口渲染帧率以降低 GPU 负载": "Limit viewport rendering FPS to reduce GPU load",
+    "限制视口渲染帧率以降低 GPU 负载。0 为自动跟随屏幕刷新率": (
+        "Limit viewport rendering FPS to reduce GPU load. 0 = auto-follow screen refresh rate"
+    ),
     "垂直同步 (VSync)": "Vertical Sync (VSync)",
-    "开启 VSync 可防止画面撕裂，关闭可提高帧率。需重启生效": (
-        "Enable VSync to prevent tearing, or disable it for higher FPS. Restart required."
+    "开启可防止画面撕裂，关闭可提高帧率。需重启生效": (
+        "Enable to prevent tearing, disable for higher FPS. Restart required."
     ),
     "界面语言": "Interface Language",
     "选择 OrcaLab 的界面语言。重启应用后生效": (
@@ -121,9 +123,6 @@ TRANSLATIONS = {
     "Culling 任务粒度": "Culling Task Granularity",
     "每 Job 处理的 Culling 条目数。值越大派发次数越少，负载越集中": (
         "Culling entries per Job. Larger value = fewer dispatches, more concentrated load"
-    ),
-    "限制视口渲染帧率以降低 GPU 负载。0 为自动跟随屏幕刷新率": (
-        "Limit viewport render FPS to reduce GPU load. 0 = auto-follow screen refresh rate"
     ),
     "选择场景": "Select Scene",
     "请选择场景：": "Please select a scene:",

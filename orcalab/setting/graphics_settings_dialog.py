@@ -178,9 +178,19 @@ def _cvar_to_str(value, default: str) -> str:
     return value if value else default
 
 
+class _NoWheelComboBox(QtWidgets.QComboBox):
+    """禁用鼠标滚轮切换选项的下拉框，只接受点击更改。
+
+    防止用户在设置项上滚动滚轮时误改配置。
+    """
+
+    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+        event.ignore()
+
+
 def _make_combo(options: list, current_value, object_name: str) -> QtWidgets.QComboBox:
     """构建下拉框。options 为 [(value, label), ...]。"""
-    combo = QtWidgets.QComboBox()
+    combo = _NoWheelComboBox()
     combo.setObjectName(object_name)
     for value, label in options:
         combo.addItem(label, value)
@@ -485,7 +495,7 @@ class GraphicsSettingsDialog(QtWidgets.QDialog):
         )
 
         # —— 帧率限制 ——
-        self.fps_combo = QtWidgets.QComboBox()
+        self.fps_combo = _NoWheelComboBox()
         self.fps_combo.setObjectName("OrcaGraphicsFpsCombo")
         screen_fps = Viewport.detect_screen_refresh_rate()
         for fps in _filtered_fps_options():
