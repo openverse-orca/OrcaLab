@@ -13,6 +13,14 @@ class _ThumbnailViewItem:
         self.cell_rect = QtCore.QRect()
         self.content_rect = QtCore.QRect()
 
+    def __eq__(self, other):
+        if isinstance(other, _ThumbnailViewItem):
+            return self.index == other.index
+        return NotImplemented
+
+    def __hash__(self):
+        return hash(self.index)
+
 
 class ThumbnailView(QtWidgets.QWidget):
 
