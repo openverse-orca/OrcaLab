@@ -478,8 +478,6 @@ class SceneLayoutV3Serializer:
     ) -> List[dict]:
         entity_overrides = []
         for entity_path, groups_dict in entity_overrides_dict.items():
-            if entity_path.is_root():
-                continue
 
             d = self._to_entity_overrides_dict(entity_path, groups_dict)
             if d:
